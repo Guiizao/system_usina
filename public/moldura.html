@@ -1,0 +1,28 @@
+<!doctype html>
+<!-- Pranchetas Digitais - © 2026 Guilherme. Todos os direitos reservados. Uso somente com autorização do autor (veja LICENCA.txt). -->
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<title>Pranchetas no celular</title>
+<style>
+  body { margin: 0; background: #c9cec9; font-family: "Segoe UI", Arial, sans-serif; display: flex; gap: 40px; justify-content: center; align-items: center; min-height: 100vh; }
+  figure { margin: 0; text-align: center; }
+  .aparelho { width: 412px; height: 880px; border: 14px solid #1c1f1d; border-radius: 42px; overflow: hidden; background: #fff; box-shadow: 0 20px 50px rgba(0,0,0,.25); }
+  iframe { width: 100%; height: 100%; border: 0; display: block; }
+  figcaption { margin-top: 14px; font-size: 20px; color: #2e3431; font-weight: 600; }
+</style>
+</head>
+<body>
+<script>
+  // moldura.html?a=URL&la=legenda&b=URL&lb=legenda
+  const p = new URLSearchParams(location.search);
+  ['a', 'b', 'c'].forEach((k) => {
+    if (!p.get(k)) return;
+    const f = document.createElement('figure');
+    f.innerHTML = `<div class="aparelho"><iframe src="${p.get(k).replace(/"/g, '')}"></iframe></div><figcaption></figcaption>`;
+    f.querySelector('figcaption').textContent = p.get('l' + k) || '';
+    document.body.appendChild(f);
+  });
+</script>
+</body>
+</html>

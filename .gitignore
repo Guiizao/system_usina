@@ -1,0 +1,11 @@
+# Gerados na hora de montar o APK
+apk/android/
+apk/node_modules/
+apk/www/
+apk/saida/
+apk/*.log
+_vendor/node_modules/
+node_modules/
+
+# Dados anotados na usina (não são código)
+dados/

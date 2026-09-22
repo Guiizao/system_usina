@@ -1,0 +1,11 @@
+{
+  "name": "pranchetas-apk",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Empacota o app das pranchetas como APK Android",
+  "dependencies": {
+    "@capacitor/android": "^7.4.0",
+    "@capacitor/cli": "^7.4.0",
+    "@capacitor/core": "^7.4.0"
+  }
+}

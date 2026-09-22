@@ -1,0 +1,67 @@
+<!doctype html>
+<!-- Pranchetas Digitais · © 2026 Guilherme. Todos os direitos reservados. Uso somente com autorização do autor. -->
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Baixar o app das Pranchetas</title>
+  <meta name="theme-color" content="#2e3431">
+  <link rel="icon" href="icons/icon-192.png">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&display=swap">
+  <link rel="stylesheet" href="styles.css">
+  <style>
+    .passos { display: grid; gap: 14px; max-width: 760px; }
+    .passo { display: grid; grid-template-columns: 64px 1fr; gap: 16px; align-items: start; background: #fff; border: 2px solid var(--linha-clara); border-radius: 10px; padding: 18px; }
+    .passo .n { width: 64px; height: 64px; border-radius: 50%; background: var(--grafite); color: #fff; display: grid; place-items: center; font-size: 32px; font-weight: 700; }
+    .passo h2 { margin: 4px 0 6px; font-size: 26px; }
+    .passo p { margin: 0 0 10px; font-size: 20px; color: var(--tinta-2); }
+    a.btn { color: var(--tinta); }
+    a.btn.primario { color: #fff; }
+    .destaque { font-size: 36px; font-weight: 700; color: var(--tinta); letter-spacing: 1px; }
+    .aviso-baixar { margin-top: 12px !important; padding: 12px 14px; border-left: 6px solid var(--ambar, #b7791f); background: var(--ambar-fundo); color: var(--ambar-texto); border-radius: 6px; font-size: 18px !important; }
+    main { overflow: auto; }
+    @media (max-width: 560px) { .passo { grid-template-columns: 1fr; } .passo h2 { font-size: 22px; } .passo p { font-size: 18px; } .destaque { font-size: 28px; } }
+  </style>
+</head>
+<body>
+  <header class="topo">
+    <img class="logo" src="icons/logo.png" alt="Ubirálcool">
+    <div class="titulo"><b>Pranchetas digitais</b><span>Instalar no celular ou tablet</span></div>
+  </header>
+  <main>
+    <div class="passos">
+      <div class="passo"><span class="n">1</span><div>
+        <h2>Baixe o aplicativo</h2>
+        <p id="texto-apk">Toque no botão verde. É o mesmo aplicativo de todos os tablets da usina.</p>
+        <a class="btn primario largo" id="botao-apk" href="apk/pranchetas.apk" download="pranchetas-ubiralcool.apk" style="text-decoration:none">Baixar o aplicativo (Android)</a>
+        <p class="aviso-baixar">Se o Chrome disser que o download "não é seguro" ou "pode ser perigoso", toque em <b>Baixar mesmo assim</b> ou <b>Manter</b>. O aviso aparece porque o arquivo vem da rede interna da usina, e não da internet.</p>
+      </div></div>
+      <div class="passo"><span class="n">2</span><div>
+        <h2>Instale</h2>
+        <p>Abra o arquivo baixado (aparece na barra de notificações). Se o Android perguntar se permite instalar apps desta fonte, toque em <b>Configurações</b>, ligue <b>Permitir desta fonte</b> e volte.</p>
+      </div></div>
+      <div class="passo"><span class="n">3</span><div>
+        <h2>Abra o app e digite o código</h2>
+        <p>O aplicativo procura o tablet chefe sozinho. Se ele pedir o endereço, digite:</p>
+        <p class="destaque" id="endereco">-</p>
+        <p>Depois digite os 6 números do código, que aparecem no tablet chefe embaixo do QR code.</p>
+      </div></div>
+      <div class="passo"><span class="n">4</span><div>
+        <h2>Não conseguiu baixar?</h2>
+        <p>Confira se este aparelho está no mesmo Wi-Fi do tablet chefe. Também dá para usar pelo navegador, sem instalar:</p>
+        <a class="btn largo" href="./" style="text-decoration:none">Abrir pelo navegador</a>
+      </div></div>
+    </div>
+    <p class="autoria" style="max-width:760px">Pranchetas Digitais · © 2026 Guilherme. Todos os direitos reservados. Uso somente com autorização do autor.</p>
+  </main>
+  <script>
+    document.getElementById('endereco').textContent = location.port && location.port !== '8080' ? location.host : location.hostname;
+    fetch('api/ping').then((r) => r.json()).then((info) => {
+      if (!info.apk) {
+        document.getElementById('botao-apk').hidden = true;
+        document.getElementById('texto-apk').textContent = 'O aplicativo ainda não foi colocado nesta central. Use o passo 4 por enquanto.';
+      }
+    }).catch(() => {});
+  </script>
+</body>
+</html>

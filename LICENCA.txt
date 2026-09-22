@@ -1,0 +1,25 @@
+PRANCHETAS DIGITAIS
+© 2026 Guilherme. Todos os direitos reservados.
+
+Este programa (código-fonte, aplicativo Android, servidor, modelos de relatório,
+leitor de folhas manuscritas com o modelo treinado leitor.onnx, scripts de treino
+e documentação) foi criado por Guilherme e é protegido pela Lei nº 9.609/1998
+(Lei do Software) e pela Lei nº 9.610/1998 (Lei de Direitos Autorais).
+
+Sem autorização por escrito do autor, não é permitido:
+  - copiar, instalar ou usar o programa fora do que foi autorizado;
+  - alterar, descompilar ou criar outro programa a partir deste código;
+  - vender, ceder, emprestar ou repassar o programa ou o código a terceiros.
+
+Os modelos das folhas, os códigos dos POPs, as regras do processo e os dados
+anotados no sistema pertencem à Ubirálcool e não fazem parte desta reserva.
+
+Componentes de terceiros usados pelo programa, cada um com a sua licença:
+  - QR Code Generator for JavaScript, de Kazuhiko Arase (licença MIT) - public/qrcode.js
+  - OpenCV.js (licença Apache 2.0) - public/lib/opencv.js
+  - Capacitor, da Ionic (licença MIT) - usado para gerar o aplicativo Android
+  - Fonte Atkinson Hyperlegible, do Braille Institute (SIL Open Font License)
+  - Treino do leitor: PyTorch (licença BSD), base EMNIST e fontes do Google Fonts
+    (cada uma com a sua licença)
+
+Contato para autorização de uso: o autor, Guilherme.
