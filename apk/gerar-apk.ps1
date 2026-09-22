@@ -61,6 +61,12 @@ if ($xml -notmatch 'ServicoCentral') {
   $xml = $xml -replace '</manifest>', ($extras + '</manifest>')
   [System.IO.File]::WriteAllText($manifesto, $xml, (New-Object System.Text.UTF8Encoding $false))
 }
+# Vibrar quando chega um aviso do escritório (versão 2.1). Separado, para entrar também em projetos já ajustados.
+$xml = Get-Content $manifesto -Raw -Encoding utf8
+if ($xml -notmatch 'android.permission.VIBRATE') {
+  $xml = $xml -replace '</manifest>', "    <uses-permission android:name=`"android.permission.VIBRATE`" />`n</manifest>"
+  [System.IO.File]::WriteAllText($manifesto, $xml, (New-Object System.Text.UTF8Encoding $false))
+}
 
 # SDK para o Gradle
 Set-Content -Path android\local.properties -Value ("sdk.dir=" + ($env:ANDROID_HOME -replace '\\', '\\')) -Encoding ascii

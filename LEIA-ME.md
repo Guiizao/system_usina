@@ -99,6 +99,42 @@ Folhas lidas hoje: Hidrólise (Anexo I), Sacarificação (Anexo II) e todas as d
 
 O treino da rede fica fora do aplicativo (Python + PyTorch), com a base EMNIST de letras de mão, 90 fontes cursivas e de mão do Google Fonts, números desenhados no jeito brasileiro (1 com gancho, 7 cortado) e células reais das folhas da usina.
 
+## Avisos do escritório
+
+No painel do tablet chefe: **Avisos**. Escolha o setor e a pessoa (ou "Quem estiver no setor"), escreva e toque em **Enviar aviso**.
+
+- Se a pessoa está trabalhando, o aviso aparece grande na tela dela em poucos segundos, com o fundo escuro, vibração e dois bipes.
+- Se não está, o aviso fica guardado e aparece quando ela entrar com o nome dela.
+- O aviso só sai da tela no botão **OK, entendi** (toque fora e o Voltar do Android não fecham).
+- Na lista de avisos, o escritório vê a situação de cada um: esperando, na tela de fulano desde tal hora, lido por fulano às tantas, ou cancelado. Aviso que ainda não foi lido pode ser cancelado.
+- Por dentro, o aviso viaja como uma anotação (folha `avisos`), e a leitura é outra anotação (`avisos-recibo`) escrita só pelo aparelho que leu. Por isso funciona com o computador ou com o tablet chefe como central, e quem estava sem Wi-Fi recebe quando a rede volta.
+
+## Versão, relógio e erros dos aparelhos
+
+- A versão aparece nos ajustes do aparelho (engrenagem) e em Usina > **Aparelhos conectados**, junto com quem está em cada aparelho. Aparelho com versão antiga aparece com "(atualizar)".
+- Se o relógio de um aparelho estiver 5 minutos ou mais diferente da central, ele avisa para acertar a hora (a folha do dia e o turno dependem da hora certa).
+- Erros inesperados de qualquer aparelho vão para a central, no arquivo `ServidorUsina/erros.log`, e aparecem em Usina > **Ver erros dos aparelhos**.
+
+## Testes automáticos
+
+Na pasta `app`:
+
+```bash
+node testes/rodar-tudo.mjs
+```
+
+Leva uns 20 minutos e grava o resultado em `testes/saida/resultado.txt`. Testa:
+
+1. o código (sem erro de escrita) e a configuração das folhas (`forms.js`);
+2. a central pela rede, **nas duas centrais**: a do computador (`server.js`) e a do tablet chefe (`ServidorCentral.java`, que roda no computador com peças do Android simuladas em `testes/java`);
+3. aparelhos virtuais usando o aplicativo como uma pessoa (escritório, tablet da Hidrólise e celular da Caldeira), nas duas centrais: anotações, avisos, sem Wi-Fi, senhas, relatório, virada do dia, relógio errado e travas;
+4. leitura de foto, impressão e o aplicativo abrindo sem rede;
+5. todas as telas em 7 tamanhos, procurando texto cortado, palavra quebrada, letra pequena e erro de JavaScript (fotos em `testes/saida/telas`).
+
+Os testes usam pastas de dados temporárias: nunca mexem em `dados/`. Só as telas: `node testes/telas.mjs http://localhost:8080`.
+
+O teste para fazer à mão no celular e no tablet está em `Teste-nos-aparelhos.pdf`, na pasta `Usina`.
+
 ## Imagens das telas
 
 Com a central ligada:
@@ -115,4 +151,6 @@ Salva em `../telas`.
 
 Versão 2 (16/09/2026): avisos de pH e Brix, telas LPHERA / Cal e Saczyme / Alcolina com a soma das dornas da hora, casinha nas abas, rolagem do painel do chefe que não volta mais para o topo, pastas *Usina, tela de relatórios, janela de Excel ou XML, listas do ralo, cadastro protegido por senha e busca do tablet chefe no Wi-Fi. Testado no navegador contra o servidor: anotação, envio, queda de rede, relatórios e Excel/XML.
 
-**Falta testar em aparelho real (o APK compila, mas não há Android aqui):** servidor dentro do tablet chefe, serviço com a tela apagada, pastas em Documentos, busca no Wi-Fi e envio direto para a conversa do WhatsApp.
+Versão 2.1 (22/09/2026): avisos do escritório, versão e relógio de cada aparelho, erros dos aparelhos guardados na central, telas revisadas no celular (notificação no alto e centralizada, selo "sem senha" embaixo do nome, títulos compridos em duas linhas) e bateria de testes automáticos (`testes/rodar-tudo.mjs`). O servidor do tablet chefe (`ServidorCentral.java`) agora passa pelos mesmos testes que o do computador.
+
+**Falta testar em aparelho real:** o que depende do Android de verdade (serviço com a tela apagada, pastas em Documentos, busca no Wi-Fi, envio direto para a conversa do WhatsApp, impressão pelo Android, câmera e vibração). O roteiro está em `Teste-nos-aparelhos.pdf`.

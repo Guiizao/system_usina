@@ -3,6 +3,7 @@
 (function () {
   'use strict';
   const C = window.USINA;
+  const VERSAO = '2.1.0'; // aparece nos ajustes e vai junto com cada envio para a central
   const AUTORIA = '© 2026 Guilherme. Todos os direitos reservados. Uso somente com autorização do autor.';
   const params = new URLSearchParams(location.search);
   const DEMO_IMG = params.has('demo'); // usado só para gerar imagens de apresentação
@@ -35,6 +36,20 @@
 
   let registros = DEMO_IMG ? {} : LS.get('registros', {});
   const salvarRegistros = () => { if (!DEMO_IMG) LS.set('registros', registros); };
+
+  /* Erros inesperados ficam guardados e vão para a central na próxima sincronização
+     (pasta ServidorUsina, arquivo erros.log). Assim dá para descobrir o que aconteceu num tablet da área. */
+  const errosGuardados = DEMO_IMG ? [] : LS.get('erros', []);
+  function guardarErro(msg, detalhe) {
+    try {
+      if (errosGuardados.length >= 30) errosGuardados.shift();
+      const tela = typeof pilha !== 'undefined' && pilha.length ? pilha[pilha.length - 1].tela : '';
+      errosGuardados.push({ quando: Date.now(), versao: VERSAO, papel: cfg.papel, tela, msg: String(msg || '').slice(0, 300), detalhe: String(detalhe || '').slice(0, 900) });
+      if (!DEMO_IMG) LS.set('erros', errosGuardados);
+    } catch (e) { /* nunca deixa um erro no registro de erros travar o app */ }
+  }
+  window.addEventListener('error', (e) => guardarErro(e.message, `${e.filename || ''}:${e.lineno || ''}:${e.colno || ''} ${e.error && e.error.stack ? e.error.stack : ''}`));
+  window.addEventListener('unhandledrejection', (e) => guardarErro('promessa: ' + (e.reason && e.reason.message ? e.reason.message : e.reason), e.reason && e.reason.stack));
 
   /* =========================================================
    * Ícones de linha (sempre com texto do lado)
@@ -75,6 +90,7 @@
     codigo: '<path d="M8 7l-5 5 5 5M16 7l5 5-5 5"/>',
     nota: '<path d="M4 20h4L19 9l-4-4L4 16v4z"/><path d="M13 7l4 4"/>',
     tamanho: '<path d="M4 20l7-16h2l7 16M7 14h10"/>',
+    sino: '<path d="M6 16V11a6 6 0 0112 0v5l2 2H4l2-2z"/><path d="M10 21h4"/>',
   };
   const ico = (nome) => `<svg class="ico" viewBox="0 0 24 24" aria-hidden="true">${ICONES[nome] || ''}</svg>`;
 
@@ -266,11 +282,18 @@
       sync.modo = 'online'; sync.falhas = 0;
 
       const envio = Object.values(registros).filter((r) => !r.sincronizado);
-      const r1 = await postJson('api/sync', { aparelho: cfg.deviceId, papel: cfg.papel, operador: operadorAtual(), registros: envio }, 10000);
+      const erros = errosGuardados.slice();
+      const antesDoEnvio = Date.now();
+      const r1 = await postJson('api/sync', { aparelho: cfg.deviceId, papel: cfg.papel, operador: operadorAtual(), versao: VERSAO, registros: envio, erros }, 10000);
       if (r1.status === 401) return desconectar('Este aparelho precisa ser conectado de novo à central.');
       if (r1.ok && envio.length) {
         envio.forEach((e) => { const atual = registros[e.id]; if (atual && atual.atualizadoEm === e.atualizadoEm) atual.sincronizado = true; });
         salvarRegistros();
+      }
+      if (r1.ok) {
+        const resp = await r1.json().catch(() => ({}));
+        if (erros.length) { errosGuardados.splice(0, erros.length); LS.set('erros', errosGuardados); }
+        if (resp.agora) conferirRelogio(resp.agora - (antesDoEnvio + Date.now()) / 2);
       }
       let mudou = false;
       const r2 = await buscar('api/registros?desde=' + (cfg.ultimoSeq || 0), {}, 10000);
@@ -292,6 +315,9 @@
         }
       }
       if (mudou && podeRedesenhar() && ['central', 'inicio', 'prancheta', 'config'].includes(view().tela)) render();
+      if (mudou && view().tela === 'avisos') atualizarTelaAvisos();
+      revisarAvisoNaTela();
+      verificarAvisos();
     } catch (e) {
       sync.modo = 'offline';
       sync.falhas = (sync.falhas || 0) + 1;
@@ -302,6 +328,21 @@
       if (bloqueadoAntes !== foraDaRede()) render(); else atualizarConexao();
     }
   }
+  /* A hora de cada anotação vem do relógio do aparelho. Se ele estiver muito diferente da central,
+     avisa (a folha do dia e o turno dependem da hora certa). */
+  function conferirRelogio(diferenca) {
+    sync.relogio = diferenca;
+    const minutos = Math.round(diferenca / 60000);
+    if (Math.abs(minutos) < 5) { sync.avisoRelogio = 0; return; }
+    if (Date.now() - (sync.avisoRelogio || 0) < 30 * 60000) return;
+    sync.avisoRelogio = Date.now();
+    toast(`O relógio deste aparelho está ${Math.abs(minutos)} min ${minutos > 0 ? 'atrasado' : 'adiantado'}. Acerte a hora nos ajustes do Android.`, 'erro');
+  }
+  const textoRelogio = () => {
+    if (sync.relogio == null) return 'ainda não conferido';
+    const m = Math.round(sync.relogio / 60000);
+    return Math.abs(m) < 2 ? 'certo' : `${Math.abs(m)} min ${m > 0 ? 'atrasado' : 'adiantado'}`;
+  };
   let syncTimer = null;
   function sincronizarLogo() { clearTimeout(syncTimer); syncTimer = setTimeout(sincronizar, 400); atualizarConexao(); }
   const foraDaRede = () => !cfg.demo && !!cfg.chave && !ehCentral() && Date.now() - (cfg.ultimoContato || 0) > C.horasForaDaRede * 3600 * 1000;
@@ -351,18 +392,20 @@
    * ========================================================= */
   const raizModal = document.getElementById('modal-root');
   let fecharModalAtual = null;
+  let modalFixo = false; // janela que só fecha no botão (aviso do escritório)
   const modalAberto = () => !!fecharModalAtual;
   function abrirModal(html, aoClicar, opcoes = {}) {
     return new Promise((resolve) => {
-      raizModal.innerHTML = `<div class="fundo-modal"><div class="modal ${opcoes.classe || ''}" role="dialog" aria-modal="true">${html}</div></div>`;
+      raizModal.innerHTML = `<div class="fundo-modal ${opcoes.fundo || ''}"><div class="modal ${opcoes.classe || ''}" role="dialog" aria-modal="true">${html}</div></div>`;
       const fundo = raizModal.firstElementChild;
       let fechado = false;
-      const fechar = (valor) => { if (fechado) return; fechado = true; document.removeEventListener('keydown', teclas); raizModal.innerHTML = ''; fecharModalAtual = null; resolve(valor); };
-      const teclas = (e) => { if (opcoes.aoTeclar) opcoes.aoTeclar(e, fechar); if (e.key === 'Escape') fechar(undefined); };
+      modalFixo = !!opcoes.fixo;
+      const fechar = (valor) => { if (fechado) return; fechado = true; document.removeEventListener('keydown', teclas); raizModal.innerHTML = ''; fecharModalAtual = null; modalFixo = false; resolve(valor); };
+      const teclas = (e) => { if (opcoes.aoTeclar) opcoes.aoTeclar(e, fechar); if (e.key === 'Escape' && !opcoes.fixo) fechar(undefined); };
       document.addEventListener('keydown', teclas);
       fecharModalAtual = () => fechar(undefined);
       fundo.addEventListener('click', (e) => {
-        if (e.target === fundo) return fechar(undefined);
+        if (e.target === fundo) return opcoes.fixo ? undefined : fechar(undefined);
         const b = e.target.closest('[data-k]');
         if (b) aoClicar(b.dataset.k, b, fechar, fundo);
       });
@@ -413,7 +456,100 @@
     const t = document.getElementById('toast');
     t.innerHTML = (tipo === 'ok' ? ico('certo') : ico('alerta')) + `<span>${esc(msg)}</span>`;
     t.className = tipo; t.hidden = false;
-    clearTimeout(toastTimer); toastTimer = setTimeout(() => { t.hidden = true; }, 3000);
+    t.setAttribute('role', tipo === 'erro' ? 'alert' : 'status');
+    t.onclick = () => { t.hidden = true; }; // um toque fecha
+    // mensagem longa fica um pouco mais na tela
+    clearTimeout(toastTimer); toastTimer = setTimeout(() => { t.hidden = true; }, Math.min(6000, 2600 + String(msg).length * 45));
+  }
+
+  /* =========================================================
+   * Avisos do escritório para quem está trabalhando
+   * O tablet chefe manda um aviso para uma pessoa (ou para quem estiver no setor).
+   * Se ela está trabalhando, o aviso aparece grande na tela dela na hora; se não, fica guardado
+   * e aparece quando ela entrar com o nome dela. Só sai da tela no botão OK.
+   * O aviso viaja como uma anotação comum (folha "avisos"), então funciona com o computador ou com
+   * o tablet chefe como central, e quem estava sem Wi-Fi recebe quando a rede volta.
+   * A confirmação de leitura é uma anotação separada ("avisos-recibo"), escrita só pelo aparelho que leu,
+   * para o escritório e o aparelho nunca escreverem na mesma anotação ao mesmo tempo.
+   * ========================================================= */
+  const PID_AVISO = 'avisos', PID_RECIBO = 'avisos-recibo';
+  const TAMANHO_AVISO = 300;
+  const horaCurta = (ms) => new Date(ms).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+  function todosAvisos() {
+    return Object.values(registros).filter((r) => r.prancheta === PID_AVISO && !r.apagado)
+      .map((r) => Object.assign({ id: r.chave, data: r.data }, r.valores))
+      .sort((a, b) => (b.enviadoEm || 0) - (a.enviadoEm || 0));
+  }
+  const reciboDo = (av) => { const r = pegar(av.data, PID_RECIBO, av.id); return r ? r.valores : {}; };
+  function situacaoDoAviso(av) {
+    const rc = reciboDo(av);
+    const setor = (setorPorId(av.paraSetor) || {}).nome || av.paraSetor;
+    if (rc.lidoEm) return { estado: 'lido', texto: `Lido por ${rc.lidoPor || 'alguém'} às ${horaCurta(rc.lidoEm)}${isoData(new Date(rc.lidoEm)) !== isoData(new Date()) ? ` de ${fmtData(isoData(new Date(rc.lidoEm)))}` : ''}` };
+    if (av.cancelado) return { estado: 'cancelado', texto: 'Cancelado pelo escritório' };
+    if (rc.mostradoEm) return { estado: 'na-tela', texto: `Na tela de ${rc.mostradoPara || 'alguém'} desde ${horaCurta(rc.mostradoEm)}` };
+    return { estado: 'esperando', texto: av.paraNome ? `Esperando ${av.paraNome} entrar` : `Esperando alguém entrar na ${setor}` };
+  }
+  const avisosEmAberto = () => todosAvisos().filter((av) => ['esperando', 'na-tela'].includes(situacaoDoAviso(av).estado));
+  /** Quem está trabalhando agora em cada setor, pelos aparelhos ligados na central. */
+  function trabalhandoAgora(setorId, nome) {
+    const st = sync.status;
+    return !!(st && st.aparelhos && st.aparelhos.some((a) => a.online && a.papel === setorId && a.operador && (!nome || a.operador === nome)));
+  }
+  function enviarAviso(setorId, nome, texto) {
+    const id = 'a' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+    gravar(dataProducao(), PID_AVISO, id, { paraSetor: setorId, paraNome: nome || '', texto, de: 'escritório', enviadoEm: Date.now() }, { operador: 'escritório' });
+    return id;
+  }
+  function avisoParaMim() {
+    if (!cfg.papel || ehCentral()) return null;
+    const op = operadorAtual();
+    if (!op) return null;
+    return todosAvisos().filter((av) => !av.cancelado && av.paraSetor === cfg.papel && (!av.paraNome || av.paraNome === op) && !reciboDo(av).lidoEm)
+      .sort((a, b) => (a.enviadoEm || 0) - (b.enviadoEm || 0))[0] || null;
+  }
+  function chamarAtencao() {
+    try { if (navigator.vibrate) navigator.vibrate([250, 120, 250]); } catch (e) { /* sem vibração */ }
+    try {
+      const Ctx = window.AudioContext || window.webkitAudioContext;
+      if (!Ctx) return;
+      const ctx = new Ctx();
+      [0, 0.28].forEach((t) => {
+        const o = ctx.createOscillator(), g = ctx.createGain();
+        o.frequency.value = 880; o.connect(g); g.connect(ctx.destination);
+        g.gain.setValueAtTime(0.0001, ctx.currentTime + t);
+        g.gain.exponentialRampToValueAtTime(0.25, ctx.currentTime + t + 0.02);
+        g.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + t + 0.22);
+        o.start(ctx.currentTime + t); o.stop(ctx.currentTime + t + 0.24);
+      });
+      setTimeout(() => ctx.close().catch(() => {}), 900);
+    } catch (e) { /* sem som */ }
+  }
+  let avisoNaTela = null;
+  /** Mostra o aviso mais antigo que ainda não foi lido por quem está trabalhando neste aparelho. */
+  function verificarAvisos() {
+    if (avisoNaTela || modalAberto()) return;
+    const av = avisoParaMim();
+    if (!av) return;
+    const op = operadorAtual();
+    avisoNaTela = av.id;
+    if (!reciboDo(av).mostradoEm) gravar(av.data, PID_RECIBO, av.id, { mostradoEm: Date.now(), mostradoPara: op, aparelhoMostrou: cfg.deviceId }, { operador: op });
+    const setor = (setorPorId(av.paraSetor) || {}).nome || '';
+    const quando = av.enviadoEm ? `${horaCurta(av.enviadoEm)}${av.data !== dataProducao() ? ` de ${fmtData(isoData(new Date(av.enviadoEm)))}` : ''}` : '';
+    chamarAtencao();
+    abrirModal(`<div class="aviso-cab"><span class="aviso-sino">${ico('sino')}</span>
+        <div><small>Aviso do escritório</small><b>Para ${esc(av.paraNome || `quem estiver na ${setor}`)}</b></div></div>
+      <p class="aviso-texto">${esc(av.texto)}</p>
+      <p class="aviso-de">Enviado pelo escritório${quando ? ` às ${esc(quando)}` : ''}</p>
+      <button class="btn primario aviso-ok" data-k="ok">${ico('certo')} OK, entendi</button>`,
+    (k, b, fechar) => { if (k === 'ok') fechar('ok'); }, { classe: 'aviso-grande', fundo: 'fundo-aviso', fixo: true })
+      .then((r) => {
+        avisoNaTela = null;
+        if (r === 'ok') {
+          gravar(av.data, PID_RECIBO, av.id, { lidoEm: Date.now(), lidoPor: operadorAtual() || op, aparelhoLeu: cfg.deviceId }, { operador: operadorAtual() || op });
+          toast('Aviso confirmado. O escritório já sabe que você leu.');
+        }
+        setTimeout(verificarAvisos, 600); // se tiver outro aviso, mostra em seguida
+      });
   }
 
   /* =========================================================
@@ -643,7 +779,7 @@
     render(true);
   }
   function voltar() {
-    if (modalAberto()) return fecharModalAtual();
+    if (modalAberto()) return modalFixo ? undefined : fecharModalAtual();
     if (painelVisivel()) { ed.oculto = true; return atualizarEdicao(); }
     if (rascunhoSujo()) salvarRascunho(true);
     if (pilha.length > 1) { pilha.pop(); rascunho = null; ed.alvoId = null; render(true); }
@@ -668,7 +804,7 @@
     const escuro = cfg.tema === 'escuro';
     return `<header class="topo">
         ${podeVoltar ? `<button class="voltar" data-a="voltar">${ico('voltar')} Voltar</button>` : '<img class="logo" src="icons/logo.png" alt="Ubirálcool">'}
-        <div class="titulo"><b>${esc(titulo)}</b>${subtitulo ? `<span id="subtitulo-topo">${esc(subtitulo)}</span>` : ''}</div>
+        <div class="titulo ${String(titulo).length > 17 ? 'longo' : ''}"><b>${esc(titulo)}</b>${subtitulo ? `<span id="subtitulo-topo">${esc(subtitulo)}</span>` : ''}</div>
         ${atalhos ? `<div class="atalhos">${atalhos}</div>` : ''}
         <div class="relogio"><b id="relogio">${horaAgora()}</b><span>${esc(turnoAtual().nome)}</span></div>
         <button class="tema" data-a="tema" aria-label="${escuro ? 'Mudar para tela clara' : 'Mudar para tela escura'}">${ico(escuro ? 'sol' : 'lua')}<span>${escuro ? 'Claro' : 'Escuro'}</span></button>
@@ -707,7 +843,7 @@
     if (foraDaRede() && v.tela !== 'bloqueado') v = { tela: 'bloqueado' };
     const telas = {
       conectar: telaConectar, preparando: telaPreparando, bloqueado: telaBloqueado, configurar: telaConfigurar, operador: telaOperador,
-      inicio: telaInicio, prancheta: telaPrancheta, central: telaCentral, relatorios: telaRelatorios, leitura: telaLeitura, config: telaConfig, admin: telaAdmin,
+      inicio: telaInicio, prancheta: telaPrancheta, central: telaCentral, relatorios: telaRelatorios, leitura: telaLeitura, config: telaConfig, admin: telaAdmin, avisos: telaAvisos,
     };
     const chaveTela = JSON.stringify([v.tela, v.pid, v.data, v.monitor]);
     const mesmaTela = !trocouDeTela && chaveTela === ultimaChaveTela;
@@ -827,7 +963,7 @@
           <div><b>Este aparelho vai ser o tablet chefe?</b><p>Ele vira o servidor da usina: guarda tudo, recebe os tablets dos setores e cria as pastas ServidorUsina, RelatoriosUsina e BackupUsina.</p></div>
           <button class="btn primario" data-a="virar-central">Ligar como tablet chefe</button>
         </div>` : ''}
-        <p class="autoria">Pranchetas Digitais · ${esc(AUTORIA)}</p>
+        <p class="autoria">Pranchetas Digitais ${VERSAO} · ${esc(AUTORIA)}</p>
       </div>`;
     return `${cabecalho('Pranchetas digitais', 'Primeiro acesso', false)}${telaEdicao(conteudo)}`;
   }
@@ -972,7 +1108,7 @@
         ${v && v.travado
           ? `<p class="sub"><span class="aviso atencao">${ico('alerta')} O tablet ficou ${Math.round(C.minutosSemMexer)} minutos sem ninguém mexer. Toque no seu nome e digite a senha para continuar. O que já estava anotado foi salvo.</span></p>`
           : '<p class="sub">Toque no seu nome. Ele vai como responsável em tudo que você anotar neste turno.</p>'}
-        <div class="opcoes nomes">${operadoresDo(cfg.papel).map((o) => `<button data-a="escolher-operador" data-nome="${esc(o.nome)}" class="${o.nome === operadorAtual() ? 'sel' : ''}">${ico('pessoa')} ${esc(o.nome)}${o.senha ? '' : '<small class="sem-senha">sem senha</small>'}</button>`).join('')}</div>
+        <div class="opcoes nomes">${operadoresDo(cfg.papel).map((o) => `<button data-a="escolher-operador" data-nome="${esc(o.nome)}" class="${o.nome === operadorAtual() ? 'sel' : ''}">${ico('pessoa')}<span class="nome-op"><b>${esc(o.nome)}</b>${o.senha ? '' : '<small class="sem-senha">sem senha</small>'}</span></button>`).join('')}</div>
         <p class="sub" style="margin-top:24px">Cada um entra com a sua senha de 4 números. Esqueceu? Chame o encarregado. Nome novo, também é com ele.</p>
       </main>`;
   }
@@ -1307,7 +1443,9 @@
    * Tablet chefe: painel
    * ========================================================= */
   function atalhosChefe() {
-    return `<button class="atalho" data-a="ler-folha">${ico('camera')}<span>Ler folha</span></button>
+    const abertos = avisosEmAberto().length;
+    return `<button class="atalho" data-a="avisos" aria-label="Avisos${abertos ? `, ${abertos} esperando` : ''}">${ico('sino')}<span>Avisos</span>${abertos ? `<em class="contador">${abertos}</em>` : ''}</button>
+      <button class="atalho" data-a="ler-folha">${ico('camera')}<span>Ler folha</span></button>
       <button class="atalho" data-a="relatorios">${ico('pasta')}<span>Relatórios</span></button>
       <button class="atalho" data-a="config">${ico('pessoas')}<span>Usina</span></button>
       <button class="atalho" data-a="admin" aria-label="Ajustes do aparelho">${ico('ajustes')}</button>`;
@@ -1391,6 +1529,77 @@
     if (!url) { el.innerHTML = '<span class="sub">Procurando o Wi-Fi</span>'; return; }
     const q = window.qrcode(0, 'M'); q.addData(url); q.make();
     el.innerHTML = q.createSvgTag({ cellSize: 6, margin: 2, scalable: true });
+  }
+
+  /* =========================================================
+   * Tela de avisos do tablet chefe: escrever, mandar e acompanhar
+   * ========================================================= */
+  const FRASES_AVISO = ['Passe no escritório.', 'Ligue para o escritório.', 'Venha falar comigo quando puder.'];
+  function previaDoAviso(f) {
+    const setor = (setorPorId(f.setor) || {}).nome || '';
+    const quem = f.nome || 'alguém';
+    if (cfg.demo) return `Demonstração: no aparelho da ${setor}, o aviso aparece quando ${quem} entrar.`;
+    if (trabalhandoAgora(f.setor, f.nome)) return f.nome ? `${f.nome} está trabalhando agora: o aviso aparece na tela em poucos segundos.` : `Tem gente trabalhando agora na ${setor}: o aviso aparece na tela em poucos segundos.`;
+    return f.nome ? `${f.nome} não está trabalhando agora. O aviso fica guardado e aparece quando ${f.nome} entrar.` : `Ninguém trabalhando agora na ${setor}. O aviso fica guardado e aparece quando alguém entrar.`;
+  }
+  function htmlListaAvisos() {
+    const lista = todosAvisos().slice(0, 50);
+    if (!lista.length) return '<p class="sub">Nenhum aviso enviado ainda.</p>';
+    return lista.map((av) => {
+      const s = situacaoDoAviso(av);
+      const setor = (setorPorId(av.paraSetor) || {}).nome || av.paraSetor;
+      const quando = av.enviadoEm ? horaCurta(av.enviadoEm) + (av.data !== dataProducao() ? ` · ${fmtData(av.data)}` : '') : '';
+      return `<div class="aviso-item ${s.estado}">
+        <div class="aviso-item-cab"><b>${esc(av.paraNome || 'Quem estiver no setor')}</b><span>${esc(setor)}${quando ? ` · ${esc(quando)}` : ''}</span></div>
+        <p>${esc(av.texto)}</p>
+        <div class="aviso-item-pe"><span class="selo ${s.estado}">${esc(s.texto)}</span>
+          ${['esperando', 'na-tela'].includes(s.estado) ? `<button class="btn pequeno" data-a="aviso-cancelar" data-id="${esc(av.id)}" data-data="${esc(av.data)}">Cancelar</button>` : ''}</div>
+      </div>`;
+    }).join('');
+  }
+  function telaAvisos(v) {
+    const lista = setores();
+    const f = v.form || (v.form = { setor: (lista[0] || {}).id, nome: '', texto: '' });
+    if (!lista.some((s) => s.id === f.setor)) { f.setor = (lista[0] || {}).id; f.nome = ''; }
+    const ops = f.setor ? operadoresDo(f.setor) : [];
+    if (f.nome && !ops.some((o) => o.nome === f.nome)) f.nome = '';
+    return `${cabecalho('Avisos', 'Mensagens para quem está trabalhando', true)}
+      <main class="tela-avisos">
+        <div class="avisos-grade">
+          <section class="bloco novo-aviso">
+            <h2>${ico('sino')} Novo aviso</h2>
+            <h3>Para qual setor?</h3>
+            <div class="chips-escolha">${lista.map((s) => `<button class="${s.id === f.setor ? 'sel' : ''}" data-a="aviso-setor" data-id="${s.id}">${ico(s.icone)}<span>${esc(s.nome)}</span></button>`).join('')}</div>
+            <h3>Para quem?</h3>
+            <div class="chips-escolha">
+              <button class="${!f.nome ? 'sel' : ''}" data-a="aviso-pessoa" data-nome="">${ico('pessoas')}<span>Quem estiver no setor</span></button>
+              ${ops.map((o) => `<button class="${f.nome === o.nome ? 'sel' : ''}" data-a="aviso-pessoa" data-nome="${esc(o.nome)}">${ico('pessoa')}<span>${esc(o.nome)}</span>${trabalhandoAgora(f.setor, o.nome) ? '<small class="trabalhando">trabalhando</small>' : ''}</button>`).join('')}
+            </div>
+            <h3><label for="aviso-texto">Mensagem</label></h3>
+            <textarea id="aviso-texto" maxlength="${TAMANHO_AVISO}" rows="3" placeholder="Escreva aqui o aviso">${esc(f.texto)}</textarea>
+            <div class="frases">${FRASES_AVISO.map((t) => `<button class="btn pequeno" data-a="aviso-frase" data-texto="${esc(t)}">${esc(t)}</button>`).join('')}</div>
+            <p class="aviso-previa" id="aviso-previa">${esc(previaDoAviso(f))}</p>
+            <button class="btn primario largo" data-a="aviso-enviar">${ico('enviar')} Enviar aviso</button>
+          </section>
+          <section class="bloco">
+            <h2>Avisos enviados</h2>
+            <div id="lista-avisos" class="lista-avisos">${htmlListaAvisos()}</div>
+          </section>
+        </div>
+      </main>`;
+  }
+  function atualizarTelaAvisos() {
+    const el = document.getElementById('lista-avisos');
+    if (el) el.innerHTML = htmlListaAvisos();
+    const v = view();
+    const p = document.getElementById('aviso-previa');
+    if (p && v.form) p.textContent = previaDoAviso(v.form);
+  }
+  /** Fecha o aviso da tela se o escritório cancelou enquanto ele estava aberto. */
+  function revisarAvisoNaTela() {
+    if (!avisoNaTela) return;
+    const av = todosAvisos().find((x) => x.id === avisoNaTela);
+    if (av && av.cancelado && modalAberto()) { fecharModalAtual(); toast('O escritório cancelou o aviso'); }
   }
 
   /* =========================================================
@@ -1718,6 +1927,11 @@
             <h3>Tipos de produto</h3>${lista('produtos', 'produto')}
             <h3 style="margin-top:14px">Fornecedores</h3>${lista('fornecedores', 'fornecedor')}
           </section>
+          <section class="bloco">
+            <h2>${ico('wifi')} Aparelhos conectados</h2>
+            ${htmlAparelhos()}
+            <div class="linha-botoes"><button class="btn pequeno" data-a="ver-erros">${ico('alerta')} Ver erros dos aparelhos</button></div>
+          </section>
         </div>
         <h2 style="margin-top:8px">Setores</h2>
         <div class="config-grade">${todosSetores.map((s) => {
@@ -1747,6 +1961,30 @@
           </section>`;
         }).join('')}</div>
       </main>`;
+  }
+  function htmlAparelhos() {
+    const st = sync.status;
+    if (cfg.demo) return '<p class="sub" style="margin:0">Na demonstração não há outros aparelhos.</p>';
+    const lista = st && st.aparelhos ? st.aparelhos.slice().sort((a, b) => a.minutos - b.minutos) : [];
+    if (!lista.length) return '<p class="sub" style="margin:0">Nenhum aparelho mandou nada desde que a central ligou.</p>';
+    return `<div class="aparelhos">${lista.map((a) => {
+      const nome = a.papel === 'central' ? nomeDoChefe() : (setorPorId(a.papel) || {}).nome || 'sem setor';
+      const velho = a.versao && a.versao !== VERSAO;
+      return `<div class="aparelho"><span class="conexao ${a.online ? 'ok' : 'off'}"><i></i>${a.online ? 'Ligado' : `Sem sinal há ${a.minutos} min`}</span>
+        <b>${esc(nome)}</b><small>${esc(a.operador || 'ninguém no turno')} · ${esc(a.id)} · versão ${esc(a.versao || 'antiga')}${velho ? ' (atualizar)' : ''}</small></div>`;
+    }).join('')}</div>`;
+  }
+  async function verErros() {
+    let lista = [];
+    try {
+      const r = await buscar('api/erros', {}, 6000);
+      lista = r.ok ? (await r.json()).erros || [] : [];
+    } catch (e) { return toast('Não consegui falar com a central', 'erro'); }
+    const quando = (ms) => new Date(ms).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+    await abrirModal(`<h3>Erros dos aparelhos</h3>
+      <p class="dica">${lista.length ? `Os ${Math.min(lista.length, 40)} mais recentes. Ficam guardados em ServidorUsina, no arquivo erros.log.` : 'Nenhum erro registrado. Tudo certo.'}</p>
+      <div class="lista-erros">${lista.slice(-40).reverse().map((e) => `<div><b>${esc(quando(e.quando || e.recebidoEm))} · ${esc((setorPorId(e.papel) || {}).nome || e.papel || '')} · ${esc(e.aparelho || '')}</b><span>${esc(e.msg)}</span><small>tela ${esc(e.tela || '-')} · versão ${esc(e.versao || '-')}</small></div>`).join('')}</div>
+      <div class="acoes-modal um"><button class="btn primario" data-k="x">Fechar</button></div>`, (k, b, fechar) => fechar(), { classe: 'largo' });
   }
   function mudarConfigLista(tipo, setorId, pid) {
     const cs = configSistema();
@@ -1980,7 +2218,8 @@
             <h2>${ico('wifi')} Rede</h2>
             <dl class="kv"><dt>Situação</dt><dd><span class="conexao ${classeConexao()}"><i></i>${esc(textoConexao())}</span></dd>
               <dt>Servidor</dt><dd>${esc(cfg.demo ? 'demonstração' : pluginCentral && ehCentral() ? 'este próprio tablet' : cfg.central || location.host)}</dd>
-              <dt>Código do aparelho</dt><dd>${esc(cfg.deviceId)}</dd><dt>Esperando envio</dt><dd>${pendentes()}</dd></dl>
+              <dt>Código do aparelho</dt><dd>${esc(cfg.deviceId)}</dd><dt>Esperando envio</dt><dd>${pendentes()}</dd>
+              <dt>Relógio</dt><dd>${esc(cfg.demo ? 'demonstração' : textoRelogio())}</dd><dt>Versão do aplicativo</dt><dd>${VERSAO}</dd></dl>
             <div class="linha-botoes"><button class="btn pequeno perigo" data-a="desconectar">${ico('wifi')} Desconectar da central</button></div>
           </section>
           <section class="bloco">
@@ -1991,7 +2230,7 @@
               <button class="btn pequeno perigo" data-a="limpar-tudo">${ico('lixeira')} Apagar dados deste aparelho</button></div>
           </section>
         </div>
-        <p class="autoria">Pranchetas Digitais · ${esc(AUTORIA)}</p>
+        <p class="autoria">Pranchetas Digitais ${VERSAO} · ${esc(AUTORIA)}</p>
       </main>`;
   }
 
@@ -2083,7 +2322,9 @@
         }
         definirOperador(nome); toast(`Bom trabalho, ${nome}`);
         if (pilha.length > 1) pilha.pop(); else pilha = [telaInicial()];
-        rascunho = null; return render(true);
+        rascunho = null; render(true);
+        setTimeout(verificarAvisos, 700); // aviso guardado para esta pessoa aparece logo que ela entra
+        return;
       }
       case 'admin': {
         const s = await pedirSenhaModal();
@@ -2134,6 +2375,32 @@
       case 'abrir-setor': return ir({ tela: 'prancheta', pid: pranchetasDasAbas(b.dataset.id)[0], data: v.data });
       case 'compartilhar': return compartilhar(b.dataset.destino, v.data || dataProducao());
       case 'relatorios': return ir({ tela: 'relatorios' });
+      case 'avisos': return ir({ tela: 'avisos' });
+      case 'ver-erros': return verErros();
+      case 'aviso-setor': v.form.setor = b.dataset.id; v.form.nome = ''; return render();
+      case 'aviso-pessoa': v.form.nome = b.dataset.nome; return render();
+      case 'aviso-frase': {
+        const junto = ((v.form.texto || '').trim() + ' ' + b.dataset.texto).trim();
+        v.form.texto = junto.slice(0, TAMANHO_AVISO); return render();
+      }
+      case 'aviso-enviar': {
+        const f = v.form;
+        const campo = document.getElementById('aviso-texto');
+        if (campo) f.texto = campo.value;
+        const texto = (f.texto || '').replace(/\s+/g, ' ').trim();
+        if (!f.setor) return toast('Escolha o setor', 'erro');
+        if (texto.length < 2) return toast('Escreva a mensagem do aviso', 'erro');
+        enviarAviso(f.setor, f.nome, texto.slice(0, TAMANHO_AVISO));
+        const setor = setorPorId(f.setor).nome;
+        const agora = !cfg.demo && trabalhandoAgora(f.setor, f.nome);
+        toast(agora ? `Aviso enviado. Aparece agora na tela da ${setor}.` : `Aviso guardado. Aparece quando ${f.nome || 'alguém'} entrar na ${setor}.`);
+        f.texto = ''; return render();
+      }
+      case 'aviso-cancelar': {
+        if (!(await confirmar('Cancelar este aviso?', 'Ele não vai mais aparecer na tela da pessoa.', 'Cancelar aviso', true))) return;
+        gravar(b.dataset.data, PID_AVISO, b.dataset.id, { cancelado: true, canceladoEm: Date.now() }, { operador: 'escritório' });
+        toast('Aviso cancelado'); return render();
+      }
       case 'ler-folha': return comecarLeitura(v.data || dataProducao());
       case 'leitura-linha': { const l = v.leitura.linhas[Number(b.dataset.i)]; if (l.temValor) l.incluir = !l.incluir; return render(); }
       case 'leitura-cel': return corrigirCelula(v, Number(b.dataset.i), b.dataset.c);
@@ -2261,6 +2528,11 @@
         return;
     }
   });
+  app.addEventListener('input', (e) => {
+    if (e.target.id !== 'aviso-texto') return;
+    const v = view();
+    if (v.form) { v.form.texto = e.target.value; atualizarTelaAvisos(); }
+  });
   let eventoInstalar = null;
   window.addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); eventoInstalar = e; });
 
@@ -2300,6 +2572,7 @@
     z *= { menor: 0.88, normal: 1, maior: 1.14 }[cfg.escala] || 1;
     z = Math.round(z * 100) / 100;
     document.documentElement.style.setProperty('--escala', z);
+    document.documentElement.dataset.escala = cfg.escala || 'normal';
     document.body.style.zoom = z;
   }
   window.addEventListener('resize', () => { ajustarEscala(); });
@@ -2309,6 +2582,7 @@
    * ========================================================= */
   /** Tela cheia só quando ligada nos ajustes. Desligada, o app respeita a barra de bateria e hora. */
   function aplicarTelaCheia() {
+    document.documentElement.toggleAttribute('data-cheia', !!cfg.telaCheia); // no celular, a hora do app só aparece em tela cheia
     if (DEMO_IMG) return;
     if (NO_APK) {
       if (pluginCentral) pluginCentral.telaCheia({ ligar: !!cfg.telaCheia }).catch(() => {});
@@ -2322,7 +2596,7 @@
     if (!NO_APK && cfg.telaCheia) aplicarTelaCheia(); // no navegador, só depois de um toque na tela
     if (navigator.wakeLock && document.visibilityState === 'visible') navigator.wakeLock.request('screen').catch(() => {});
   }
-  document.addEventListener('contextmenu', (e) => { if (!e.target.closest('input')) e.preventDefault(); });
+  document.addEventListener('contextmenu', (e) => { if (!e.target.closest('input, textarea')) e.preventDefault(); });
   document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') { entrarTelaCheia(); sincronizar(); } });
 
   /* =========================================================
@@ -2371,6 +2645,7 @@
     // ?demo&papel=hidrolise&op=Guilherme&tela=prancheta&pid=hid_anexo1&chave=9&campo=brix&teclas=18
     cfg.papel = params.get('papel') || null;
     if (params.get('tema')) { cfg.tema = params.get('tema'); aplicarTema(); }
+    if (params.get('escala')) { cfg.escala = params.get('escala'); ajustarEscala(); }
     if (params.get('op')) definirOperador(params.get('op'));
     preencherExemplo();
     Object.values(registros).forEach((r) => { r.sincronizado = true; });
@@ -2388,6 +2663,15 @@
       pilha = [telaInicial()];
       if (tela === 'operador') { cfg.op = null; pilha.push({ tela: 'operador' }); }
       else if (tela === 'config' || tela === 'admin' || tela === 'relatorios') pilha.push({ tela });
+      else if (tela === 'avisos') {
+        // exemplos: um lido, um na tela e um esperando
+        const a1 = enviarAviso('hidrolise', 'Guilherme', 'Passe no escritório antes de sair, por favor.');
+        gravar(dataProducao(), PID_RECIBO, a1, { mostradoEm: Date.now() - 600000, mostradoPara: 'Guilherme', lidoEm: Date.now() - 540000, lidoPor: 'Guilherme' }, { operador: 'Guilherme' });
+        const a2 = enviarAviso('caldeira', 'Alberto', 'O técnico da caldeira chega às 14h. Acompanhe ele, por favor.');
+        gravar(dataProducao(), PID_RECIBO, a2, { mostradoEm: Date.now() - 120000, mostradoPara: 'Alberto' }, { operador: 'Alberto' });
+        enviarAviso('destilaria', '', 'Ligue para o escritório.');
+        pilha.push({ tela: 'avisos', form: { setor: 'hidrolise', nome: 'Felipe', texto: 'Amanhã o turno começa mais cedo, às 6h.' } });
+      }
       else if (tela === 'prancheta') {
         const pv = { tela, pid: params.get('pid') };
         if (params.get('chave')) pv.chave = Number(params.get('chave'));
@@ -2402,6 +2686,10 @@
       (params.get('teclas') || '').split('|').filter(Boolean).forEach((k) => tecla(k));
     }
     if (params.get('modal') === 'formato') compartilhar('whatsapp', dataProducao());
+    if (params.get('aviso') && cfg.papel && !ehCentral() && operadorAtual()) {
+      enviarAviso(cfg.papel, operadorAtual(), 'Passe no escritório antes de sair, por favor. O encarregado quer falar sobre a troca de turno de amanhã.');
+      verificarAvisos();
+    }
     if (params.get('lerfoto')) {
       // ?demo&papel=central&lerfoto=teste.jpg&pid=hid_anexo2 : lê uma foto de teste sem abrir a câmera
       fetch(params.get('lerfoto')).then((r) => r.blob()).then((b) => lerFolhaDeArquivo(params.get('pid'), dataProducao(), new File([b], 'folha.jpg', { type: b.type })));
@@ -2420,15 +2708,17 @@
 
   aplicarTema();
   ajustarEscala();
+  document.documentElement.toggleAttribute('data-cheia', !!cfg.telaCheia);
   if (DEMO_IMG) iniciarImagens();
   else {
     if (centralNoTablet()) ligarCentralDoTablet().then(sincronizar);
     // no aplicativo, quem guarda se a tela cheia está ligada é o Android
-    if (NO_APK && pluginCentral && pluginCentral.telaCheia) pluginCentral.telaCheia({}).then((r) => { if (!!r.ligada !== !!cfg.telaCheia) { cfg.telaCheia = !!r.ligada; salvarCfg(); } }).catch(() => {});
+    if (NO_APK && pluginCentral && pluginCentral.telaCheia) pluginCentral.telaCheia({}).then((r) => { if (!!r.ligada !== !!cfg.telaCheia) { cfg.telaCheia = !!r.ligada; salvarCfg(); document.documentElement.toggleAttribute('data-cheia', cfg.telaCheia); } }).catch(() => {});
     pilha = [telaInicial()];
     if (cfg.papel && (cfg.chave || cfg.demo) && !ehCentral() && !operadorAtual()) pilha.push({ tela: 'operador' });
     render(true);
     sincronizar();
+    setTimeout(verificarAvisos, 800); // aviso que já estava guardado neste aparelho
     // o tablet chefe atualiza mais rápido, para acompanhar em tempo real
     setInterval(sincronizar, ehCentral() ? 4000 : 8000);
     setInterval(() => { if (foraDaRede() && view().tela !== 'bloqueado' && !modalAberto()) render(); }, 60000);

@@ -167,7 +167,9 @@ public class ServidorCentral {
     carregarRegistros();
     socketServidor = new ServerSocket();
     socketServidor.setReuseAddress(true);
-    socketServidor.bind(new java.net.InetSocketAddress(porta));
+    // "pranchetas.ip" só existe nos testes no computador (liga só no próprio computador); no tablet fica em todas as redes
+    String ipFixo = System.getProperty("pranchetas.ip");
+    socketServidor.bind(ipFixo != null ? new java.net.InetSocketAddress(ipFixo, porta) : new java.net.InetSocketAddress(porta));
     trabalhadores = Executors.newFixedThreadPool(8);
     rodando = true;
     new Thread(this::aceitarConexoes, "servidor-usina").start();
@@ -403,6 +405,8 @@ public class ServidorCentral {
         return;
       }
 
+      if ("/relatorios".equals(caminho) || "/relatorios/".equals(caminho)) { paginaRelatorios(saida); return; }
+
       if (caminho.startsWith("/relatorios/")) {
         String[] pedaco = caminho.substring("/relatorios/".length()).split("/");
         if (pedaco.length == 2 && pedaco[0].matches("\\d{4}-\\d{2}-\\d{2}") && !pedaco[1].contains("..")) {
@@ -422,6 +426,7 @@ public class ServidorCentral {
         if ("/api/registros".equals(caminho)) { apiRegistros(consulta, saida); return; }
         if ("/api/status".equals(caminho)) { apiStatus(saida); return; }
         if ("/api/relatorios".equals(caminho)) { apiRelatorios(saida); return; }
+        if ("/api/erros".equals(caminho)) { apiErros(saida); return; }
         if ("/api/novo-codigo".equals(caminho) && "POST".equals(metodo)) { enviarJson(saida, 200, new JSONObject().put("codigo", novoCodigo())); return; }
         if ("/api/relatorio".equals(caminho) && "POST".equals(metodo)) { apiRelatorio(corpo, saida); return; }
         enviarJson(saida, 404, new JSONObject().put("erro", "rota desconhecida"));
@@ -445,9 +450,11 @@ public class ServidorCentral {
       aparelhos.put(aparelho, new JSONObject()
           .put("papel", pedido.optString("papel"))
           .put("operador", pedido.optString("operador"))
+          .put("versao", pedido.optString("versao"))
           .put("vistoEm", System.currentTimeMillis())
           .put("ip", ip));
     }
+    guardarErros(aparelho, pedido.optJSONArray("erros"), ip);
     JSONArray chegaram = pedido.optJSONArray("registros");
     int aceitos = 0;
     List<String> dias = new ArrayList<>();
@@ -470,7 +477,48 @@ public class ServidorCentral {
       salvarRegistros();
       for (String dia : dias) backupDoDia(dia);
     }
-    enviarJson(saida, 200, new JSONObject().put("ok", true).put("aceitos", aceitos).put("seq", seq));
+    enviarJson(saida, 200, new JSONObject().put("ok", true).put("aceitos", aceitos).put("seq", seq).put("agora", System.currentTimeMillis()));
+  }
+
+  /** Erros que os aparelhos mandam: uma linha JSON por erro em ServidorUsina/erros.log (passou de 2 MB, começa outro). */
+  private synchronized void guardarErros(String aparelho, JSONArray lista, String ip) {
+    if (lista == null || lista.length() == 0) return;
+    try {
+      File arquivo = new File(pastaServidor, "erros.log");
+      if (arquivo.exists() && arquivo.length() > 2L * 1024 * 1024) {
+        File antigo = new File(pastaServidor, "erros-antigo.log");
+        if (antigo.exists()) antigo.delete();
+        arquivo.renameTo(antigo);
+      }
+      StringBuilder sb = new StringBuilder();
+      for (int i = 0; i < Math.min(lista.length(), 50); i++) {
+        JSONObject e = lista.optJSONObject(i);
+        if (e == null) continue;
+        sb.append(new JSONObject()
+            .put("recebidoEm", System.currentTimeMillis()).put("aparelho", cortar(aparelho, 40)).put("ip", ip)
+            .put("quando", e.optLong("quando")).put("versao", cortar(e.optString("versao"), 20))
+            .put("papel", cortar(e.optString("papel"), 40)).put("tela", cortar(e.optString("tela"), 40))
+            .put("msg", cortar(e.optString("msg"), 300)).put("detalhe", cortar(e.optString("detalhe"), 900)).toString()).append('\n');
+      }
+      try (FileOutputStream saida = new FileOutputStream(arquivo, true)) { saida.write(sb.toString().getBytes(StandardCharsets.UTF_8)); }
+    } catch (Exception erro) { /* registro de erro é melhor esforço */ }
+  }
+
+  private static String cortar(String texto, int tamanho) {
+    if (texto == null) return "";
+    return texto.length() > tamanho ? texto.substring(0, tamanho) : texto;
+  }
+
+  private void apiErros(OutputStream saida) throws Exception {
+    JSONArray lista = new JSONArray();
+    File arquivo = new File(pastaServidor, "erros.log");
+    if (arquivo.exists()) {
+      String[] linhas = new String(lerArquivo(arquivo), StandardCharsets.UTF_8).trim().split("\n");
+      for (int i = Math.max(0, linhas.length - 100); i < linhas.length; i++) {
+        try { if (!linhas[i].trim().isEmpty()) lista.put(new JSONObject(linhas[i])); } catch (Exception ignorado) { }
+      }
+    }
+    enviarJson(saida, 200, new JSONObject().put("erros", lista));
   }
 
   private synchronized void apiRegistros(String consulta, OutputStream saida) throws Exception {
@@ -499,6 +547,7 @@ public class ServidorCentral {
           .put("id", e.getKey())
           .put("papel", a.optString("papel"))
           .put("operador", a.optString("operador"))
+          .put("versao", a.optString("versao"))
           .put("ip", a.optString("ip"))
           .put("online", agora - visto < 30000)
           .put("minutos", Math.round((agora - visto) / 60000.0)));
@@ -536,6 +585,42 @@ public class ServidorCentral {
       }
     }
     enviarJson(saida, 200, new JSONObject().put("pasta", "RelatoriosUsina").put("dias", dias));
+  }
+
+  /** Página simples para abrir no navegador do escritório: os relatórios guardados, por dia. */
+  private void paginaRelatorios(OutputStream saida) throws IOException {
+    StringBuilder linhas = new StringBuilder();
+    File[] pastas = pastaRelatorios.listFiles();
+    if (pastas != null) {
+      Arrays.sort(pastas, (a, b) -> b.getName().compareTo(a.getName()));
+      for (File dia : pastas) {
+        if (!dia.isDirectory() || !dia.getName().matches("\\d{4}-\\d{2}-\\d{2}")) continue;
+        String[] p = dia.getName().split("-");
+        linhas.append("<tr><td><b>").append(p[2]).append('/').append(p[1]).append('/').append(p[0]).append("</b></td><td>");
+        File[] arquivos = dia.listFiles();
+        if (arquivos != null) {
+          Arrays.sort(arquivos, (a, b) -> a.getName().compareTo(b.getName()));
+          for (File a : arquivos) {
+            if (a.getName().endsWith(".tmp")) continue;
+            String nome = escHtml(a.getName());
+            linhas.append("<a href=\"/relatorios/").append(dia.getName()).append('/').append(java.net.URLEncoder.encode(a.getName(), "UTF-8").replace("+", "%20"))
+                .append("\">").append(nome).append("</a> &nbsp; ");
+          }
+        }
+        linhas.append("</td></tr>");
+      }
+    }
+    String html = "<!doctype html><html lang=\"pt-BR\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">"
+        + "<title>Relatórios das pranchetas</title><link rel=\"stylesheet\" href=\"/styles.css\"></head><body>"
+        + "<header class=\"topo\"><img class=\"logo\" src=\"/icons/logo.png\" alt=\"Ubirálcool\"><div class=\"titulo\"><b>Relatórios das pranchetas</b><span>Arquivos guardados no tablet chefe</span></div></header>"
+        + "<main><p class=\"sub\">Clique para baixar e anexar no e-mail ou no sistema da empresa.</p><div class=\"folha\"><div class=\"tabela-wrap\"><table class=\"papel\"><thead><tr><th>Dia</th><th>Arquivos</th></tr></thead><tbody>"
+        + (linhas.length() > 0 ? linhas : "<tr><td colspan=\"2\" class=\"vazia\">Nenhum relatório guardado ainda.</td></tr>")
+        + "</tbody></table></div></div></main></body></html>";
+    enviar(saida, 200, "text/html; charset=utf-8", html.getBytes(StandardCharsets.UTF_8), null, false);
+  }
+
+  private static String escHtml(String s) {
+    return s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace("\"", "&quot;");
   }
 
   private void apiRelatorio(byte[] corpo, OutputStream saida) throws Exception {

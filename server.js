@@ -26,7 +26,7 @@ const PORTA = Number(process.env.PORTA || process.env.PORT || 8080);
 const PUBLICO = path.join(__dirname, 'public');
 const APK = path.join(__dirname, 'apk', 'saida', 'pranchetas.apk');
 // Pastas da usina, todas com final "Usina", dentro de app/dados
-const DADOS = path.join(__dirname, 'dados');
+const DADOS = process.env.PASTA_DADOS ? path.resolve(process.env.PASTA_DADOS) : path.join(__dirname, 'dados'); // os testes usam uma pasta separada
 const PASTAS = {
   servidor: path.join(DADOS, 'ServidorUsina'),
   relatorios: path.join(DADOS, 'RelatoriosUsina'),
@@ -46,6 +46,27 @@ Object.values(PASTAS).forEach((p) => fs.mkdirSync(p, { recursive: true }));
 });
 const ARQUIVO = path.join(PASTAS.servidor, 'registros.json');
 const CONFIG = path.join(PASTAS.servidor, 'config.json');
+const ERROS = path.join(PASTAS.servidor, 'erros.log');
+
+// erros que os aparelhos mandam: uma linha JSON por erro; passou de 2 MB, guarda o antigo e começa outro
+function guardarErros(aparelho, lista, ip) {
+  if (!Array.isArray(lista) || !lista.length) return;
+  const corta = (v, n) => String(v == null ? '' : v).slice(0, n);
+  const linhas = lista.slice(0, 50).map((e) => JSON.stringify({
+    recebidoEm: Date.now(), aparelho: corta(aparelho, 40), ip, quando: Number(e && e.quando) || null,
+    versao: corta(e && e.versao, 20), papel: corta(e && e.papel, 40), tela: corta(e && e.tela, 40),
+    msg: corta(e && e.msg, 300), detalhe: corta(e && e.detalhe, 900),
+  })).join('\n') + '\n';
+  try {
+    if (fs.existsSync(ERROS) && fs.statSync(ERROS).size > 2 * 1024 * 1024) fs.renameSync(ERROS, ERROS.replace('.log', '-antigo.log'));
+    fs.appendFileSync(ERROS, linhas);
+  } catch (e) { /* registro de erro é melhor esforço */ }
+}
+function ultimosErros(n) {
+  try {
+    return fs.readFileSync(ERROS, 'utf8').trim().split('\n').slice(-n).map((l) => { try { return JSON.parse(l); } catch (e) { return null; } }).filter(Boolean);
+  } catch (e) { return []; }
+}
 
 // ---------- configuração: chave da rede e código de conexão ----------
 const novoCodigo = () => String(crypto.randomInt(0, 1000000)).padStart(6, '0');
@@ -215,7 +236,8 @@ const servidor = http.createServer(async (req, res) => {
 
       if (p === '/api/sync' && req.method === 'POST') {
         const corpo = JSON.parse(await lerCorpo(req));
-        if (corpo.aparelho) aparelhos[corpo.aparelho] = { papel: corpo.papel, operador: corpo.operador, vistoEm: Date.now(), ip };
+        if (corpo.aparelho) aparelhos[corpo.aparelho] = { papel: corpo.papel, operador: corpo.operador, versao: corpo.versao || '', vistoEm: Date.now(), ip };
+        guardarErros(corpo.aparelho, corpo.erros, ip);
         const dias = new Set();
         let aceitos = 0;
         for (const r of Array.isArray(corpo.registros) ? corpo.registros : []) {
@@ -231,7 +253,7 @@ const servidor = http.createServer(async (req, res) => {
           }
         }
         if (aceitos) { gravarDisco(); dias.forEach(backupDoDia); }
-        return json(res, 200, { ok: true, aceitos, seq: db.seq });
+        return json(res, 200, { ok: true, aceitos, seq: db.seq, agora: Date.now() });
       }
 
       if (p === '/api/registros') {
@@ -247,7 +269,7 @@ const servidor = http.createServer(async (req, res) => {
           codigo: config.codigo, enderecos: enderecosLocais(), apk: fs.existsSync(APK),
           pastas: { servidor: PASTAS.servidor, relatorios: PASTAS.relatorios, backup: PASTAS.backup },
           aparelhos: Object.entries(aparelhos).map(([id, a]) => ({
-            id, papel: a.papel, operador: a.operador, ip: a.ip,
+            id, papel: a.papel, operador: a.operador, ip: a.ip, versao: a.versao || '',
             online: agora - a.vistoEm < 30000, minutos: Math.round((agora - a.vistoEm) / 60000),
           })),
         });
@@ -267,6 +289,8 @@ const servidor = http.createServer(async (req, res) => {
 
       if (p === '/api/relatorios') return json(res, 200, { pasta: 'RelatoriosUsina', dias: listaDeRelatorios() });
 
+      if (p === '/api/erros') return json(res, 200, { erros: ultimosErros(100) });
+
       if (p === '/api/novo-codigo' && req.method === 'POST') {
         config.codigo = novoCodigo(); salvarConfig();
         return json(res, 200, { codigo: config.codigo });
@@ -285,7 +309,8 @@ const servidor = http.createServer(async (req, res) => {
   }
 });
 
-servidor.listen(PORTA, '0.0.0.0', () => {
+// ENDERECO=127.0.0.1 deixa a central só neste computador (usado nos testes, para o Windows não perguntar do firewall)
+servidor.listen(PORTA, process.env.ENDERECO || '0.0.0.0', () => {
   console.log('\n  Central das Pranchetas rodando\n');
   console.log(`  Neste computador:     http://localhost:${PORTA}`);
   enderecosLocais().forEach((e) => console.log(`  Nos tablets (Wi-Fi):  ${e}`));

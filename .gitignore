@@ -9,3 +9,7 @@ node_modules/
 
 # Dados anotados na usina (não são código)
 dados/
+
+# Saída dos testes (fotos das telas, relatórios, servidor Java compilado)
+testes/saida/
+testes/java/saida/

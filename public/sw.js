@@ -1,6 +1,6 @@
 /* Pranchetas Digitais - © 2026 Guilherme. Todos os direitos reservados. Uso somente com autorização do autor (veja LICENCA.txt). */
 // Service worker: deixa o app abrir mesmo sem Wi-Fi (quando aberto pelo navegador).
-const CACHE = 'pranchetas-v8';
+const CACHE = 'pranchetas-v9';
 const ARQUIVOS = ['./', 'index.html', 'styles.css', 'forms.js', 'xlsx.js', 'modelos.js', 'leitor.js', 'qrcode.js', 'app.js', 'manifest.webmanifest',
   'icons/icon-192.png', 'icons/icon-512.png', 'icons/logo.png'];
 

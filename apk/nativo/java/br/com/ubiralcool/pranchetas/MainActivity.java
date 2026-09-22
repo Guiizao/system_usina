@@ -36,6 +36,8 @@ public class MainActivity extends BridgeActivity {
     // O aplicativo cuida sozinho do espaço das barras do Android, igual em todas as versões:
     // com a tela cheia desligada, nada fica embaixo da barra de bateria e hora nem da barra de botões.
     if (getBridge() == null || getBridge().getWebView() == null) return; // aparelho sem WebView: o Capacitor já mostra o aviso
+    // o bipe do aviso do escritório toca mesmo sem ninguém ter tocado na tela antes
+    getBridge().getWebView().getSettings().setMediaPlaybackRequiresUserGesture(false);
     WindowCompat.setDecorFitsSystemWindows(getWindow(), false);
     pintarBarras();
 
