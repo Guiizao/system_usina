@@ -50,6 +50,16 @@ export async function testarConfiguracao(grupo) {
 }
 
 export async function testarExtras(nav, central, grupo) {
+  await teste(grupo, 'código de conexão com zero na frente (014204) é digitado inteiro', async () => {
+    const a = await nav.novoAparelho('código', TAMANHOS.celular);
+    try {
+      await a.ir(central.url + '/', 'document.querySelector("[data-quadro=\\"codigo\\"]")');
+      await a.tocar('[data-quadro="codigo"]');
+      await a.teclar(['0', '1', '4', '2', '0', '4', '9']);
+      const txt = await a.avaliar('document.querySelector("[data-quadro=\\"codigo\\"] .val").textContent.trim()');
+      igual(txt, '014204', 'código no quadro');
+    } finally { await a.fechar(); }
+  });
   await teste(grupo, 'leitura de uma folha de papel fotografada, sem internet', async () => {
     const foto = 'C:/Users/guilh/Downloads/Phone Link/Hidrolise 1.jpg';
     if (!fs.existsSync(foto)) return 'foto de teste não encontrada, pulei';

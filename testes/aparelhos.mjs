@@ -69,7 +69,7 @@ export async function testarAparelhos(nav, central, grupo) {
     await teste(grupo, 'o escritório vê os dois aparelhos ligados, com o nome de quem está', async () => {
       await esc.esperar('document.body.innerText.includes("Ligado, Guilherme") && document.body.innerText.includes("Ligado, Alberto")', 25000);
     });
-    await teste(grupo, 'dorna com pH 4,6: o aviso da cal aparece e a anotação chega na central', async () => {
+    await teste(grupo, 'dorna com pH 4,6: o aviso da cal aparece, salva enchendo e chega na central', async () => {
       await tab.tocar('[data-a="abrir-prancheta"][data-id="hid_anexo1"]');
       await tab.tocar('[data-quadro="phf"]');
       await tab.teclar(['4', ',', '6']);
@@ -80,7 +80,15 @@ export async function testarAparelhos(nav, central, grupo) {
       await tab.tocar('[data-a="salvar"]');
       const r = await naCentral((x) => x.prancheta === 'hid_anexo1' && x.valores.phf === '4.6');
       igual(r.valores.brix, '18', 'Brix'); igual(r.operador, 'Guilherme', 'operador'); igual(r.chave, '1', 'dorna');
-      certo(/^\d\d:\d\d$/.test(r.valores.inicio), 'hora de início não foi preenchida sozinha');
+      certo(!r.valores.inicio, 'início marcado antes de enviar');
+      await tab.esperar('document.body.innerText.includes("Enchendo")', 5000, 'status enchendo');
+      await naCentral((x) => x.prancheta === 'hid_anexo2' && x.chave === '1', 15000, 'Sacarificação da dorna 1 criada sozinha');
+    });
+    await teste(grupo, 'Enviar: marca o início e a Sacarificação recebe o mesmo horário', async () => {
+      await tab.tocar('[data-a="enviar-dorna"]');
+      const r = await naCentral((x) => x.prancheta === 'hid_anexo1' && x.chave === '1' && /^\d\d:\d\d$/.test(x.valores.inicio || ''), 15000, 'início marcado');
+      await naCentral((x) => x.prancheta === 'hid_anexo2' && x.chave === '1' && x.valores.horario === r.valores.inicio, 15000, 'horário na Sacarificação');
+      await tab.esperar('document.body.innerText.includes("Enviando para cima")', 5000, 'status enviando');
     });
     await teste(grupo, 'celular anota a pressão da caldeira', async () => {
       await cel.tocar('[data-a="abrir-prancheta"][data-id="caldeira"]');
@@ -91,8 +99,8 @@ export async function testarAparelhos(nav, central, grupo) {
       const r = await naCentral((x) => x.prancheta === 'caldeira' && x.valores.pressao === '6');
       igual(r.operador, 'Alberto', 'operador');
     });
-    await teste(grupo, 'o escritório vê a dorna enchendo na mesma hora', async () => {
-      await esc.esperar('document.body.innerText.includes("Dorna 1 enchendo")', 20000);
+    await teste(grupo, 'o escritório vê a dorna sendo enviada na mesma hora', async () => {
+      await esc.esperar('document.body.innerText.includes("Nº 1 enviando desde")', 20000);
     });
     await teste(grupo, 'aviso para quem está trabalhando aparece grande na tela, com o texto sem virar código', async () => {
       await mandarAviso('hidrolise', 'Guilherme', 'Passe no escritório <b>agora</b> <img src=x onerror=alert(1)>');
@@ -147,6 +155,7 @@ export async function testarAparelhos(nav, central, grupo) {
     await teste(grupo, 'sem Wi-Fi: o tablet guarda a anotação e manda quando a rede volta', async () => {
       await tab.semRede(true);
       await tab.tocar('[data-a="abrir-prancheta"][data-id="hid_anexo1"]').catch(() => {});
+      await tab.tocar('.seletor button.nova'); // dorna nova (o Salvar agora continua na mesma dorna)
       await tab.tocar('[data-quadro="phf"]');
       await tab.teclar(['5', ',', '1']);
       await tab.tocar('[data-ed="ocultar"]');

@@ -187,6 +187,17 @@ public class ServidorCentral {
 
   public String getCodigo() { return config == null ? "" : config.optString("codigo", ""); }
 
+  /** Muda quando o escritório zera as anotações de teste; os tablets veem e limpam o que têm. */
+  public String getGeracao() {
+    try {
+      if (config.optString("geracao", "").isEmpty()) {
+        config.put("geracao", sorteiaChave().substring(0, 12));
+        salvarArquivo(new File(pastaServidor, "config.json"), config.toString().getBytes(StandardCharsets.UTF_8));
+      }
+    } catch (Exception e) { /* segue com a da memória */ }
+    return config.optString("geracao", "");
+  }
+
   public String novoCodigo() {
     try {
       config.put("codigo", sorteiaCodigo());
@@ -427,6 +438,7 @@ public class ServidorCentral {
         if ("/api/status".equals(caminho)) { apiStatus(saida); return; }
         if ("/api/relatorios".equals(caminho)) { apiRelatorios(saida); return; }
         if ("/api/erros".equals(caminho)) { apiErros(saida); return; }
+        if ("/api/zerar".equals(caminho) && "POST".equals(metodo)) { apiZerar(corpo, saida); return; }
         if ("/api/novo-codigo".equals(caminho) && "POST".equals(metodo)) { enviarJson(saida, 200, new JSONObject().put("codigo", novoCodigo())); return; }
         if ("/api/relatorio".equals(caminho) && "POST".equals(metodo)) { apiRelatorio(corpo, saida); return; }
         enviarJson(saida, 404, new JSONObject().put("erro", "rota desconhecida"));
@@ -455,6 +467,12 @@ public class ServidorCentral {
           .put("ip", ip));
     }
     guardarErros(aparelho, pedido.optJSONArray("erros"), ip);
+    String geracaoDele = pedido.optString("geracao", "");
+    if (!geracaoDele.isEmpty() && !geracaoDele.equals(getGeracao())) {
+      // aparelho com anotações de antes de zerar: não aceita, manda ele limpar
+      enviarJson(saida, 200, new JSONObject().put("ok", false).put("zerar", true).put("geracao", getGeracao()).put("seq", seq).put("agora", System.currentTimeMillis()));
+      return;
+    }
     JSONArray chegaram = pedido.optJSONArray("registros");
     int aceitos = 0;
     List<String> dias = new ArrayList<>();
@@ -477,7 +495,7 @@ public class ServidorCentral {
       salvarRegistros();
       for (String dia : dias) backupDoDia(dia);
     }
-    enviarJson(saida, 200, new JSONObject().put("ok", true).put("aceitos", aceitos).put("seq", seq).put("agora", System.currentTimeMillis()));
+    enviarJson(saida, 200, new JSONObject().put("ok", true).put("aceitos", aceitos).put("seq", seq).put("agora", System.currentTimeMillis()).put("geracao", getGeracao()));
   }
 
   /** Erros que os aparelhos mandam: uma linha JSON por erro em ServidorUsina/erros.log (passou de 2 MB, começa outro). */
@@ -534,7 +552,7 @@ public class ServidorCentral {
       JSONObject r = registros.optJSONObject(it.next());
       if (r != null && r.optLong("seq") > desde) lista.put(r);
     }
-    enviarJson(saida, 200, new JSONObject().put("seq", seq).put("registros", lista));
+    enviarJson(saida, 200, new JSONObject().put("seq", seq).put("geracao", getGeracao()).put("registros", lista));
   }
 
   private synchronized void apiStatus(OutputStream saida) throws Exception {
@@ -633,6 +651,31 @@ public class ServidorCentral {
     }
     String onde = guardarRelatorio(data, nome, android.util.Base64.decode(pedido.optString("base64"), android.util.Base64.DEFAULT));
     enviarJson(saida, 200, new JSONObject().put("ok", true).put("caminho", onde));
+  }
+
+  /** Zera as anotações de teste: guarda uma cópia em BackupUsina e apaga tudo, menos a configuração da usina. */
+  private synchronized void apiZerar(byte[] corpo, OutputStream saida) throws Exception {
+    JSONObject pedido = new JSONObject(new String(corpo, StandardCharsets.UTF_8));
+    if (!"ZERAR".equals(pedido.optString("confirmar"))) { enviarJson(saida, 400, new JSONObject().put("erro", "faltou confirmar")); return; }
+    String carimbo = new java.text.SimpleDateFormat("yyyyMMddHHmm", Locale.US).format(new java.util.Date());
+    String nome = "antes-de-zerar-" + carimbo + ".json";
+    JSONArray tudo = new JSONArray();
+    List<String> apagar = new ArrayList<>();
+    for (Iterator<String> it = registros.keys(); it.hasNext(); ) {
+      String id = it.next();
+      JSONObject r = registros.optJSONObject(id);
+      if (r == null) continue;
+      tudo.put(r);
+      if (!"config".equals(r.optString("data"))) apagar.add(id);
+    }
+    byte[] copia = tudo.toString().getBytes(StandardCharsets.UTF_8);
+    salvarArquivo(new File(pastaBackup, nome), copia);
+    espelhar("BackupUsina", nome, copia, "application/json");
+    for (String id : apagar) registros.remove(id);
+    config.put("geracao", sorteiaChave().substring(0, 12));
+    salvarArquivo(new File(pastaServidor, "config.json"), config.toString().getBytes(StandardCharsets.UTF_8));
+    salvarRegistros();
+    enviarJson(saida, 200, new JSONObject().put("ok", true).put("apagados", apagar.size()).put("geracao", getGeracao()).put("copia", "BackupUsina/" + nome));
   }
 
   private boolean chutesDemais(String ip) {

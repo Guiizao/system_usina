@@ -281,11 +281,11 @@ h3.secao-titulo { font-size: 21px; margin: 26px 0 10px; }
 .grupos { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 268px), 1fr)); gap: 10px; align-items: start; }
 .grupo { background: var(--papel-2); border: 2px solid var(--linha-clara); border-radius: 12px; padding: 8px 10px 10px; }
 .grupo h3 { margin: 0 0 6px; font-size: 17px; font-weight: 700; color: var(--tinta-2); }
-.grupo .par { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.grupo .par { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
 .grupo .par.um { grid-template-columns: 1fr; }
 .grupo .campo { min-height: 92px; padding: 8px 10px; }
 .grupo .campo .val { font-size: 36px; white-space: nowrap; overflow: hidden; }
-.grupo .campo .val.vazio, .grupo .campo .val.texto { white-space: normal; }
+.grupo .campo .val.texto { white-space: normal; overflow-wrap: normal; }
 .grupo .campo .rot svg.ico { width: 20px; height: 20px; color: var(--vermelho); }
 .grupo .campo .rot { font-size: 17px; }
 .chip.sel { background: var(--grafite); color: #fff; border-color: var(--grafite); }
@@ -293,9 +293,9 @@ h3.secao-titulo { font-size: 21px; margin: 26px 0 10px; }
 .campos { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 176px), 1fr)); gap: 12px; }
 .campo { position: relative; display: flex; flex-direction: column; align-items: stretch; min-height: 122px; padding: 12px 14px; border-radius: 10px; background: var(--papel); border: 2px dashed var(--linha); }
 .campo .rot { font-size: 18px; font-weight: 700; color: var(--tinta-2); }
-.campo .val { margin-top: auto; font-size: 44px; font-weight: 700; line-height: 1.05; overflow-wrap: anywhere; }
+.campo .val { margin-top: auto; font-size: 44px; font-weight: 700; line-height: 1.05; white-space: nowrap; overflow: hidden; }
 .campo .val small { font-size: 19px; color: var(--tinta-2); margin-left: 6px; font-weight: 400; }
-.campo .val.vazio { font-size: 18px; font-weight: 400; color: var(--tinta-2); }
+.campo .val.vazio { font-size: 18px; font-weight: 400; color: var(--tinta-2); white-space: nowrap; overflow: hidden; line-height: 1.2; }
 .campo .val.texto { font-size: 26px; overflow-wrap: normal; word-break: normal; }
 .campo.preenchido { border-style: solid; border-color: var(--grafite); }
 .campo.fora { border: 3px solid var(--vermelho); background: var(--vermelho-fundo); }
@@ -455,7 +455,7 @@ table.papel td.atencao { background: var(--ambar-fundo); color: var(--ambar-text
 .grupo .par.n3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 /* Nome do operador e o selo "sem senha": o nome quebra só entre palavras e o selo nunca quebra */
 .opcoes.nomes button .nome-op { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: flex-start; gap: 6px; text-align: left; line-height: 1.15; }
-.opcoes.nomes button .nome-op b { max-width: 100%; overflow-wrap: break-word; }
+.opcoes.nomes button .nome-op b { max-width: 100%; white-space: nowrap; overflow: hidden; }
 .sem-senha { flex: none; padding: 5px 12px; border-radius: 999px; background: var(--ambar-fundo); color: var(--ambar-texto); border: 1px solid var(--ambar); font-size: 16px; font-weight: 700; line-height: 1.2; white-space: nowrap; }
 :root[data-dispositivo="celular"] .sem-senha { font-size: 14px; padding: 4px 10px; }
 
@@ -1015,3 +1015,94 @@ body.ver-folhas .folha-imp.paisagem { width: 297mm; }
 /* Letra "Maior" com cinco botões na barra: os botões ficam só com o ícone, para o título caber */
 :root[data-escala="maior"] .topo:has(.atalhos > :nth-child(5)) .atalho span { display: none; }
 :root[data-escala="maior"] .topo:has(.atalhos > :nth-child(5)) .atalho { padding: 0 12px; }
+
+
+/* =====================================================================
+   Versão 2.2: texto que cabe, etapas da dorna, animações e ícones
+   ===================================================================== */
+/* Nada quebra palavra no meio: o que não couber diminui a letra (caberTextos no app.js) */
+.campo .rot, .abas button, .seletor button, .chip, .rodape .btn, .painel-nav .btn, .item .texto b, .setor-cartao .texto b,
+.papel-cartao b, .cabecalho-form .aviso, .linha-botoes .btn, .acoes-modal .btn, .opcoes-painel button { overflow-wrap: normal; word-break: normal; }
+.campo .rot, .rodape .btn, .painel-nav .btn, .abas button, .seletor button, .acoes-modal .btn { white-space: nowrap; overflow: hidden; }
+.campo .rot { display: flex; align-items: center; gap: 4px; min-width: 0; }
+.rodape .btn, .painel-nav .btn, .linha-botoes .btn { min-width: 0; }
+.item .texto b, .setor-cartao .texto b, .papel-cartao b { overflow: hidden; }
+.campo { min-width: 0; overflow: hidden; }
+
+/* Etapas da dorna: enchendo (amarelo), enviando (azul), anotada (verde) */
+.seletor button.enviando { border: 3px solid var(--foco); background: var(--ativo-fundo); color: var(--foco); }
+.aviso.info { border-color: var(--foco); background: var(--ativo-fundo); color: var(--foco); font-weight: 700; }
+:root[data-tema="escuro"] .seletor button.enviando, :root[data-tema="escuro"] .aviso.info { background: #1c2d4a; color: #b9d2ff; border-color: #6d9cf0; }
+.rodape .btn:not(.primario) { flex: 0 1 34%; }
+
+/* Tela de conectar: no celular, o texto da busca fica numa linha e o botão embaixo */
+.procura-central { flex-wrap: wrap; }
+.procura-central span { flex: 1 1 240px; min-width: 0; }
+:root[data-dispositivo="celular"] .procura-central { gap: 10px 12px; font-size: 16px; padding: 10px 12px; }
+:root[data-dispositivo="celular"] .procura-central .btn { flex: 1 1 100%; min-height: 54px; }
+:root[data-dispositivo="celular"] .boas-vindas .linha-botoes .btn { flex: 1 1 100%; min-width: 0 !important; }
+
+/* Ícones do tamanho do texto ao lado (antes alguns tinham tamanho fixo e ficavam grandes no celular) */
+.opcoes.nomes button svg.ico { width: 1.25em; height: 1.25em; }
+.procura-central > svg.ico { width: 1.6em; height: 1.6em; }
+.btn svg.ico, .chip svg.ico, .aviso svg.ico { width: 1.2em; height: 1.2em; }
+.abas button.casa svg.ico { width: 1.25em; height: 1.25em; }
+.item .seta svg.ico, .setor-cartao .seta svg.ico { width: 1.4em; height: 1.4em; }
+:root[data-dispositivo="celular"] .item .desenho svg.ico { width: 28px; height: 28px; }
+:root[data-dispositivo="celular"] .escolha-ico { width: 46px; height: 46px; }
+:root[data-dispositivo="celular"] .escolha-ico svg.ico { width: 26px; height: 26px; }
+:root[data-dispositivo="celular"] .setor-cartao .desenho { width: 44px; height: 44px; }
+:root[data-dispositivo="celular"] .setor-cartao .desenho svg.ico { width: 26px; height: 26px; }
+
+/* ---------- Animações: curtas e suaves, nada que atrapalhe quem está trabalhando ---------- */
+:root { --suave: cubic-bezier(.2, .8, .2, 1); }
+/* Troca de tela */
+#app.troca main, #app.troca .barra-trabalho { animation: entrarTela .22s var(--suave) both; }
+@keyframes entrarTela { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+/* Toque nos botões */
+button { transition: background-color .15s, border-color .15s, color .15s, box-shadow .15s, transform .08s; }
+.btn:active, .chip:active, .abas button:active, .seletor button:active, .atalho:active, .tema:active, .voltar:active,
+.opcoes button:active, .opcoes-painel button:active, .escolhas button:active, .chips-escolha button:active, .teclas button:active, .valor-linha .mm:active { transform: scale(.96); }
+.item:active, .setor-cartao:active, .papel-cartao:active, .campo:active { transform: scale(.985); }
+.campo { transition: border-color .15s, background-color .15s, box-shadow .2s, transform .08s; }
+/* Teclado entrando */
+.edicao.com-painel .painel { animation: painelEntra .2s var(--suave) both; }
+@keyframes painelEntra { from { opacity: 0; transform: translateX(24px); } to { opacity: 1; transform: none; } }
+@keyframes painelSobe { from { opacity: 0; transform: translateY(28px); } to { opacity: 1; transform: none; } }
+@media (max-width: 639px), (orientation: portrait) { .edicao.com-painel .painel { animation-name: painelSobe; } }
+/* Janelas: fundo escurece aos poucos, a janela sobe (celular) ou cresce (tablet) */
+.fundo-modal { animation: fundoEntra .18s ease-out both; }
+.fundo-modal .modal { animation: janelaSobe .24s var(--suave) both; }
+@media (min-width: 700px) { .fundo-modal .modal { animation-name: janelaCresce; } }
+.fundo-modal.fechando { animation: fundoSai .17s ease-in both; pointer-events: none; }
+.fundo-modal.fechando .modal { animation: janelaSai .17s ease-in both; }
+@keyframes fundoEntra { from { opacity: 0; } to { opacity: 1; } }
+@keyframes fundoSai { from { opacity: 1; } to { opacity: 0; } }
+@keyframes janelaSobe { from { opacity: 0; transform: translateY(40px); } to { opacity: 1; transform: none; } }
+@keyframes janelaCresce { from { opacity: 0; transform: scale(.94); } to { opacity: 1; transform: none; } }
+@keyframes janelaSai { from { opacity: 1; transform: none; } to { opacity: 0; transform: scale(.97) translateY(10px); } }
+/* Aviso do escritório: entra com mais presença e o sino balança */
+.fundo-modal.fundo-aviso .modal.aviso-grande { animation: avisoEntra .38s cubic-bezier(.2, 1.3, .4, 1) both; }
+.aviso-sino svg.ico { transform-origin: 50% 10%; animation: sinoBalanca 1.1s ease-in-out .3s 2; }
+@keyframes avisoEntra { from { opacity: 0; transform: scale(.85) translateY(20px); } to { opacity: 1; transform: none; } }
+@keyframes sinoBalanca { 0%, 100% { transform: rotate(0); } 15% { transform: rotate(16deg); } 35% { transform: rotate(-14deg); } 55% { transform: rotate(9deg); } 75% { transform: rotate(-5deg); } }
+/* Notificação: desce e some subindo */
+#toast { animation: toastEntra .3s var(--suave) both; }
+#toast.saindo { animation: toastSai .2s ease-in both; }
+@keyframes toastEntra { from { opacity: 0; transform: translateY(-18px) scale(.96); } to { opacity: 1; transform: none; } }
+@keyframes toastSai { from { opacity: 1; transform: none; } to { opacity: 0; transform: translateY(-14px) scale(.97); } }
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 1ms !important; animation-iteration-count: 1 !important; transition-duration: 1ms !important; }
+  .btn:active, .item:active, .campo:active, .teclas button:active { transform: none; }
+}
+
+/* Folha do monitoramento: rola para o lado com o dedo e também pelas setas */
+.tabela-wrap { touch-action: pan-x pan-y; overscroll-behavior-x: contain; }
+.folha-cab { align-items: center; }
+.folha-cab > div { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.rolar-folha { display: none; gap: 8px; flex: none; }
+.folha.larga .rolar-folha { display: flex; }
+.rolar-folha .btn { min-width: 58px; min-height: 50px; padding: 0 12px; }
+
+.cabecalho-form .btn, .cabecalho-form .aviso { max-width: 100%; }
+.topo .voltar svg.ico { width: 1.5em; height: 1.5em; }

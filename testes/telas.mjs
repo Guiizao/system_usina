@@ -10,7 +10,7 @@ import path from 'node:path';
 import { abrirNavegador, TAMANHOS, auditarLayout, dormir } from './navegador.mjs';
 
 const BASE = (process.argv[2] || 'http://localhost:8080').replace(/\/$/, '');
-const SO_TAMANHOS = process.argv[3] ? process.argv[3].split(',') : ['celular', 'celularGrande', 'celularDeitado', 'tablet8', 'tablet', 'tabletEmPe'];
+const SO_TAMANHOS = process.argv[3] ? process.argv[3].split(',') : ['celular', 'motorola', 'celularDeitado', 'tablet8', 'tablet10', 'tablet', 'tabletEmPe'];
 const SO_TELAS = process.argv[4] ? process.argv[4].split(',') : null;
 const SAIDA = path.join(path.dirname(new URL(import.meta.url).pathname.replace(/^\/([A-Z]:)/, '$1')), 'saida');
 
@@ -59,6 +59,10 @@ const TELAS = [
   ['letra-maior-chefe', '&escala=maior&papel=central'],
   ['letra-menor-dorna', '&escala=menor' + HID + '&campo=brix&teclas=1|8'],
   ['aviso-na-tela', '&papel=hidrolise&op=Guilherme&aviso=1'],
+  ['operador-nomes-longos', '&papel=hidrolise&tela=operador&nomesLongos=1'],
+  ['dorna-enviando', HID + '&chave=6'],
+  ['dorna-nova', HID + '&chave=7'],
+  ['avisos-chefe-celular', '&papel=central&tela=avisos'],
 ];
 
 const relatorio = { base: BASE, quando: new Date().toISOString(), telas: [] };

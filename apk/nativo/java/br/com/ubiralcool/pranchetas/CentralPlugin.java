@@ -21,8 +21,11 @@ import com.getcapacitor.JSArray;
 import com.getcapacitor.JSObject;
 import com.getcapacitor.Plugin;
 import com.getcapacitor.PluginCall;
+import com.getcapacitor.PermissionState;
 import com.getcapacitor.PluginMethod;
 import com.getcapacitor.annotation.CapacitorPlugin;
+import com.getcapacitor.annotation.Permission;
+import com.getcapacitor.annotation.PermissionCallback;
 
 import java.io.File;
 import java.io.FileOutputStream;
@@ -33,10 +36,60 @@ import java.io.FileOutputStream;
  * - cria as pastas ServidorUsina, RelatoriosUsina e BackupUsina;
  * - envia a folha direto para o WhatsApp ou e-mail do escritório.
  */
-@CapacitorPlugin(name = "Central")
+@CapacitorPlugin(name = "Central", permissions = {
+    // Android 17: permissão "Rede local". Android 16 (alguns aparelhos, como Motorola, já bloqueiam): "Dispositivos por perto".
+    @Permission(alias = "redeLocal", strings = { "android.permission.ACCESS_LOCAL_NETWORK" }),
+    @Permission(alias = "dispositivos", strings = { "android.permission.NEARBY_WIFI_DEVICES" })
+})
 public class CentralPlugin extends Plugin {
 
   private static final int PORTA_PADRAO = 8080;
+  private static final String REDE_LOCAL = "android.permission.ACCESS_LOCAL_NETWORK";
+
+  /** Qual permissão libera a rede local neste Android (ou null se ele não bloqueia). */
+  private String aliasDaRede() {
+    try {
+      getContext().getPackageManager().getPermissionInfo(REDE_LOCAL, 0);
+      return "redeLocal"; // o sistema conhece a permissão nova
+    } catch (PackageManager.NameNotFoundException e) {
+      return Build.VERSION.SDK_INT >= 36 ? "dispositivos" : null;
+    }
+  }
+
+  /**
+   * Confere (e, com pedir=true, pede) a permissão para falar com os outros tablets no Wi-Fi.
+   * Responde estado: livre (este Android não bloqueia), concedida, negada ou bloqueada (a pessoa marcou para não perguntar mais).
+   */
+  @PluginMethod
+  public void permissaoRede(PluginCall chamada) {
+    String alias = aliasDaRede();
+    if (alias == null) { chamada.resolve(new JSObject().put("estado", "livre")); return; }
+    if (getPermissionState(alias) == PermissionState.GRANTED) { chamada.resolve(new JSObject().put("estado", "concedida")); return; }
+    if (!Boolean.TRUE.equals(chamada.getBoolean("pedir", false))) { chamada.resolve(new JSObject().put("estado", "negada")); return; }
+    requestPermissionForAlias(alias, chamada, "voltouPermissaoRede");
+  }
+
+  @PermissionCallback
+  private void voltouPermissaoRede(PluginCall chamada) {
+    String alias = aliasDaRede();
+    boolean ok = alias == null || getPermissionState(alias) == PermissionState.GRANTED;
+    boolean podePerguntar = getActivity() != null && alias != null
+        && ActivityCompat.shouldShowRequestPermissionRationale(getActivity(), "redeLocal".equals(alias) ? REDE_LOCAL : Manifest.permission.NEARBY_WIFI_DEVICES);
+    chamada.resolve(new JSObject().put("estado", ok ? "concedida" : podePerguntar ? "negada" : "bloqueada"));
+  }
+
+  /** Abre a tela do aplicativo nos ajustes do Android (para liberar uma permissão na mão). */
+  @PluginMethod
+  public void abrirAjustesDoApp(PluginCall chamada) {
+    try {
+      Intent tela = new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:" + getContext().getPackageName()));
+      tela.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+      getContext().startActivity(tela);
+      chamada.resolve(new JSObject().put("aberto", true));
+    } catch (Exception e) {
+      chamada.reject("Não consegui abrir os ajustes: " + e.getMessage());
+    }
+  }
 
   private ServidorCentral servidor(PluginCall chamada) {
     return ServidorCentral.pegar(getContext(), chamada.getInt("porta", PORTA_PADRAO));

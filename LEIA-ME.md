@@ -99,6 +99,27 @@ Folhas lidas hoje: Hidrólise (Anexo I), Sacarificação (Anexo II) e todas as d
 
 O treino da rede fica fora do aplicativo (Python + PyTorch), com a base EMNIST de letras de mão, 90 fontes cursivas e de mão do Google Fonts, números desenhados no jeito brasileiro (1 com gancho, 7 cortado) e células reais das folhas da usina.
 
+## Dia da Hidrólise (versão 2.2)
+
+Do jeito que é feito na área:
+
+1. **Enchendo:** a dorna de baixo enche. O operador anota Brix, pH, cal (em copos de 1 litro) e enzima e toca em **Salvar**. A tela continua na mesma dorna. Duas dornas podem estar enchendo juntas.
+2. **Enviando:** ligou a bomba, toca em **Enviar Nº X**. O início é marcado na hora do aparelho (dá para corrigir no quadro). Se outra dorna ainda estava indo para cima, ela termina no mesmo horário: a bomba manda uma de cada vez.
+3. **Anotada:** quando esvaziar, **Terminou de enviar** marca o fim. Se houve uma pausa entre uma dorna e outra, é só tocar em Terminou na hora certa.
+
+- **Sacarificação:** a dorna de mesmo número é criada sozinha e recebe o horário de início, o pH final (pHf) e o Brix final (BHX) da Hidrólise. Quadro mudado à mão na Sacarificação para de acompanhar; o botão **Copiar da Hidrólise** volta a acompanhar.
+- **LPHERA / Cal e Saczyme / Antibiótico:** cada hora é somada sozinha das dornas enviadas naquela hora (duas dornas = 140 de LPHERA, 200 de Saczyme e de Antibiótico). A hora fica marcada **conferir** até o operador tocar em **Confirmar**. Hora anotada ou confirmada à mão não é mais mexida.
+- **Trocar de aba** volta na mesma dorna (e nos insumos, na hora em que ela foi enviada).
+- **Apagar esta dorna** sobe as seguintes um número (3 vira 2), na Hidrólise e na Sacarificação, como na folha de papel.
+
+## Começar do zero
+
+No tablet chefe: **Usina** (senha do encarregado) > **Zerar as anotações de teste**. Apaga as anotações de todos os setores, na central e nos tablets (cada tablet limpa quando se conecta). Operadores, senhas, contatos e listas continuam. Uma cópia do que foi apagado fica em `BackupUsina/antes-de-zerar-<data>.json`.
+
+## Rede local no Android 16 e 17
+
+Alguns Android (como o Motorola) bloqueiam a rede local até a pessoa permitir **Dispositivos por perto** (Android 16) ou **Rede local** (Android 17). Sem isso, o tablet não acha o tablet chefe e o tablet chefe não recebe ninguém, mesmo no mesmo Wi-Fi. O aplicativo pede a permissão ao procurar a central, ao conectar e ao ligar como tablet chefe. Se ela estiver bloqueada, aparece um aviso com o botão **Abrir ajustes**.
+
 ## Avisos do escritório
 
 No painel do tablet chefe: **Avisos**. Escolha o setor e a pessoa (ou "Quem estiver no setor"), escreva e toque em **Enviar aviso**.
@@ -133,7 +154,7 @@ Leva uns 20 minutos e grava o resultado em `testes/saida/resultado.txt`. Testa:
 
 Os testes usam pastas de dados temporárias: nunca mexem em `dados/`. Só as telas: `node testes/telas.mjs http://localhost:8080`.
 
-O teste para fazer à mão no celular e no tablet está em `Teste-nos-aparelhos.pdf`, na pasta `Usina`.
+O teste para fazer à mão no celular e no tablet está em `Teste-nos-aparelhos-2.2.pdf`, na pasta `Usina`.
 
 ## Imagens das telas
 
@@ -150,6 +171,8 @@ Salva em `../telas`.
 43 verificações automáticas: conexão com código certo e errado, anotação, botões − e +, aviso de valor fora do normal, cópia da dorna anterior, marcar fim, monitoramento, valores padrão, insumos, senha do operador, trava por inatividade, virada de turno, exportação, relatórios e configurações. Mais: queda de rede com envio depois que volta, sincronização entre dois aparelhos e validação do Excel e do XML.
 
 Versão 2 (16/09/2026): avisos de pH e Brix, telas LPHERA / Cal e Saczyme / Alcolina com a soma das dornas da hora, casinha nas abas, rolagem do painel do chefe que não volta mais para o topo, pastas *Usina, tela de relatórios, janela de Excel ou XML, listas do ralo, cadastro protegido por senha e busca do tablet chefe no Wi-Fi. Testado no navegador contra o servidor: anotação, envio, queda de rede, relatórios e Excel/XML.
+
+Versão 2.2 (23/09/2026), a partir do teste na área: fluxo da dorna enchendo, enviando e anotada; Sacarificação e insumos acompanhando a Hidrólise; trocar de aba volta na mesma dorna; apagar renumera; cal em copos; Alcolina virou Antibiótico; zerar anotações de teste; setor parado não conta como pendência; permissão de rede local (Motorola); texto que não cabe diminui a letra em vez de quebrar a palavra; animações de notificação, janelas e troca de tela; tabela do monitoramento rola com o dedo e tem setas.
 
 Versão 2.1 (22/09/2026): avisos do escritório, versão e relógio de cada aparelho, erros dos aparelhos guardados na central, telas revisadas no celular (notificação no alto e centralizada, selo "sem senha" embaixo do nome, títulos compridos em duas linhas) e bateria de testes automáticos (`testes/rodar-tudo.mjs`). O servidor do tablet chefe (`ServidorCentral.java`) agora passa pelos mesmos testes que o do computador.
 

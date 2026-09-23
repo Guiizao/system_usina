@@ -3,7 +3,8 @@
  * Bateria completa de testes. Uso (na pasta app):   node testes/rodar-tudo.mjs
  *  1. código sem erro de escrita          4. aparelhos virtuais usando o app, nas duas centrais
  *  2. configuração das folhas             5. leitura de foto, impressão e app sem rede
- *  3. central pela rede, nas duas         6. todas as telas em 7 tamanhos de tela
+ *  3. central pela rede, nas duas         6. todas as telas em 9 tamanhos de tela
+ *  4b. fluxo da dorna (enchendo, enviando, anotada), nas duas centrais
  * Resultado em testes/saida/resultado.json e testes/saida/resultado.txt
  */
 import fs from 'node:fs';
@@ -13,6 +14,7 @@ import { abrirNavegador } from './navegador.mjs';
 import { novoGrupo, teste, certo, resumo } from './teste.mjs';
 import { testarApi } from './api.mjs';
 import { testarAparelhos } from './aparelhos.mjs';
+import { testarDornas } from './dornas.mjs';
 import { testarConfiguracao, testarExtras } from './extras.mjs';
 import { centralNode, centralJava, APP } from './servidores.mjs';
 
@@ -55,6 +57,13 @@ try {
     try { await testarAparelhos(nav, c, g); } finally { await c.desligar(); }
     grupos.push(g);
   }
+  // 4b. o dia da Hidrólise: enchendo, enviando, anotada; Sacarificação e insumos acompanhando
+  for (const [nome, ligar, porta] of [['computador', centralNode, 8297], ['tablet chefe', centralJava, 8298]]) {
+    const g = novoGrupo('Fluxo da dorna (Hidrólise, Sacarificação e insumos) na central do ' + nome);
+    const c = await ligar(porta);
+    try { await testarDornas(nav, c, g); } finally { await c.desligar(); }
+    grupos.push(g);
+  }
   // 5. extras
   const g5 = novoGrupo('Leitura de foto, impressão e aplicativo sem rede');
   const c5 = await centralNode(8295);
@@ -63,10 +72,10 @@ try {
 } finally { await nav.fechar(); }
 
 // 6. telas (roda separado, com a própria central)
-const g6 = novoGrupo('Todas as telas em 7 tamanhos (celular, celular deitado, tablet pequeno, tablet e tablet em pé)');
+const g6 = novoGrupo('Todas as telas em 9 tamanhos (celulares, celular deitado, tablets pequenos, tablets e tablet em pé)');
 const c6 = await centralNode(8296);
 try {
-  spawnSync(process.execPath, [path.join(APP, 'testes', 'telas.mjs'), c6.url, 'celular,celularGrande,celularDeitado,tablet8,tablet8Deitado,tablet,tabletEmPe'], { stdio: 'inherit' });
+  spawnSync(process.execPath, [path.join(APP, 'testes', 'telas.mjs'), c6.url, 'celular,motorola,celularGrande,celularDeitado,tablet8,tablet8Deitado,tablet10,tablet,tabletEmPe'], { stdio: 'inherit' });
 } finally { await c6.desligar(); }
 const telas = JSON.parse(fs.readFileSync(path.join(SAIDA, 'telas.json'), 'utf8')).telas;
 const porTamanho = {};

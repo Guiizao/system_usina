@@ -67,6 +67,14 @@ if ($xml -notmatch 'android.permission.VIBRATE') {
   $xml = $xml -replace '</manifest>', "    <uses-permission android:name=`"android.permission.VIBRATE`" />`n</manifest>"
   [System.IO.File]::WriteAllText($manifesto, $xml, (New-Object System.Text.UTF8Encoding $false))
 }
+# Rede local (versão 2.2): Android 17 pede "Rede local"; alguns Android 16 (Motorola) bloqueiam pelo "Dispositivos por perto"
+$xml = Get-Content $manifesto -Raw -Encoding utf8
+if ($xml -notmatch 'ACCESS_LOCAL_NETWORK') {
+  $rede = "    <uses-permission android:name=`"android.permission.ACCESS_LOCAL_NETWORK`" />`n" +
+          "    <uses-permission android:name=`"android.permission.NEARBY_WIFI_DEVICES`" android:usesPermissionFlags=`"neverForLocation`" />`n"
+  $xml = $xml -replace '</manifest>', ($rede + '</manifest>')
+  [System.IO.File]::WriteAllText($manifesto, $xml, (New-Object System.Text.UTF8Encoding $false))
+}
 
 # SDK para o Gradle
 Set-Content -Path android\local.properties -Value ("sdk.dir=" + ($env:ANDROID_HOME -replace '\\', '\\')) -Encoding ascii

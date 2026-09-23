@@ -76,6 +76,8 @@ try { config = JSON.parse(fs.readFileSync(CONFIG, 'utf8')); } catch (e) {
   fs.writeFileSync(CONFIG, JSON.stringify(config, null, 2));
 }
 const salvarConfig = () => fs.writeFileSync(CONFIG, JSON.stringify(config, null, 2));
+// "geração" dos dados: muda quando o escritório zera as anotações de teste; os tablets veem e limpam o que têm
+if (!config.geracao) { config.geracao = crypto.randomBytes(6).toString('hex'); salvarConfig(); }
 
 // ---------- banco de dados simples em arquivo JSON ----------
 let db = { seq: 0, registros: {} };
@@ -238,6 +240,8 @@ const servidor = http.createServer(async (req, res) => {
         const corpo = JSON.parse(await lerCorpo(req));
         if (corpo.aparelho) aparelhos[corpo.aparelho] = { papel: corpo.papel, operador: corpo.operador, versao: corpo.versao || '', vistoEm: Date.now(), ip };
         guardarErros(corpo.aparelho, corpo.erros, ip);
+        // aparelho com anotações de antes de zerar: não aceita, manda ele limpar
+        if (corpo.geracao && corpo.geracao !== config.geracao) return json(res, 200, { ok: false, zerar: true, geracao: config.geracao, seq: db.seq, agora: Date.now() });
         const dias = new Set();
         let aceitos = 0;
         for (const r of Array.isArray(corpo.registros) ? corpo.registros : []) {
@@ -253,13 +257,13 @@ const servidor = http.createServer(async (req, res) => {
           }
         }
         if (aceitos) { gravarDisco(); dias.forEach(backupDoDia); }
-        return json(res, 200, { ok: true, aceitos, seq: db.seq, agora: Date.now() });
+        return json(res, 200, { ok: true, aceitos, seq: db.seq, agora: Date.now(), geracao: config.geracao });
       }
 
       if (p === '/api/registros') {
         const desde = Number(url.searchParams.get('desde') || 0);
         const base = desde > db.seq ? 0 : desde; // servidor foi zerado: manda tudo
-        return json(res, 200, { seq: db.seq, registros: Object.values(db.registros).filter((r) => r.seq > base) });
+        return json(res, 200, { seq: db.seq, geracao: config.geracao, registros: Object.values(db.registros).filter((r) => r.seq > base) });
       }
 
       if (p === '/api/status') {
@@ -290,6 +294,20 @@ const servidor = http.createServer(async (req, res) => {
       if (p === '/api/relatorios') return json(res, 200, { pasta: 'RelatoriosUsina', dias: listaDeRelatorios() });
 
       if (p === '/api/erros') return json(res, 200, { erros: ultimosErros(100) });
+
+      // Zerar as anotações de teste: guarda uma cópia em BackupUsina e apaga tudo, menos a configuração da usina
+      if (p === '/api/zerar' && req.method === 'POST') {
+        const corpo = JSON.parse(await lerCorpo(req, 10000));
+        if (corpo.confirmar !== 'ZERAR') return json(res, 400, { erro: 'faltou confirmar' });
+        const agora = new Date();
+        const carimbo = agora.toISOString().slice(0, 16).replace(/[-:T]/g, '');
+        fs.writeFileSync(path.join(PASTAS.backup, `antes-de-zerar-${carimbo}.json`), JSON.stringify(Object.values(db.registros), null, 1));
+        let apagados = 0;
+        Object.keys(db.registros).forEach((id) => { if (db.registros[id].data !== 'config') { delete db.registros[id]; apagados += 1; } });
+        config.geracao = crypto.randomBytes(6).toString('hex'); salvarConfig();
+        gravarDisco();
+        return json(res, 200, { ok: true, apagados, geracao: config.geracao, copia: `BackupUsina/antes-de-zerar-${carimbo}.json` });
+      }
 
       if (p === '/api/novo-codigo' && req.method === 'POST') {
         config.codigo = novoCodigo(); salvarConfig();

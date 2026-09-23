@@ -31,6 +31,8 @@ export const TAMANHOS = {
   tablet8Deitado: { largura: 960, altura: 600, dpr: 2, celular: true },
   tablet: { largura: 1280, altura: 800, dpr: 2, celular: true },
   tabletEmPe: { largura: 800, altura: 1280, dpr: 2, celular: true },
+  tablet10: { largura: 1000, altura: 600, dpr: 2, celular: true },
+  motorola: { largura: 393, altura: 852, dpr: 2.75, celular: true },
   computador: { largura: 1440, altura: 900, dpr: 1, celular: false },
 };
 
@@ -210,6 +212,17 @@ export const auditarLayout = (minLetra = 11.5) => `(() => {
     const z = parseFloat(getComputedStyle(document.documentElement).zoom || 1) * parseFloat(getComputedStyle(document.body).zoom || 1);
     const px = parseFloat(s.fontSize) * z;
     if (px < ${minLetra} && !e.closest('.folha-imp, svg, .qr')) probs.push({ tipo: 'letra-pequena', onde: nomeDe(e), texto: e.textContent.trim().slice(0, 40) + ' (' + px.toFixed(1) + 'px)' });
+  });
+  // ícone desproporcional ao texto do lado (fora das caixinhas de ícone, que são grandes de propósito)
+  const zoomTela = parseFloat(getComputedStyle(document.documentElement).zoom || 1) * parseFloat(getComputedStyle(document.body).zoom || 1);
+  document.querySelectorAll('svg.ico').forEach((ic) => {
+    if (!visivel(ic) || ic.closest('.desenho, .escolha-ico, .aviso-sino, .grande-ico, .preparo-ico, .marca, #toast, .teclas, .mm, .folha-imp, .qr')) return;
+    const pai = ic.parentElement;
+    const texto = [...pai.childNodes].some((c) => (c.nodeType === 3 && c.textContent.trim()) || (c.nodeType === 1 && c !== ic && c.tagName !== 'svg' && c.textContent.trim()));
+    if (!texto) return;
+    const fonte = parseFloat(getComputedStyle(pai).fontSize) * zoomTela;
+    const razao = ic.getBoundingClientRect().height / fonte;
+    if (razao > 2.1 || razao < 0.7) probs.push({ tipo: 'icone-desproporcional', onde: nomeDe(pai), texto: (pai.textContent.trim().slice(0, 30) || '(ícone)') + ' (ícone ' + razao.toFixed(1) + 'x o texto)' });
   });
   document.querySelectorAll('button, [data-a], [data-k], [data-ed]').forEach((b) => {
     if (!visivel(b) || b.closest('.tabela-wrap, .folha-imp, .qr')) return;

@@ -117,15 +117,21 @@ window.USINA = {
       tipo: 'dornas',
       nome: 'Hidrólise',
       rotulo: 'Dorna',
-      marcarFim: 'fim', // mostra o botão "Marcar fim" enquanto a dorna está enchendo
+      // Etapas da dorna (como é feito na área):
+      //   enchendo  -> a dorna de baixo está enchendo; o operador anota Brix, pH, cal e enzima
+      //   enviando  -> a bomba está mandando a dorna para o tanque de cima (marca o horário de início)
+      //   anotada   -> terminou de esvaziar (marca o horário de fim)
+      // Uma bomba manda uma dorna de cada vez: ao enviar a próxima, a que estava indo termina no mesmo horário.
+      envio: { inicio: 'inicio', fim: 'fim' },
+      marcarFim: 'fim',
       codigo: 'Anexo I - POP 011',
       titulo: 'Monitoramento do Processo de Hidrólise',
       maxLinhas: 25,
       papel: { modelo: 'pop011', titulo: 'Anexo I-Pop 011-Monitoramento do Processo de Hidrólise' },
       // A ordem abaixo é a das COLUNAS DO PAPEL (tabela e Excel saem assim)
       campos: [
-        { id: 'inicio', label: 'Horário Início', papel: 'Horario Início', labelCurto: 'Início', type: 'time', agoraAoCriar: true },
-        { id: 'fim', label: 'Horário Fim', labelCurto: 'Fim', type: 'time' },
+        { id: 'inicio', label: 'Horário Início', papel: 'Horario Início', labelCurto: 'Início', type: 'time', vazioTexto: 'Marca ao enviar', dica: 'Hora em que a dorna começou a ir para o tanque de cima. Marca sozinho no botão Enviar.' },
+        { id: 'fim', label: 'Horário Fim', labelCurto: 'Fim', type: 'time', vazioTexto: 'Marca ao terminar', dica: 'Hora em que a dorna terminou de esvaziar.' },
         {
           id: 'phf', label: 'PHF', type: 'num', dec: 1, min: 2, max: 9, dica: 'pH medido antes da cal. Média 4,9 a 5,3.',
           avisos: [
@@ -133,7 +139,7 @@ window.USINA = {
             { quando: '>=', valor: 7, nivel: 'atencao', texto: 'pH alto, 7 ou mais' },
           ],
         },
-        { id: 'cal', label: 'Cal', type: 'num', dec: 0, dica: 'Quanto de cal foi colocado. Sem cal, deixe em branco.' },
+        { id: 'cal', label: 'Cal', type: 'num', dec: 1, unidade: 'copos', dica: 'Quantos copos de cal (copo de 1 litro). Sem cal, deixe em branco.' },
         {
           id: 'brix', label: 'Brix', type: 'num', dec: 0, min: 3, max: 40, dica: 'Média 15 a 25.',
           avisos: [
@@ -191,19 +197,22 @@ window.USINA = {
           ],
         },
         { id: 'enz', label: 'ENZ.', type: 'num', dec: 0, padrao: '100', dica: 'Saczyme da dorna de cima. O normal é 100.' },
-        { id: 'anti', label: 'Anti.', type: 'num', dec: 0, padrao: '100', dica: 'Alcolina da dorna de cima. O normal é 100.' },
+        { id: 'anti', label: 'Anti.', type: 'num', dec: 0, padrao: '100', dica: 'Antibiótico da dorna de cima. O normal é 100.' },
       ],
       grupos: [
         { titulo: 'Horário e dorna', campos: ['horario', 'sac'] },
         { titulo: 'pH e Brix', campos: ['phf', 'bhx'] },
         { titulo: 'Enzima e antibiótico', campos: ['enz', 'anti'] },
       ],
-      // Nova linha já vem com os valores da dorna de baixo de mesmo número
+      // A dorna de mesmo número da Hidrólise cria e preenche esta linha sozinha: horário de início, pH final e Brix final.
+      // Enquanto ninguém mudar esses quadros aqui, eles acompanham a Hidrólise. Mudou à mão, para de copiar
+      // (dá para voltar a copiar no botão "Copiar da Hidrólise").
       vemDe: { prancheta: 'hid_anexo1', campos: { horario: 'inicio', phf: 'phf2', bhx: 'bhx' } },
       copiarDaAnterior: ['sac', 'enz', 'anti'],
     },
 
-    // Duas pranchetas de insumo na mesma tela. Os valores vêm sugeridos das dornas da mesma hora.
+    // Duas pranchetas de insumo na mesma tela. As horas são somadas sozinhas das dornas enviadas naquela hora
+    // (ex.: duas dornas das 08h = 140 de LPHERA e 200 de Saczyme); o operador só confere e confirma.
     juntas_lphera_cal: {
       tipo: 'juntas',
       nome: 'LPHERA / Cal',
@@ -215,7 +224,7 @@ window.USINA = {
     },
     juntas_saczyme_alcolina: {
       tipo: 'juntas',
-      nome: 'Saczyme / Alcolina',
+      nome: 'Saczyme / Antibiótico',
       codigo: 'POP-03-FOR-004',
       partes: [
         { prancheta: 'ins_saczyme', sugestao: { prancheta: 'hid_anexo2', campo: 'enz', hora: 'horario' } },
@@ -224,9 +233,10 @@ window.USINA = {
     },
 
     ins_lphera: insumo('LPHERA', 'LPHERA', ['mL', 'L']),
-    ins_cal: insumo('CAL', 'Cal', ['kg', 'g']),
+    // a cal é medida num copo de 1 litro: anota quantos copos
+    ins_cal: insumo('CAL', 'Cal', ['copos']),
     ins_saczyme: insumo('SACZYME', 'Saczyme', ['mL', 'L']),
-    ins_alcolina: insumo('FERMENTAÇÃO - ANTIBIÓTICO ALCOLINA', 'Alcolina', ['mL', 'L']),
+    ins_alcolina: insumo('FERMENTAÇÃO - ANTIBIÓTICO ALCOLINA', 'Antibiótico', ['mL', 'L']),
 
     /* ---------------- RALO ---------------- */
     // No ralo o operador anota o peso do bag e o tipo de produto que está batendo.
