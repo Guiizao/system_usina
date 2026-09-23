@@ -955,14 +955,16 @@
    * Partes comuns
    * ========================================================= */
   const topo = (titulo, subtitulo, podeVoltar, atalhos) => cabecalho(titulo, subtitulo, podeVoltar, atalhos) + faixa();
-  /** Barra de cima. Leva título, atalhos, relógio e o botão claro/escuro. */
+  /** Barra de cima. Leva título, atalhos, relógio e, no canto, os ajustes e o botão claro/escuro. */
   function cabecalho(titulo, subtitulo, podeVoltar, atalhos) {
     const escuro = cfg.tema === 'escuro';
+    const configurado = cfg.papel && (cfg.chave || cfg.demo);
     return `<header class="topo">
         ${podeVoltar ? `<button class="voltar" data-a="voltar">${ico('voltar')} Voltar</button>` : '<img class="logo" src="icons/logo.png" alt="Ubirálcool">'}
         <div class="titulo ${String(titulo).length > 17 ? 'longo' : ''}"><b>${esc(titulo)}</b>${subtitulo ? `<span id="subtitulo-topo">${esc(subtitulo)}</span>` : ''}</div>
         ${atalhos ? `<div class="atalhos">${atalhos}</div>` : ''}
         <div class="relogio"><b id="relogio">${horaAgora()}</b><span>${esc(turnoAtual().nome)}</span></div>
+        ${configurado && (view() || {}).tela !== 'admin' ? `<button class="tema" data-a="admin" aria-label="Ajustes do aparelho">${ico('ajustes')}<span>Ajustes</span></button>` : ''}
         <button class="tema" data-a="tema" aria-label="${escuro ? 'Mudar para tela clara' : 'Mudar para tela escura'}">${ico(escuro ? 'sol' : 'lua')}<span>${escuro ? 'Claro' : 'Escuro'}</span></button>
       </header>`;
   }
@@ -970,8 +972,7 @@
     const op = operadorAtual();
     const v = view();
     return `${!ehCentral() ? `<button class="atalho ${op ? '' : 'alerta'}" data-a="trocar-operador">${ico('pessoa')}<span>${esc(op || 'Seu nome')}</span></button>` : ''}
-      ${v && v.tela === 'prancheta' ? `<button class="atalho ${v.monitor ? 'sel' : ''}" data-a="monitor">${ico('planilha')}<span>${v.monitor ? 'Anotar' : 'Monitorar'}</span></button>` : ''}
-      <button class="atalho" data-a="admin" aria-label="Ajustes do aparelho">${ico('ajustes')}</button>`;
+      ${v && v.tela === 'prancheta' ? `<button class="atalho ${v.monitor ? 'sel' : ''}" data-a="monitor">${ico('planilha')}<span>${v.monitor ? 'Anotar' : 'Monitorar'}</span></button>` : ''}`;
   }
   function aplicarTema() {
     document.documentElement.dataset.tema = cfg.tema === 'escuro' ? 'escuro' : 'claro';
@@ -987,7 +988,6 @@
         <span id="conexao" class="conexao ${classeConexao()}"><i></i>${esc(textoConexao())}</span>
         <span class="espaco"></span>
         <button class="chip ${op ? '' : 'alerta'}" data-a="trocar-operador">${ico('pessoa')} ${op ? `Operador: <b>${esc(op)}</b>` : 'Toque aqui e escolha seu nome'}</button>
-        <button class="chip icone-so" data-a="admin" aria-label="Ajustes do aparelho">${ico('ajustes')}</button>
       </div>`;
   }
 
@@ -1714,8 +1714,7 @@
     return `<button class="atalho" data-a="avisos" aria-label="Avisos${abertos ? `, ${abertos} esperando` : ''}">${ico('sino')}<span>Avisos</span>${abertos ? `<em class="contador">${abertos}</em>` : ''}</button>
       <button class="atalho" data-a="ler-folha">${ico('camera')}<span>Ler folha</span></button>
       <button class="atalho" data-a="relatorios">${ico('pasta')}<span>Relatórios</span></button>
-      <button class="atalho" data-a="config">${ico('pessoas')}<span>Usina</span></button>
-      <button class="atalho" data-a="admin" aria-label="Ajustes do aparelho">${ico('ajustes')}</button>`;
+      <button class="atalho" data-a="config">${ico('pessoas')}<span>Usina</span></button>`;
   }
   function telaCentral(v) {
     const data = v.data;
@@ -2926,7 +2925,7 @@
    * ========================================================= */
   const CABER = [
     '.opcoes.nomes .nome-op b', '.campo .rot', '.campo .val', '.item .texto b', '.setor-cartao .texto b', '.papel-cartao b',
-    '.abas button', '.seletor button', '.rodape .btn', '.painel-nav .btn', '.chip', '.topo .titulo b', '.topo .atalho span',
+    '.abas button', '.seletor button', '.rodape .btn', '.painel-nav .btn', '.chip', '.topo .titulo b', '.topo .titulo span', '.topo .atalho span',
     '.chips-escolha button span', '.escolhas button b', '.cabecalho-form .aviso', '.cabecalho-form .btn', '.opcoes-painel button',
     '.linha-botoes .btn', '.acoes-modal .btn', '.btn.largo', '.aviso-item-cab b', '.aparelho b', '.data-grande b', '.boas-vindas h1',
   ].join(', ');

@@ -979,9 +979,9 @@ body.ver-folhas .folha-imp.paisagem { width: 297mm; }
 :root[data-dispositivo="celular"] .topo:has(.atalhos > :nth-child(4)) .atalhos { order: 5; width: 100%; }
 :root[data-dispositivo="celular"] .topo:has(.atalhos > :nth-child(4)) .atalho { flex: 1; justify-content: center; }
 
-/* Tablet chefe: com cinco botões na barra, o título vai em duas linhas em vez de cortar */
-.topo:has(.atalhos > :nth-child(5)) .titulo b { font-size: 22px; line-height: 1.1; white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
-.topo:has(.atalhos > :nth-child(5)) .titulo span { display: none; }
+/* Tablet chefe: com quatro atalhos na barra, o título vai em duas linhas em vez de cortar */
+.topo:has(.atalhos > :nth-child(4)) .titulo b { font-size: 22px; line-height: 1.1; white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.topo:has(.atalhos > :nth-child(4)) .titulo span { display: none; }
 /* Celular deitado: a janela de escolher Excel ou XML cabe inteira */
 @media (orientation: landscape) and (max-height: 500px) {
   html:root[data-dispositivo] .escolhas { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
@@ -992,12 +992,12 @@ body.ver-folhas .folha-imp.paisagem { width: 297mm; }
 /* Título comprido na barra de cima: vai em duas linhas, um pouco menor, e a linha de baixo continua */
 .topo .titulo.longo b { font-size: 21px; line-height: 1.1; white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 @media (orientation: landscape) and (max-height: 620px) { .topo .titulo.longo b { font-size: 19px; line-height: 1.05; } .topo .titulo.longo span { font-size: 14px; } }
-/* Tablet em pé: com cinco botões na barra, eles vão para uma segunda linha, como no celular */
+/* Tablet em pé: com quatro atalhos na barra, eles vão para uma segunda linha, como no celular */
 @media (orientation: portrait) {
-  .topo:has(.atalhos > :nth-child(5)) { height: auto; min-height: var(--topo); flex-wrap: wrap; padding-block: 8px; row-gap: 8px; }
-  .topo:has(.atalhos > :nth-child(5)) .atalhos { order: 5; width: 100%; }
-  .topo:has(.atalhos > :nth-child(5)) .atalho { flex: 1; justify-content: center; max-width: none; }
-  .topo:has(.atalhos > :nth-child(5)) .titulo b { font-size: 24px; -webkit-line-clamp: 1; }
+  .topo:has(.atalhos > :nth-child(4)) { height: auto; min-height: var(--topo); flex-wrap: wrap; padding-block: 8px; row-gap: 8px; }
+  .topo:has(.atalhos > :nth-child(4)) .atalhos { order: 5; width: 100%; }
+  .topo:has(.atalhos > :nth-child(4)) .atalho { flex: 1; justify-content: center; max-width: none; }
+  .topo:has(.atalhos > :nth-child(4)) .titulo b { font-size: 24px; -webkit-line-clamp: 1; }
 }
 
 /* Aparelhos conectados e erros (Configurações da usina) */
@@ -1012,9 +1012,9 @@ body.ver-folhas .folha-imp.paisagem { width: 297mm; }
 .lista-erros span { font-size: 16px; overflow-wrap: anywhere; }
 .lista-erros small { font-size: 14px; color: var(--tinta-2); }
 
-/* Letra "Maior" com cinco botões na barra: os botões ficam só com o ícone, para o título caber */
-:root[data-escala="maior"] .topo:has(.atalhos > :nth-child(5)) .atalho span { display: none; }
-:root[data-escala="maior"] .topo:has(.atalhos > :nth-child(5)) .atalho { padding: 0 12px; }
+/* Letra "Maior" com quatro atalhos na barra: os botões ficam só com o ícone, para o título caber */
+:root[data-escala="maior"] .topo:has(.atalhos > :nth-child(4)) .atalho span { display: none; }
+:root[data-escala="maior"] .topo:has(.atalhos > :nth-child(4)) .atalho { padding: 0 12px; }
 
 
 /* =====================================================================
