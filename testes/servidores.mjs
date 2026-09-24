@@ -5,6 +5,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { dormir } from './navegador.mjs';
+import { conectarTeste } from './cifra.mjs';
 
 export const APP = path.resolve(path.dirname(new URL(import.meta.url).pathname.replace(/^\/([A-Z]:)/, '$1')), '..');
 const JDK = path.join(os.homedir(), 'android-build', 'jdk', 'bin');
@@ -24,7 +25,20 @@ const HASH_TESTE = '26fa3ebe21340e4e62f4a260877095092eff5f4a619ce7a60ee57a355aa4
 
 export function pastaTemporaria(nome) { return fs.mkdtempSync(path.join(os.tmpdir(), `pranchetas-${nome}-`)); }
 
-/** Central do computador. Devolve { url, pasta, codigo(), chave(), reiniciar(), desligar() }. */
+/** Um aparelho de teste conectado na central (pelo código, com a conexão embaralhada, como o aplicativo).
+    api(rota, corpo) devolve o JSON; se o código for trocado, conecta de novo. */
+function comCliente(central) {
+  let cli = null;
+  central.cliente = async () => { if (!cli) { cli = await conectarTeste(central.url, central.codigo()); if (!cli.pedir) throw new Error('a central recusou o aparelho de teste: ' + cli.erro); } return cli; };
+  central.api = async (rota, corpo) => {
+    let r = await (await central.cliente()).pedir(rota, { corpo });
+    if (r.status === 401 && r.fora) { cli = null; r = await (await central.cliente()).pedir(rota, { corpo }); }
+    return r.json;
+  };
+  return central;
+}
+
+/** Central do computador. Devolve { url, pasta, codigo(), chave(), api(), reiniciar(), desligar() }. */
 export async function centralNode(porta, pasta = pastaTemporaria('node'), publico) {
   let proc;
   const ligar = async () => {
@@ -33,12 +47,12 @@ export async function centralNode(porta, pasta = pastaTemporaria('node'), public
   };
   await ligar();
   const cfg = () => JSON.parse(fs.readFileSync(path.join(pasta, 'ServidorUsina', 'config.json'), 'utf8'));
-  return {
+  return comCliente({
     tipo: 'computador (server.js)', url: `http://127.0.0.1:${porta}`, pasta, pastaServidor: path.join(pasta, 'ServidorUsina'), pastaRelatorios: path.join(pasta, 'RelatoriosUsina'), pastaBackup: path.join(pasta, 'BackupUsina'),
     codigo: () => cfg().codigo, chave: () => cfg().chave,
     async reiniciar() { proc.kill(); await dormir(700); await ligar(); },
     async desligar() { proc.kill(); await dormir(300); },
-  };
+  });
 }
 
 /** Central do tablet chefe (o mesmo ServidorCentral.java do APK), rodando no computador com peças do Android simuladas. */
@@ -58,10 +72,10 @@ export async function centralJava(porta, pasta = pastaTemporaria('java')) {
   };
   await ligar();
   const cfg = () => JSON.parse(fs.readFileSync(path.join(pasta, 'ServidorUsina', 'config.json'), 'utf8'));
-  return {
+  return comCliente({
     tipo: 'tablet chefe (ServidorCentral.java)', url: `http://127.0.0.1:${porta}`, pasta, pastaServidor: path.join(pasta, 'ServidorUsina'), pastaRelatorios: path.join(pasta, 'RelatoriosUsina'), pastaBackup: path.join(pasta, 'BackupUsina'),
     codigo: () => cfg().codigo, chave: () => cfg().chave,
     async reiniciar() { proc.kill(); await dormir(900); await ligar(); },
     async desligar() { proc.kill(); await dormir(300); },
-  };
+  });
 }

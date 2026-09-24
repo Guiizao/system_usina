@@ -3,7 +3,7 @@
 (function () {
   'use strict';
   const C = window.USINA;
-  const VERSAO = '2.4.0'; // aparece nos ajustes e vai junto com cada envio para a central
+  const VERSAO = '2.5.0'; // aparece nos ajustes e vai junto com cada envio para a central
   const AUTORIA = '© 2026 Guilherme. Todos os direitos reservados. Uso somente com autorização do autor.';
   const params = new URLSearchParams(location.search);
   const DEMO_IMG = params.has('demo'); // usado só para gerar imagens de apresentação
@@ -25,13 +25,17 @@
     escala: 'normal',     // menor, normal ou maior (tamanho da tela)
     telaCheia: false,     // esconde a barra de bateria e hora do Android (liga nos ajustes do aparelho)
     central: '',          // endereço da central (vazio = o próprio site)
-    chave: null,          // chave recebida ao conectar na central
+    chave: null,          // chave deste aparelho, recebida ao conectar na central (tudo vai embaralhado com ela)
     demo: false,          // modo demonstração, sem central
     ultimoContato: 0,
     ultimoSeq: 0,
   }, DEMO_IMG ? {} : LS.get('cfg', {}));
   const salvarCfg = () => { if (!DEMO_IMG) LS.set('cfg', cfg); };
   if (DEMO_IMG) cfg.demo = true;
+  /* Até a versão 2.4 o aparelho guardava a chave da rede, que passava aberta no Wi-Fi.
+     Agora cada aparelho usa a sua, tirada da chave da rede (public/cifra.js). */
+  const usarChaveDaRede = (chaveRede) => { cfg.chave = Cifra.chaveDoAparelho(chaveRede, cfg.deviceId); cfg.cifra = 1; };
+  if (cfg.chave && !cfg.cifra) usarChaveDaRede(cfg.chave);
   salvarCfg();
 
   let registros = DEMO_IMG ? {} : LS.get('registros', {});
@@ -401,7 +405,7 @@
       const r = await pluginCentral.iniciar({ porta: C.portaCentral });
       pluginCentral.manterLigado().catch(() => {});
       cfg.central = `http://127.0.0.1:${C.portaCentral}`;
-      cfg.chave = r.chave;
+      usarChaveDaRede(r.chave);
       cfg.demo = false;
       cfg.ultimoContato = Date.now();
       salvarCfg();
@@ -430,14 +434,37 @@
       'Sem essa permissão o aplicativo não acha os outros tablets no Wi-Fi. Toque em Abrir ajustes, depois em Permissões, e deixe "Dispositivos por perto" (ou "Rede local") em Permitir.', 'Abrir ajustes');
     if (abrir && pluginCentral.abrirAjustesDoApp) pluginCentral.abrirAjustesDoApp().catch(() => {});
   }
-  const urlCentral = (caminho) => (cfg.central ? cfg.central.replace(/\/$/, '') + '/' : '') + caminho;
+  const baseCentral = () => (cfg.central ? cfg.central.replace(/\/$/, '') + '/' : '');
 
-  async function buscar(caminho, opcoes = {}, ms = 4000) {
+  /* Tudo que vai para a central passa embaralhado com a chave deste aparelho (public/cifra.js).
+     Só o "ping" (a central está aí?) e o pedido de conexão vão abertos, e neles não há anotação nem chave. */
+  let desvioCentral = 0; // diferença entre o relógio da central e o deste aparelho (a central só aceita pedido recente)
+  async function pedirCifrado(base, caminho, opcoes = {}, ms = 4000) {
     const ctrl = new AbortController();
     const t = setTimeout(() => ctrl.abort(), ms);
-    const headers = Object.assign({}, opcoes.headers || {}, cfg.chave ? { 'X-Chave': cfg.chave } : {});
-    try { return await fetch(urlCentral(caminho), Object.assign({}, opcoes, { headers, signal: ctrl.signal, cache: 'no-store' })); } finally { clearTimeout(t); }
+    try {
+      for (let vez = 0; vez < 2; vez++) {
+        const { corpo, iv } = await Cifra.pedido(cfg.chave, cfg.deviceId, opcoes.method || 'GET', caminho, opcoes.body || '', Date.now() + desvioCentral);
+        const r = await fetch(`${base}api/c?a=${encodeURIComponent(cfg.deviceId)}`, { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: corpo, signal: ctrl.signal, cache: 'no-store' });
+        if (r.status === 409 && vez === 0) {
+          // o relógio deste aparelho está longe do da central: acerta a diferença e pede de novo
+          const d = await r.json().catch(() => ({}));
+          if (d.agora) { desvioCentral = d.agora - Date.now(); continue; }
+        }
+        if (r.status !== 200) return r; // 401: a chave não vale mais (o código de conexão foi trocado)
+        const resp = await Cifra.resposta(cfg.chave, iv, new Uint8Array(await r.arrayBuffer()));
+        return new Response(resp.texto, { status: resp.status, headers: { 'Content-Type': 'application/json' } });
+      }
+      throw new Error('relógio');
+    } finally { clearTimeout(t); }
   }
+  async function buscar(caminho, opcoes = {}, ms = 4000) {
+    if (cfg.chave && caminho !== 'api/ping' && caminho !== 'api/parear') return pedirCifrado(baseCentral(), caminho, opcoes, ms);
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), ms);
+    try { return await fetch(baseCentral() + caminho, Object.assign({}, opcoes, { signal: ctrl.signal, cache: 'no-store' })); } finally { clearTimeout(t); }
+  }
+  const avisarCentralAntiga = () => toast(`O servidor da usina está com o aplicativo antigo. Atualize o servidor (tablet chefe ou computador) para a versão ${VERSAO}.`, 'erro');
   const postJson = (caminho, corpo, ms) => buscar(caminho, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(corpo) }, ms);
 
   async function sincronizar() {
@@ -448,6 +475,12 @@
       const r0 = await buscar('api/ping');
       const info = r0.ok ? await r0.json() : null;
       if (!info || info.app !== 'pranchetas') throw new Error('sem central');
+      if (!info.cifra) {
+        // central ainda na versão antiga (sem a conexão embaralhada): espera ela ser atualizada, sem apagar nada
+        if (Date.now() - (sync.avisoAntiga || 0) > 10 * 60000) { sync.avisoAntiga = Date.now(); avisarCentralAntiga(); }
+        throw new Error('central antiga');
+      }
+      if (info.agora) desvioCentral = info.agora - Date.now();
       cfg.ultimoContato = Date.now(); salvarCfg();
       sync.modo = 'online'; sync.falhas = 0;
 
@@ -458,7 +491,7 @@
       const r1 = await postJson('api/sync', { aparelho: cfg.deviceId, papel: cfg.papel, operador: operadorAtual(), versao: VERSAO, geracao: cfg.geracao || '', novaConexao: !!cfg.novaConexao, registros: envio, erros }, 15000);
       if (r1.status === 401) {
         // o servidor está neste aparelho: pega a chave nova com ele (o código de conexão foi trocado)
-        if (centralNoTablet()) { try { const e = await pluginCentral.estado(); if (e && e.chave) { cfg.chave = e.chave; salvarCfg(); } } catch (x) { /* tenta de novo */ } return; }
+        if (centralNoTablet()) { try { const e = await pluginCentral.estado(); if (e && e.chave) { usarChaveDaRede(e.chave); salvarCfg(); } } catch (x) { /* tenta de novo */ } return; }
         return desconectar('O código de conexão mudou (ou a central foi trocada). Digite o código novo que aparece no tablet chefe.');
       }
       const resp1 = r1.ok ? await r1.clone().json().catch(() => ({})) : {};
@@ -502,6 +535,7 @@
           const texto = await r3.text();
           // só redesenha se algo mudou de verdade, para não pular a tela de quem está olhando
           if (texto !== sync.statusJson) { sync.statusJson = texto; sync.status = JSON.parse(texto); mudou = true; }
+          verificarBase44();
         }
       }
       if (mudou && ['central', 'inicio', 'prancheta', 'config'].includes(view().tela)) {
@@ -670,7 +704,7 @@
   }
   function textoLivre(o) {
     return abrirModal(`<h3>${esc(o.titulo)}</h3>${o.dica ? `<p class="dica">${esc(o.dica)}</p>` : ''}
-      <input type="${o.tipo || 'text'}" id="txt" maxlength="80" value="${esc(o.valor || '')}" ${o.tipo === 'tel' ? 'inputmode="numeric"' : ''}>
+      <input type="${o.tipo || 'text'}" id="txt" maxlength="${o.max || 80}" value="${esc(o.valor || '')}" ${o.tipo === 'tel' ? 'inputmode="numeric"' : ''} autocapitalize="off" spellcheck="false">
       <div class="acoes-modal"><button class="btn" data-k="x">Cancelar</button><button class="btn primario" data-k="ok">Salvar</button></div>`,
     (k, b, fechar, f) => { if (k === 'x') fechar(undefined); if (k === 'ok') fechar(f.querySelector('#txt').value.trim()); },
     { aoAbrir: (f) => setTimeout(() => f.querySelector('#txt').focus(), 50) });
@@ -1250,12 +1284,8 @@
     procura.ativa = true;
     try {
       const achou = await varrerRede(async (ip) => {
-        const ctrl = new AbortController();
-        const t = setTimeout(() => ctrl.abort(), 3000);
-        try {
-          const r = await fetch(`http://${ip}:${C.portaCentral}/api/status`, { headers: { 'X-Chave': cfg.chave }, signal: ctrl.signal, cache: 'no-store' });
-          return r.ok;
-        } catch (e) { return false; } finally { clearTimeout(t); }
+        // só a central deste aparelho abre o pedido embaralhado com a chave dele
+        try { return (await pedirCifrado(`http://${ip}:${C.portaCentral}/`, 'api/status', {}, 3000)).ok; } catch (e) { return false; }
       });
       if (achou) {
         cfg.central = `http://${achou}:${C.portaCentral}`; salvarCfg();
@@ -1300,10 +1330,17 @@
     if (!(await garantirRedeLocal(true))) return;
     cfg.central = NO_APK ? `http://${endereco.includes(':') ? endereco : endereco + ':' + C.portaCentral}` : '';
     try {
-      const r = await postJson('api/parear', { codigo: conexaoForm.codigo, aparelho: cfg.deviceId }, 6000);
+      const r0 = await buscar('api/ping', {}, 5000);
+      const info = await r0.json().catch(() => ({}));
+      if (!info || info.app !== 'pranchetas') throw new Error('sem central');
+      if (!info.cifra || !info.pub) return avisarCentralAntiga();
+      // o código não vai aberto: vai uma prova dele, que só a central consegue conferir
+      const { corpo, chavePar } = Cifra.pedidoDeConexao(info.pub, cfg.deviceId, conexaoForm.codigo);
+      const r = await postJson('api/parear', corpo, 6000);
       const dados = await r.json().catch(() => ({}));
       if (!r.ok) return toast(dados.erro === 'Código errado' ? 'Código errado. Confira no tablet chefe.' : (dados.erro || 'A central recusou a conexão'), 'erro');
-      cfg.chave = dados.chave; cfg.demo = false; cfg.ultimoContato = Date.now(); cfg.novaConexao = true; salvarCfg();
+      const { chave } = await Cifra.abrirConexao(chavePar, cfg.deviceId, dados.cifrado);
+      cfg.chave = chave; cfg.cifra = 1; cfg.demo = false; cfg.ultimoContato = Date.now(); cfg.novaConexao = true; salvarCfg();
       toast('Aparelho conectado na rede da usina');
       ed.alvoId = null; pilha = [telaInicial()]; render(true); sincronizar();
     } catch (e) {
@@ -1367,7 +1404,7 @@
       });
       ok = ok && await passo(`Ligando o servidor na rede, porta ${C.portaCentral}`, async () => {
         const r = await pluginCentral.iniciar({ porta: C.portaCentral });
-        cfg.central = `http://127.0.0.1:${C.portaCentral}`; cfg.chave = r.chave; cfg.demo = false; cfg.ultimoContato = Date.now(); salvarCfg();
+        cfg.central = `http://127.0.0.1:${C.portaCentral}`; usarChaveDaRede(r.chave); cfg.demo = false; cfg.ultimoContato = Date.now(); salvarCfg();
         return 'Servidor ligado';
       });
       ok = ok && await passo('Mantendo o servidor ligado com a tela apagada', async () => {
@@ -2432,6 +2469,10 @@
             <div class="linha-config"><span class="escolha-ico">${ico('email')}</span><div><b>E-mail</b><small>${esc(cs.email || 'não cadastrado')}</small></div>
               <button class="btn pequeno" data-a="contato" data-campo="email">${cs.email ? 'Trocar' : 'Cadastrar'}</button></div>
           </section>
+          <section class="bloco" id="bloco-base44">
+            <h2>${ico('escritorio')} Totais do dia no Base44</h2>
+            ${htmlBase44()}
+          </section>
           <section class="bloco">
             <h2>${ico('balanca')} Listas do ralo</h2>
             <h3>Tipos de produto</h3>${lista('produtos', 'produto')}
@@ -2608,6 +2649,112 @@
       insumos.forEach((pid) => linhas.push(`• ${prancheta(pid).nome}: ${totalInsumo(linhasDeHora(listar(data, pid))) || 'nada adicionado'}`));
     }
     return linhas.join('\n');
+  }
+
+  /* =========================================================
+   * Totais do dia no Base44 (o sistema do escritório onde o Lucas lança os totais)
+   * Quando o dia fecha (07:00), o tablet chefe soma cada insumo e a central manda pela internet.
+   * Se alguém corrigir a folha depois, os totais mudam e vão de novo. O endereço e o segredo ficam só na central.
+   * ========================================================= */
+  const DIAS_BASE44 = 7;
+  let base44Info = null;       // estado completo (endereço, erros), buscado ao abrir as configurações
+  const base44Avisado = {};    // dia -> já avisou do erro (avisa uma vez só)
+  let base44Ocupado = false;
+  let base44Visto = 0;
+  function totaisDoDia(data) {
+    const itens = [];
+    setores().forEach((s) => s.pranchetas.flatMap(folhasDe).filter((pid) => prancheta(pid).tipo === 'insumo').forEach((pid) => {
+      const p = prancheta(pid);
+      const soma = {};
+      linhasDeHora(listar(data, pid)).forEach((r) => {
+        const n = parseFloat(r.valores.qtd);
+        if (isNaN(n)) return;
+        const u = r.valores.unidade || p.unidade || '';
+        soma[u] = (soma[u] || 0) + n;
+      });
+      const unidades = Object.keys(soma);
+      if (!unidades.length) itens.push({ setor: s.nome, insumo: p.nome, folha: pid, quantidade: 0, unidade: p.unidade || '' });
+      unidades.forEach((u) => itens.push({ setor: s.nome, insumo: p.nome, folha: pid, quantidade: Math.round(soma[u] * 100) / 100, unidade: u }));
+    }));
+    return itens;
+  }
+  async function enviarBase44(data, forcar) {
+    await buscarDia(data);
+    const itens = totaisDoDia(data);
+    const hash = Cifra.hex(Cifra.sha256(Cifra.utf8(JSON.stringify({ data, itens })))).slice(0, 16);
+    const dados = { origem: 'Pranchetas Ubirálcool', data, dataBr: fmtData(data), itens, resumo: resumoDoDia(data), enviadoEm: new Date().toISOString() };
+    try {
+      const r = await postJson('api/base44', { acao: 'enviar', data, hash, dados, forcar: !!forcar }, 30000);
+      const d = await r.json().catch(() => ({}));
+      return r.ok ? d : { ok: false, erro: d.erro || 'A central recusou' };
+    } catch (e) { return { ok: false, erro: 'Não consegui falar com a central' }; }
+  }
+  /** Dias fechados que ainda não foram (ou mudaram depois que foram). Só dias depois de ligar o envio:
+      os anteriores o escritório já lançou à mão (dá para mandar um por um nas configurações). */
+  function diasParaBase44(b) {
+    const hoje = dataProducao();
+    const comDados = new Set();
+    Object.values(registros).forEach((r) => { if (!r.apagado && /^\d{4}-\d{2}-\d{2}$/.test(r.data)) comDados.add(r.data); });
+    const dias = [];
+    for (let i = DIAS_BASE44; i >= 1; i--) {
+      const d = somarDias(hoje, -i);
+      if (b.desde && d < b.desde) continue;
+      if (comDados.has(d)) dias.push(d);
+    }
+    return dias;
+  }
+  async function verificarBase44() {
+    const b = sync.status && sync.status.base44;
+    if (!ehCentral() || cfg.demo || !b || !b.ligado || base44Ocupado || Date.now() - base44Visto < 60000) return;
+    base44Visto = Date.now();
+    base44Ocupado = true;
+    try {
+      for (const d of diasParaBase44(b)) {
+        const e = (b.enviados || {})[d];
+        const itens = totaisDoDia(d);
+        const hash = Cifra.hex(Cifra.sha256(Cifra.utf8(JSON.stringify({ data: d, itens })))).slice(0, 16);
+        if (e && e.ok && e.hash === hash) continue;
+        if (e && !e.ok && Date.now() - e.em < 10 * 60000) continue; // deu erro há pouco: tenta de novo daqui a 10 minutos
+        const r = await enviarBase44(d);
+        if (!r.ok && !base44Avisado[d]) { base44Avisado[d] = true; toast(`Não consegui mandar os totais de ${fmtData(d)} para o Base44: ${r.erro}. Tento de novo a cada 10 minutos.`, 'erro'); }
+        sync.statusJson = ''; // pega o estado novo na próxima sincronização
+        break; // um dia por vez, para não pesar
+      }
+    } finally { base44Ocupado = false; }
+  }
+  async function carregarBase44() {
+    try {
+      const r = await postJson('api/base44', { acao: 'estado' }, 8000);
+      if (r.ok) { base44Info = await r.json(); if (sync.status) sync.status.base44 = Object.assign({}, base44Info); if (view().tela === 'config' && podeRedesenhar()) render(); }
+    } catch (e) { /* mostra o que veio na sincronização */ }
+  }
+  /** O endereço inteiro não cabe no celular: mostra o começo e o fim do nome do site (o inteiro aparece ao tocar em Trocar). */
+  function enderecoCurto(u) {
+    let host = u;
+    try { host = new URL(u).hostname; } catch (e) { /* mostra como veio */ }
+    return host.length <= 20 ? host : `${host.slice(0, 10)}…${host.split('.').slice(-2).join('.')}`;
+  }
+  function htmlBase44() {
+    // o que muda (dias enviados) vem da sincronização; o endereço só vem ao abrir as configurações
+    const b = Object.assign({ enviados: {} }, base44Info, sync.status && sync.status.base44);
+    if (base44Info) b.url = base44Info.url;
+    if (cfg.demo && !base44Info) return '<p class="sub" style="margin:0">Na demonstração não há central para mandar os totais.</p>';
+    const hoje = dataProducao();
+    const quando = (ms) => new Date(ms).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }).replace(',', ' às');
+    const dias = [];
+    for (let i = 1; i <= DIAS_BASE44; i++) dias.push(somarDias(hoje, -i));
+    const linhas = dias.map((d) => {
+      const e = (b.enviados || {})[d];
+      const texto = !e ? (b.desde && d >= b.desde ? 'Ainda não foi' : 'Não enviado (lançado à mão)') : e.ok ? `Enviado ${quando(e.em)}` : `Erro: ${e.erro || 'não foi'}`;
+      return `<div class="linha-config base44-dia ${e ? (e.ok ? 'ok' : 'erro') : ''}"><div><b>${fmtData(d).slice(0, 5)} <small class="dia-semana">${esc(diaSemana(d))}</small></b><small>${esc(texto)}</small></div>
+        <button class="btn pequeno" data-a="base44-enviar" data-data="${d}" ${b.ligado ? '' : 'disabled'}>${e && e.ok ? 'De novo' : 'Enviar'}</button></div>`;
+    }).join('');
+    return `<p class="sub" style="margin:0 0 6px">Quando o dia fecha, às ${pad2(C.inicioDoDia)}:00, os totais de cada insumo vão sozinhos para o sistema do escritório. Se alguém corrigir a folha depois, vão de novo. Precisa de internet no servidor da usina.</p>
+      <div class="linha-config"><span class="escolha-ico">${ico('escritorio')}</span><div><b>Endereço no Base44</b><small>${esc(b.url ? enderecoCurto(b.url) : b.ligado ? 'cadastrado' : 'não cadastrado')}</small></div>
+        <button class="btn pequeno" data-a="base44-url">${b.ligado ? 'Trocar' : 'Cadastrar'}</button></div>
+      <div class="linha-config"><span class="escolha-ico">${ico('codigo')}</span><div><b>Segredo</b><small>${b.temSegredo ? 'cadastrado (não aparece aqui)' : 'não cadastrado'}</small></div>
+        <button class="btn pequeno" data-a="base44-segredo">${b.temSegredo ? 'Trocar' : 'Cadastrar'}</button></div>
+      ${b.ligado ? `<h3 style="margin-top:12px">Últimos dias</h3>${linhas}` : ''}`;
   }
 
   /**
@@ -3043,7 +3190,48 @@
         const s = await pedirSenhaModal('Senha do encarregado', 'As configurações da usina valem para todos os tablets.');
         if (s === undefined) return;
         if (s !== C.pinAdmin) return toast('Senha errada', 'erro');
+        carregarBase44();
         return ir({ tela: 'config' });
+      }
+      case 'base44-url': {
+        const atual = (base44Info && base44Info.url) || '';
+        const valor = await textoLivre({ titulo: 'Endereço no Base44', dica: 'Quem montou o sistema do escritório copia do Base44 (a função receberTotaisPranchetas). Começa com https://. Deixe em branco para parar de enviar.', valor: atual, tipo: 'url', max: 300 });
+        if (valor === undefined) return;
+        if (valor && !/^https?:\/\/\S+\.\S+$/i.test(valor)) return toast('Endereço incompleto. Ele começa com https://', 'erro');
+        const r = await postJson('api/base44', { acao: 'configurar', url: valor, desde: dataProducao() }, 8000).catch(() => null);
+        if (!r || !r.ok) return toast(r ? ((await r.json().catch(() => ({}))).erro || 'A central recusou') : 'Não consegui falar com a central', 'erro');
+        base44Info = await r.json(); if (sync.status) sync.status.base44 = Object.assign({}, base44Info); sync.statusJson = '';
+        toast(valor ? 'Endereço salvo. Os totais vão sozinhos quando o dia fechar.' : 'Envio para o Base44 desligado');
+        return render();
+      }
+      case 'base44-segredo': {
+        let valor = await textoLivre({ titulo: 'Segredo do Base44', dica: 'O mesmo texto cadastrado no Base44 como PRANCHETAS_SEGREDO. Deixe em branco e toque em Salvar para o aplicativo criar um.', tipo: 'text', max: 200 });
+        if (valor === undefined) return;
+        const criado = !valor;
+        if (criado) {
+          const letras = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+          valor = Array.from(crypto.getRandomValues(new Uint8Array(20)), (x) => letras[x % letras.length]).join('').replace(/(.{5})(?=.)/g, '$1-');
+        }
+        const r = await postJson('api/base44', { acao: 'configurar', url: (base44Info && base44Info.url) || '', segredo: valor }, 8000).catch(() => null);
+        if (!r || !r.ok) return toast('Não consegui falar com a central', 'erro');
+        base44Info = await r.json(); if (sync.status) sync.status.base44 = Object.assign({}, base44Info); sync.statusJson = '';
+        if (criado) {
+          await abrirModal(`<h3>Segredo criado</h3><p class="dica">Passe para quem montou o Base44 cadastrar como PRANCHETAS_SEGREDO. Ele não aparece de novo aqui.</p>
+            <p class="segredo-grande">${esc(valor)}</p>
+            <div class="acoes-modal um"><button class="btn primario" data-k="x">Anotei</button></div>`, (k, b2, fechar) => fechar());
+        } else toast('Segredo salvo');
+        return render();
+      }
+      case 'base44-enviar': {
+        const data = b.dataset.data;
+        b.disabled = true;
+        toast(`Mandando os totais de ${fmtData(data)} para o Base44...`);
+        const r = await enviarBase44(data, true);
+        if (r.ok) toast(`Totais de ${fmtData(data)} enviados para o Base44`);
+        else toast(`Não foi: ${r.erro}`, 'erro');
+        sync.statusJson = '';
+        await carregarBase44();
+        return render();
       }
       case 'contato': {
         const campo = b.dataset.campo;
@@ -3130,7 +3318,7 @@
         const r = await postJson('api/novo-codigo', {}).catch(() => null);
         if (r && r.ok) {
           const d = await r.json().catch(() => ({}));
-          if (d.chave) { cfg.chave = d.chave; salvarCfg(); } // este aparelho continua conectado
+          if (d.chave) { cfg.chave = d.chave; cfg.cifra = 1; salvarCfg(); } // este aparelho continua conectado
           sync.statusJson = ''; await sincronizar(); toast('Código trocado. Os outros aparelhos vão pedir o código novo.'); render();
         }
         return;
@@ -3348,6 +3536,12 @@
     if (params.get('escala')) { cfg.escala = params.get('escala'); ajustarEscala(); }
     if (params.get('op')) definirOperador(params.get('op'));
     if (params.get('nomesLongos') && cfg.papel) cfg.operadores[cfg.papel] = ['Romenique', 'Maximiliano Aparecido', 'Carlindo Ferreira Júnior', 'Cleber', 'Guilherme', 'Wellington'];
+    // demonstração da seção do Base44 (para conferir a tela)
+    if (params.get('base44')) {
+      const d = (n) => somarDias(dataProducao(), -n);
+      base44Info = { ligado: true, temSegredo: true, url: 'https://sistema-do-escritorio-ubiralcool-7f3a9c.base44.app/functions/receberTotaisPranchetas', desde: d(5),
+        enviados: { [d(1)]: { ok: true, em: Date.now() - 3600000, hash: 'a' }, [d(2)]: { ok: false, em: Date.now() - 600000, erro: 'Sem internet na central (ou endereço errado)' }, [d(3)]: { ok: true, em: Date.now() - 2 * 86400000, hash: 'b' } } };
+    }
     preencherExemplo();
     Object.values(registros).forEach((r) => { r.sincronizado = true; });
     const tela = params.get('tela');

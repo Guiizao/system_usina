@@ -13,7 +13,7 @@ import { teste, certo, igual, teclasDaSenha } from './teste.mjs';
 
 export async function testarPedidos24(nav, ligar, porta, grupo) {
   const c = await ligar(porta);
-  const api = async (rota) => (await fetch(c.url + rota, { headers: { 'X-Chave': c.chave() } })).json();
+  const api = (rota) => c.api(rota);
   const regs = async () => (await api('/api/registros?desde=0')).registros.filter((r) => !r.apagado);
   const esperarCentral = async (filtro, descricao, ms = 25000) => {
     const t0 = Date.now();

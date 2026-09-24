@@ -162,6 +162,29 @@ Medido num tablet simulado 4 vezes mais lento que o computador, com a central gu
 - Dois aparelhos criando a mesma linha sem um saber do outro (o chefe corrigiu nos segundos antes de receber): os valores se juntam, nada se perde.
 - **Código embaralhado no APK**: quem abrir o APK não lê o código do jeito que foi escrito (o mapa para entender erros fica só em `apk/saida/mapas`).
 
+## Wi-Fi embaralhado (versão 2.5)
+
+Tudo que passa entre os aparelhos e a central vai embaralhado (`public/cifra.js`, igual no `server.js` e no `ServidorCentral.java`). Quem espiar o Wi-Fi não lê anotação, nome de operador, código nem chave.
+
+- **Conectar:** o código de 6 números não passa aberto. O aparelho e a central combinam um segredo (X25519) que quem só escuta o Wi-Fi não consegue calcular, e o aparelho manda só uma prova do código. A central devolve a chave deste aparelho, embaralhada. Quem chuta códigos é bloqueado (6 por minuto por aparelho, 30 no total).
+- **Depois:** cada aparelho tem a sua chave (sai da chave da rede) e cada pedido vai embaralhado com ela (AES-256-GCM). Pacote alterado no caminho, pedido gravado e mandado de novo e resposta trocada são recusados.
+- **Relógio:** a central só aceita pedido dos últimos 5 minutos. Se o relógio do aparelho estiver errado, a central manda a hora certa e o aparelho acerta sozinho (continua o aviso de acertar a hora do Android).
+- **Aplicativo instalado:** usa a criptografia do próprio Android. **Navegador do computador** aberto por `http://endereço`: usa a versão escrita em `cifra.js` (mesmo resultado, conferido nos testes contra a do Node).
+- Só o "ping" (a central está aí?), a página `/baixar` e o download do APK continuam abertos. A página `/relatorios` também continua aberta na rede da usina (o escritório baixa os arquivos pelo navegador).
+
+**Atualizando da 2.4:** atualize primeiro o servidor (o tablet chefe, ou o `server.js` do computador) e depois os outros aparelhos (pela página `/baixar`). Aparelho ainda na 2.4 não recebe nada da central nova, mas não perde o que anotou: guarda e manda quando for atualizado, sem pedir o código de novo. Depois que todos estiverem na 2.5, toque **uma vez** em **Trocar código** no tablet chefe: a chave da 2.4 passava aberta no Wi-Fi e assim ela deixa de valer (todos pedem o código novo uma vez).
+
+## Totais do dia no Base44 (versão 2.5)
+
+O Lucas lança os totais do dia num sistema feito no Base44. Agora os totais de cada insumo vão sozinhos:
+
+1. Quem montou o sistema no Base44 cria a tabela e a função que estão em `integracoes/base44` (`entities/total-insumo-dia.jsonc` e `functions/receberTotaisPranchetas/entry.ts`) e cadastra o segredo `PRANCHETAS_SEGREDO` nos segredos do app.
+2. No tablet chefe: **Usina** (senha do encarregado) > **Totais do dia no Base44**: cadastre o endereço da função e o segredo. Com o segredo em branco, o aplicativo cria um e mostra para passar a quem montou o Base44.
+3. Quando o dia fecha (07:00), o tablet chefe soma cada insumo e a central manda pela internet, com o segredo. Se alguém corrigir a folha depois, os totais mudam e vão de novo (a função atualiza o dia, não duplica). Os dias de antes de ligar não vão sozinhos (o escritório já lançou à mão); dá para mandar um por um na mesma tela.
+4. A mesma tela mostra os últimos 7 dias: enviado (e quando), ou o erro (sem internet, segredo recusado). Com erro, tenta de novo a cada 10 minutos e avisa o tablet chefe uma vez.
+
+O endereço e o segredo ficam só no servidor (`ServidorUsina/config.json`), não vão para os tablets. **Precisa de internet no servidor da usina** (no tablet chefe, se ele for o servidor; ou no computador).
+
 ## Troca de turno e virada das 07:00 no meio da anotação (versão 2.3)
 
 Se o turno trocar (07:00, 16:00, 00:00) com a pessoa no meio de uma anotação, o que ela digitou é salvo no nome dela e no dia da folha que estava aberta. Depois o aplicativo pede o nome de quem entrou. Antes, o que estava digitado podia se perder, ou ir para a folha do dia seguinte.
@@ -203,12 +226,13 @@ Leva uns 20 minutos e grava o resultado em `testes/saida/resultado.txt`. Testa:
 5. longo prazo, nas duas centrais: 90 dias de uso da usina inteira (a memória do tablet não enche), dias antigos no BackupUsina, troca de turno e virada das 07:00 no meio da anotação, "Terminou a Nº X", tablet chefe trocado e 700 anotações guardadas sem Wi-Fi;
 6. velocidade: cada toque num tablet 4 vezes mais lento, com 90 dias de uso, tem que responder em menos de 100 ms;
 7. os pedidos do teste de 24/09 (aviso curto, senha do operador no tablet chefe, relatórios, WhatsApp, rolagem, trocar o código), nas duas centrais, e o aplicativo com o código embaralhado como vai no APK;
+7b. a versão 2.5, nas duas centrais: Wi-Fi embaralhado (quem espia não lê nada, pacote alterado, repetido ou com relógio errado, aplicativo antigo, criptografia escrita em JavaScript igual à do Node e à do navegador) e os totais no Base44 (com um Base44 de mentira no computador: sozinho quando o dia fecha, de novo quando a folha é corrigida, erro sem internet ou com segredo errado, e a função que vai no Base44 rodando com um Base44 simulado);
 8. leitura de foto, impressão e o aplicativo abrindo sem rede;
 9. todas as telas em 9 tamanhos, procurando texto cortado, palavra quebrada, letra pequena, pouco contraste entre a letra e o fundo e erro de JavaScript (fotos em `testes/saida/telas`).
 
 Os testes usam pastas de dados temporárias: nunca mexem em `dados/`. Só as telas: `node testes/rodar-telas.mjs` (liga uma central de teste sozinho). Só o longo prazo: `node testes/rodar-robustez.mjs`.
 
-O teste para fazer à mão no celular e no tablet está em `Teste-nos-aparelhos-2.4.pdf`, na pasta `Usina`.
+O teste para fazer à mão no celular e no tablet está em `Teste-nos-aparelhos-2.5.pdf`, na pasta `Usina`. Só a versão 2.5: `node testes/rodar-pedidos25.mjs`.
 
 ## Imagens das telas
 
@@ -225,6 +249,8 @@ Salva em `../telas`.
 43 verificações automáticas: conexão com código certo e errado, anotação, botões − e +, aviso de valor fora do normal, cópia da dorna anterior, marcar fim, monitoramento, valores padrão, insumos, senha do operador, trava por inatividade, virada de turno, exportação, relatórios e configurações. Mais: queda de rede com envio depois que volta, sincronização entre dois aparelhos e validação do Excel e do XML.
 
 Versão 2 (16/09/2026): avisos de pH e Brix, telas LPHERA / Cal e Saczyme / Alcolina com a soma das dornas da hora, casinha nas abas, rolagem do painel do chefe que não volta mais para o topo, pastas *Usina, tela de relatórios, janela de Excel ou XML, listas do ralo, cadastro protegido por senha e busca do tablet chefe no Wi-Fi. Testado no navegador contra o servidor: anotação, envio, queda de rede, relatórios e Excel/XML.
+
+Versão 2.5 (24/09/2026), ideias aprovadas depois do teste na área: Wi-Fi embaralhado (conectar sem o código passar aberto, uma chave por aparelho, pacote alterado ou repetido recusado, também no navegador do computador) e totais do dia no Base44 (sozinhos quando o dia fecha e de novo se a folha for corrigida, com a função para o Base44 em `integracoes/base44`).
 
 Versão 2.4 (24/09/2026), pedidos do teste na área: aviso curto do lado do número (caixa e teclado não mudam de tamanho) e só no primeiro pH; insumos somados só de dorna terminada; blocos mais juntos e Apagar lá em cima; Monitorar rola com o dedo e tem folha inteira; turno do lado do nome; sincronização a cada 5 s sem mexer onde a pessoa está; animação só nos quadros ao trocar de dorna; tablet chefe separado do servidor; senha do operador para o chefe corrigir; relatórios um por dia (abrir, enviar, apagar); escolher os setores ao enviar e imprimir; WhatsApp com os totais dos insumos; trocar o código desconecta todos; apagar tudo com a senha do programador; senha do encarregado 159357; código embaralhado no APK.
 

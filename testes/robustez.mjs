@@ -41,10 +41,7 @@ export function diaDaUsina(data, aparelho = 'semeado') {
 /** Testes direto na central (sem navegador). ligar(porta, pasta) liga a central; roda nas duas. */
 export async function testarRobustezCentral(ligar, porta, grupo) {
   let c = await ligar(porta);
-  const pedir = async (rota, corpo) => {
-    const r = await fetch(c.url + rota, { method: corpo ? 'POST' : 'GET', headers: { 'X-Chave': c.chave(), 'Content-Type': 'application/json' }, body: corpo ? JSON.stringify(corpo) : undefined });
-    return r.json();
-  };
+  const pedir = (rota, corpo) => c.api(rota, corpo);
   const reg = (data, pid, chave, valores, extra = {}) => ({ id: `${data}|${pid}|${chave}`, data, prancheta: pid, setor: 'caldeira', chave: String(chave), valores, criadoEm: Date.now(), atualizadoEm: Date.now(), aparelho: 'teste', apagado: false, operador: 'Teste', ...extra });
   try {
     await teste(grupo, 'cada aparelho recebe só os dias que guarda (configuração e avisos vão sempre)', async () => {
@@ -159,7 +156,7 @@ export async function testarRobustezCentral(ligar, porta, grupo) {
 /** Testes com aparelhos virtuais. */
 export async function testarRobustezAparelhos(nav, ligar, porta, grupo) {
   let c = await ligar(porta);
-  const api = async (rota, corpo) => (await fetch(c.url + rota, { method: corpo ? 'POST' : 'GET', headers: { 'X-Chave': c.chave(), 'Content-Type': 'application/json' }, body: corpo ? JSON.stringify(corpo) : undefined })).json();
+  const api = (rota, corpo) => c.api(rota, corpo);
   const regs = async () => (await api('/api/registros?desde=0')).registros.filter((r) => !r.apagado);
   const esperarCentral = async (filtro, descricao, ms = 30000) => {
     const t0 = Date.now();

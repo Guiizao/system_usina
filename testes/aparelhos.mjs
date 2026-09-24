@@ -11,7 +11,7 @@ import { teste, certo, igual, teclasDaSenha } from './teste.mjs';
 
 export async function testarAparelhos(nav, central, grupo) {
   const U = central.url + '/';
-  const api = async (rota) => (await fetch(central.url + rota, { headers: { 'X-Chave': central.chave() } })).json();
+  const api = (rota) => central.api(rota);
   const naCentral = async (filtro, ms = 25000, descricao = 'anotação na central') => {
     const t0 = Date.now();
     while (Date.now() - t0 < ms) {

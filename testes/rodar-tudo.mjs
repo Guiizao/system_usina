@@ -23,6 +23,8 @@ import { testarConfiguracao, testarExtras } from './extras.mjs';
 import { testarRobustezCentral, testarRobustezAparelhos } from './robustez.mjs';
 import { medirDesempenho } from './desempenho.mjs';
 import { testarPedidos24 } from './pedidos24.mjs';
+import { testarCifra } from './cifra.mjs';
+import { testarBase44Central, testarPedidos25, testarFuncaoBase44 } from './pedidos25.mjs';
 import { testarApkWeb } from './rodar-apk-web.mjs';
 import { centralNode, centralJava, APP } from './servidores.mjs';
 
@@ -55,6 +57,19 @@ for (const [nome, ligar, porta] of [['computador (server.js)', centralNode, 8291
   try { await testarApi(c, g); } finally { await c.desligar(); }
   grupos.push(g);
 }
+// 3c. criptografia do Wi-Fi (a escrita em JavaScript igual à do Node) e envio dos totais para o Base44
+const gc = novoGrupo('Criptografia do Wi-Fi: a escrita em JavaScript igual à do Node');
+await testarCifra(gc);
+grupos.push(gc);
+const gf = novoGrupo('Função que vai no Base44 do escritório (com o Base44 simulado)');
+await testarFuncaoBase44(gf);
+grupos.push(gf);
+for (const [nome, ligar, porta] of [['computador', centralNode, 8265], ['tablet chefe', centralJava, 8266]]) {
+  const g = novoGrupo('Totais no Base44, direto na central do ' + nome);
+  const c = await ligar(porta);
+  try { await testarBase44Central(c, porta + 10, g); } finally { await c.desligar(); }
+  grupos.push(g);
+}
 // 3b. longo prazo direto na central: dias guardados, dias antigos no BackupUsina, central nova, 90 dias de uso
 for (const [nome, ligar, porta] of [['computador', centralNode, 8271], ['tablet chefe', centralJava, 8272]]) {
   const g = novoGrupo('Longo prazo e central nova, direto na central do ' + nome);
@@ -82,6 +97,12 @@ try {
   for (const [nome, ligar, porta] of [['computador', centralNode, 8279], ['tablet chefe', centralJava, 8280]]) {
     const g = novoGrupo('Pedidos do teste de 24/09 na central do ' + nome);
     await testarPedidos24(nav, ligar, porta, g);
+    grupos.push(g);
+  }
+  // 4g. versão 2.5: totais no Base44 sozinhos e pelas configurações; Wi-Fi embaralhado no navegador sem WebCrypto
+  for (const [nome, ligar, porta] of [['computador', centralNode, 8267], ['tablet chefe', centralJava, 8268]]) {
+    const g = novoGrupo('Versão 2.5 (Base44 e Wi-Fi embaralhado) na central do ' + nome);
+    await testarPedidos25(nav, ligar, porta, g, { correcao: nome === 'computador' });
     grupos.push(g);
   }
   // 4f. o aplicativo embaralhado (como vai no APK) continua funcionando igual

@@ -11,12 +11,14 @@
  * Segurança:
  *  - só aceita aparelhos da rede interna (192.168.x.x, 10.x.x.x, 172.16-31.x.x)
  *  - cada aparelho precisa do código de conexão (6 números) mostrado aqui e no tablet chefe
- *  - depois de conectado, o aparelho recebe uma chave e só ela abre os dados
+ *  - o código não passa aberto no Wi-Fi: vai só uma prova dele, presa a um segredo combinado (X25519)
+ *  - depois de conectado, cada aparelho tem a sua chave e tudo passa embaralhado (AES-256-GCM, public/cifra.js)
  *
  * Não precisa instalar nada além do Node.js. Os dados ficam em ./dados/ServidorUsina,
  * os relatórios em ./dados/RelatoriosUsina e os backups diários em ./dados/BackupUsina.
  */
 const http = require('http');
+const https = require('https');
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
@@ -84,6 +86,74 @@ try { config = JSON.parse(fs.readFileSync(CONFIG, 'utf8')); } catch (e) {
 const salvarConfig = () => fs.writeFileSync(CONFIG, JSON.stringify(config, null, 2));
 // "geração" dos dados: muda quando o escritório zera as anotações de teste; os tablets veem e limpam o que têm
 if (!config.geracao) { config.geracao = crypto.randomBytes(6).toString('hex'); salvarConfig(); }
+
+// ---------- criptografia do Wi-Fi (a mesma do public/cifra.js) ----------
+// par de chaves da central: o aparelho que conecta combina com ela um segredo que quem espia o Wi-Fi não calcula
+const DER_PRIVADA = Buffer.from('302e020100300506032b656e04220420', 'hex');
+const DER_PUBLICA = Buffer.from('302a300506032b656e032100', 'hex');
+if (!/^[0-9a-f]{64}$/.test(config.par || '')) {
+  config.par = crypto.generateKeyPairSync('x25519').privateKey.export({ format: 'der', type: 'pkcs8' }).subarray(-32).toString('hex');
+  salvarConfig();
+}
+const privadaPar = crypto.createPrivateKey({ key: Buffer.concat([DER_PRIVADA, Buffer.from(config.par, 'hex')]), format: 'der', type: 'pkcs8' });
+const PUB_PAR = crypto.createPublicKey(privadaPar).export({ format: 'der', type: 'spki' }).subarray(-32).toString('hex');
+const hmac = (chave, texto) => crypto.createHmac('sha256', chave).update(texto).digest();
+/** Chave de cada aparelho: sai da chave da rede (trocar o código troca a da rede e desconecta todos). */
+const chaveDoAparelho = (aparelho) => hmac(config.chave, 'aparelho|' + aparelho);
+function selar(chave, texto, aad) {
+  const iv = crypto.randomBytes(12);
+  const c = crypto.createCipheriv('aes-256-gcm', chave, iv); c.setAAD(aad);
+  return Buffer.concat([iv, c.update(texto), c.final(), c.getAuthTag()]);
+}
+function abrir(chave, pacote, aad) {
+  if (pacote.length < 28) throw new Error('pacote curto');
+  const d = crypto.createDecipheriv('aes-256-gcm', chave, pacote.subarray(0, 12)); d.setAAD(aad); d.setAuthTag(pacote.subarray(pacote.length - 16));
+  return Buffer.concat([d.update(pacote.subarray(12, pacote.length - 16)), d.final()]);
+}
+// pedido gravado por alguém e mandado de novo é recusado: vale só por 5 minutos e cada um só uma vez
+const JANELA = 5 * 60000;
+const pedidosVistos = new Map(); // iv -> quando
+function jaVisto(iv) {
+  const agora = Date.now();
+  for (const [k, t] of pedidosVistos) { if (agora - t < 2 * JANELA) break; pedidosVistos.delete(k); }
+  if (pedidosVistos.has(iv)) return true;
+  pedidosVistos.set(iv, agora);
+  return false;
+}
+const ATUALIZE = 'Atualize o aplicativo: a central agora usa a conexão embaralhada (versão 2.5).';
+
+// ---------- totais do dia para o sistema do escritório (Base44) ----------
+// o endereço e o segredo ficam só aqui na central, não vão para os tablets
+if (!config.base44) config.base44 = { url: '', segredo: '', enviados: {} };
+function estadoBase44(completo) {
+  const b = config.base44;
+  const enviados = {};
+  Object.keys(b.enviados || {}).sort().reverse().slice(0, 15).forEach((d) => {
+    const e = b.enviados[d];
+    enviados[d] = completo ? e : { hash: e.hash, ok: e.ok, em: e.em, erro: e.erro || '' };
+  });
+  return Object.assign({ ligado: !!b.url, temSegredo: !!b.segredo, desde: b.desde || '', enviados }, completo ? { url: b.url } : {});
+}
+const enviandoBase44 = new Set();
+function postarBase44(dados) {
+  const b = config.base44;
+  return new Promise((resolve) => {
+    let u;
+    try { u = new URL(b.url); } catch (e) { return resolve({ status: 0, erro: 'Endereço do Base44 inválido' }); }
+    const corpo = Buffer.from(JSON.stringify(dados));
+    const pedido = (u.protocol === 'http:' ? http : https).request(u, {
+      method: 'POST', timeout: 20000,
+      headers: { 'Content-Type': 'application/json', 'Content-Length': corpo.length, 'X-Pranchetas-Segredo': b.segredo || '' },
+    }, (r) => {
+      const partes = [];
+      r.on('data', (c) => partes.push(c));
+      r.on('end', () => resolve({ status: r.statusCode, texto: Buffer.concat(partes).toString('utf8').slice(0, 2000) }));
+    });
+    pedido.on('timeout', () => pedido.destroy(new Error('O Base44 não respondeu em 20 segundos')));
+    pedido.on('error', (e) => resolve({ status: 0, erro: /ENOTFOUND|EAI_AGAIN|ENETUNREACH|ECONNREFUSED/.test(e.code || '') ? 'Sem internet na central (ou endereço errado)' : e.message }));
+    pedido.end(corpo);
+  });
+}
 
 // ---------- banco de dados simples em arquivo JSON ----------
 let db = { seq: 0, registros: {} };
@@ -180,11 +250,12 @@ function enderecosLocais() {
     })
     .map((i) => `http://${i.address}:${PORTA}`);
 }const tentativas = {}; // ip -> [horários] para limitar chutes de código
+let tentativasTodas = []; // e no total, para quem troca de endereço a cada chute
 
 // ---------- HTTP ----------
 function cabecalhosCors(res) {
   res.setHeader('Access-Control-Allow-Origin', '*'); // o APK roda em http://localhost
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, X-Chave');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
 }
 function json(res, status, obj) {
@@ -192,6 +263,11 @@ function json(res, status, obj) {
   res.end(JSON.stringify(obj));
 }
 function lerCorpo(req, limite = 5 * 1024 * 1024) {
+  // pedido que veio embaralhado: o corpo já foi aberto
+  if (req.corpoPronto !== undefined) return req.corpoPronto.length > limite ? Promise.reject(new Error('muito grande')) : Promise.resolve(req.corpoPronto);
+  return lerBytes(req, limite).then((b) => b.toString('utf8'));
+}
+function lerBytes(req, limite) {
   return new Promise((resolve, reject) => {
     let tamanho = 0;
     const partes = [];
@@ -200,7 +276,7 @@ function lerCorpo(req, limite = 5 * 1024 * 1024) {
       if (tamanho > limite) { reject(new Error('muito grande')); req.destroy(); return; }
       partes.push(c);
     });
-    req.on('end', () => resolve(Buffer.concat(partes).toString('utf8')));
+    req.on('end', () => resolve(Buffer.concat(partes)));
     req.on('error', reject);
   });
 }
@@ -263,16 +339,28 @@ const servidor = http.createServer(async (req, res) => {
 
   try {
     // ----- rotas abertas na rede da usina -----
-    if (p === '/api/ping') return json(res, 200, { app: 'pranchetas', rede: config.nome, apk: fs.existsSync(APK) });
+    if (p === '/api/ping') return json(res, 200, { app: 'pranchetas', rede: config.nome, apk: fs.existsSync(APK), cifra: 1, pub: PUB_PAR, agora: Date.now() });
 
+    // conectar: o código de 6 números não passa aberto; a chave deste aparelho volta embaralhada
     if (p === '/api/parear' && req.method === 'POST') {
       const agora = Date.now();
       tentativas[ip] = (tentativas[ip] || []).filter((t) => agora - t < 60000);
-      if (tentativas[ip].length >= 6) return json(res, 429, { erro: 'Muitas tentativas. Espere um minuto.' });
-      tentativas[ip].push(agora);
+      tentativasTodas = tentativasTodas.filter((t) => agora - t < 60000);
+      if (tentativas[ip].length >= 6 || tentativasTodas.length >= 30) return json(res, 429, { erro: 'Muitas tentativas. Espere um minuto.' });
+      tentativas[ip].push(agora); tentativasTodas.push(agora);
       const corpo = JSON.parse(await lerCorpo(req, 10000));
-      if (String(corpo.codigo || '') !== config.codigo) return json(res, 403, { erro: 'Código errado' });
-      return json(res, 200, { chave: config.chave, rede: config.nome });
+      const aparelho = String(corpo.aparelho || '');
+      if (!/^[0-9a-f]{64}$/.test(corpo.pub || '') || !/^[0-9a-f]{64}$/.test(corpo.prova || '') || !aparelho || aparelho.length > 80) {
+        return json(res, 400, { erro: corpo.codigo ? ATUALIZE : 'Pedido de conexão inválido' });
+      }
+      let comum;
+      try {
+        comum = crypto.diffieHellman({ privateKey: privadaPar, publicKey: crypto.createPublicKey({ key: Buffer.concat([DER_PUBLICA, Buffer.from(corpo.pub, 'hex')]), format: 'der', type: 'spki' }) });
+      } catch (e) { return json(res, 403, { erro: 'Código errado' }); }
+      const chavePar = hmac(comum, `parear|${aparelho}|${corpo.pub}`);
+      if (!crypto.timingSafeEqual(hmac(chavePar, 'codigo|' + config.codigo), Buffer.from(corpo.prova, 'hex'))) return json(res, 403, { erro: 'Código errado' });
+      const pacote = selar(chavePar, JSON.stringify({ chave: chaveDoAparelho(aparelho).toString('hex') }), Buffer.from('parear|' + aparelho));
+      return json(res, 200, { rede: config.nome, cifrado: pacote.toString('base64') });
     }
 
     if (p === '/apk/pranchetas.apk') {
@@ -287,10 +375,45 @@ const servidor = http.createServer(async (req, res) => {
       return fs.createReadStream(APK).pipe(res);
     }
 
-    // ----- rotas protegidas pela chave -----
-    if (p.startsWith('/api/')) {
-      if (req.headers['x-chave'] !== config.chave) return json(res, 401, { erro: 'Aparelho não conectado à central' });
+    // ----- rotas protegidas: só por pedido embaralhado com a chave do aparelho -----
+    if (p === '/api/c' && req.method === 'POST') {
+      const aparelho = String(url.searchParams.get('a') || '').slice(0, 80);
+      const pacote = await lerBytes(req, 40 * 1024 * 1024);
+      const chave = chaveDoAparelho(aparelho);
+      let texto;
+      try { texto = abrir(chave, pacote, Buffer.from('pedido|' + aparelho)).toString('utf8'); } catch (e) { return json(res, 401, { erro: 'Aparelho não conectado à central' }); }
+      const nl = texto.indexOf('\n');
+      const cab = JSON.parse(texto.slice(0, nl));
+      const agora = Date.now();
+      // relógio do aparelho muito diferente: ele acerta com a hora da central e pede de novo
+      if (!(Math.abs(agora - Number(cab.t)) <= JANELA)) return json(res, 409, { erro: 'relogio', agora });
+      const iv = pacote.subarray(0, 12);
+      if (jaVisto(iv.toString('hex'))) return json(res, 401, { erro: 'Pedido repetido' });
+      const caminho = String(cab.c || '');
+      if (!/^api\/[a-z0-9-]+(\?.*)?$/.test(caminho) || /^api\/(c|ping|parear)(\?|$)/.test(caminho)) return json(res, 400, { erro: 'caminho inválido' });
+      const falso = { status: 200, corpo: '', setHeader() {}, writeHead(s) { this.status = s; }, end(b) { this.corpo = b == null ? '' : String(b); } };
+      await rotaProtegida({ method: cab.m === 'POST' ? 'POST' : 'GET', corpoPronto: texto.slice(nl + 1), aparelho }, falso, new URL('/' + caminho, 'http://localhost'), ip);
+      res.writeHead(200, { 'Content-Type': 'application/octet-stream', 'Cache-Control': 'no-store' });
+      return res.end(selar(chave, `${falso.status}\n${falso.corpo}`, Buffer.concat([Buffer.from('resposta|'), iv])));
+    }
+    // aparelho com o aplicativo antigo (chave aberta no Wi-Fi): não recebe nada até atualizar
+    if (p.startsWith('/api/')) return json(res, 426, { erro: ATUALIZE });
 
+    if (req.method !== 'GET') { res.writeHead(405); return res.end(); }
+
+    // Página do escritório com os relatórios já prontos, por dia
+    if (p === '/relatorios' || p.startsWith('/relatorios/')) return paginaRelatorios(res, p);
+
+    return arquivoEstatico(res, p);
+  } catch (e) {
+    return json(res, 400, { erro: e.message });
+  }
+});
+
+/** As rotas com os dados da usina. Chegam aqui só depois de abrir o pedido embaralhado. */
+async function rotaProtegida(req, res, url, ip) {
+  const p = url.pathname;
+  try {
       if (p === '/api/sync' && req.method === 'POST') {
         const corpo = JSON.parse(await lerCorpo(req));
         if (corpo.aparelho) aparelhos[corpo.aparelho] = { papel: corpo.papel, operador: corpo.operador, versao: corpo.versao || '', vistoEm: Date.now(), ip };
@@ -328,6 +451,41 @@ const servidor = http.createServer(async (req, res) => {
         return json(res, 200, { ok: true, aceitos, seq: db.seq, agora: Date.now(), geracao: config.geracao });
       }
 
+      // totais do dia para o Base44 (sistema do escritório): o tablet chefe calcula, a central manda pela internet
+      if (p === '/api/base44' && req.method === 'POST') {
+        const corpo = JSON.parse(await lerCorpo(req, 2 * 1024 * 1024));
+        const b = config.base44;
+        if (corpo.acao === 'estado') return json(res, 200, estadoBase44(true));
+        if (corpo.acao === 'configurar') {
+          const endereco = String(corpo.url || '').trim();
+          if (endereco && !/^https?:\/\/[^\s/]+\.[^\s]+$/i.test(endereco) && !/^http:\/\/127\.0\.0\.1:\d+\//.test(endereco)) return json(res, 400, { erro: 'Endereço inválido. Ele começa com https://' });
+          // só os dias depois de ligar vão sozinhos (os anteriores o escritório já lançou à mão)
+          if (endereco && endereco !== b.url && ehDia(corpo.desde)) b.desde = corpo.desde;
+          b.url = endereco;
+          if (typeof corpo.segredo === 'string') b.segredo = corpo.segredo.trim().slice(0, 200);
+          salvarConfig();
+          return json(res, 200, estadoBase44(true));
+        }
+        if (corpo.acao === 'enviar') {
+          if (!b.url) return json(res, 400, { erro: 'O endereço do Base44 não foi cadastrado' });
+          if (!ehDia(corpo.data) || !corpo.dados || typeof corpo.dados !== 'object') return json(res, 400, { erro: 'dados inválidos' });
+          const antes = (b.enviados || {})[corpo.data];
+          if (!corpo.forcar && antes && antes.ok && antes.hash === corpo.hash) return json(res, 200, { ok: true, jaEnviado: true });
+          if (enviandoBase44.has(corpo.data)) return json(res, 200, { ok: false, erro: 'Já está enviando este dia' });
+          enviandoBase44.add(corpo.data);
+          let r;
+          try { r = await postarBase44(corpo.dados); } finally { enviandoBase44.delete(corpo.data); }
+          const ok = r.status >= 200 && r.status < 300;
+          const erro = ok ? '' : r.erro || (r.status === 401 || r.status === 403 ? 'O Base44 recusou o segredo' : `O Base44 respondeu ${r.status}: ${(r.texto || '').slice(0, 200)}`);
+          b.enviados = b.enviados || {};
+          b.enviados[corpo.data] = { hash: String(corpo.hash || ''), ok, em: Date.now(), status: r.status, erro };
+          Object.keys(b.enviados).sort().slice(0, -60).forEach((d) => delete b.enviados[d]);
+          salvarConfig();
+          return json(res, 200, { ok, erro, status: r.status });
+        }
+        return json(res, 400, { erro: 'ação desconhecida' });
+      }
+
       if (p === '/api/registros') {
         const dia = url.searchParams.get('dia');
         if (dia) { // o tablet chefe abriu um dia que não guarda mais
@@ -347,7 +505,7 @@ const servidor = http.createServer(async (req, res) => {
         const agora = Date.now();
         return json(res, 200, {
           seq: db.seq, total: Object.keys(db.registros).length,
-          codigo: config.codigo, enderecos: enderecosLocais(), apk: fs.existsSync(APK),
+          codigo: config.codigo, enderecos: enderecosLocais(), apk: fs.existsSync(APK), base44: estadoBase44(false),
           pastas: { servidor: PASTAS.servidor, relatorios: PASTAS.relatorios, backup: PASTAS.backup },
           aparelhos: Object.entries(aparelhos).map(([id, a]) => ({
             id, papel: a.papel, operador: a.operador, ip: a.ip, versao: a.versao || '',
@@ -408,21 +566,14 @@ const servidor = http.createServer(async (req, res) => {
       // trocar o código também troca a chave: todos os outros aparelhos são desconectados (aparelho perdido ou roubado)
       if (p === '/api/novo-codigo' && req.method === 'POST') {
         config.codigo = novoCodigo(); config.chave = crypto.randomBytes(18).toString('hex'); salvarConfig();
-        return json(res, 200, { codigo: config.codigo, chave: config.chave });
+        // quem trocou recebe a chave nova dele (a resposta vai embaralhada com a chave antiga)
+        return json(res, 200, { codigo: config.codigo, chave: chaveDoAparelho(req.aparelho).toString('hex') });
       }
       return json(res, 404, { erro: 'rota desconhecida' });
-    }
-
-    if (req.method !== 'GET') { res.writeHead(405); return res.end(); }
-
-    // Página do escritório com os relatórios já prontos, por dia
-    if (p === '/relatorios' || p.startsWith('/relatorios/')) return paginaRelatorios(res, p);
-
-    return arquivoEstatico(res, p);
   } catch (e) {
     return json(res, 400, { erro: e.message });
   }
-});
+}
 
 arquivarDiasAntigos();
 setInterval(arquivarDiasAntigos, 3600 * 1000).unref();

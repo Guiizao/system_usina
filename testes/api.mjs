@@ -6,8 +6,10 @@
 import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
+import crypto from 'node:crypto';
 import { teste, certo, igual } from './teste.mjs';
 import { dormir } from './navegador.mjs';
+import { Cifra, conectarTeste, clienteCifrado } from './cifra.mjs';
 
 const hoje = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
 
@@ -25,9 +27,10 @@ function cru(url, caminho, metodo = 'GET') {
 
 export async function testarApi(central, grupo) {
   const U = central.url;
-  const pedir = async (caminho, { metodo = 'GET', corpo, chave, texto } = {}) => {
-    const headers = {};
-    if (chave) headers['X-Chave'] = chave;
+  // com chave (um aparelho conectado), o pedido vai embaralhado, como no aplicativo
+  const pedir = async (caminho, { metodo = 'GET', corpo, chave, texto, cabecalhos } = {}) => {
+    if (chave && chave.pedir) return chave.pedir(caminho, { metodo, corpo, texto });
+    const headers = Object.assign({}, cabecalhos);
     let body;
     if (corpo !== undefined || texto !== undefined) { headers['Content-Type'] = 'application/json'; body = texto !== undefined ? texto : JSON.stringify(corpo); }
     try {
@@ -43,30 +46,79 @@ export async function testarApi(central, grupo) {
   }, extra);
   let chave = null;
 
-  await teste(grupo, 'ping responde e não entrega a chave', async () => {
+  await teste(grupo, 'ping responde, mostra a chave pública da central e não entrega a chave da rede', async () => {
     const r = await pedir('/api/ping');
-    igual(r.status, 200); igual(r.json.app, 'pranchetas');
+    igual(r.status, 200); igual(r.json.app, 'pranchetas'); igual(r.json.cifra, 1, 'sem conexão embaralhada');
+    certo(/^[0-9a-f]{64}$/.test(r.json.pub || ''), 'chave pública: ' + r.json.pub);
+    certo(Math.abs(r.json.agora - Date.now()) < 5000, 'hora da central');
     certo(!r.texto.includes(central.chave()), 'a chave apareceu no ping');
   });
   await teste(grupo, 'código de conexão errado é recusado', async () => {
     const errado = central.codigo() === '000000' ? '111111' : '000000';
-    const r = await pedir('/api/parear', { metodo: 'POST', corpo: { codigo: errado } });
-    igual(r.status, 403); igual(r.json.erro, 'Código errado');
+    const r = await conectarTeste(U, errado, 'teste-errado');
+    igual(r.status, 403); igual(r.erro, 'Código errado');
   });
-  await teste(grupo, 'código certo entrega a chave da rede', async () => {
-    const r = await pedir('/api/parear', { metodo: 'POST', corpo: { codigo: central.codigo(), aparelho: 'teste-api' } });
-    igual(r.status, 200); certo(r.json.chave && r.json.chave === central.chave(), 'chave diferente');
-    chave = r.json.chave;
+  await teste(grupo, 'código certo: a chave volta embaralhada e é só deste aparelho', async () => {
+    const cli = await conectarTeste(U, central.codigo(), 'teste-api');
+    certo(cli.pedir, 'não conectou: ' + cli.erro);
+    igual(cli.chave, crypto.createHmac('sha256', central.chave()).update('aparelho|teste-api').digest('hex'), 'chave do aparelho');
+    certo(cli.chave !== central.chave(), 'recebeu a chave da rede');
+    const outro = await conectarTeste(U, central.codigo(), 'teste-outro');
+    certo(outro.chave !== cli.chave, 'dois aparelhos com a mesma chave');
+    chave = cli;
   });
-  await teste(grupo, 'sem chave, ou com chave errada, os dados ficam fechados', async () => {
-    for (const c of [undefined, 'chave-errada']) {
-      for (const rota of ['/api/registros', '/api/status', '/api/relatorios', '/api/erros']) {
-        const r = await pedir(rota, { chave: c });
-        igual(r.status, 401, rota);
-      }
-      const s = await pedir('/api/sync', { metodo: 'POST', corpo: { registros: [] }, chave: c });
-      igual(s.status, 401, 'sync');
+  await teste(grupo, 'quem espia o Wi-Fi não vê o código, a chave nem as anotações', async () => {
+    // conexão: o que passa aberto é só a prova do código e a resposta embaralhada
+    const ping = (await pedir('/api/ping')).json;
+    const { corpo, chavePar } = Cifra.pedidoDeConexao(ping.pub, 'teste-espiao', central.codigo());
+    const r = await pedir('/api/parear', { metodo: 'POST', corpo });
+    igual(r.status, 200);
+    const noAr = JSON.stringify(corpo) + r.texto;
+    const chaveDele = (await Cifra.abrirConexao(chavePar, 'teste-espiao', r.json.cifrado)).chave;
+    certo(!noAr.includes(central.codigo()), 'o código passou aberto');
+    certo(!noAr.includes(chaveDele) && !noAr.includes(central.chave()), 'a chave passou aberta');
+    // anotação: nem o valor nem o nome do operador aparecem no que vai e volta
+    await pedir('/api/sync', { metodo: 'POST', chave, corpo: { aparelho: 'teste-api', registros: [registro('espiao', { brix: '19.87', obs: 'SEGREDO-DA-DORNA' }, Date.now(), { operador: 'Operador Espiado' })] } });
+    const ida = Buffer.from(chave.gravados[chave.gravados.length - 1].pedido).toString('latin1');
+    await pedir('/api/registros?desde=0', { chave });
+    const volta = Buffer.from(chave.gravados[chave.gravados.length - 1].resposta).toString('latin1');
+    for (const s of ['SEGREDO-DA-DORNA', '19.87', 'Operador Espiado', 'hid_anexo1', 'registros']) {
+      certo(!ida.includes(s) && !volta.includes(s), `"${s}" passou aberto`);
     }
+  });
+  await teste(grupo, 'aplicativo antigo (chave aberta) e chave errada não abrem os dados', async () => {
+    for (const rota of ['/api/registros', '/api/status', '/api/relatorios', '/api/erros']) {
+      const r = await pedir(rota, { cabecalhos: { 'X-Chave': central.chave() } });
+      igual(r.status, 426, rota); certo(/Atualize o aplicativo/.test(r.json.erro), 'mensagem para atualizar');
+      certo(!r.texto.includes('registros"') && !r.texto.includes(central.codigo()), 'entregou dados para o aplicativo antigo');
+    }
+    const antigo = await pedir('/api/parear', { metodo: 'POST', corpo: { codigo: central.codigo(), aparelho: 'antigo' } });
+    igual(antigo.status, 400, 'conexão do aplicativo antigo'); certo(/Atualize o aplicativo/.test(antigo.json.erro), 'mensagem');
+    certo(!antigo.texto.includes(central.chave()), 'entregou a chave da rede');
+    const errada = clienteCifrado(U, 'teste-api', crypto.randomBytes(32).toString('hex'));
+    const r = await errada.pedir('/api/status');
+    igual(r.status, 401, 'chave errada'); certo(r.fora, 'a central respondeu por dentro');
+    const outroNome = clienteCifrado(U, 'outro-aparelho', chave.chave);
+    igual((await outroNome.pedir('/api/status')).status, 401, 'chave de um aparelho usada por outro');
+  });
+  await teste(grupo, 'pacote alterado, pedido repetido e resposta trocada são recusados', async () => {
+    await pedir('/api/status', { chave });
+    const g = chave.gravados[chave.gravados.length - 1];
+    const url = `${U}/api/c?a=teste-api`;
+    const repetido = await fetch(url, { method: 'POST', body: g.pedido });
+    igual(repetido.status, 401, 'pedido repetido');
+    const mexido = Buffer.from(g.pedido); mexido[20] ^= 1;
+    igual((await fetch(url, { method: 'POST', body: mexido })).status, 401, 'pacote alterado');
+    // a resposta de um pedido não abre com o de outro (ninguém troca uma resposta velha no caminho)
+    const { iv } = await Cifra.pedido(chave.chave, 'teste-api', 'GET', 'api/status', '', Date.now());
+    let abriu = true; try { await Cifra.resposta(chave.chave, iv, g.resposta); } catch { abriu = false; }
+    certo(!abriu, 'resposta aberta com outro pedido');
+  });
+  await teste(grupo, 'relógio do aparelho errado: a central manda a hora certa e o pedido passa', async () => {
+    const r = await chave.pedir('/api/status', { agora: Date.now() - 3 * 3600000 });
+    igual(r.status, 409, 'pedido com a hora errada'); certo(Math.abs(r.json.agora - Date.now()) < 5000, 'hora da central');
+    const certoAgora = await chave.pedir('/api/status', { agora: r.json.agora });
+    igual(certoAgora.status, 200, 'com a hora da central');
   });
   let seqDepois = 0;
   await teste(grupo, 'envio de anotações: aceita, numera e manda a hora da central', async () => {
@@ -158,9 +210,9 @@ export async function testarApi(central, grupo) {
     }
   });
   await teste(grupo, 'CORS e pedido OPTIONS (o aplicativo roda em outro endereço)', async () => {
-    const r = await cru(U, '/api/sync', 'OPTIONS');
+    const r = await cru(U, '/api/c', 'OPTIONS');
     igual(r.status, 204); igual(r.headers['access-control-allow-origin'], '*');
-    certo(/X-Chave/i.test(r.headers['access-control-allow-headers'] || ''), 'X-Chave não liberado');
+    certo(/Content-Type/i.test(r.headers['access-control-allow-headers'] || ''), 'Content-Type não liberado');
   });
   await teste(grupo, 'download do aplicativo informa o tamanho (HEAD)', async () => {
     const r = await cru(U, '/apk/pranchetas.apk', 'HEAD');
@@ -208,19 +260,22 @@ export async function testarApi(central, grupo) {
   });
   await teste(grupo, 'trocar o código: o antigo para de funcionar e o novo funciona', async () => {
     const antigo = central.codigo();
+    const outro = await conectarTeste(U, antigo, 'teste-outro2');
     const r = await pedir('/api/novo-codigo', { metodo: 'POST', chave, corpo: {} });
     igual(r.status, 200); certo(r.json.codigo !== antigo && /^\d{6}$/.test(r.json.codigo), 'código novo');
     // a chave também muda: todos os outros aparelhos são desconectados
-    igual((await pedir('/api/status', { chave })).status, 401, 'aparelho com a chave antiga');
-    certo(r.json.chave && r.json.chave !== chave, 'chave nova para quem trocou');
-    chave = r.json.chave;
-    igual((await pedir('/api/parear', { metodo: 'POST', corpo: { codigo: antigo } })).status, 403, 'antigo');
-    igual((await pedir('/api/parear', { metodo: 'POST', corpo: { codigo: r.json.codigo } })).status, 200, 'novo');
+    igual((await outro.pedir('/api/status')).status, 401, 'outro aparelho com a chave antiga');
+    certo(r.json.chave && r.json.chave !== chave.chave, 'chave nova para quem trocou');
+    igual(r.json.chave, crypto.createHmac('sha256', central.chave()).update('aparelho|teste-api').digest('hex'), 'chave nova certa');
+    chave.chave = r.json.chave;
+    igual((await pedir('/api/status', { chave })).status, 200, 'quem trocou continua conectado');
+    igual((await conectarTeste(U, antigo, 'teste-a')).status, 403, 'antigo');
+    certo((await conectarTeste(U, r.json.codigo, 'teste-b')).pedir, 'novo');
   });
   await teste(grupo, 'quem chuta códigos é bloqueado por um minuto', async () => {
     let bloqueou = false;
     for (let i = 0; i < 9 && !bloqueou; i++) {
-      const r = await pedir('/api/parear', { metodo: 'POST', corpo: { codigo: '99999' + (i % 10) } });
+      const r = await conectarTeste(U, '99999' + (i % 10), 'chute-' + i);
       if (r.status === 429) bloqueou = true;
     }
     certo(bloqueou, 'nunca bloqueou');

@@ -15,6 +15,15 @@ import org.json.JSONArray;
 import org.json.JSONObject;
 
 import java.io.ByteArrayOutputStream;
+import java.math.BigInteger;
+import java.net.HttpURLConnection;
+import java.net.URL;
+import java.security.MessageDigest;
+import java.security.SecureRandom;
+import javax.crypto.Cipher;
+import javax.crypto.Mac;
+import javax.crypto.spec.GCMParameterSpec;
+import javax.crypto.spec.SecretKeySpec;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
@@ -32,11 +41,14 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Iterator;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Random;
+import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -75,6 +87,7 @@ public class ServidorCentral {
   private long seq = 0;
   private final Map<String, JSONObject> aparelhos = new HashMap<>();
   private final Map<String, List<Long>> tentativas = new HashMap<>();
+  private final List<Long> tentativasTodas = new ArrayList<>();
   private final Map<String, Long> ultimoEspelho = new HashMap<>();
 
   private ServidorCentral(Context contexto, int porta) {
@@ -259,6 +272,20 @@ public class ServidorCentral {
         salvarArquivo(arquivo, config.toString().getBytes(StandardCharsets.UTF_8));
       } catch (Exception erro) { /* segue com a config em memória */ }
     }
+    // par de chaves da central: o aparelho que conecta combina com ela um segredo que quem espia o Wi-Fi não calcula
+    try {
+      if (!config.optString("par", "").matches("[0-9a-f]{64}")) {
+        byte[] novo = new byte[32];
+        ALEATORIO.nextBytes(novo);
+        config.put("par", hex(novo));
+        salvarConfig();
+      }
+      pubPar = hex(x25519(deHex(config.optString("par")), BASE));
+    } catch (Exception e) { pubPar = ""; }
+  }
+
+  private synchronized void salvarConfig() {
+    try { salvarArquivo(new File(pastaServidor, "config.json"), config.toString().getBytes(StandardCharsets.UTF_8)); } catch (Exception e) { /* fica na memória */ }
   }
 
   private void carregarRegistros() {
@@ -469,6 +496,12 @@ public class ServidorCentral {
 
   private void responder(String metodo, String caminhoCompleto, Map<String, String> cabecalhos,
                          byte[] corpo, String ip, OutputStream saida, boolean soCabecalho) throws IOException {
+    responder(metodo, caminhoCompleto, cabecalhos, corpo, ip, saida, soCabecalho, false, "");
+  }
+
+  /** autenticado: o pedido chegou embaralhado com a chave do aparelho (e já foi aberto). */
+  private void responder(String metodo, String caminhoCompleto, Map<String, String> cabecalhos,
+                         byte[] corpo, String ip, OutputStream saida, boolean soCabecalho, boolean autenticado, String aparelho) throws IOException {
     String caminho = caminhoCompleto;
     String consulta = "";
     int interrogacao = caminhoCompleto.indexOf('?');
@@ -482,18 +515,37 @@ public class ServidorCentral {
     if (!redeInterna(ip)) { enviarTexto(saida, 403, "Acesso permitido só pela rede da usina."); return; }
 
     try {
-      if ("/api/ping".equals(caminho)) {
-        enviarJson(saida, 200, new JSONObject().put("app", "pranchetas").put("rede", "Tablet chefe").put("apk", true));
+      if (!autenticado && "/api/ping".equals(caminho)) {
+        enviarJson(saida, 200, new JSONObject().put("app", "pranchetas").put("rede", "Tablet chefe").put("apk", true)
+            .put("cifra", 1).put("pub", pubPar).put("agora", System.currentTimeMillis()));
         return;
       }
 
-      if ("/api/parear".equals(caminho) && "POST".equals(metodo)) {
+      // conectar: o código de 6 números não passa aberto; a chave deste aparelho volta embaralhada
+      if (!autenticado && "/api/parear".equals(caminho) && "POST".equals(metodo)) {
         if (chutesDemais(ip)) { enviarJson(saida, 429, new JSONObject().put("erro", "Muitas tentativas. Espere um minuto.")); return; }
         JSONObject pedido = new JSONObject(new String(corpo, StandardCharsets.UTF_8));
-        if (!getCodigo().equals(pedido.optString("codigo"))) { enviarJson(saida, 403, new JSONObject().put("erro", "Código errado")); return; }
-        enviarJson(saida, 200, new JSONObject().put("chave", getChave()).put("rede", "Tablet chefe"));
+        String quem = pedido.optString("aparelho"), pub = pedido.optString("pub"), prova = pedido.optString("prova");
+        if (!pub.matches("[0-9a-f]{64}") || !prova.matches("[0-9a-f]{64}") || quem.isEmpty() || quem.length() > 80) {
+          enviarJson(saida, 400, new JSONObject().put("erro", pedido.has("codigo") ? ATUALIZE : "Pedido de conexão inválido"));
+          return;
+        }
+        byte[] comum = x25519(deHex(config.optString("par")), deHex(pub));
+        boolean zero = true;
+        for (byte b : comum) if (b != 0) zero = false;
+        byte[] chavePar = hmac(comum, "parear|" + quem + "|" + pub);
+        if (zero || !MessageDigest.isEqual(hmac(chavePar, "codigo|" + getCodigo()), deHex(prova))) {
+          enviarJson(saida, 403, new JSONObject().put("erro", "Código errado"));
+          return;
+        }
+        byte[] pacote = selar(chavePar, new JSONObject().put("chave", hex(chaveDoAparelho(quem))).toString().getBytes(StandardCharsets.UTF_8),
+            ("parear|" + quem).getBytes(StandardCharsets.UTF_8));
+        enviarJson(saida, 200, new JSONObject().put("rede", "Tablet chefe").put("cifrado", base64(pacote)));
         return;
       }
+
+      // rotas com os dados: só por pedido embaralhado com a chave do aparelho
+      if (!autenticado && "/api/c".equals(caminho) && "POST".equals(metodo)) { apiCifrada(consulta, corpo, ip, saida); return; }
 
       if ("/apk/pranchetas.apk".equals(caminho)) {
         // entrega o próprio aplicativo instalado neste tablet: é exatamente o mesmo app
@@ -515,17 +567,17 @@ public class ServidorCentral {
       }
 
       if (caminho.startsWith("/api/")) {
-        if (!getChave().equals(cabecalhos.get("x-chave"))) {
-          enviarJson(saida, 401, new JSONObject().put("erro", "Aparelho não conectado à central"));
-          return;
-        }
+        // aparelho com o aplicativo antigo (chave aberta no Wi-Fi): não recebe nada até atualizar
+        if (!autenticado) { enviarJson(saida, 426, new JSONObject().put("erro", ATUALIZE)); return; }
         if ("/api/sync".equals(caminho) && "POST".equals(metodo)) { apiSync(corpo, ip, saida); return; }
         if ("/api/registros".equals(caminho)) { apiRegistros(consulta, saida); return; }
         if ("/api/status".equals(caminho)) { apiStatus(saida); return; }
         if ("/api/relatorios".equals(caminho)) { apiRelatorios(saida); return; }
         if ("/api/erros".equals(caminho)) { apiErros(saida); return; }
         if ("/api/zerar".equals(caminho) && "POST".equals(metodo)) { apiZerar(corpo, saida); return; }
-        if ("/api/novo-codigo".equals(caminho) && "POST".equals(metodo)) { String codigo = novoCodigo(); enviarJson(saida, 200, new JSONObject().put("codigo", codigo).put("chave", getChave())); return; }
+        // quem trocou recebe a chave nova dele (a resposta vai embaralhada com a chave antiga)
+        if ("/api/novo-codigo".equals(caminho) && "POST".equals(metodo)) { String codigo = novoCodigo(); enviarJson(saida, 200, new JSONObject().put("codigo", codigo).put("chave", hex(chaveDoAparelho(aparelho)))); return; }
+        if ("/api/base44".equals(caminho) && "POST".equals(metodo)) { apiBase44(corpo, saida); return; }
         if ("/api/relatorio".equals(caminho) && "POST".equals(metodo)) { apiRelatorio(corpo, saida); return; }
         if ("/api/relatorio-apagar".equals(caminho) && "POST".equals(metodo)) { apiRelatorioApagar(corpo, saida); return; }
         enviarJson(saida, 404, new JSONObject().put("erro", "rota desconhecida"));
@@ -726,7 +778,7 @@ public class ServidorCentral {
     String docs = Build.VERSION.SDK_INT >= 29 ? "Documentos/Usina/" : "";
     enviarJson(saida, 200, new JSONObject()
         .put("seq", seq).put("total", registros.length())
-        .put("codigo", getCodigo()).put("enderecos", ends).put("apk", true)
+        .put("codigo", getCodigo()).put("enderecos", ends).put("apk", true).put("base44", estadoBase44(false))
         .put("pastas", new JSONObject()
             .put("servidor", "ServidorUsina (dentro do aplicativo)")
             .put("relatorios", docs.isEmpty() ? pastaRelatorios.getAbsolutePath() : docs + "RelatoriosUsina")
@@ -880,13 +932,15 @@ public class ServidorCentral {
     }
   }
 
-  private boolean chutesDemais(String ip) {
+  private synchronized boolean chutesDemais(String ip) {
     long agora = System.currentTimeMillis();
     List<Long> lista = tentativas.get(ip);
     if (lista == null) { lista = new ArrayList<>(); tentativas.put(ip, lista); }
     lista.removeIf(t -> agora - t > 60000);
+    tentativasTodas.removeIf(t -> agora - t > 60000);
     lista.add(agora);
-    return lista.size() > 6;
+    tentativasTodas.add(agora);
+    return lista.size() > 6 || tentativasTodas.size() > 30;
   }
 
   private boolean redeInterna(String ip) {
@@ -956,7 +1010,7 @@ public class ServidorCentral {
     cab.append("Content-Type: ").append(tipo).append("\r\n");
     cab.append("Content-Length: ").append(tamanho).append("\r\n");
     cab.append("Access-Control-Allow-Origin: *\r\n");
-    cab.append("Access-Control-Allow-Headers: Content-Type, X-Chave\r\n");
+    cab.append("Access-Control-Allow-Headers: Content-Type\r\n");
     cab.append("Access-Control-Allow-Methods: GET, POST, OPTIONS\r\n");
     cab.append("Cache-Control: no-store\r\n");
     if (disposicao != null) cab.append("Content-Disposition: ").append(disposicao).append("\r\n");
@@ -968,5 +1022,257 @@ public class ServidorCentral {
     saida.write(cabecalho(codigo, tipo, corpo.length, disposicao).toString().getBytes(StandardCharsets.UTF_8));
     if (!soCabecalho) saida.write(corpo);
     saida.flush();
+  }
+
+  /* ------------------------------------------------------------------ */
+  /* Criptografia do Wi-Fi (a mesma do public/cifra.js e do server.js)  */
+  /* ------------------------------------------------------------------ */
+
+  private static final String ATUALIZE = "Atualize o aplicativo: a central agora usa a conexão embaralhada (versão 2.5).";
+  private static final SecureRandom ALEATORIO = new SecureRandom();
+  private static final long JANELA = 5 * 60000L;
+  private String pubPar = "";
+  private final LinkedHashMap<String, Long> pedidosVistos = new LinkedHashMap<>();
+
+  /** Pedido embaralhado: abre, confere relógio e repetição, responde pela rota de dentro e embaralha a resposta. */
+  private void apiCifrada(String consulta, byte[] pacote, String ip, OutputStream saida) throws Exception {
+    String quem = "";
+    for (String par : consulta.split("&")) if (par.startsWith("a=")) quem = URLDecoder.decode(par.substring(2), "UTF-8");
+    if (quem.length() > 80) quem = quem.substring(0, 80);
+    byte[] chave = chaveDoAparelho(quem);
+    String texto;
+    try { texto = new String(abrir(chave, pacote, ("pedido|" + quem).getBytes(StandardCharsets.UTF_8)), StandardCharsets.UTF_8); } catch (Exception e) {
+      enviarJson(saida, 401, new JSONObject().put("erro", "Aparelho não conectado à central"));
+      return;
+    }
+    int nl = texto.indexOf('\n');
+    JSONObject cab = new JSONObject(texto.substring(0, nl));
+    long agora = System.currentTimeMillis();
+    // relógio do aparelho muito diferente: ele acerta com a hora da central e pede de novo
+    if (Math.abs(agora - cab.optLong("t")) > JANELA) { enviarJson(saida, 409, new JSONObject().put("erro", "relogio").put("agora", agora)); return; }
+    byte[] iv = Arrays.copyOfRange(pacote, 0, 12);
+    if (jaVisto(hex(iv))) { enviarJson(saida, 401, new JSONObject().put("erro", "Pedido repetido")); return; }
+    String c = cab.optString("c");
+    if (!c.matches("api/[a-z0-9-]+(\\?.*)?") || c.matches("api/(c|ping|parear)(\\?.*)?")) { enviarJson(saida, 400, new JSONObject().put("erro", "caminho inválido")); return; }
+    ByteArrayOutputStream captura = new ByteArrayOutputStream();
+    responder("POST".equals(cab.optString("m")) ? "POST" : "GET", "/" + c, new HashMap<>(), texto.substring(nl + 1).getBytes(StandardCharsets.UTF_8), ip, captura, false, true, quem);
+    // a resposta gravada: situação na primeira linha, corpo depois da linha em branco
+    byte[] bruto = captura.toByteArray();
+    int fimLinha = 0, fimCab = 0;
+    while (fimLinha < bruto.length && bruto[fimLinha] != '\r') fimLinha++;
+    for (int i = 0; i + 3 < bruto.length; i++) if (bruto[i] == '\r' && bruto[i + 1] == '\n' && bruto[i + 2] == '\r' && bruto[i + 3] == '\n') { fimCab = i + 4; break; }
+    String situacao = new String(bruto, 0, fimLinha, StandardCharsets.UTF_8).split(" ")[1];
+    byte[] plano = juntar((situacao + "\n").getBytes(StandardCharsets.UTF_8), Arrays.copyOfRange(bruto, fimCab, bruto.length));
+    enviar(saida, 200, "application/octet-stream", selar(chave, plano, juntar("resposta|".getBytes(StandardCharsets.UTF_8), iv)), null, false);
+  }
+
+  /** Pedido gravado por alguém e mandado de novo é recusado: vale só por 5 minutos e cada um só uma vez. */
+  private synchronized boolean jaVisto(String iv) {
+    long agora = System.currentTimeMillis();
+    Iterator<Map.Entry<String, Long>> it = pedidosVistos.entrySet().iterator();
+    while (it.hasNext()) { if (agora - it.next().getValue() < 2 * JANELA) break; it.remove(); }
+    if (pedidosVistos.containsKey(iv)) return true;
+    pedidosVistos.put(iv, agora);
+    return false;
+  }
+
+  /** Chave de cada aparelho: sai da chave da rede (trocar o código troca a da rede e desconecta todos). */
+  private byte[] chaveDoAparelho(String aparelho) throws Exception { return hmac(getChave().getBytes(StandardCharsets.UTF_8), "aparelho|" + aparelho); }
+
+  private static byte[] hmac(byte[] chave, String texto) throws Exception {
+    Mac mac = Mac.getInstance("HmacSHA256");
+    mac.init(new SecretKeySpec(chave, "HmacSHA256"));
+    return mac.doFinal(texto.getBytes(StandardCharsets.UTF_8));
+  }
+
+  private static byte[] selar(byte[] chave, byte[] texto, byte[] aad) throws Exception {
+    byte[] iv = new byte[12];
+    ALEATORIO.nextBytes(iv);
+    Cipher c = Cipher.getInstance("AES/GCM/NoPadding");
+    c.init(Cipher.ENCRYPT_MODE, new SecretKeySpec(chave, "AES"), new GCMParameterSpec(128, iv));
+    c.updateAAD(aad);
+    return juntar(iv, c.doFinal(texto));
+  }
+
+  private static byte[] abrir(byte[] chave, byte[] pacote, byte[] aad) throws Exception {
+    if (pacote.length < 28) throw new IOException("pacote curto");
+    Cipher c = Cipher.getInstance("AES/GCM/NoPadding");
+    c.init(Cipher.DECRYPT_MODE, new SecretKeySpec(chave, "AES"), new GCMParameterSpec(128, pacote, 0, 12));
+    c.updateAAD(aad);
+    return c.doFinal(pacote, 12, pacote.length - 12);
+  }
+
+  private static byte[] juntar(byte[] a, byte[] b) {
+    byte[] r = Arrays.copyOf(a, a.length + b.length);
+    System.arraycopy(b, 0, r, a.length, b.length);
+    return r;
+  }
+
+  private static String hex(byte[] b) {
+    StringBuilder sb = new StringBuilder();
+    for (byte x : b) sb.append(String.format(Locale.US, "%02x", x & 255));
+    return sb.toString();
+  }
+
+  private static byte[] deHex(String h) {
+    byte[] b = new byte[h.length() / 2];
+    for (int i = 0; i < b.length; i++) b[i] = (byte) Integer.parseInt(h.substring(2 * i, 2 * i + 2), 16);
+    return b;
+  }
+
+  private static String base64(byte[] b) {
+    String letras = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    StringBuilder sb = new StringBuilder();
+    for (int i = 0; i < b.length; i += 3) {
+      int n = (b[i] & 255) << 16 | (i + 1 < b.length ? (b[i + 1] & 255) << 8 : 0) | (i + 2 < b.length ? b[i + 2] & 255 : 0);
+      sb.append(letras.charAt(n >> 18 & 63)).append(letras.charAt(n >> 12 & 63));
+      sb.append(i + 1 < b.length ? letras.charAt(n >> 6 & 63) : '=').append(i + 2 < b.length ? letras.charAt(n & 63) : '=');
+    }
+    return sb.toString();
+  }
+
+  /* X25519 (RFC 7748), escrito aqui para funcionar em qualquer Android */
+  private static final BigInteger P = BigInteger.ONE.shiftLeft(255).subtract(BigInteger.valueOf(19));
+  private static final BigInteger A24 = BigInteger.valueOf(121665);
+  private static final byte[] BASE = new byte[32];
+  static { BASE[0] = 9; }
+
+  private static BigInteger numero(byte[] b) {
+    byte[] be = new byte[b.length];
+    for (int i = 0; i < b.length; i++) be[i] = b[b.length - 1 - i];
+    return new BigInteger(1, be);
+  }
+
+  static byte[] x25519(byte[] escalar, byte[] u) {
+    byte[] k = escalar.clone();
+    k[0] &= (byte) 248; k[31] &= 127; k[31] |= 64;
+    BigInteger n = numero(k);
+    byte[] uu = u.clone();
+    uu[31] &= 127;
+    BigInteger x1 = numero(uu).mod(P);
+    BigInteger x2 = BigInteger.ONE, z2 = BigInteger.ZERO, x3 = x1, z3 = BigInteger.ONE, t;
+    boolean troca = false;
+    for (int i = 254; i >= 0; i--) {
+      boolean bit = n.testBit(i);
+      if (troca ^ bit) { t = x2; x2 = x3; x3 = t; t = z2; z2 = z3; z3 = t; }
+      troca = bit;
+      BigInteger a = x2.add(z2).mod(P), aa = a.multiply(a).mod(P);
+      BigInteger b = x2.subtract(z2).mod(P), bb = b.multiply(b).mod(P);
+      BigInteger e = aa.subtract(bb).mod(P);
+      BigInteger c = x3.add(z3).mod(P), d = x3.subtract(z3).mod(P);
+      BigInteger da = d.multiply(a).mod(P), cb = c.multiply(b).mod(P);
+      x3 = da.add(cb).mod(P); x3 = x3.multiply(x3).mod(P);
+      z3 = da.subtract(cb).mod(P); z3 = x1.multiply(z3.multiply(z3)).mod(P);
+      x2 = aa.multiply(bb).mod(P);
+      z2 = e.multiply(aa.add(A24.multiply(e))).mod(P);
+    }
+    if (troca) { t = x2; x2 = x3; x3 = t; t = z2; z2 = z3; z3 = t; }
+    BigInteger r = x2.multiply(z2.modPow(P.subtract(BigInteger.valueOf(2)), P)).mod(P);
+    byte[] be = r.toByteArray();
+    byte[] out = new byte[32];
+    for (int i = 0; i < 32 && i < be.length; i++) out[i] = be[be.length - 1 - i];
+    return out;
+  }
+
+  /* ------------------------------------------------------------------ */
+  /* Totais do dia para o sistema do escritório (Base44)                 */
+  /* O tablet chefe calcula; a central manda pela internet. O endereço e */
+  /* o segredo ficam só aqui, não vão para os tablets.                   */
+  /* ------------------------------------------------------------------ */
+
+  private final Set<String> enviandoBase44 = Collections.synchronizedSet(new HashSet<>());
+
+  private synchronized JSONObject base44() throws Exception {
+    JSONObject b = config.optJSONObject("base44");
+    if (b == null) { b = new JSONObject().put("url", "").put("segredo", "").put("enviados", new JSONObject()); config.put("base44", b); }
+    if (b.optJSONObject("enviados") == null) b.put("enviados", new JSONObject());
+    return b;
+  }
+
+  private synchronized JSONObject estadoBase44(boolean completo) throws Exception {
+    JSONObject b = base44();
+    JSONObject todos = b.optJSONObject("enviados");
+    List<String> dias = new ArrayList<>();
+    for (Iterator<String> it = todos.keys(); it.hasNext(); ) dias.add(it.next());
+    Collections.sort(dias, Collections.reverseOrder());
+    JSONObject enviados = new JSONObject();
+    for (String d : dias.subList(0, Math.min(15, dias.size()))) {
+      JSONObject e = todos.optJSONObject(d);
+      if (e == null) continue;
+      enviados.put(d, completo ? e : new JSONObject().put("hash", e.optString("hash")).put("ok", e.optBoolean("ok")).put("em", e.optLong("em")).put("erro", e.optString("erro")));
+    }
+    JSONObject r = new JSONObject().put("ligado", !b.optString("url").isEmpty()).put("temSegredo", !b.optString("segredo").isEmpty())
+        .put("desde", b.optString("desde")).put("enviados", enviados);
+    if (completo) r.put("url", b.optString("url"));
+    return r;
+  }
+
+  private void apiBase44(byte[] corpo, OutputStream saida) throws Exception {
+    JSONObject pedido = new JSONObject(new String(corpo, StandardCharsets.UTF_8));
+    String acao = pedido.optString("acao");
+    JSONObject b = base44();
+    if ("estado".equals(acao)) { enviarJson(saida, 200, estadoBase44(true)); return; }
+    if ("configurar".equals(acao)) {
+      String endereco = pedido.optString("url").trim();
+      if (!endereco.isEmpty() && !endereco.matches("(?i)https?://[^\\s/]+\\.[^\\s]+") && !endereco.matches("http://127\\.0\\.0\\.1:\\d+/.*")) {
+        enviarJson(saida, 400, new JSONObject().put("erro", "Endereço inválido. Ele começa com https://"));
+        return;
+      }
+      synchronized (this) {
+        // só os dias depois de ligar vão sozinhos (os anteriores o escritório já lançou à mão)
+        if (!endereco.isEmpty() && !endereco.equals(b.optString("url")) && ehDia(pedido.optString("desde"))) b.put("desde", pedido.optString("desde"));
+        b.put("url", endereco);
+        if (pedido.opt("segredo") instanceof String) { String s = pedido.optString("segredo").trim(); b.put("segredo", s.length() > 200 ? s.substring(0, 200) : s); }
+        salvarConfig();
+      }
+      enviarJson(saida, 200, estadoBase44(true));
+      return;
+    }
+    if ("enviar".equals(acao)) {
+      String data = pedido.optString("data");
+      JSONObject dados = pedido.optJSONObject("dados");
+      if (b.optString("url").isEmpty()) { enviarJson(saida, 400, new JSONObject().put("erro", "O endereço do Base44 não foi cadastrado")); return; }
+      if (!ehDia(data) || dados == null) { enviarJson(saida, 400, new JSONObject().put("erro", "dados inválidos")); return; }
+      JSONObject antes = b.optJSONObject("enviados").optJSONObject(data);
+      if (!pedido.optBoolean("forcar") && antes != null && antes.optBoolean("ok") && antes.optString("hash").equals(pedido.optString("hash"))) {
+        enviarJson(saida, 200, new JSONObject().put("ok", true).put("jaEnviado", true));
+        return;
+      }
+      if (!enviandoBase44.add(data)) { enviarJson(saida, 200, new JSONObject().put("ok", false).put("erro", "Já está enviando este dia")); return; }
+      int status = 0;
+      String erro = "", texto = "";
+      try {
+        HttpURLConnection con = (HttpURLConnection) new URL(b.optString("url")).openConnection();
+        con.setConnectTimeout(15000); con.setReadTimeout(20000);
+        con.setRequestMethod("POST"); con.setDoOutput(true);
+        con.setRequestProperty("Content-Type", "application/json");
+        con.setRequestProperty("X-Pranchetas-Segredo", b.optString("segredo"));
+        try (OutputStream o = con.getOutputStream()) { o.write(dados.toString().getBytes(StandardCharsets.UTF_8)); }
+        status = con.getResponseCode();
+        InputStream resp = status >= 400 ? con.getErrorStream() : con.getInputStream();
+        if (resp != null) { texto = new String(lerTudo(resp), StandardCharsets.UTF_8); resp.close(); }
+        con.disconnect();
+      } catch (java.net.UnknownHostException | java.net.ConnectException e) {
+        erro = "Sem internet na central (ou endereço errado)";
+      } catch (java.net.SocketTimeoutException e) {
+        erro = "O Base44 não respondeu em 20 segundos";
+      } catch (Exception e) {
+        erro = String.valueOf(e.getMessage());
+      } finally { enviandoBase44.remove(data); }
+      boolean ok = status >= 200 && status < 300;
+      if (!ok && erro.isEmpty()) erro = status == 401 || status == 403 ? "O Base44 recusou o segredo" : "O Base44 respondeu " + status + ": " + (texto.length() > 200 ? texto.substring(0, 200) : texto);
+      synchronized (this) {
+        JSONObject todos = b.optJSONObject("enviados");
+        todos.put(data, new JSONObject().put("hash", pedido.optString("hash")).put("ok", ok).put("em", System.currentTimeMillis()).put("status", status).put("erro", ok ? "" : erro));
+        List<String> dias = new ArrayList<>();
+        for (Iterator<String> it = todos.keys(); it.hasNext(); ) dias.add(it.next());
+        Collections.sort(dias);
+        for (int i = 0; i < dias.size() - 60; i++) todos.remove(dias.get(i));
+        salvarConfig();
+      }
+      enviarJson(saida, 200, new JSONObject().put("ok", ok).put("erro", ok ? "" : erro).put("status", status));
+      return;
+    }
+    enviarJson(saida, 400, new JSONObject().put("erro", "ação desconhecida"));
   }
 }

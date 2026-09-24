@@ -592,6 +592,14 @@ main.config { max-width: 1500px; }
 .linha-config div { flex: 1; min-width: 0; }
 .linha-config b { display: block; font-size: 19px; }
 .linha-config small { display: block; font-size: 16px; color: var(--tinta-2); word-break: break-all; }
+/* Base44: um dia por linha, com a situação do envio */
+#bloco-base44 .linha-config small { word-break: normal; }
+.base44-dia b { font-size: 18px; }
+.base44-dia b .dia-semana { display: inline; font-size: 15px; font-weight: 400; }
+.base44-dia.ok small { color: var(--verde-escuro); }
+.base44-dia.erro small { color: var(--vermelho); }
+.base44-dia b .dia-semana, .base44-dia.ok b .dia-semana, .base44-dia.erro b .dia-semana { color: var(--tinta-2); }
+.segredo-grande { font-size: 26px; font-weight: 700; letter-spacing: 1px; text-align: center; word-break: break-all; padding: 14px; border: 2px dashed var(--linha); border-radius: 10px; }
 .chips { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .chip-item { display: inline-flex; align-items: center; gap: 4px; min-height: 48px; padding: 0 6px 0 14px; border-radius: 24px; background: var(--papel-2); border: 2px solid var(--linha-clara); font-size: 17px; font-weight: 700; }
 .chip-item button { width: 38px; height: 38px; border-radius: 50%; display: grid; place-items: center; color: var(--tinta-2); }

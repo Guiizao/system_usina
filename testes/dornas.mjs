@@ -10,7 +10,7 @@ import { SENHA_PROGRAMADOR_TESTE } from './servidores.mjs';
 import { teste, certo, igual, teclasDaSenha } from './teste.mjs';
 
 export async function testarDornas(nav, central, grupo) {
-  const api = async (rota) => (await fetch(central.url + rota, { headers: { 'X-Chave': central.chave() } })).json();
+  const api = (rota) => central.api(rota);
   const regs = async () => (await api('/api/registros?desde=0')).registros.filter((r) => !r.apagado);
   const esperarCentral = async (filtro, descricao, ms = 25000) => {
     const t0 = Date.now();

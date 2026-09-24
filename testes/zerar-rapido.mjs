@@ -5,7 +5,7 @@ import { centralNode, centralJava, SENHA_PROGRAMADOR_TESTE } from './servidores.
 
 for (const [nome, ligar, porta] of [['computador', centralNode, 8391], ['tablet chefe', centralJava, 8392]]) {
   const c = await ligar(porta);
-  const pedir = async (rota, corpo) => (await fetch(c.url + rota, { method: corpo ? 'POST' : 'GET', headers: { 'X-Chave': c.chave(), 'Content-Type': 'application/json' }, body: corpo ? JSON.stringify(corpo) : undefined })).json();
+  const pedir = (rota, corpo) => c.api(rota, corpo);
   try {
     const reg = (id, data) => ({ id, data, prancheta: 'x', chave: '1', valores: { a: 1 }, atualizadoEm: Date.now() });
     const r1 = await pedir('/api/sync', { aparelho: 't', registros: [reg('2026-09-23|x|1', '2026-09-23'), reg('config|sistema|geral', 'config')] });

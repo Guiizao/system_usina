@@ -1,0 +1,21 @@
+// Pranchetas Digitais - (c) 2026 Guilherme. Tabela com o total de cada insumo por dia de produção (07:00 às 06:59).
+{
+  "name": "TotalInsumoDia",
+  "type": "object",
+  "properties": {
+    "data": { "type": "string", "format": "date", "description": "Dia de produção (das 07:00 às 06:59 do dia seguinte)" },
+    "setor": { "type": "string", "description": "Setor da usina (ex.: Hidrólise)" },
+    "insumo": { "type": "string", "description": "Nome do insumo como aparece nas pranchetas (ex.: LPHERA)" },
+    "folha": { "type": "string", "description": "Código da folha nas pranchetas (ex.: ins_lphera)" },
+    "quantidade": { "type": "number", "description": "Total do dia" },
+    "unidade": { "type": "string", "description": "mL, L, kg, copos..." }
+  },
+  "required": ["data", "insumo", "quantidade"],
+  // quem entra no app lê; só a função (como administradora) grava
+  "rls": {
+    "read": { "user_condition": { "id": "{{user.id}}" } },
+    "create": { "user_condition": { "role": "admin" } },
+    "update": { "user_condition": { "role": "admin" } },
+    "delete": { "user_condition": { "role": "admin" } }
+  }
+}

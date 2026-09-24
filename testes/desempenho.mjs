@@ -33,7 +33,7 @@ const MEDIR = `window.__medir = (seletor, texto) => new Promise((ok) => {
 
 export async function medirDesempenho(ligar, porta, nav) {
   const c = await ligar(porta);
-  const api = async (rota, corpo) => (await fetch(c.url + rota, { method: corpo ? 'POST' : 'GET', headers: { 'X-Chave': c.chave(), 'Content-Type': 'application/json' }, body: corpo ? JSON.stringify(corpo) : undefined })).json();
+  const api = (rota, corpo) => c.api(rota, corpo);
   const res = {};
   try {
     const tudo = [];
