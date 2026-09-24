@@ -6,7 +6,10 @@
  *   âmbar    = pendente, falta anotar
  *   vermelho = valor fora do normal
  * Fonte Atkinson Hyperlegible: feita para leitura por pessoas com baixa visão.
+ * Ela vem dentro do aplicativo (pasta fonts, licença em fonts/OFL.txt): abre na hora, mesmo sem internet.
  */
+@font-face { font-family: "Atkinson Hyperlegible"; font-style: normal; font-weight: 400; font-display: swap; src: url("fonts/atkinson-hyperlegible-400.woff2") format("woff2"); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+@font-face { font-family: "Atkinson Hyperlegible"; font-style: normal; font-weight: 700; font-display: swap; src: url("fonts/atkinson-hyperlegible-700.woff2") format("woff2"); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
 :root {
   --chao: #dcdfdb;
   --papel: #ffffff;
@@ -1106,3 +1109,20 @@ button { transition: background-color .15s, border-color .15s, color .15s, box-s
 
 .cabecalho-form .btn, .cabecalho-form .aviso { max-width: 100%; }
 .topo .voltar svg.ico { width: 1.5em; height: 1.5em; }
+
+/* ---------- Revisão de uso (2.3) ---------- */
+/* A "Nova Nº" fica sempre à vista, numa caixa própria à direita das dornas do dia (as dornas rolam, ela não) */
+.seletor-dornas { flex: none; display: flex; gap: 8px; min-width: 0; }
+.seletor-dornas > .seletor:first-child { flex: 0 1 auto; min-width: 0; }
+.seletor { position: relative; } /* a posição de cada botão é contada a partir do seletor (para centralizar a linha escolhida) */
+.seletor-dornas > .seletor-nova { flex: none; overflow: visible; }
+.seletor-dornas > .seletor:first-child:empty { display: none; }
+/* Dorna enchendo ou indo para cima: trabalho em andamento (azul), não é pendência */
+.item.andamento, .setor-cartao.andamento { border-left-color: var(--foco); }
+.item.andamento .situacao, .setor-cartao.andamento .situacao { color: var(--foco); }
+/* Tela escura: o verde dos botões principais é claro, então a letra fica escura (dá para ler no sol) */
+:root[data-tema="escuro"] .btn.primario { color: #06170c; }
+/* Celular do tablet chefe: os botões da barra mostram o nome embaixo do ícone */
+:root[data-dispositivo="celular"] .topo:has(.atalhos > :nth-child(4)) .atalho { position: relative; flex-direction: column; gap: 2px; height: auto; min-height: 52px; padding: 4px 2px; }
+:root[data-dispositivo="celular"] .topo:has(.atalhos > :nth-child(4)) .atalho span { display: block; font-size: 13px; line-height: 1.1; }
+:root[data-dispositivo="celular"] .topo:has(.atalhos > :nth-child(4)) .atalho .contador { position: absolute; top: 2px; right: 6px; }

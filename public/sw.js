@@ -1,8 +1,8 @@
 /* Pranchetas Digitais - © 2026 Guilherme. Todos os direitos reservados. Uso somente com autorização do autor (veja LICENCA.txt). */
 // Service worker: deixa o app abrir mesmo sem Wi-Fi (quando aberto pelo navegador).
-const CACHE = 'pranchetas-v11';
+const CACHE = 'pranchetas-v13';
 const ARQUIVOS = ['./', 'index.html', 'styles.css', 'forms.js', 'xlsx.js', 'modelos.js', 'leitor.js', 'qrcode.js', 'app.js', 'manifest.webmanifest',
-  'icons/icon-192.png', 'icons/icon-512.png', 'icons/logo.png'];
+  'icons/icon-192.png', 'icons/icon-512.png', 'icons/logo.png', 'fonts/atkinson-hyperlegible-400.woff2', 'fonts/atkinson-hyperlegible-700.woff2'];
 
 self.addEventListener('install', (e) => {
   e.waitUntil(caches.open(CACHE).then((c) => c.addAll(ARQUIVOS)).then(() => self.skipWaiting()));
@@ -17,15 +17,6 @@ self.addEventListener('activate', (e) => {
 self.addEventListener('fetch', (e) => {
   const url = new URL(e.request.url);
   if (e.request.method !== 'GET' || url.pathname.includes('/api/') || url.pathname.includes('/apk/')) return;
-  // Fonte: guarda na primeira vez para funcionar sem internet
-  if (url.hostname.endsWith('fonts.googleapis.com') || url.hostname.endsWith('fonts.gstatic.com')) {
-    e.respondWith(caches.match(e.request).then((c) => c || fetch(e.request).then((resp) => {
-      const copia = resp.clone();
-      caches.open(CACHE).then((cache) => cache.put(e.request, copia));
-      return resp;
-    })));
-    return;
-  }
   // Rede primeiro (pega atualizações), cache se estiver sem conexão
   e.respondWith(
     fetch(e.request)

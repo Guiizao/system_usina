@@ -94,10 +94,42 @@ function gravarDisco() {
   }, 500);
 }
 // backup: um arquivo por dia de produção
+const ehDia = (d) => /^\d{4}-\d{2}-\d{2}$/.test(d || '');
+const arquivoDoDia = (data) => path.join(PASTAS.backup, `${data}.json`);
 function backupDoDia(data) {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(data)) return;
+  if (!ehDia(data) || arquivado(data)) return;
   const doDia = Object.values(db.registros).filter((r) => r.data === data);
-  fs.writeFile(path.join(PASTAS.backup, `${data}.json`), JSON.stringify(doDia, null, 1), () => {});
+  fs.writeFile(arquivoDoDia(data), JSON.stringify(doDia, null, 1), () => {});
+}
+
+/* A central guarda na memória os últimos 60 dias. Os mais antigos ficam só no BackupUsina (um arquivo por dia)
+   e são lidos de lá quando o tablet chefe abre um dia antigo. Assim a central não fica mais lenta com o tempo. */
+const DIAS_NA_CENTRAL = Number(process.env.DIAS_NA_CENTRAL || 60);
+function diasAtras(n) {
+  const d = new Date(); d.setDate(d.getDate() - n);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+function arquivado(data) { return ehDia(data) && data < diasAtras(DIAS_NA_CENTRAL); }
+function lerDiaArquivado(data) {
+  try { return JSON.parse(fs.readFileSync(arquivoDoDia(data), 'utf8')); } catch (e) { return []; }
+}
+/** Junta anotações num dia que só está no BackupUsina (ex.: o tablet chefe corrigiu uma folha antiga). */
+function juntarNoArquivo(data, novos) {
+  const mapa = {};
+  lerDiaArquivado(data).forEach((r) => { mapa[r.id] = r; });
+  let n = 0;
+  novos.forEach((r) => { const a = mapa[r.id]; if (!a || r.atualizadoEm >= a.atualizadoEm) { mapa[r.id] = r; n += 1; } });
+  fs.writeFileSync(arquivoDoDia(data), JSON.stringify(Object.values(mapa), null, 1));
+  return n;
+}
+/** Tira da memória os dias antigos (eles continuam no BackupUsina). */
+function arquivarDiasAntigos() {
+  const porDia = {};
+  Object.values(db.registros).forEach((r) => { if (arquivado(r.data)) (porDia[r.data] = porDia[r.data] || []).push(r); });
+  const dias = Object.keys(porDia);
+  dias.forEach((d) => { juntarNoArquivo(d, porDia[d]); porDia[d].forEach((r) => { delete db.registros[r.id]; }); });
+  if (dias.length) gravarDisco();
+  return dias.length;
 }
 function listaDeRelatorios() {
   if (!fs.existsSync(PASTAS.relatorios)) return [];
@@ -152,6 +184,7 @@ function lerCorpo(req, limite = 5 * 1024 * 1024) {
 const TIPOS = {
   '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8',
   '.png': 'image/png', '.webmanifest': 'application/manifest+json', '.json': 'application/json', '.svg': 'image/svg+xml',
+  '.woff2': 'font/woff2', '.txt': 'text/plain; charset=utf-8', '.onnx': 'application/octet-stream',
 };
 function arquivoEstatico(res, pathname) {
   let rel = decodeURIComponent(pathname);
@@ -188,7 +221,6 @@ function paginaRelatorios(res, p) {
   res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' });
   res.end(`<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Relatórios das pranchetas</title>
-    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&display=swap">
     <link rel="stylesheet" href="/styles.css"></head>
     <body><header class="topo"><img class="logo" src="/icons/logo.png" alt="Ubirálcool">
       <div class="titulo"><b>Relatórios das pranchetas</b><span>Arquivos guardados pela central</span></div></header>
@@ -240,12 +272,23 @@ const servidor = http.createServer(async (req, res) => {
         const corpo = JSON.parse(await lerCorpo(req));
         if (corpo.aparelho) aparelhos[corpo.aparelho] = { papel: corpo.papel, operador: corpo.operador, versao: corpo.versao || '', vistoEm: Date.now(), ip };
         guardarErros(corpo.aparelho, corpo.erros, ip);
-        // aparelho com anotações de antes de zerar: não aceita, manda ele limpar
-        if (corpo.geracao && corpo.geracao !== config.geracao) return json(res, 200, { ok: false, zerar: true, geracao: config.geracao, seq: db.seq, agora: Date.now() });
+        // aparelho com anotações de antes de zerar: não aceita, manda ele limpar.
+        // Aparelho que acabou de conectar numa central nova (tablet chefe trocado ou reinstalado): aceita o que ele tem.
+        if (corpo.geracao && corpo.geracao !== config.geracao) {
+          const zerada = (config.geracoesZeradas || []).includes(corpo.geracao);
+          if (zerada || !corpo.novaConexao) return json(res, 200, { ok: false, zerar: true, geracao: config.geracao, seq: db.seq, agora: Date.now() });
+        }
         const dias = new Set();
+        const antigos = {};
         let aceitos = 0;
         for (const r of Array.isArray(corpo.registros) ? corpo.registros : []) {
           if (!r || typeof r.id !== 'string' || typeof r.atualizadoEm !== 'number') continue;
+          if (arquivado(r.data)) {
+            const limpo = Object.assign({}, r, { recebidoEm: Date.now() });
+            delete limpo.sincronizado;
+            (antigos[r.data] = antigos[r.data] || []).push(limpo);
+            continue;
+          }
           const atual = db.registros[r.id];
           if (!atual || r.atualizadoEm >= atual.atualizadoEm) {
             db.seq += 1;
@@ -256,14 +299,24 @@ const servidor = http.createServer(async (req, res) => {
             aceitos += 1;
           }
         }
+        Object.entries(antigos).forEach(([d, lista]) => { aceitos += juntarNoArquivo(d, lista); });
         if (aceitos) { gravarDisco(); dias.forEach(backupDoDia); }
         return json(res, 200, { ok: true, aceitos, seq: db.seq, agora: Date.now(), geracao: config.geracao });
       }
 
       if (p === '/api/registros') {
+        const dia = url.searchParams.get('dia');
+        if (dia) { // o tablet chefe abriu um dia que não guarda mais
+          if (!ehDia(dia)) return json(res, 400, { erro: 'dia inválido' });
+          const lista = arquivado(dia) ? lerDiaArquivado(dia) : Object.values(db.registros).filter((r) => r.data === dia);
+          return json(res, 200, { seq: db.seq, geracao: config.geracao, registros: lista });
+        }
         const desde = Number(url.searchParams.get('desde') || 0);
         const base = desde > db.seq ? 0 : desde; // servidor foi zerado: manda tudo
-        return json(res, 200, { seq: db.seq, geracao: config.geracao, registros: Object.values(db.registros).filter((r) => r.seq > base) });
+        // cada aparelho guarda só os últimos dias (a configuração da usina e os avisos vão sempre)
+        const aPartirDe = url.searchParams.get('aPartirDe');
+        const serve = (r) => !ehDia(aPartirDe) || !ehDia(r.data) || r.data >= aPartirDe || r.prancheta === 'avisos' || r.prancheta === 'avisos-recibo';
+        return json(res, 200, { seq: db.seq, geracao: config.geracao, registros: Object.values(db.registros).filter((r) => r.seq > base && serve(r)) });
       }
 
       if (p === '/api/status') {
@@ -304,6 +357,13 @@ const servidor = http.createServer(async (req, res) => {
         fs.writeFileSync(path.join(PASTAS.backup, `antes-de-zerar-${carimbo}.json`), JSON.stringify(Object.values(db.registros), null, 1));
         let apagados = 0;
         Object.keys(db.registros).forEach((id) => { if (db.registros[id].data !== 'config') { delete db.registros[id]; apagados += 1; } });
+        // os arquivos de cada dia (inclusive os dias antigos) vão para uma pasta, para não voltarem na folha
+        const guardados = path.join(PASTAS.backup, `antes-de-zerar-${carimbo}`);
+        fs.readdirSync(PASTAS.backup).filter((n) => /^\d{4}-\d{2}-\d{2}\.json$/.test(n)).forEach((n) => {
+          fs.mkdirSync(guardados, { recursive: true });
+          fs.renameSync(path.join(PASTAS.backup, n), path.join(guardados, n));
+        });
+        config.geracoesZeradas = [...(config.geracoesZeradas || []), config.geracao].slice(-50);
         config.geracao = crypto.randomBytes(6).toString('hex'); salvarConfig();
         gravarDisco();
         return json(res, 200, { ok: true, apagados, geracao: config.geracao, copia: `BackupUsina/antes-de-zerar-${carimbo}.json` });
@@ -326,6 +386,9 @@ const servidor = http.createServer(async (req, res) => {
     return json(res, 400, { erro: e.message });
   }
 });
+
+arquivarDiasAntigos();
+setInterval(arquivarDiasAntigos, 3600 * 1000).unref();
 
 // ENDERECO=127.0.0.1 deixa a central só neste computador (usado nos testes, para o Windows não perguntar do firewall)
 servidor.listen(PORTA, process.env.ENDERECO || '0.0.0.0', () => {

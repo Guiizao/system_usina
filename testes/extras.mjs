@@ -73,7 +73,7 @@ export async function testarExtras(nav, central, grupo) {
       const txt = await a.texto();
       certo(!/Não deu para ler/.test(txt), 'não achou a tabela na foto');
       const linhas = Number((txt.match(/Salvar (\d+) linha/) || [])[1] || 0);
-      const amarelos = Number((txt.match(/(\d+) valor\(es\) em amarelo/) || [])[1] || 0);
+      const amarelos = Number((txt.match(/(\d+) valor(?:es)? em amarelo/) || [])[1] || 0);
       certo(linhas >= 10, 'leu poucas linhas: ' + linhas);
       await a.foto(path.join(SAIDA, 'extras', 'leitura.png'));
       certo(!a.erros.length, a.erros.join(' | '));

@@ -220,8 +220,11 @@ export async function testarAparelhos(nav, central, grupo) {
       return (await tab.avaliar(`window.__notificacoes.find((t) => t.includes('adiantado'))`)).trim();
     });
     await teste(grupo, '30 minutos sem mexer: o celular pede o nome e a senha de novo', async () => {
+      // perto das 07:00, 16:00 ou 00:00 os 31 minutos passam da troca de turno: aí ele pede o nome pelo turno novo
+      const turnoAntes = await cel.avaliar('(document.querySelector(".relogio span") || {}).textContent || ""');
       await cel.adiantar(31 * 60000);
-      await cel.esperar('document.body.innerText.includes("minutos sem ninguém mexer")', 10000, 'trava por inatividade');
+      await cel.esperar('document.body.innerText.includes("minutos sem ninguém mexer") || (document.querySelector(".opcoes.nomes") && (document.querySelector(".relogio span") || {}).textContent !== ' + JSON.stringify(turnoAntes) + ')', 10000, 'trava por inatividade');
+      return (await cel.existe('.aviso', 'minutos sem ninguém mexer')) ? '' : 'passou da troca de turno: pediu o nome do turno novo';
     });
     await teste(grupo, '12 horas fora da rede da usina: o celular trava e destrava quando volta', async () => {
       await cel.semRede(true);

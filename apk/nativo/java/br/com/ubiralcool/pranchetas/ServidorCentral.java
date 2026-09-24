@@ -165,6 +165,7 @@ public class ServidorCentral {
     criarPastas();
     carregarConfig();
     carregarRegistros();
+    arquivarDiasAntigos();
     socketServidor = new ServerSocket();
     socketServidor.setReuseAddress(true);
     // "pranchetas.ip" só existe nos testes no computador (liga só no próprio computador); no tablet fica em todas as redes
@@ -278,9 +279,92 @@ public class ServidorCentral {
     } catch (Exception e) { /* tenta de novo na próxima gravação */ }
   }
 
+  /* A central guarda na memória os últimos 60 dias. Os mais antigos ficam só no BackupUsina (um arquivo por dia)
+     e são lidos de lá quando o tablet chefe abre um dia antigo. Assim o tablet chefe não fica mais lento com o tempo. */
+  private static final int DIAS_NA_CENTRAL = Integer.getInteger("pranchetas.diasNaCentral", 60);
+  private long ultimoArquivamento = 0;
+
+  private static boolean ehDia(String d) { return d != null && d.matches("\\d{4}-\\d{2}-\\d{2}"); }
+
+  private static String diasAtras(int n) {
+    java.util.Calendar c = java.util.Calendar.getInstance();
+    c.add(java.util.Calendar.DAY_OF_MONTH, -n);
+    return new java.text.SimpleDateFormat("yyyy-MM-dd", Locale.US).format(c.getTime());
+  }
+
+  private static String corteCalculado = "";
+  private static long corteQuando = 0;
+
+  /** Primeiro dia que fica na memória (recalculado no máximo uma vez por minuto). */
+  private static synchronized String corteDoArquivo() {
+    long agora = System.currentTimeMillis();
+    if (agora - corteQuando > 60000) { corteCalculado = diasAtras(DIAS_NA_CENTRAL); corteQuando = agora; }
+    return corteCalculado;
+  }
+
+  private static boolean arquivado(String data) { return ehDia(data) && data.compareTo(corteDoArquivo()) < 0; }
+
+  private JSONArray lerDiaArquivado(String data) {
+    try { return new JSONArray(new String(lerArquivo(new File(pastaBackup, data + ".json")), StandardCharsets.UTF_8)); }
+    catch (Exception e) { return new JSONArray(); }
+  }
+
+  /** Junta anotações num dia que só está no BackupUsina. Devolve quantas entraram, ou -1 se não conseguiu gravar. */
+  private int juntarNoArquivo(String data, List<JSONObject> novos) {
+    try {
+      JSONArray antes = lerDiaArquivado(data);
+      Map<String, JSONObject> mapa = new java.util.LinkedHashMap<>();
+      for (int i = 0; i < antes.length(); i++) {
+        JSONObject r = antes.optJSONObject(i);
+        if (r != null) mapa.put(r.optString("id"), r);
+      }
+      int n = 0;
+      for (JSONObject r : novos) {
+        JSONObject a = mapa.get(r.optString("id"));
+        if (a == null || r.optLong("atualizadoEm") >= a.optLong("atualizadoEm")) { mapa.put(r.optString("id"), r); n++; }
+      }
+      JSONArray tudo = new JSONArray();
+      for (JSONObject r : mapa.values()) tudo.put(r);
+      byte[] bytes = tudo.toString().getBytes(StandardCharsets.UTF_8);
+      salvarArquivo(new File(pastaBackup, data + ".json"), bytes);
+      espelhar("BackupUsina", data + ".json", bytes, "application/json");
+      return n;
+    } catch (Exception e) {
+      return -1;
+    }
+  }
+
+  /** Tira da memória os dias antigos (eles continuam no BackupUsina). Só tira depois de gravar o arquivo do dia. */
+  synchronized int arquivarDiasAntigos() {
+    ultimoArquivamento = System.currentTimeMillis();
+    Map<String, List<JSONObject>> porDia = new HashMap<>();
+    for (Iterator<String> it = registros.keys(); it.hasNext(); ) {
+      JSONObject r = registros.optJSONObject(it.next());
+      if (r == null || !arquivado(r.optString("data"))) continue;
+      List<JSONObject> lista = porDia.get(r.optString("data"));
+      if (lista == null) { lista = new ArrayList<>(); porDia.put(r.optString("data"), lista); }
+      lista.add(r);
+    }
+    int dias = 0;
+    for (Map.Entry<String, List<JSONObject>> e : porDia.entrySet()) {
+      if (juntarNoArquivo(e.getKey(), e.getValue()) < 0) continue;
+      for (JSONObject r : e.getValue()) registros.remove(r.optString("id"));
+      dias++;
+    }
+    if (dias > 0) salvarRegistros();
+    return dias;
+  }
+
+  private boolean geracaoZerada(String geracao) {
+    JSONArray zeradas = config.optJSONArray("geracoesZeradas");
+    if (zeradas == null) return false;
+    for (int i = 0; i < zeradas.length(); i++) if (geracao.equals(zeradas.optString(i))) return true;
+    return false;
+  }
+
   /** Um arquivo por dia de produção, para nunca perder a folha. */
   private void backupDoDia(String data) {
-    if (data == null || !data.matches("\\d{4}-\\d{2}-\\d{2}")) return;
+    if (!ehDia(data) || arquivado(data)) return;
     try {
       JSONArray doDia = new JSONArray();
       for (Iterator<String> it = registros.keys(); it.hasNext(); ) {
@@ -469,17 +553,30 @@ public class ServidorCentral {
     guardarErros(aparelho, pedido.optJSONArray("erros"), ip);
     String geracaoDele = pedido.optString("geracao", "");
     if (!geracaoDele.isEmpty() && !geracaoDele.equals(getGeracao())) {
-      // aparelho com anotações de antes de zerar: não aceita, manda ele limpar
-      enviarJson(saida, 200, new JSONObject().put("ok", false).put("zerar", true).put("geracao", getGeracao()).put("seq", seq).put("agora", System.currentTimeMillis()));
-      return;
+      // aparelho com anotações de antes de zerar: não aceita, manda ele limpar.
+      // Aparelho que acabou de conectar numa central nova (tablet chefe trocado ou reinstalado): aceita o que ele tem.
+      if (geracaoZerada(geracaoDele) || !pedido.optBoolean("novaConexao")) {
+        enviarJson(saida, 200, new JSONObject().put("ok", false).put("zerar", true).put("geracao", getGeracao()).put("seq", seq).put("agora", System.currentTimeMillis()));
+        return;
+      }
     }
+    if (System.currentTimeMillis() - ultimoArquivamento > 3600000L) arquivarDiasAntigos();
     JSONArray chegaram = pedido.optJSONArray("registros");
     int aceitos = 0;
     List<String> dias = new ArrayList<>();
+    Map<String, List<JSONObject>> antigos = new HashMap<>();
     if (chegaram != null) {
       for (int i = 0; i < chegaram.length(); i++) {
         JSONObject r = chegaram.optJSONObject(i);
         if (r == null || r.optString("id").isEmpty() || !r.has("atualizadoEm")) continue;
+        if (arquivado(r.optString("data"))) {
+          r.remove("sincronizado");
+          r.put("recebidoEm", System.currentTimeMillis());
+          List<JSONObject> lista = antigos.get(r.optString("data"));
+          if (lista == null) { lista = new ArrayList<>(); antigos.put(r.optString("data"), lista); }
+          lista.add(r);
+          continue;
+        }
         JSONObject atual = registros.optJSONObject(r.getString("id"));
         if (atual == null || r.optLong("atualizadoEm") >= atual.optLong("atualizadoEm")) {
           seq++;
@@ -490,6 +587,10 @@ public class ServidorCentral {
           aceitos++;
         }
       }
+    }
+    for (Map.Entry<String, List<JSONObject>> e : antigos.entrySet()) {
+      int n = juntarNoArquivo(e.getKey(), e.getValue());
+      if (n > 0) aceitos += n;
     }
     if (aceitos > 0) {
       salvarRegistros();
@@ -541,16 +642,32 @@ public class ServidorCentral {
 
   private synchronized void apiRegistros(String consulta, OutputStream saida) throws Exception {
     long desde = 0;
+    String dia = null, aPartirDe = null;
     for (String par : consulta.split("&")) {
       if (par.startsWith("desde=")) {
         try { desde = Long.parseLong(par.substring(6)); } catch (NumberFormatException ignorado) { }
+      } else if (par.startsWith("dia=")) dia = par.substring(4);
+      else if (par.startsWith("aPartirDe=")) aPartirDe = par.substring(10);
+    }
+    JSONArray lista = new JSONArray();
+    if (dia != null) { // o tablet chefe abriu um dia que não guarda mais
+      if (!ehDia(dia)) { enviarJson(saida, 400, new JSONObject().put("erro", "dia inválido")); return; }
+      if (arquivado(dia)) lista = lerDiaArquivado(dia);
+      else for (Iterator<String> it = registros.keys(); it.hasNext(); ) {
+        JSONObject r = registros.optJSONObject(it.next());
+        if (r != null && dia.equals(r.optString("data"))) lista.put(r);
       }
+      enviarJson(saida, 200, new JSONObject().put("seq", seq).put("geracao", getGeracao()).put("registros", lista));
+      return;
     }
     if (desde > seq) desde = 0; // o aparelho tem número maior: manda tudo
-    JSONArray lista = new JSONArray();
+    // cada aparelho guarda só os últimos dias (a configuração da usina e os avisos vão sempre)
+    boolean filtrar = ehDia(aPartirDe);
     for (Iterator<String> it = registros.keys(); it.hasNext(); ) {
       JSONObject r = registros.optJSONObject(it.next());
-      if (r != null && r.optLong("seq") > desde) lista.put(r);
+      if (r == null || r.optLong("seq") <= desde) continue;
+      String d = r.optString("data"), pr = r.optString("prancheta");
+      if (!filtrar || !ehDia(d) || d.compareTo(aPartirDe) >= 0 || "avisos".equals(pr) || "avisos-recibo".equals(pr)) lista.put(r);
     }
     enviarJson(saida, 200, new JSONObject().put("seq", seq).put("geracao", getGeracao()).put("registros", lista));
   }
@@ -672,6 +789,17 @@ public class ServidorCentral {
     salvarArquivo(new File(pastaBackup, nome), copia);
     espelhar("BackupUsina", nome, copia, "application/json");
     for (String id : apagar) registros.remove(id);
+    // os arquivos de cada dia (inclusive os dias antigos) vão para uma pasta, para não voltarem na folha
+    File guardados = new File(pastaBackup, "antes-de-zerar-" + carimbo);
+    File[] arquivosDosDias = pastaBackup.listFiles();
+    if (arquivosDosDias != null) for (File f : arquivosDosDias) {
+      if (f.isFile() && f.getName().matches("\\d{4}-\\d{2}-\\d{2}\\.json")) { guardados.mkdirs(); f.renameTo(new File(guardados, f.getName())); }
+    }
+    JSONArray zeradas = config.optJSONArray("geracoesZeradas");
+    JSONArray novaLista = new JSONArray();
+    if (zeradas != null) for (int i = Math.max(0, zeradas.length() - 49); i < zeradas.length(); i++) novaLista.put(zeradas.optString(i));
+    novaLista.put(getGeracao());
+    config.put("geracoesZeradas", novaLista);
     config.put("geracao", sorteiaChave().substring(0, 12));
     salvarArquivo(new File(pastaServidor, "config.json"), config.toString().getBytes(StandardCharsets.UTF_8));
     salvarRegistros();
@@ -734,6 +862,7 @@ public class ServidorCentral {
     if (caminho.endsWith(".js")) return "text/javascript; charset=utf-8";
     if (caminho.endsWith(".css")) return "text/css; charset=utf-8";
     if (caminho.endsWith(".png")) return "image/png";
+    if (caminho.endsWith(".woff2")) return "font/woff2";
     if (caminho.endsWith(".webmanifest")) return "application/manifest+json";
     if (caminho.endsWith(".json")) return "application/json";
     return "application/octet-stream";

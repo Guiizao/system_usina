@@ -160,7 +160,7 @@ export async function abrirNavegador({ porta = 9340 + Math.floor(Math.random() *
 
 /**
  * Procura problemas de layout na tela atual: texto saindo da caixa, palavra quebrada no meio,
- * rolagem para o lado, letra pequena demais e botão pequeno demais para o dedo.
+ * rolagem para o lado, letra pequena demais, pouco contraste entre a letra e o fundo e botão pequeno demais para o dedo.
  */
 export const auditarLayout = (minLetra = 11.5) => `(() => {
   const probs = [];
@@ -223,6 +223,50 @@ export const auditarLayout = (minLetra = 11.5) => `(() => {
     const fonte = parseFloat(getComputedStyle(pai).fontSize) * zoomTela;
     const razao = ic.getBoundingClientRect().height / fonte;
     if (razao > 2.1 || razao < 0.7) probs.push({ tipo: 'icone-desproporcional', onde: nomeDe(pai), texto: (pai.textContent.trim().slice(0, 30) || '(ícone)') + ' (ícone ' + razao.toFixed(1) + 'x o texto)' });
+  });
+  // contraste entre a letra e o fundo (sol na área, tela suja ou riscada): mínimo 4,5 no texto normal e 3 no texto grande.
+  // Cada elemento é medido uma vez só (o fundo e a transparência de cada um aproveitam o do elemento de fora).
+  const estilos = new Map();
+  const est = (e) => { let x = estilos.get(e); if (!x) { x = getComputedStyle(e); estilos.set(e, x); } return x; };
+  const cor = (txt) => { const m = String(txt).match(/rgba?\\(([^)]+)\\)/); if (!m) return null; const p = m[1].split(/[\\s,\\/]+/).filter(Boolean).map(Number); return { r: p[0], g: p[1], b: p[2], a: p.length > 3 ? p[3] : 1 }; };
+  const misturar = (c, f, a) => ({ r: c.r * a + f.r * (1 - a), g: c.g * a + f.g * (1 - a), b: c.b * a + f.b * (1 - a), a: 1 });
+  const luz = (c) => { const f = (v) => { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); }; return 0.2126 * f(c.r) + 0.7152 * f(c.g) + 0.0722 * f(c.b); };
+  const fundos = new Map(), opacidades = new Map();
+  const BRANCO = { r: 255, g: 255, b: 255, a: 1 };
+  const fundoDe = (e) => {
+    if (!e) return BRANCO;
+    if (fundos.has(e)) return fundos.get(e);
+    const s = est(e);
+    let f;
+    if (s.backgroundImage && s.backgroundImage !== 'none') f = null; // degradê ou imagem: não dá para medir
+    else {
+      const c = cor(s.backgroundColor);
+      if (c && c.a >= 1) f = c;
+      else { const debaixo = fundoDe(e.parentElement); f = debaixo && c && c.a > 0 ? misturar(c, debaixo, c.a) : debaixo; }
+    }
+    fundos.set(e, f);
+    return f;
+  };
+  const opacidadeDe = (e) => {
+    if (!e) return 1;
+    if (opacidades.has(e)) return opacidades.get(e);
+    const v = parseFloat(est(e).opacity) * opacidadeDe(e.parentElement);
+    opacidades.set(e, v);
+    return v;
+  };
+  document.querySelectorAll('body *').forEach((e) => {
+    if (![...e.childNodes].some((c) => c.nodeType === 3 && c.textContent.trim())) return;
+    if (e.closest('.folha-imp, svg, .qr, [disabled], #impressao') || !visivel(e)) return;
+    if (opacidadeDe(e) < 0.99) return; // entrando ou saindo com animação
+    const s = est(e);
+    const letra = cor(s.color); const fundo = fundoDe(e);
+    if (!letra || !fundo) return;
+    const efetiva = misturar(letra, fundo, letra.a);
+    const l1 = luz(efetiva), l2 = luz(fundo);
+    const razao = (Math.max(l1, l2) + 0.05) / (Math.min(l1, l2) + 0.05);
+    const px = parseFloat(s.fontSize) * zoomTela;
+    const grande = px >= 24 || (px >= 18.6 && parseInt(s.fontWeight, 10) >= 700);
+    if (razao < (grande ? 3 : 4.5)) probs.push({ tipo: 'contraste-baixo', onde: nomeDe(e), texto: e.textContent.trim().slice(0, 40) + ' (' + razao.toFixed(2) + ':1)' });
   });
   document.querySelectorAll('button, [data-a], [data-k], [data-ed]').forEach((b) => {
     if (!visivel(b) || b.closest('.tabela-wrap, .folha-imp, .qr')) return;

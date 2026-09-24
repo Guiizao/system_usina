@@ -108,13 +108,42 @@ Do jeito que é feito na área:
 3. **Anotada:** quando esvaziar, **Terminou de enviar** marca o fim. Se houve uma pausa entre uma dorna e outra, é só tocar em Terminou na hora certa.
 
 - **Sacarificação:** a dorna de mesmo número é criada sozinha e recebe o horário de início, o pH final (pHf) e o Brix final (BHX) da Hidrólise. Quadro mudado à mão na Sacarificação para de acompanhar; o botão **Copiar da Hidrólise** volta a acompanhar.
-- **LPHERA / Cal e Saczyme / Antibiótico:** cada hora é somada sozinha das dornas enviadas naquela hora (duas dornas = 140 de LPHERA, 200 de Saczyme e de Antibiótico). A hora fica marcada **conferir** até o operador tocar em **Confirmar**. Hora anotada ou confirmada à mão não é mais mexida.
+- **LPHERA / Cal e Saczyme / Antibiótico:** cada hora é somada sozinha das dornas enviadas naquela hora (duas dornas = 140 de LPHERA, 200 de Saczyme e de Antibiótico). A hora fica marcada **conferir** até o operador tocar em **Confirmar**. Hora com valor digitado à mão não é mais mexida. Hora só confirmada (sem mudar o valor) volta para **conferir** se depois entrar ou sair uma dorna daquela hora (versão 2.3).
+- A **Nova Nº** fica sempre à vista, à direita das dornas do dia (versão 2.3).
 - **Trocar de aba** volta na mesma dorna (e nos insumos, na hora em que ela foi enviada).
 - **Apagar esta dorna** sobe as seguintes um número (3 vira 2), na Hidrólise e na Sacarificação, como na folha de papel.
 
 ## Começar do zero
 
-No tablet chefe: **Usina** (senha do encarregado) > **Zerar as anotações de teste**. Apaga as anotações de todos os setores, na central e nos tablets (cada tablet limpa quando se conecta). Operadores, senhas, contatos e listas continuam. Uma cópia do que foi apagado fica em `BackupUsina/antes-de-zerar-<data>.json`.
+No tablet chefe: **Usina** (senha do encarregado) > **Zerar as anotações de teste**. Apaga as anotações de todos os setores, na central e nos tablets (cada tablet limpa quando se conecta). Operadores, senhas, contatos e listas continuam. Uma cópia do que foi apagado fica em `BackupUsina/antes-de-zerar-<data>.json`, e os arquivos de cada dia vão para a pasta `BackupUsina/antes-de-zerar-<data>/`.
+
+## Memória dos aparelhos e dias antigos (versão 2.3)
+
+A memória do navegador do Android guarda uns 5 milhões de letras, o que dá perto de 2 meses de anotações da usina inteira. Até a versão 2.2, cada tablet guardava tudo desde o primeiro dia e, com uns 2 meses de uso, parava de salvar. Agora:
+
+- **Tablet do setor:** guarda os últimos 3 dias (o que ainda não foi enviado nunca sai da memória).
+- **Tablet chefe:** guarda os últimos 20 dias. Um dia mais antigo é buscado na central quando alguém abre (o painel mostra "Buscando as anotações na central...").
+- **Central:** guarda na memória os últimos 60 dias. Os mais antigos ficam só em `BackupUsina`, um arquivo por dia, e continuam abrindo no painel, no Excel e no XML.
+- Aparelho que ficou muito tempo sem Wi-Fi manda as anotações em lotes de 300.
+
+## Tablet chefe trocado, reinstalado ou reiniciado (versão 2.3)
+
+- **Reiniciou** (acabou a bateria, atualização do Android) ou o aplicativo foi **atualizado**: o servidor liga sozinho, sem ninguém abrir o aplicativo.
+- **Trocado ou reinstalado** (a central começa vazia, com código novo): cada tablet de setor pede o código de novo. Depois de conectar, ele manda para a central nova o que tinha guardado (os últimos 3 dias), para a folha não começar vazia. Os dias mais antigos ficam na pasta `BackupUsina` do tablet chefe antigo (Documentos > Usina).
+- Um tablet que tinha anotações de antes de **Zerar** continua sendo mandado limpar, mesmo que conecte de novo.
+
+## Velocidade (versão 2.3)
+
+Medido num tablet simulado 4 vezes mais lento que o computador, com a central guardando 90 dias: tecla e Próximo em 12 a 14 ms, painel do tablet chefe em 10 a 21 ms, trocar de aba em 41 a 53 ms e salvar uma dorna em 64 ms. Todos abaixo de 100 ms. Para medir de novo: `node testes/desempenho.mjs` (resultado em `testes/saida/desempenho.json`).
+
+- As anotações têm um índice por dia e folha, montado de novo só quando alguma muda.
+- Ao teclar, só o quadro que mudou e o teclado são refeitos (e só neles a letra é ajustada para caber).
+- A tabela do monitoramento só é montada quando alguém abre o monitoramento; o QR code do painel é guardado.
+- A fonte (Atkinson Hyperlegible) vem dentro do aplicativo, em `public/fonts` (licença em `public/fonts/OFL.txt`). Antes ela vinha da internet e, num Wi-Fi sem internet, a tela podia demorar para aparecer.
+
+## Troca de turno e virada das 07:00 no meio da anotação (versão 2.3)
+
+Se o turno trocar (07:00, 16:00, 00:00) com a pessoa no meio de uma anotação, o que ela digitou é salvo no nome dela e no dia da folha que estava aberta. Depois o aplicativo pede o nome de quem entrou. Antes, o que estava digitado podia se perder, ou ir para a folha do dia seguinte.
 
 ## Rede local no Android 16 e 17
 
@@ -149,12 +178,15 @@ Leva uns 20 minutos e grava o resultado em `testes/saida/resultado.txt`. Testa:
 1. o código (sem erro de escrita) e a configuração das folhas (`forms.js`);
 2. a central pela rede, **nas duas centrais**: a do computador (`server.js`) e a do tablet chefe (`ServidorCentral.java`, que roda no computador com peças do Android simuladas em `testes/java`);
 3. aparelhos virtuais usando o aplicativo como uma pessoa (escritório, tablet da Hidrólise e celular da Caldeira), nas duas centrais: anotações, avisos, sem Wi-Fi, senhas, relatório, virada do dia, relógio errado e travas;
-4. leitura de foto, impressão e o aplicativo abrindo sem rede;
-5. todas as telas em 7 tamanhos, procurando texto cortado, palavra quebrada, letra pequena e erro de JavaScript (fotos em `testes/saida/telas`).
+4. o dia da Hidrólise (enchendo, enviando, anotada; Sacarificação e insumos acompanhando), nas duas centrais;
+5. longo prazo, nas duas centrais: 90 dias de uso da usina inteira (a memória do tablet não enche), dias antigos no BackupUsina, troca de turno e virada das 07:00 no meio da anotação, "Terminou a Nº X", tablet chefe trocado e 700 anotações guardadas sem Wi-Fi;
+6. velocidade: cada toque num tablet 4 vezes mais lento, com 90 dias de uso, tem que responder em menos de 100 ms;
+7. leitura de foto, impressão e o aplicativo abrindo sem rede;
+8. todas as telas em 9 tamanhos, procurando texto cortado, palavra quebrada, letra pequena, pouco contraste entre a letra e o fundo e erro de JavaScript (fotos em `testes/saida/telas`).
 
-Os testes usam pastas de dados temporárias: nunca mexem em `dados/`. Só as telas: `node testes/telas.mjs http://localhost:8080`.
+Os testes usam pastas de dados temporárias: nunca mexem em `dados/`. Só as telas: `node testes/rodar-telas.mjs` (liga uma central de teste sozinho). Só o longo prazo: `node testes/rodar-robustez.mjs`.
 
-O teste para fazer à mão no celular e no tablet está em `Teste-nos-aparelhos-2.2.pdf`, na pasta `Usina`.
+O teste para fazer à mão no celular e no tablet está em `Teste-nos-aparelhos-2.3.pdf`, na pasta `Usina`.
 
 ## Imagens das telas
 
@@ -171,6 +203,8 @@ Salva em `../telas`.
 43 verificações automáticas: conexão com código certo e errado, anotação, botões − e +, aviso de valor fora do normal, cópia da dorna anterior, marcar fim, monitoramento, valores padrão, insumos, senha do operador, trava por inatividade, virada de turno, exportação, relatórios e configurações. Mais: queda de rede com envio depois que volta, sincronização entre dois aparelhos e validação do Excel e do XML.
 
 Versão 2 (16/09/2026): avisos de pH e Brix, telas LPHERA / Cal e Saczyme / Alcolina com a soma das dornas da hora, casinha nas abas, rolagem do painel do chefe que não volta mais para o topo, pastas *Usina, tela de relatórios, janela de Excel ou XML, listas do ralo, cadastro protegido por senha e busca do tablet chefe no Wi-Fi. Testado no navegador contra o servidor: anotação, envio, queda de rede, relatórios e Excel/XML.
+
+Versão 2.3 (24/09/2026), revisão completa: a memória dos tablets não enche mais com o tempo (antes parava de salvar com uns 2 meses de uso); troca de turno e virada das 07:00 no meio da anotação não perdem nada; "Terminou a Nº X" não perde o que estava sendo anotado em outra dorna; limpar uma dorna atualiza a Sacarificação e os insumos; LPHERA confirmada volta para conferir se entrar outra dorna na hora; tablet chefe trocado recebe de novo o que os tablets tinham; servidor do tablet chefe liga sozinho quando o tablet reinicia; engrenagem ao lado do botão de tema; Nova Nº sempre à vista; dorna em andamento não conta como pendência; plural de verdade nos textos; botões verdes legíveis na tela escura; nomes embaixo dos ícones do tablet chefe no celular; mais rápido (índice das anotações, só o quadro mexido é refeito ao teclar) e fonte dentro do aplicativo.
 
 Versão 2.2 (23/09/2026), a partir do teste na área: fluxo da dorna enchendo, enviando e anotada; Sacarificação e insumos acompanhando a Hidrólise; trocar de aba volta na mesma dorna; apagar renumera; cal em copos; Alcolina virou Antibiótico; zerar anotações de teste; setor parado não conta como pendência; permissão de rede local (Motorola); texto que não cabe diminui a letra em vez de quebrar a palavra; animações de notificação, janelas e troca de tela; tabela do monitoramento rola com o dedo e tem setas.
 

@@ -75,6 +75,21 @@ if ($xml -notmatch 'ACCESS_LOCAL_NETWORK') {
   $xml = $xml -replace '</manifest>', ($rede + '</manifest>')
   [System.IO.File]::WriteAllText($manifesto, $xml, (New-Object System.Text.UTF8Encoding $false))
 }
+# Tablet chefe religou ou o aplicativo foi atualizado: o servidor liga sozinho (versão 2.3)
+$xml = Get-Content $manifesto -Raw -Encoding utf8
+if ($xml -notmatch 'LigarAoIniciar') {
+  $receptor = @"
+        <receiver android:name=".LigarAoIniciar" android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+            </intent-filter>
+        </receiver>
+"@
+  $xml = $xml -replace '</application>', ($receptor + '    </application>')
+  $xml = $xml -replace '</manifest>', "    <uses-permission android:name=`"android.permission.RECEIVE_BOOT_COMPLETED`" />`n</manifest>"
+  [System.IO.File]::WriteAllText($manifesto, $xml, (New-Object System.Text.UTF8Encoding $false))
+}
 
 # SDK para o Gradle
 Set-Content -Path android\local.properties -Value ("sdk.dir=" + ($env:ANDROID_HOME -replace '\\', '\\')) -Encoding ascii

@@ -128,6 +128,7 @@ public class CentralPlugin extends Plugin {
       Intent servico = new Intent(ctx, ServicoCentral.class);
       if (Build.VERSION.SDK_INT >= 26) ctx.startForegroundService(servico);
       else ctx.startService(servico);
+      LigarAoIniciar.lembrar(ctx, true); // se o tablet religar, o servidor liga sozinho
 
       boolean bateriaLivre = true;
       PowerManager energia = (PowerManager) ctx.getSystemService(Context.POWER_SERVICE);
@@ -179,6 +180,7 @@ public class CentralPlugin extends Plugin {
   @PluginMethod
   public void parar(PluginCall chamada) {
     Context ctx = getContext();
+    LigarAoIniciar.lembrar(ctx, false);
     ctx.stopService(new Intent(ctx, ServicoCentral.class));
     servidor(chamada).parar();
     chamada.resolve(new JSObject().put("rodando", false));

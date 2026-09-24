@@ -123,7 +123,6 @@ window.USINA = {
       //   anotada   -> terminou de esvaziar (marca o horário de fim)
       // Uma bomba manda uma dorna de cada vez: ao enviar a próxima, a que estava indo termina no mesmo horário.
       envio: { inicio: 'inicio', fim: 'fim' },
-      marcarFim: 'fim',
       codigo: 'Anexo I - POP 011',
       titulo: 'Monitoramento do Processo de Hidrólise',
       maxLinhas: 25,

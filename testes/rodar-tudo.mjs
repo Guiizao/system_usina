@@ -5,6 +5,8 @@
  *  2. configuração das folhas             5. leitura de foto, impressão e app sem rede
  *  3. central pela rede, nas duas         6. todas as telas em 9 tamanhos de tela
  *  4b. fluxo da dorna (enchendo, enviando, anotada), nas duas centrais
+ *  3b e 4c. longo prazo (90 dias), troca de turno, virada das 07:00, central nova e sem Wi-Fi, nas duas
+ *  4d. velocidade de cada toque num tablet 4 vezes mais lento
  * Resultado em testes/saida/resultado.json e testes/saida/resultado.txt
  */
 import fs from 'node:fs';
@@ -16,6 +18,8 @@ import { testarApi } from './api.mjs';
 import { testarAparelhos } from './aparelhos.mjs';
 import { testarDornas } from './dornas.mjs';
 import { testarConfiguracao, testarExtras } from './extras.mjs';
+import { testarRobustezCentral, testarRobustezAparelhos } from './robustez.mjs';
+import { medirDesempenho } from './desempenho.mjs';
 import { centralNode, centralJava, APP } from './servidores.mjs';
 
 const SAIDA = path.join(APP, 'testes', 'saida');
@@ -47,6 +51,12 @@ for (const [nome, ligar, porta] of [['computador (server.js)', centralNode, 8291
   try { await testarApi(c, g); } finally { await c.desligar(); }
   grupos.push(g);
 }
+// 3b. longo prazo direto na central: dias guardados, dias antigos no BackupUsina, central nova, 90 dias de uso
+for (const [nome, ligar, porta] of [['computador', centralNode, 8271], ['tablet chefe', centralJava, 8272]]) {
+  const g = novoGrupo('Longo prazo e central nova, direto na central do ' + nome);
+  await testarRobustezCentral(ligar, porta, g);
+  grupos.push(g);
+}
 
 const nav = await abrirNavegador();
 try {
@@ -64,6 +74,30 @@ try {
     try { await testarDornas(nav, c, g); } finally { await c.desligar(); }
     grupos.push(g);
   }
+  // 4c. 90 dias de uso, troca de turno e virada das 07:00 no meio da anotação, central nova, sem Wi-Fi
+  for (const [nome, ligar, porta] of [['computador', centralNode, 8273], ['tablet chefe', centralJava, 8274]]) {
+    const g = novoGrupo('Longo prazo, turnos e central nova com aparelhos, na central do ' + nome);
+    await testarRobustezAparelhos(nav, ligar, porta, g);
+    grupos.push(g);
+  }
+  // 4d. velocidade: num tablet 4 vezes mais lento e com 90 dias de uso, cada toque responde em menos de 100 ms
+  const gv = novoGrupo('Velocidade num tablet mais lento (4 vezes), com 90 dias de uso');
+  let tempos = {};
+  await teste(gv, 'medir os toques no tablet do setor e no tablet chefe', async () => {
+    tempos = await medirDesempenho(centralNode, 8275, nav);
+    fs.writeFileSync(path.join(SAIDA, 'desempenho.json'), JSON.stringify({ quando: new Date().toISOString(), lentidao: 4, r: tempos }, null, 1));
+  });
+  for (const [nome, ms] of Object.entries(tempos)) {
+    if (/memória|travadas/.test(nome)) continue;
+    const limite = /abrir o aplicativo/.test(nome) ? 2500 : 100;
+    await teste(gv, `${nome.replace(' (ms)', '')}: ${ms} ms`, async () => certo(ms != null && ms >= 0 && ms < limite, `passou de ${limite} ms`));
+  }
+  await teste(gv, 'tablet chefe parado sincronizando: nenhuma travada de mais de 200 ms', async () => {
+    const longas = JSON.parse(tempos['chefe: travadas de mais de 50 ms em 20 s parado'] || '[]');
+    certo(longas.every((ms) => ms < 200), 'travadas: ' + longas.join(', '));
+    return longas.length ? `${longas.length} de ${Math.max(...longas)} ms` : 'nenhuma acima de 50 ms';
+  });
+  grupos.push(gv);
   // 5. extras
   const g5 = novoGrupo('Leitura de foto, impressão e aplicativo sem rede');
   const c5 = await centralNode(8295);
