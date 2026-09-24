@@ -6,7 +6,7 @@ Guia com o passo a passo ilustrado: https://claude.ai/artifact/CmJHBvqjeGRWHVYE5
 
 ## Antes de instalar
 
-1. Troque a senha do encarregado em `public/forms.js` (`pinAdmin: '1234'`).
+1. A senha do encarregado (ajustes e configurações da usina) fica em `public/forms.js` (`pinAdmin`). Desde a versão 2.4 é 159357.
 2. Gere o aplicativo, se mexeu em algo:
 
 ```bash
@@ -17,7 +17,9 @@ O APK sai em `apk/saida/pranchetas.apk`. Na primeira vez, rode antes `apk\instal
 
 ## Ligar a central
 
-**No tablet chefe (sem computador):** instale o APK, abra e toque em "Ligar como tablet chefe". A tela "Preparando o servidor da usina" cria as pastas, liga o servidor (com aviso fixo na barra, para não desligar com a tela apagada) e mostra o código. Permita as notificações e a bateria quando o Android perguntar.
+**Num tablet (sem computador):** instale o APK, abra e toque em **Usar como servidor**. A tela "Preparando o servidor" cria as pastas, liga o servidor (com aviso fixo na barra, para não desligar com a tela apagada) e mostra o código. Permita as notificações e a bateria quando o Android perguntar. Depois escolha a função deste aparelho: normalmente **Tablet chefe**, mas pode ser um setor.
+
+Desde a versão 2.4, ser o **tablet chefe** (o painel do escritório) e ser o **servidor** são coisas separadas: o tablet chefe pode usar um servidor que está em outro aparelho (outro tablet ou o computador), e ligar o servidor nunca apaga nada do que já está guardado. Nos ajustes do aparelho: **Usar este aparelho como servidor** ou **Desligar o servidor deste aparelho**.
 
 Pastas no tablet chefe: `Documentos/Usina/RelatoriosUsina` (Excel e XML), `Documentos/Usina/BackupUsina` (um arquivo por dia) e `ServidorUsina` (dentro do app).
 
@@ -72,8 +74,10 @@ Tamanho da tela (Menor, Normal, Maior) é por aparelho, na engrenagem.
 
 ## Relatórios
 
-- No tablet chefe: "Enviar para o escritório" (direto para o WhatsApp ou e-mail cadastrado), WhatsApp, E-mail, Outros apps, Guardar e Imprimir. Uma janela pergunta se vai Excel, XML ou resumo em texto.
-- Todo arquivo gerado fica guardado em RelatoriosUsina e aparece na tela **Relatórios**. No computador com `node server.js`, também em `http://ENDEREÇO:8080/relatorios`.
+- No tablet chefe: "Enviar para o escritório" (direto para o WhatsApp ou e-mail cadastrado), WhatsApp, E-mail, Outros apps, Guardar e Imprimir. Uma janela pergunta **de quais setores** (todos vêm marcados) e se vai Excel, XML ou resumo em texto.
+- O **resumo em texto** (WhatsApp) sai organizado: cada setor em negrito, e no fim os **totais do dia de cada insumo** (LPHERA, Cal, Saczyme, Antibiótico, matéria-prima...), que é o que o escritório lança no sistema dele.
+- Tela **Relatórios**: **um por dia**, com todos os setores. Cada dia tem **Abrir e corrigir** (abre o painel daquele dia), **Enviar ou imprimir** (o arquivo é montado na hora, com as últimas correções) e **Apagar o arquivo** (apaga o Excel e o XML guardados; as anotações continuam). O XML não aparece na lista: é só outro tipo de arquivo que dá para escolher ao enviar.
+- O Excel do dia com todos os setores fica em RelatoriosUsina. No computador com `node server.js`, também em `http://ENDEREÇO:8080/relatorios`.
 - Às 07:00 o dia fecha sozinho e o arquivo do dia anterior é guardado.
 
 ## Relatórios iguais ao papel
@@ -113,9 +117,12 @@ Do jeito que é feito na área:
 - **Trocar de aba** volta na mesma dorna (e nos insumos, na hora em que ela foi enviada).
 - **Apagar esta dorna** sobe as seguintes um número (3 vira 2), na Hidrólise e na Sacarificação, como na folha de papel.
 
-## Começar do zero
+## Apagar dados
 
-No tablet chefe: **Usina** (senha do encarregado) > **Zerar as anotações de teste**. Apaga as anotações de todos os setores, na central e nos tablets (cada tablet limpa quando se conecta). Operadores, senhas, contatos e listas continuam. Uma cópia do que foi apagado fica em `BackupUsina/antes-de-zerar-<data>.json`, e os arquivos de cada dia vão para a pasta `BackupUsina/antes-de-zerar-<data>/`.
+- **Apagar dados deste aparelho** (ajustes do aparelho): tira deste aparelho as anotações e a função dele, para usar em outro setor. O que já foi enviado continua na central. No aparelho que é o servidor, desligue o servidor antes.
+- **Apagar todos os dados do sistema** (Usina > senha do encarregado): pede também a **senha do programador**, que a própria central confere (ela guarda só o resumo da senha, não a senha).
+
+No tablet chefe: **Usina** (senha do encarregado) > **Apagar todos os dados do sistema** > senha do programador. Apaga as anotações de todos os setores, na central e nos tablets (cada tablet limpa quando se conecta). Operadores, senhas, contatos e listas continuam. Uma cópia do que foi apagado fica em `BackupUsina/antes-de-zerar-<data>.json`, e os arquivos de cada dia vão para a pasta `BackupUsina/antes-de-zerar-<data>/`.
 
 ## Memória dos aparelhos e dias antigos (versão 2.3)
 
@@ -140,6 +147,20 @@ Medido num tablet simulado 4 vezes mais lento que o computador, com a central gu
 - Ao teclar, só o quadro que mudou e o teclado são refeitos (e só neles a letra é ajustada para caber).
 - A tabela do monitoramento só é montada quando alguém abre o monitoramento; o QR code do painel é guardado.
 - A fonte (Atkinson Hyperlegible) vem dentro do aplicativo, em `public/fonts` (licença em `public/fonts/OFL.txt`). Antes ela vinha da internet e, num Wi-Fi sem internet, a tela podia demorar para aparecer.
+
+## Pedidos do teste de 24/09 (versão 2.4)
+
+- **Aviso curto** do lado do número (pH baixo, Brix alto): a caixa do quadro e o teclado não mudam de tamanho, e o dedo não erra a tecla. O aviso de pH vale só para o primeiro pH (o segundo já é depois da cal). No teclado, o nome do quadro fica vermelho com o aviso do lado.
+- **LPHERA / Cal e Saczyme / Antibiótico** somam só as dornas que terminaram de enviar (anotadas). Dorna enchendo, enviando ou de teste não entra.
+- **Blocos mais juntos** e "Apagar a Nº X" lá em cima, do lado de "Enchendo": no tablet deitado cabe tudo sem rolar.
+- **Monitorar**: a folha rola com o dedo para baixo e para o lado, em todas as folhas. O botão **Folha inteira / Letra maior** diminui a tabela para caber na tela.
+- **Turno** do lado do nome da tela; o relógio fica só com a hora.
+- **Sincronização a cada 5 segundos** em todos os aparelhos. A atualização acontece por trás: não mexe na rolagem das abas, do seletor nem da folha.
+- **Animação**: trocar de tela anima a tela; trocar de dorna ou de hora anima só os quadros.
+- **Tablet chefe corrigindo** o que um operador anotou: pede a senha do operador (sem senha cadastrada, a do encarregado). Fica registrado quem autorizou. Linha nova e campos do escritório não pedem.
+- **Trocar o código de conexão** desconecta todos os outros aparelhos (aparelho perdido ou roubado): eles só voltam com o código novo.
+- Dois aparelhos criando a mesma linha sem um saber do outro (o chefe corrigiu nos segundos antes de receber): os valores se juntam, nada se perde.
+- **Código embaralhado no APK**: quem abrir o APK não lê o código do jeito que foi escrito (o mapa para entender erros fica só em `apk/saida/mapas`).
 
 ## Troca de turno e virada das 07:00 no meio da anotação (versão 2.3)
 
@@ -181,12 +202,13 @@ Leva uns 20 minutos e grava o resultado em `testes/saida/resultado.txt`. Testa:
 4. o dia da Hidrólise (enchendo, enviando, anotada; Sacarificação e insumos acompanhando), nas duas centrais;
 5. longo prazo, nas duas centrais: 90 dias de uso da usina inteira (a memória do tablet não enche), dias antigos no BackupUsina, troca de turno e virada das 07:00 no meio da anotação, "Terminou a Nº X", tablet chefe trocado e 700 anotações guardadas sem Wi-Fi;
 6. velocidade: cada toque num tablet 4 vezes mais lento, com 90 dias de uso, tem que responder em menos de 100 ms;
-7. leitura de foto, impressão e o aplicativo abrindo sem rede;
-8. todas as telas em 9 tamanhos, procurando texto cortado, palavra quebrada, letra pequena, pouco contraste entre a letra e o fundo e erro de JavaScript (fotos em `testes/saida/telas`).
+7. os pedidos do teste de 24/09 (aviso curto, senha do operador no tablet chefe, relatórios, WhatsApp, rolagem, trocar o código), nas duas centrais, e o aplicativo com o código embaralhado como vai no APK;
+8. leitura de foto, impressão e o aplicativo abrindo sem rede;
+9. todas as telas em 9 tamanhos, procurando texto cortado, palavra quebrada, letra pequena, pouco contraste entre a letra e o fundo e erro de JavaScript (fotos em `testes/saida/telas`).
 
 Os testes usam pastas de dados temporárias: nunca mexem em `dados/`. Só as telas: `node testes/rodar-telas.mjs` (liga uma central de teste sozinho). Só o longo prazo: `node testes/rodar-robustez.mjs`.
 
-O teste para fazer à mão no celular e no tablet está em `Teste-nos-aparelhos-2.3.pdf`, na pasta `Usina`.
+O teste para fazer à mão no celular e no tablet está em `Teste-nos-aparelhos-2.4.pdf`, na pasta `Usina`.
 
 ## Imagens das telas
 
@@ -203,6 +225,8 @@ Salva em `../telas`.
 43 verificações automáticas: conexão com código certo e errado, anotação, botões − e +, aviso de valor fora do normal, cópia da dorna anterior, marcar fim, monitoramento, valores padrão, insumos, senha do operador, trava por inatividade, virada de turno, exportação, relatórios e configurações. Mais: queda de rede com envio depois que volta, sincronização entre dois aparelhos e validação do Excel e do XML.
 
 Versão 2 (16/09/2026): avisos de pH e Brix, telas LPHERA / Cal e Saczyme / Alcolina com a soma das dornas da hora, casinha nas abas, rolagem do painel do chefe que não volta mais para o topo, pastas *Usina, tela de relatórios, janela de Excel ou XML, listas do ralo, cadastro protegido por senha e busca do tablet chefe no Wi-Fi. Testado no navegador contra o servidor: anotação, envio, queda de rede, relatórios e Excel/XML.
+
+Versão 2.4 (24/09/2026), pedidos do teste na área: aviso curto do lado do número (caixa e teclado não mudam de tamanho) e só no primeiro pH; insumos somados só de dorna terminada; blocos mais juntos e Apagar lá em cima; Monitorar rola com o dedo e tem folha inteira; turno do lado do nome; sincronização a cada 5 s sem mexer onde a pessoa está; animação só nos quadros ao trocar de dorna; tablet chefe separado do servidor; senha do operador para o chefe corrigir; relatórios um por dia (abrir, enviar, apagar); escolher os setores ao enviar e imprimir; WhatsApp com os totais dos insumos; trocar o código desconecta todos; apagar tudo com a senha do programador; senha do encarregado 159357; código embaralhado no APK.
 
 Versão 2.3 (24/09/2026), revisão completa: a memória dos tablets não enche mais com o tempo (antes parava de salvar com uns 2 meses de uso); troca de turno e virada das 07:00 no meio da anotação não perdem nada; "Terminou a Nº X" não perde o que estava sendo anotado em outra dorna; limpar uma dorna atualiza a Sacarificação e os insumos; LPHERA confirmada volta para conferir se entrar outra dorna na hora; tablet chefe trocado recebe de novo o que os tablets tinham; servidor do tablet chefe liga sozinho quando o tablet reinicia; engrenagem ao lado do botão de tema; Nova Nº sempre à vista; dorna em andamento não conta como pendência; plural de verdade nos textos; botões verdes legíveis na tela escura; nomes embaixo dos ícones do tablet chefe no celular; mais rápido (índice das anotações, só o quadro mexido é refeito ao teclar) e fonte dentro do aplicativo.
 

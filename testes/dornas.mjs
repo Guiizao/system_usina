@@ -6,7 +6,8 @@
  *   trocar de aba volta na mesma dorna; apagar renumera; zerar limpa central e tablets.
  */
 import { TAMANHOS, dormir } from './navegador.mjs';
-import { teste, certo, igual } from './teste.mjs';
+import { SENHA_PROGRAMADOR_TESTE } from './servidores.mjs';
+import { teste, certo, igual, teclasDaSenha } from './teste.mjs';
 
 export async function testarDornas(nav, central, grupo) {
   const api = async (rota) => (await fetch(central.url + rota, { headers: { 'X-Chave': central.chave() } })).json();
@@ -88,17 +89,19 @@ export async function testarDornas(nav, central, grupo) {
       const lista = await esperarCentral((l) => { const a = um(l, 'hid_anexo1', 1); const b = um(l, 'hid_anexo1', 2); return a && b && a.valores.fim && b.valores.inicio && l; }, 'fim da 1 e início da 2');
       igual(um(lista, 'hid_anexo1', 1).valores.fim, um(lista, 'hid_anexo1', 2).valores.inicio, 'fim da 1 = início da 2');
     });
-    await teste(grupo, 'LPHERA e Saczyme somados sozinhos das dornas da hora, para conferir', async () => {
+    await teste(grupo, 'LPHERA e Saczyme somados sozinhos só das dornas terminadas da hora, para conferir', async () => {
+      // a Nº 1 terminou (a Nº 2 foi enviada); a Nº 2 ainda está indo para cima: só a Nº 1 entra na soma
+      await dormir(1500);
       const lista = await esperarCentral((l) => {
         const lph = l.filter((r) => r.prancheta === 'ins_lphera');
         const soma = lph.reduce((s, r) => s + Number(r.valores.qtd), 0);
-        return soma === 140 && l;
-      }, 'LPHERA = 70 + 70');
+        return soma === 70 && l;
+      }, 'LPHERA = 70 (só a dorna 1, que terminou)');
       const sac = lista.filter((r) => r.prancheta === 'ins_saczyme').reduce((s, r) => s + Number(r.valores.qtd), 0);
       const anti = lista.filter((r) => r.prancheta === 'ins_alcolina').reduce((s, r) => s + Number(r.valores.qtd), 0);
-      igual(sac, 200, 'Saczyme'); igual(anti, 200, 'Antibiótico');
+      igual(sac, 100, 'Saczyme'); igual(anti, 100, 'Antibiótico');
       certo(lista.filter((r) => r.prancheta === 'ins_lphera').every((r) => r.conferir && r.auto), 'não ficou marcado para conferir');
-      return `LPHERA 140, Saczyme 200, Antibiótico 200`;
+      return `LPHERA 70, Saczyme 100, Antibiótico 100 (a dorna 2 ainda não terminou)`;
     });
     await teste(grupo, 'confirmar a hora dos insumos: deixa de "conferir" e fica com quem confirmou', async () => {
       await tab.tocar('[data-a="aba"][data-id="juntas_lphera_cal"]');
@@ -132,6 +135,12 @@ export async function testarDornas(nav, central, grupo) {
       await tab.tocar('[data-a="linha"][data-chave="2"]');
       certo(await tab.existe('.seletor button.sel small', 'anotada'), 'não ficou "anotada"');
     });
+    await teste(grupo, 'a dorna 2 terminou: a hora da LPHERA confirmada volta para conferir, agora com 140', async () => {
+      await esperarCentral((l) => {
+        const lph = l.filter((r) => r.prancheta === 'ins_lphera');
+        return lph.reduce((s, r) => s + Number(r.valores.qtd), 0) === 140 && lph.some((r) => r.conferir);
+      }, 'LPHERA = 140 para conferir');
+    });
     await teste(grupo, 'apagar a dorna 1: a 2 vira 1 na Hidrólise e na Sacarificação', async () => {
       await tab.tocar('[data-a="linha"][data-chave="1"]');
       await tab.tocar('[data-a="apagar-linha"]');
@@ -147,11 +156,12 @@ export async function testarDornas(nav, central, grupo) {
       certo(!pendente, 'Caldeira sem nenhuma leitura aparece como pendente');
       certo(!(await esc.existe('[data-id="caldeira"]', 'Falta a leitura')), 'Caldeira ainda diz "Falta a leitura"');
     });
-    await teste(grupo, 'zerar as anotações de teste limpa a central e o tablet', async () => {
+    await teste(grupo, 'apagar todos os dados do sistema (senha do programador) limpa a central e o tablet', async () => {
       await esc.tocar('[data-a="config"]');
-      await esc.teclar(['1', '2', '3', '4', 'ok']);
+      await esc.teclar(teclasDaSenha());
       await esc.tocar('[data-a="zerar-tudo"]');
       await esc.tocar('[data-k="sim"]');
+      await esc.teclar([...SENHA_PROGRAMADOR_TESTE.split(''), 'ok']);
       await esperarCentral((l) => l.every((r) => r.data === 'config') && l.length >= 0, 'central sem anotações');
       await tab.esperar(`(() => { const r = JSON.parse(localStorage.getItem('usina.registros') || '{}'); return Object.values(r).every((x) => x.data === 'config'); })()`, 30000, 'tablet limpo');
       await dormir(9000);

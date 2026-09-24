@@ -18,13 +18,17 @@ async function esperarNoAr(url, ms = 20000) {
   throw new Error('a central não ligou: ' + url);
 }
 
+/** Senha do programador nas centrais de teste (a de verdade não fica nos testes). */
+export const SENHA_PROGRAMADOR_TESTE = '24682468';
+const HASH_TESTE = '26fa3ebe21340e4e62f4a260877095092eff5f4a619ce7a60ee57a355aa4adfb';
+
 export function pastaTemporaria(nome) { return fs.mkdtempSync(path.join(os.tmpdir(), `pranchetas-${nome}-`)); }
 
 /** Central do computador. Devolve { url, pasta, codigo(), chave(), reiniciar(), desligar() }. */
-export async function centralNode(porta, pasta = pastaTemporaria('node')) {
+export async function centralNode(porta, pasta = pastaTemporaria('node'), publico) {
   let proc;
   const ligar = async () => {
-    proc = spawn(process.execPath, [path.join(APP, 'server.js')], { env: Object.assign({}, process.env, { PORTA: String(porta), PASTA_DADOS: pasta, ENDERECO: '127.0.0.1' }), stdio: 'ignore' });
+    proc = spawn(process.execPath, [path.join(APP, 'server.js')], { env: Object.assign({}, process.env, { PORTA: String(porta), PASTA_DADOS: pasta, ENDERECO: '127.0.0.1', SENHA_PROGRAMADOR_HASH: HASH_TESTE }, publico ? { PASTA_PUBLICA: publico } : {}), stdio: 'ignore' });
     await esperarNoAr(`http://127.0.0.1:${porta}`);
   };
   await ligar();
@@ -49,7 +53,7 @@ export async function centralJava(porta, pasta = pastaTemporaria('java')) {
   execFileSync(path.join(JDK, 'javac.exe'), ['-encoding', 'UTF-8', '-d', saida, ...fontes], { stdio: 'pipe' });
   let proc;
   const ligar = async () => {
-    proc = spawn(path.join(JDK, 'java.exe'), ['-Dpranchetas.ip=127.0.0.1', '-cp', saida, 'RodarServidorJava', String(porta), pasta, APP], { stdio: 'ignore' });
+    proc = spawn(path.join(JDK, 'java.exe'), ['-Dpranchetas.ip=127.0.0.1', '-Dpranchetas.senhaProgramadorHash=' + HASH_TESTE, '-cp', saida, 'RodarServidorJava', String(porta), pasta, APP], { stdio: 'ignore' });
     await esperarNoAr(`http://127.0.0.1:${porta}`);
   };
   await ligar();

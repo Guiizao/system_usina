@@ -210,6 +210,10 @@ export async function testarApi(central, grupo) {
     const antigo = central.codigo();
     const r = await pedir('/api/novo-codigo', { metodo: 'POST', chave, corpo: {} });
     igual(r.status, 200); certo(r.json.codigo !== antigo && /^\d{6}$/.test(r.json.codigo), 'código novo');
+    // a chave também muda: todos os outros aparelhos são desconectados
+    igual((await pedir('/api/status', { chave })).status, 401, 'aparelho com a chave antiga');
+    certo(r.json.chave && r.json.chave !== chave, 'chave nova para quem trocou');
+    chave = r.json.chave;
     igual((await pedir('/api/parear', { metodo: 'POST', corpo: { codigo: antigo } })).status, 403, 'antigo');
     igual((await pedir('/api/parear', { metodo: 'POST', corpo: { codigo: r.json.codigo } })).status, 200, 'novo');
   });

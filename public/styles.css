@@ -1126,3 +1126,55 @@ button { transition: background-color .15s, border-color .15s, color .15s, box-s
 :root[data-dispositivo="celular"] .topo:has(.atalhos > :nth-child(4)) .atalho { position: relative; flex-direction: column; gap: 2px; height: auto; min-height: 52px; padding: 4px 2px; }
 :root[data-dispositivo="celular"] .topo:has(.atalhos > :nth-child(4)) .atalho span { display: block; font-size: 13px; line-height: 1.1; }
 :root[data-dispositivo="celular"] .topo:has(.atalhos > :nth-child(4)) .atalho .contador { position: absolute; top: 2px; right: 6px; }
+
+/* ---------- Pedidos do teste de 24/09 (versão 2.4) ---------- */
+/* A área da folha rola com o dedo (para baixo e para o lado): os blocos não são mais espremidos para caber */
+.edicao main > * { flex-shrink: 0; }
+/* Aviso curto do lado do número: a caixa do quadro não muda de tamanho */
+.campo .val .tag-aviso { font-style: normal; font-size: 15px; font-weight: 700; margin-left: 8px; vertical-align: middle; letter-spacing: 0; }
+:root[data-dispositivo="celular"] .campo .val .tag-aviso { font-size: 13px; margin-left: 5px; }
+/* No teclado, o aviso fica em vermelho do lado do nome do quadro (o teclado não desce) */
+.painel-cab b { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.painel-cab b.fora { color: var(--vermelho); }
+.painel-cab b.atencao { color: var(--ambar-texto); }
+.painel-cab b .tag-aviso { display: inline-flex; align-items: center; gap: 4px; margin-left: 10px; font-style: normal; font-size: max(.72em, 13px); vertical-align: middle; }
+.painel-cab b .tag-aviso svg.ico { width: 1.1em; height: 1.1em; }
+/* Turno do lado do nome da tela; o relógio fica só com a hora */
+.topo .titulo-linha { display: flex; align-items: center; gap: 10px; min-width: 0; }
+:root[data-dispositivo="celular"] .topo .titulo.longo .turno-topo { display: none; } /* título comprido no celular: não cabe o turno */
+.topo .titulo-linha b { min-width: 0; }
+.topo .turno-topo { flex: none; font-style: normal; font-size: 15px; font-weight: 700; color: #e6ebe7; background: rgba(255, 255, 255, .14); border-radius: 999px; padding: 2px 10px; white-space: nowrap; }
+:root[data-dispositivo="celular"] .topo .turno-topo { font-size: 13px; padding: 1px 8px; }
+/* Celular: os botões da linha de cima (Apagar, Terminou) ficam baixos, para sobrar lugar para os quadros */
+:root[data-dispositivo="celular"] .cabecalho-form .btn { min-height: 38px; font-size: 14px; padding: 0 10px; }
+.topo:has(.atalhos > :nth-child(4)) .turno-topo { display: none; }
+.topo .relogio { align-self: center; }
+/* Blocos mais juntos: cabem mais numa tela, sem precisar rolar */
+.grupos { gap: 8px; }
+.grupo { padding: 6px 9px 8px; }
+.grupo h3 { margin: 0 0 4px; font-size: 16px; }
+.grupo .campo { min-height: 80px; padding: 6px 10px; }
+.grupo .campo .val { font-size: 32px; }
+/* Tablet pequeno deitado (tela baixa): quadros mais baixos, para os blocos caberem sem rolar */
+@media (orientation: landscape) and (max-height: 620px) {
+  .grupo .campo { min-height: 64px; padding: 4px 8px; }
+  .grupo .campo .val { font-size: 26px; }
+  .grupo h3 { font-size: 14px; margin-bottom: 2px; }
+  .grupo .campo .val.vazio { font-size: 14px; }
+}
+/* Troca de dorna ou de hora (mesma tela): só o conteúdo aparece de leve; a tela inteira anima só ao trocar de tela */
+#app.troca-linha .edicao main { animation: entrarLinha .16s var(--suave) both; }
+@keyframes entrarLinha { from { opacity: .3; } to { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { #app.troca-linha .edicao main { animation: none; } }
+/* Folha do monitoramento: botões do lado do título */
+.botoes-folha { display: flex; gap: 8px; align-items: center; flex: none; }
+.folha.larga .rolar-folha { display: flex; }
+.abas { position: relative; }
+
+/* Relatórios: um cartão por dia */
+.relatorio-dia { display: grid; gap: 10px; }
+.relatorio-cab { display: flex; align-items: center; gap: 14px; min-width: 0; }
+.relatorio-cab b { display: block; font-size: 22px; }
+.relatorio-cab small { display: block; font-size: 16px; color: var(--tinta-2); }
+/* Envio: escolher os setores */
+.setores-envio { margin: 4px 0 12px; }

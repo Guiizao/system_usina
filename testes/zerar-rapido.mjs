@@ -1,7 +1,7 @@
 /* Pranchetas Digitais - © 2026 Guilherme. Confere o "zerar" direto na central (as duas), sem navegador. */
 import fs from 'node:fs';
 import path from 'node:path';
-import { centralNode, centralJava } from './servidores.mjs';
+import { centralNode, centralJava, SENHA_PROGRAMADOR_TESTE } from './servidores.mjs';
 
 for (const [nome, ligar, porta] of [['computador', centralNode, 8391], ['tablet chefe', centralJava, 8392]]) {
   const c = await ligar(porta);
@@ -10,7 +10,9 @@ for (const [nome, ligar, porta] of [['computador', centralNode, 8391], ['tablet 
     const reg = (id, data) => ({ id, data, prancheta: 'x', chave: '1', valores: { a: 1 }, atualizadoEm: Date.now() });
     const r1 = await pedir('/api/sync', { aparelho: 't', registros: [reg('2026-09-23|x|1', '2026-09-23'), reg('config|sistema|geral', 'config')] });
     const g0 = r1.geracao;
-    const z = await pedir('/api/zerar', { confirmar: 'ZERAR' });
+    const errada = await pedir('/api/zerar', { confirmar: 'ZERAR', senha: '11111111' });
+    if (!errada.erro) throw new Error('apagou sem a senha do programador');
+    const z = await pedir('/api/zerar', { confirmar: 'ZERAR', senha: SENHA_PROGRAMADOR_TESTE });
     const lista = (await pedir('/api/registros?desde=0')).registros;
     const antigo = await pedir('/api/sync', { aparelho: 't', geracao: g0, registros: [reg('2026-09-23|x|2', '2026-09-23')] });
     const depois = (await pedir('/api/registros?desde=0')).registros;

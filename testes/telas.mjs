@@ -38,6 +38,8 @@ const TELAS = [
   ['caldeira-letras', '&papel=caldeira&op=Alberto&tela=prancheta&pid=caldeira&chave=10&campo=obs&teclas=O|K'],
   ['caldeira-monitor', '&papel=caldeira&op=Alberto&tela=prancheta&pid=caldeira&monitor=1'],
   ['destilaria', '&papel=destilaria&op=Mateus&tela=prancheta&pid=destilaria&chave=13'],
+  ['destilaria-monitor', '&papel=destilaria&op=Mateus&tela=prancheta&pid=destilaria&monitor=1'],
+  ['hidrolise-monitor-chefe', '&papel=central&tela=prancheta&pid=hid_anexo1&monitor=1'],
   ['lactrol', '&papel=destilaria&op=Mateus&tela=prancheta&pid=ins_lactrol'],
   ['nova-destilaria', '&papel=nova_destilaria&op=Operador%201&tela=prancheta&pid=nova_destilaria'],
   ['chefe-painel', '&papel=central'],

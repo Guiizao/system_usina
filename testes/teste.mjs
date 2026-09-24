@@ -1,5 +1,11 @@
 /* Pranchetas Digitais - © 2026 Guilherme. Todos os direitos reservados. Uso somente com autorização do autor (veja LICENCA.txt). */
 /* Um jeito simples de escrever e contar os testes. */
+import fs from 'node:fs';
+
+/** Senha do encarregado, lida do forms.js (os testes não guardam a senha em outro lugar). */
+export const SENHA_ENCARREGADO = (fs.readFileSync(new URL('../public/forms.js', import.meta.url), 'utf8').match(/pinAdmin:\s*'(\d+)'/) || [])[1];
+/** Teclas para digitar a senha do encarregado e confirmar. */
+export const teclasDaSenha = () => [...SENHA_ENCARREGADO.split(''), 'ok'];
 export function novoGrupo(titulo) { console.log(`\n== ${titulo}`); return { titulo, resultados: [] }; }
 
 export async function teste(grupo, nome, fn) {

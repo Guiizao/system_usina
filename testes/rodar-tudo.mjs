@@ -7,6 +7,8 @@
  *  4b. fluxo da dorna (enchendo, enviando, anotada), nas duas centrais
  *  3b e 4c. longo prazo (90 dias), troca de turno, virada das 07:00, central nova e sem Wi-Fi, nas duas
  *  4d. velocidade de cada toque num tablet 4 vezes mais lento
+ *  4e. pedidos do teste de 24/09 (aviso curto, senha do operador no tablet chefe, relatórios, WhatsApp...), nas duas
+ *  4f. o aplicativo com o código embaralhado, como vai no APK
  * Resultado em testes/saida/resultado.json e testes/saida/resultado.txt
  */
 import fs from 'node:fs';
@@ -20,6 +22,8 @@ import { testarDornas } from './dornas.mjs';
 import { testarConfiguracao, testarExtras } from './extras.mjs';
 import { testarRobustezCentral, testarRobustezAparelhos } from './robustez.mjs';
 import { medirDesempenho } from './desempenho.mjs';
+import { testarPedidos24 } from './pedidos24.mjs';
+import { testarApkWeb } from './rodar-apk-web.mjs';
 import { centralNode, centralJava, APP } from './servidores.mjs';
 
 const SAIDA = path.join(APP, 'testes', 'saida');
@@ -74,6 +78,14 @@ try {
     try { await testarDornas(nav, c, g); } finally { await c.desligar(); }
     grupos.push(g);
   }
+  // 4e. pedidos do teste de 24/09
+  for (const [nome, ligar, porta] of [['computador', centralNode, 8279], ['tablet chefe', centralJava, 8280]]) {
+    const g = novoGrupo('Pedidos do teste de 24/09 na central do ' + nome);
+    await testarPedidos24(nav, ligar, porta, g);
+    grupos.push(g);
+  }
+  // 4f. o aplicativo embaralhado (como vai no APK) continua funcionando igual
+  await testarApkWeb(nav, grupos);
   // 4c. 90 dias de uso, troca de turno e virada das 07:00 no meio da anotação, central nova, sem Wi-Fi
   for (const [nome, ligar, porta] of [['computador', centralNode, 8273], ['tablet chefe', centralJava, 8274]]) {
     const g = novoGrupo('Longo prazo, turnos e central nova com aparelhos, na central do ' + nome);

@@ -17,6 +17,18 @@ Copy-Item ..\public www -Recurse
 # baixar.html fica: o tablet chefe mostra essa página para quem lê o QR code
 Remove-Item www\sw.js, www\moldura.html, www\testes.js, www\teste-*.jpg -ErrorAction SilentlyContinue
 
+# Proteção (versão 2.4): o código vai para o APK embaralhado (nomes trocados, sem comentários nem espaços).
+# Quem abrir o APK não lê o código do jeito que ele foi escrito. O mapa para entender os erros fica só em saida\mapas.
+Log 'Embaralhando o código do aplicativo...'
+New-Item -ItemType Directory -Force saida\mapas | Out-Null
+# (o qrcode.js é uma biblioteca aberta, licença MIT: vai como está, com o aviso do autor dela)
+foreach ($js in 'app.js', 'forms.js', 'modelos.js', 'xlsx.js', 'leitor.js') {
+  $arquivo = "www\$js"
+  & cmd /c "npx terser `"$arquivo`" --compress --mangle --comments `"/Guilherme/`" --source-map `"filename='$js'`" -o `"$arquivo`"" 2>&1 | Select-Object -Last 2
+  if ($LASTEXITCODE -ne 0) { throw "Não consegui embaralhar $js" }
+  if (Test-Path "$arquivo.map") { Move-Item "$arquivo.map" "saida\mapas\$js.map" -Force }
+}
+
 if (-not (Test-Path android)) {
   Log 'Criando projeto Android (primeira vez)...'
   cmd /c "npx cap add android" 2>&1 | Select-Object -Last 5

@@ -13,7 +13,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { TAMANHOS, dormir } from './navegador.mjs';
 import { teste, certo, igual } from './teste.mjs';
-import { pastaTemporaria } from './servidores.mjs';
+import { pastaTemporaria, SENHA_PROGRAMADOR_TESTE } from './servidores.mjs';
 
 const iso = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 export const diasAtras = (n) => { const d = new Date(); d.setDate(d.getDate() - n); return iso(d); };
@@ -90,6 +90,29 @@ export async function testarRobustezCentral(ligar, porta, grupo) {
       const lista = (await pedir(`/api/registros?dia=${velho}`)).registros;
       igual(lista.map((x) => x.valores.inpm), ['93.1'], 'dia antigo lido do BackupUsina');
     });
+    await teste(grupo, 'dois aparelhos criando a mesma linha sem saber um do outro: os valores se juntam', async () => {
+      const id = `${diasAtras(0)}|hid_anexo1|7`;
+      const t = Date.now();
+      const doTablet = { id, data: diasAtras(0), prancheta: 'hid_anexo1', setor: 'hidrolise', chave: '7', valores: { phf: '5.1', brix: '18', enzi: '70' }, criadoEm: t - 5000, atualizadoEm: t - 5000, aparelho: 'tablet', apagado: false, operador: 'Guilherme' };
+      const doChefe = { id, data: diasAtras(0), prancheta: 'hid_anexo1', setor: 'hidrolise', chave: '7', valores: { brix: '20', bhx: '' }, criadoEm: t - 1000, atualizadoEm: t - 1000, aparelho: 'chefe', apagado: false, operador: '' };
+      await pedir('/api/sync', { aparelho: 'tablet', registros: [doTablet] });
+      await pedir('/api/sync', { aparelho: 'chefe', registros: [doChefe] });
+      const r = (await pedir('/api/registros?desde=0')).registros.find((x) => x.id === id);
+      igual(r.valores, { phf: '5.1', brix: '20', enzi: '70' }, 'valores juntos');
+      igual(r.operador, 'Guilherme', 'responsável');
+      certo(r.atualizadoEm > doChefe.atualizadoEm, 'a linha junta não vai chegar de novo nos aparelhos');
+      // na ordem contrária (o do chefe chega antes), dá o mesmo resultado
+      const id2 = `${diasAtras(0)}|hid_anexo1|8`;
+      await pedir('/api/sync', { aparelho: 'chefe', registros: [Object.assign({}, doChefe, { id: id2, chave: '8' })] });
+      await pedir('/api/sync', { aparelho: 'tablet', registros: [Object.assign({}, doTablet, { id: id2, chave: '8' })] });
+      const r2 = (await pedir('/api/registros?desde=0')).registros.find((x) => x.id === id2);
+      igual(r2.valores, { phf: '5.1', brix: '20', enzi: '70' }, 'valores juntos na ordem contrária');
+      // o mesmo aparelho mudando a própria linha continua valendo a última (inclusive apagar um quadro)
+      const id3 = `${diasAtras(0)}|hid_anexo1|9`;
+      await pedir('/api/sync', { aparelho: 'tablet', registros: [Object.assign({}, doTablet, { id: id3, chave: '9' })] });
+      await pedir('/api/sync', { aparelho: 'tablet', registros: [Object.assign({}, doTablet, { id: id3, chave: '9', valores: { phf: '5.1', brix: '', enzi: '70' }, atualizadoEm: t })] });
+      igual((await pedir('/api/registros?desde=0')).registros.find((x) => x.id === id3).valores.brix, '', 'quadro apagado pelo próprio aparelho');
+    });
     let geracao = '';
     await teste(grupo, 'tablet chefe trocado: a central nova aceita o que o aparelho tem (só logo depois de conectar)', async () => {
       geracao = (await pedir('/api/sync', { aparelho: 't1', registros: [] })).geracao;
@@ -99,7 +122,9 @@ export async function testarRobustezCentral(ligar, porta, grupo) {
       certo(conectado.ok && conectado.aceitos === 1, 'a central nova recusou as anotações do aparelho: ' + JSON.stringify(conectado));
     });
     await teste(grupo, 'depois de zerar, a geração antiga é mandada limpar mesmo reconectando; os arquivos dos dias vão para uma pasta', async () => {
-      const z = await pedir('/api/zerar', { confirmar: 'ZERAR' });
+      const semSenha = await pedir('/api/zerar', { confirmar: 'ZERAR', senha: '12345678' });
+      certo(!semSenha.ok, 'apagou tudo com a senha do programador errada');
+      const z = await pedir('/api/zerar', { confirmar: 'ZERAR', senha: SENHA_PROGRAMADOR_TESTE });
       certo(z.ok, 'não zerou');
       const r = await pedir('/api/sync', { aparelho: 't3', geracao, novaConexao: true, registros: [reg(diasAtras(0), 'caldeira', 12, { pressao: '6' })] });
       certo(r.zerar === true, 'aceitou anotações de antes de zerar');
@@ -257,7 +282,7 @@ export async function testarRobustezAparelhos(nav, ligar, porta, grupo) {
         return um(1) && um(1).valores.fim === '10:10' && um(2) && um(2).valores.brix === '20';
       }, 'fim da dorna 1 e o Brix 20 da dorna 2');
     });
-    await teste(grupo, 'LPHERA confirmada volta para conferir quando outra dorna é enviada na mesma hora', async () => {
+    await teste(grupo, 'LPHERA confirmada volta para conferir quando outra dorna da mesma hora termina', async () => {
       const dia = await rel.avaliar('(() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; })()');
       const lph = (l) => l.find((r) => r.id === `${dia}|ins_lphera|10`);
       await esperarCentral((l) => lph(l) && lph(l).valores.qtd === '70' && lph(l).conferir, 'LPHERA das 10h somada (70)');
@@ -268,6 +293,9 @@ export async function testarRobustezAparelhos(nav, ligar, porta, grupo) {
       await rel.tocar('[data-a="aba"][data-id="hid_anexo1"]');
       await rel.tocar('[data-a="linha"][data-chave="2"]');
       await rel.tocar('[data-a="enviar-dorna"]');
+      await dormir(1500);
+      certo((await regs()).some((r) => r.id === `${dia}|ins_lphera|10` && r.valores.qtd === '70' && !r.conferir), 'a dorna 2 ainda está indo para cima, mas já entrou na soma');
+      await rel.tocar('[data-a="terminar-dorna"][data-chave="2"]');
       await esperarCentral((l) => lph(l) && lph(l).valores.qtd === '140' && lph(l).conferir, 'LPHERA das 10h volta para conferir com 140');
     });
     await rel.fechar();

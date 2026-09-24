@@ -199,9 +199,11 @@ public class ServidorCentral {
     return config.optString("geracao", "");
   }
 
+  /** Troca o código e a chave: todos os outros aparelhos são desconectados (aparelho perdido ou roubado). */
   public String novoCodigo() {
     try {
       config.put("codigo", sorteiaCodigo());
+      config.put("chave", sorteiaChave());
       salvarArquivo(new File(pastaServidor, "config.json"), config.toString().getBytes(StandardCharsets.UTF_8));
     } catch (Exception e) { /* mantém o código antigo */ }
     return getCodigo();
@@ -523,8 +525,9 @@ public class ServidorCentral {
         if ("/api/relatorios".equals(caminho)) { apiRelatorios(saida); return; }
         if ("/api/erros".equals(caminho)) { apiErros(saida); return; }
         if ("/api/zerar".equals(caminho) && "POST".equals(metodo)) { apiZerar(corpo, saida); return; }
-        if ("/api/novo-codigo".equals(caminho) && "POST".equals(metodo)) { enviarJson(saida, 200, new JSONObject().put("codigo", novoCodigo())); return; }
+        if ("/api/novo-codigo".equals(caminho) && "POST".equals(metodo)) { String codigo = novoCodigo(); enviarJson(saida, 200, new JSONObject().put("codigo", codigo).put("chave", getChave())); return; }
         if ("/api/relatorio".equals(caminho) && "POST".equals(metodo)) { apiRelatorio(corpo, saida); return; }
+        if ("/api/relatorio-apagar".equals(caminho) && "POST".equals(metodo)) { apiRelatorioApagar(corpo, saida); return; }
         enviarJson(saida, 404, new JSONObject().put("erro", "rota desconhecida"));
         return;
       }
@@ -578,11 +581,12 @@ public class ServidorCentral {
           continue;
         }
         JSONObject atual = registros.optJSONObject(r.getString("id"));
-        if (atual == null || r.optLong("atualizadoEm") >= atual.optLong("atualizadoEm")) {
+        JSONObject entrada = criadasSemSaber(atual, r) ? juntarLinhas(atual, r) : r;
+        if (atual == null || entrada != r || r.optLong("atualizadoEm") >= atual.optLong("atualizadoEm")) {
           seq++;
-          r.put("seq", seq).put("recebidoEm", System.currentTimeMillis());
-          r.remove("sincronizado");
-          registros.put(r.getString("id"), r);
+          entrada.put("seq", seq).put("recebidoEm", System.currentTimeMillis());
+          entrada.remove("sincronizado");
+          registros.put(r.getString("id"), entrada);
           if (!dias.contains(r.optString("data"))) dias.add(r.optString("data"));
           aceitos++;
         }
@@ -597,6 +601,36 @@ public class ServidorCentral {
       for (String dia : dias) backupDoDia(dia);
     }
     enviarJson(saida, 200, new JSONObject().put("ok", true).put("aceitos", aceitos).put("seq", seq).put("agora", System.currentTimeMillis()).put("geracao", getGeracao()));
+  }
+
+  /* Dois aparelhos criaram a mesma linha sem um saber do outro (ex.: o tablet chefe corrigiu uma dorna nos segundos
+     antes de recebê-la): em vez de a última apagar a primeira, os valores se juntam. O mais novo vale nos quadros que
+     ele preencheu; o resto continua. A linha junta ganha um horário novo, para chegar de novo nos dois aparelhos. */
+  private static boolean criadasSemSaber(JSONObject atual, JSONObject r) {
+    // só entre aparelhos diferentes: o mesmo aparelho mudando a própria linha vale a versão mais nova, como sempre
+    return atual != null && !atual.optBoolean("apagado") && !r.optBoolean("apagado")
+        && atual.optJSONObject("valores") != null && r.optJSONObject("valores") != null
+        && !r.optString("aparelho").isEmpty() && !r.optString("aparelho").equals(atual.optString("aparelho"))
+        && r.optLong("criadoEm") != 0 && atual.optLong("criadoEm") != 0 && r.optLong("criadoEm") != atual.optLong("criadoEm");
+  }
+
+  private static JSONObject juntarLinhas(JSONObject a, JSONObject b) throws Exception {
+    boolean bMaisNovo = b.optLong("atualizadoEm") >= a.optLong("atualizadoEm");
+    JSONObject velho = bMaisNovo ? a : b, novo = bMaisNovo ? b : a;
+    JSONObject junta = new JSONObject(velho.toString());
+    for (Iterator<String> it = novo.keys(); it.hasNext(); ) { String k = it.next(); junta.put(k, novo.opt(k)); }
+    JSONObject valores = new JSONObject(velho.getJSONObject("valores").toString());
+    JSONObject dele = novo.getJSONObject("valores");
+    for (Iterator<String> it = dele.keys(); it.hasNext(); ) {
+      String k = it.next();
+      Object x = dele.opt(k);
+      if (x != null && x != JSONObject.NULL && !"".equals(String.valueOf(x))) valores.put(k, x);
+    }
+    junta.put("valores", valores);
+    junta.put("operador", novo.optString("operador").isEmpty() ? velho.optString("operador") : novo.optString("operador"));
+    junta.put("criadoEm", Math.min(a.optLong("criadoEm"), b.optLong("criadoEm")));
+    junta.put("atualizadoEm", Math.max(a.optLong("atualizadoEm"), b.optLong("atualizadoEm")) + 1);
+    return junta;
   }
 
   /** Erros que os aparelhos mandam: uma linha JSON por erro em ServidorUsina/erros.log (passou de 2 MB, começa outro). */
@@ -719,7 +753,32 @@ public class ServidorCentral {
         dias.put(new JSONObject().put("data", dia.getName()).put("arquivos", lista));
       }
     }
-    enviarJson(saida, 200, new JSONObject().put("pasta", "RelatoriosUsina").put("dias", dias));
+    // dias com anotações (na memória e no BackupUsina): o tablet chefe vê, corrige e envia os dias anteriores
+    java.util.TreeSet<String> comDados = new java.util.TreeSet<>(Collections.reverseOrder());
+    synchronized (this) {
+      for (Iterator<String> it = registros.keys(); it.hasNext(); ) {
+        JSONObject r = registros.optJSONObject(it.next());
+        if (r != null && ehDia(r.optString("data"))) comDados.add(r.optString("data"));
+      }
+    }
+    File[] copias = pastaBackup.listFiles();
+    if (copias != null) for (File f : copias) {
+      if (f.isFile() && f.getName().matches("\\d{4}-\\d{2}-\\d{2}\\.json")) comDados.add(f.getName().substring(0, 10));
+    }
+    JSONArray listaDias = new JSONArray();
+    for (String d : comDados) listaDias.put(d);
+    enviarJson(saida, 200, new JSONObject().put("pasta", "RelatoriosUsina").put("dias", dias).put("diasComDados", listaDias));
+  }
+
+  /** Apaga o Excel e o XML guardados de um dia (as anotações continuam). */
+  private void apiRelatorioApagar(byte[] corpo, OutputStream saida) throws Exception {
+    String data = new JSONObject(new String(corpo, StandardCharsets.UTF_8)).optString("data");
+    if (!ehDia(data)) { enviarJson(saida, 400, new JSONObject().put("erro", "data inválida")); return; }
+    File pasta = new File(pastaRelatorios, data);
+    File[] arquivos = pasta.listFiles();
+    if (arquivos != null) for (File f : arquivos) f.delete();
+    pasta.delete();
+    enviarJson(saida, 200, new JSONObject().put("ok", true));
   }
 
   /** Página simples para abrir no navegador do escritório: os relatórios guardados, por dia. */
@@ -774,6 +833,7 @@ public class ServidorCentral {
   private synchronized void apiZerar(byte[] corpo, OutputStream saida) throws Exception {
     JSONObject pedido = new JSONObject(new String(corpo, StandardCharsets.UTF_8));
     if (!"ZERAR".equals(pedido.optString("confirmar"))) { enviarJson(saida, 400, new JSONObject().put("erro", "faltou confirmar")); return; }
+    if (!senhaDoProgramador(pedido.optString("senha"))) { enviarJson(saida, 403, new JSONObject().put("erro", "senha do programador errada")); return; }
     String carimbo = new java.text.SimpleDateFormat("yyyyMMddHHmm", Locale.US).format(new java.util.Date());
     String nome = "antes-de-zerar-" + carimbo + ".json";
     JSONArray tudo = new JSONArray();
@@ -804,6 +864,20 @@ public class ServidorCentral {
     salvarArquivo(new File(pastaServidor, "config.json"), config.toString().getBytes(StandardCharsets.UTF_8));
     salvarRegistros();
     enviarJson(saida, 200, new JSONObject().put("ok", true).put("apagados", apagar.size()).put("geracao", getGeracao()).put("copia", "BackupUsina/" + nome));
+  }
+
+  /** Só a senha do programador apaga todos os dados do sistema. Fica guardado só o resumo (hash) dela. */
+  private static final String HASH_PROGRAMADOR = System.getProperty("pranchetas.senhaProgramadorHash", "f3a1f608cc2b347ff635467ec7440a8e1f8171a889e3feb02137a7d642debbc1");
+
+  private static boolean senhaDoProgramador(String senha) {
+    try {
+      byte[] h = java.security.MessageDigest.getInstance("SHA-256").digest(String.valueOf(senha).getBytes(StandardCharsets.UTF_8));
+      StringBuilder sb = new StringBuilder();
+      for (byte b : h) sb.append(String.format(Locale.US, "%02x", b));
+      return sb.toString().equals(HASH_PROGRAMADOR);
+    } catch (Exception e) {
+      return false;
+    }
   }
 
   private boolean chutesDemais(String ip) {

@@ -7,7 +7,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { TAMANHOS, dormir } from './navegador.mjs';
-import { teste, certo, igual } from './teste.mjs';
+import { teste, certo, igual, teclasDaSenha } from './teste.mjs';
 
 export async function testarAparelhos(nav, central, grupo) {
   const U = central.url + '/';
@@ -73,7 +73,10 @@ export async function testarAparelhos(nav, central, grupo) {
       await tab.tocar('[data-a="abrir-prancheta"][data-id="hid_anexo1"]');
       await tab.tocar('[data-quadro="phf"]');
       await tab.teclar(['4', ',', '6']);
-      await tab.esperar('document.body.innerText.includes("pH abaixo de 5,0: coloque cal")', 5000, 'aviso da cal');
+      // aviso curto do lado do número (e no alto do teclado); a caixa do PHF fica do mesmo tamanho da do pHf
+      await tab.esperar('document.querySelector("[data-quadro=\\"phf\\"] .tag-aviso") && document.querySelector("[data-quadro=\\"phf\\"] .tag-aviso").textContent === "pH baixo" && document.querySelector(".painel-cab b.fora")', 5000, 'aviso da cal');
+      const alturas = await tab.avaliar('[document.querySelector("[data-quadro=\\"phf\\"]").offsetHeight, document.querySelector("[data-quadro=\\"phf2\\"]").offsetHeight]');
+      certo(Math.abs(alturas[0] - alturas[1]) <= 1, 'a caixa com o aviso ficou de outro tamanho: ' + alturas.join(' e '));
       await tab.tocar('[data-quadro="brix"]');
       await tab.teclar(['1', '8']);
       await tab.tocar('[data-ed="ocultar"]');
@@ -169,7 +172,7 @@ export async function testarAparelhos(nav, central, grupo) {
     await teste(grupo, 'senha do operador: o escritório cadastra e o tablet passa a pedir', async () => {
       await esc.tocar('[data-a="voltar"]');
       await esc.tocar('[data-a="config"]');
-      await esc.teclar(['1', '2', '3', '4', 'ok']);
+      await esc.teclar(teclasDaSenha());
       await esc.tocar('[data-a="op-senha"][data-setor="hidrolise"][data-i="2"]');
       await esc.teclar(['4', '3', '2', '1', 'ok']);
       await esc.esperar('document.body.innerText.includes("Senha de Carlindo trocada")', 5000);
@@ -221,9 +224,9 @@ export async function testarAparelhos(nav, central, grupo) {
     });
     await teste(grupo, '30 minutos sem mexer: o celular pede o nome e a senha de novo', async () => {
       // perto das 07:00, 16:00 ou 00:00 os 31 minutos passam da troca de turno: aí ele pede o nome pelo turno novo
-      const turnoAntes = await cel.avaliar('(document.querySelector(".relogio span") || {}).textContent || ""');
+      const turnoAntes = await cel.avaliar('(document.getElementById("turno-topo") || {}).textContent || ""');
       await cel.adiantar(31 * 60000);
-      await cel.esperar('document.body.innerText.includes("minutos sem ninguém mexer") || (document.querySelector(".opcoes.nomes") && (document.querySelector(".relogio span") || {}).textContent !== ' + JSON.stringify(turnoAntes) + ')', 10000, 'trava por inatividade');
+      await cel.esperar('document.body.innerText.includes("minutos sem ninguém mexer") || (document.querySelector(".opcoes.nomes") && (document.getElementById("turno-topo") || {}).textContent !== ' + JSON.stringify(turnoAntes) + ')', 10000, 'trava por inatividade');
       return (await cel.existe('.aviso', 'minutos sem ninguém mexer')) ? '' : 'passou da troca de turno: pediu o nome do turno novo';
     });
     await teste(grupo, '12 horas fora da rede da usina: o celular trava e destrava quando volta', async () => {

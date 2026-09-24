@@ -23,7 +23,8 @@ const os = require('os');
 const crypto = require('crypto');
 
 const PORTA = Number(process.env.PORTA || process.env.PORT || 8080);
-const PUBLICO = path.join(__dirname, 'public');
+// PASTA_PUBLICA: os testes usam para rodar o aplicativo do jeito que vai no APK (embaralhado)
+const PUBLICO = process.env.PASTA_PUBLICA ? path.resolve(process.env.PASTA_PUBLICA) : path.join(__dirname, 'public');
 const APK = path.join(__dirname, 'apk', 'saida', 'pranchetas.apk');
 // Pastas da usina, todas com final "Usina", dentro de app/dados
 const DADOS = process.env.PASTA_DADOS ? path.resolve(process.env.PASTA_DADOS) : path.join(__dirname, 'dados'); // os testes usam uma pasta separada
@@ -67,6 +68,11 @@ function ultimosErros(n) {
     return fs.readFileSync(ERROS, 'utf8').trim().split('\n').slice(-n).map((l) => { try { return JSON.parse(l); } catch (e) { return null; } }).filter(Boolean);
   } catch (e) { return []; }
 }
+
+// ---------- senha do programador: só ela apaga todos os dados do sistema ----------
+// fica só o resumo (hash) da senha; os testes usam uma senha própria (SENHA_PROGRAMADOR_HASH)
+const HASH_PROGRAMADOR = process.env.SENHA_PROGRAMADOR_HASH || 'f3a1f608cc2b347ff635467ec7440a8e1f8171a889e3feb02137a7d642debbc1';
+const senhaDoProgramador = (s) => crypto.createHash('sha256').update(String(s || '')).digest('hex') === HASH_PROGRAMADOR;
 
 // ---------- configuração: chave da rede e código de conexão ----------
 const novoCodigo = () => String(crypto.randomInt(0, 1000000)).padStart(6, '0');
@@ -138,6 +144,23 @@ function listaDeRelatorios() {
     arquivos: fs.readdirSync(path.join(PASTAS.relatorios, d)).sort().map((nome) => ({ nome, tamanho: fs.statSync(path.join(PASTAS.relatorios, d, nome)).size })),
   }));
 }
+
+/* Dois aparelhos criaram a mesma linha sem um saber do outro (ex.: o tablet chefe corrigiu uma dorna nos segundos
+   antes de recebê-la): em vez de a última apagar a primeira, os valores se juntam. O mais novo vale nos quadros que ele
+   preencheu; o resto continua. A linha junta ganha um horário novo, para chegar de novo nos dois aparelhos. */
+function juntarLinhas(a, b) {
+  const [velho, novo] = b.atualizadoEm >= a.atualizadoEm ? [a, b] : [b, a];
+  const valores = Object.assign({}, velho.valores);
+  Object.entries(novo.valores || {}).forEach(([k, x]) => { if (x !== '' && x != null) valores[k] = x; });
+  return Object.assign({}, velho, novo, {
+    valores, operador: novo.operador || velho.operador,
+    criadoEm: Math.min(a.criadoEm, b.criadoEm), atualizadoEm: Math.max(a.atualizadoEm, b.atualizadoEm) + 1,
+  });
+}
+// só entre aparelhos diferentes: o mesmo aparelho mudando a própria linha vale a versão mais nova, como sempre
+const criadasSemSaber = (atual, r) => !!(atual && !atual.apagado && !r.apagado && atual.valores && r.valores
+  && r.aparelho && atual.aparelho && r.aparelho !== atual.aparelho
+  && r.criadoEm && atual.criadoEm && r.criadoEm !== atual.criadoEm);
 
 // ---------- rede ----------
 function ipDoCliente(req) { return (req.socket.remoteAddress || '').replace(/^::ffff:/, ''); }
@@ -290,9 +313,10 @@ const servidor = http.createServer(async (req, res) => {
             continue;
           }
           const atual = db.registros[r.id];
-          if (!atual || r.atualizadoEm >= atual.atualizadoEm) {
+          const entrada = criadasSemSaber(atual, r) ? juntarLinhas(atual, r) : r;
+          if (!atual || entrada !== r || r.atualizadoEm >= atual.atualizadoEm) {
             db.seq += 1;
-            const limpo = Object.assign({}, r, { seq: db.seq, recebidoEm: Date.now() });
+            const limpo = Object.assign({}, entrada, { seq: db.seq, recebidoEm: Date.now() });
             delete limpo.sincronizado;
             db.registros[r.id] = limpo;
             dias.add(r.data);
@@ -344,7 +368,18 @@ const servidor = http.createServer(async (req, res) => {
         return json(res, 200, { ok: true });
       }
 
-      if (p === '/api/relatorios') return json(res, 200, { pasta: 'RelatoriosUsina', dias: listaDeRelatorios() });
+      if (p === '/api/relatorios') {
+        // dias com anotações (na memória e no BackupUsina): o tablet chefe vê, corrige e envia os dias anteriores
+        const comDados = new Set(Object.values(db.registros).map((r) => r.data).filter(ehDia));
+        fs.readdirSync(PASTAS.backup).forEach((n) => { const m = n.match(/^(\d{4}-\d{2}-\d{2})\.json$/); if (m) comDados.add(m[1]); });
+        return json(res, 200, { pasta: 'RelatoriosUsina', dias: listaDeRelatorios(), diasComDados: [...comDados].sort().reverse() });
+      }
+      if (p === '/api/relatorio-apagar' && req.method === 'POST') {
+        const corpo = JSON.parse(await lerCorpo(req, 10000));
+        if (!ehDia(corpo.data)) return json(res, 400, { erro: 'data inválida' });
+        fs.rmSync(path.join(PASTAS.relatorios, corpo.data), { recursive: true, force: true });
+        return json(res, 200, { ok: true });
+      }
 
       if (p === '/api/erros') return json(res, 200, { erros: ultimosErros(100) });
 
@@ -352,6 +387,7 @@ const servidor = http.createServer(async (req, res) => {
       if (p === '/api/zerar' && req.method === 'POST') {
         const corpo = JSON.parse(await lerCorpo(req, 10000));
         if (corpo.confirmar !== 'ZERAR') return json(res, 400, { erro: 'faltou confirmar' });
+        if (!senhaDoProgramador(corpo.senha)) return json(res, 403, { erro: 'senha do programador errada' });
         const agora = new Date();
         const carimbo = agora.toISOString().slice(0, 16).replace(/[-:T]/g, '');
         fs.writeFileSync(path.join(PASTAS.backup, `antes-de-zerar-${carimbo}.json`), JSON.stringify(Object.values(db.registros), null, 1));
@@ -369,9 +405,10 @@ const servidor = http.createServer(async (req, res) => {
         return json(res, 200, { ok: true, apagados, geracao: config.geracao, copia: `BackupUsina/antes-de-zerar-${carimbo}.json` });
       }
 
+      // trocar o código também troca a chave: todos os outros aparelhos são desconectados (aparelho perdido ou roubado)
       if (p === '/api/novo-codigo' && req.method === 'POST') {
-        config.codigo = novoCodigo(); salvarConfig();
-        return json(res, 200, { codigo: config.codigo });
+        config.codigo = novoCodigo(); config.chave = crypto.randomBytes(18).toString('hex'); salvarConfig();
+        return json(res, 200, { codigo: config.codigo, chave: config.chave });
       }
       return json(res, 404, { erro: 'rota desconhecida' });
     }

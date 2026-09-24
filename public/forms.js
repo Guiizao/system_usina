@@ -36,7 +36,7 @@ window.USINA = {
     { id: 3, nome: '3º Turno', inicio: 0, fim: 7 },
   ],
 
-  pinAdmin: '1234',
+  pinAdmin: '159357',
 
   // Dados que aparecem no cabeçalho e no rodapé das folhas de papel (Excel, XML e impressão saem iguais)
   documentos: {
@@ -132,25 +132,22 @@ window.USINA = {
         { id: 'inicio', label: 'Horário Início', papel: 'Horario Início', labelCurto: 'Início', type: 'time', vazioTexto: 'Marca ao enviar', dica: 'Hora em que a dorna começou a ir para o tanque de cima. Marca sozinho no botão Enviar.' },
         { id: 'fim', label: 'Horário Fim', labelCurto: 'Fim', type: 'time', vazioTexto: 'Marca ao terminar', dica: 'Hora em que a dorna terminou de esvaziar.' },
         {
-          id: 'phf', label: 'PHF', type: 'num', dec: 1, min: 2, max: 9, dica: 'pH medido antes da cal. Média 4,9 a 5,3.',
+          id: 'phf', label: 'PHF', type: 'num', dec: 1, min: 2, max: 9, dica: 'pH medido antes da cal. Média 4,9 a 5,3. Abaixo de 5,0, coloque cal.',
           avisos: [
-            { quando: '<', valor: 5, nivel: 'alerta', texto: 'pH abaixo de 5,0: coloque cal' },
-            { quando: '>=', valor: 7, nivel: 'atencao', texto: 'pH alto, 7 ou mais' },
+            { quando: '<', valor: 5, nivel: 'alerta', texto: 'pH abaixo de 5,0: coloque cal', curto: 'pH baixo' },
+            { quando: '>=', valor: 7, nivel: 'atencao', texto: 'pH alto, 7 ou mais', curto: 'pH alto' },
           ],
         },
         { id: 'cal', label: 'Cal', type: 'num', dec: 1, unidade: 'copos', dica: 'Quantos copos de cal (copo de 1 litro). Sem cal, deixe em branco.' },
         {
-          id: 'brix', label: 'Brix', type: 'num', dec: 0, min: 3, max: 40, dica: 'Média 15 a 25.',
+          id: 'brix', label: 'Brix', type: 'num', dec: 0, min: 3, max: 40, dica: 'Média 15 a 25. Acima de 25, quebre com água e enzima.',
           avisos: [
-            { quando: '>', valor: 25, nivel: 'alerta', texto: 'Brix acima de 25: quebre com água e enzima' },
+            { quando: '>', valor: 25, nivel: 'alerta', texto: 'Brix acima de 25: quebre com água e enzima', curto: 'Brix alto' },
           ],
         },
         {
+          // pH depois da correção com cal: sem o aviso de pH baixo (ele vale só para o primeiro pH)
           id: 'phf2', label: 'pHf', type: 'num', dec: 1, min: 2, max: 9, dica: 'pH depois da cal. Média 4,9 a 5,3.',
-          avisos: [
-            { quando: '<', valor: 5, nivel: 'alerta', texto: 'pH abaixo de 5,0: coloque cal' },
-            { quando: '>=', valor: 7, nivel: 'atencao', texto: 'pH alto, 7 ou mais' },
-          ],
         },
         { id: 'anti', label: 'Anti.', type: 'num', dec: 0, dica: 'Antibiótico, quando for usado.' },
         { id: 'enzi', label: 'Enzi.', type: 'num', dec: 0, padrao: '70', dica: 'Enzima da dorna de baixo. O normal é 70.' },
@@ -183,16 +180,13 @@ window.USINA = {
         { id: 'horario', label: 'Horário', type: 'time', agoraAoCriar: true },
         { id: 'sac', label: 'SAC', type: 'num', dec: 0, padrao: '4', dica: 'Número da dorna de sacarificação.' },
         {
+          // é o pH final da Hidrólise, já corrigido: sem o aviso de pH baixo
           id: 'phf', label: 'PHF', type: 'num', dec: 1, min: 2, max: 9, dica: 'Média 4,9 a 5,3.',
-          avisos: [
-            { quando: '<', valor: 5, nivel: 'alerta', texto: 'pH abaixo de 5,0: coloque cal' },
-            { quando: '>=', valor: 7, nivel: 'atencao', texto: 'pH alto, 7 ou mais' },
-          ],
         },
         {
           id: 'bhx', label: 'BHX', type: 'num', dec: 0, min: 3, max: 40, dica: 'Média 15 a 25.',
           avisos: [
-            { quando: '>', valor: 25, nivel: 'alerta', texto: 'Brix acima de 25: quebre com água e enzima' },
+            { quando: '>', valor: 25, nivel: 'alerta', texto: 'Brix acima de 25: quebre com água e enzima', curto: 'Brix alto' },
           ],
         },
         { id: 'enz', label: 'ENZ.', type: 'num', dec: 0, padrao: '100', dica: 'Saczyme da dorna de cima. O normal é 100.' },
