@@ -753,7 +753,8 @@ public class ServidorCentral {
       JSONObject r = registros.optJSONObject(it.next());
       if (r == null || r.optLong("seq") <= desde) continue;
       String d = r.optString("data"), pr = r.optString("prancheta");
-      if (!filtrar || !ehDia(d) || d.compareTo(aPartirDe) >= 0 || "avisos".equals(pr) || "avisos-recibo".equals(pr)) lista.put(r);
+      // os enchimentos das dornas de fermentação vão sempre (uma dorna pode passar vários dias fermentando)
+      if (!filtrar || !ehDia(d) || d.compareTo(aPartirDe) >= 0 || "avisos".equals(pr) || "avisos-recibo".equals(pr) || "fermentacao".equals(pr)) lista.put(r);
     }
     enviarJson(saida, 200, new JSONObject().put("seq", seq).put("geracao", getGeracao()).put("registros", lista));
   }

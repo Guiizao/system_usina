@@ -3,7 +3,7 @@
 (function () {
   'use strict';
   const C = window.USINA;
-  const VERSAO = '2.5.0'; // aparece nos ajustes e vai junto com cada envio para a central
+  const VERSAO = '2.6.0'; // aparece nos ajustes e vai junto com cada envio para a central
   const AUTORIA = '© 2026 Guilherme. Todos os direitos reservados. Uso somente com autorização do autor.';
   const params = new URLSearchParams(location.search);
   const DEMO_IMG = params.has('demo'); // usado só para gerar imagens de apresentação
@@ -87,6 +87,7 @@
     pasta: '<path d="M3 6h6l2 2h10v11H3z"/>',
     servidor: '<rect x="4" y="3" width="16" height="7" rx="1.5"/><rect x="4" y="14" width="16" height="7" rx="1.5"/><path d="M8 6.5h.01M8 17.5h.01"/>',
     tanque: '<path d="M6 4h12v13a3 3 0 01-3 3H9a3 3 0 01-3-3V4z"/><path d="M6 11h12M10 4V2h4v2"/>',
+    regua: '<path d="M3 16.5L16.5 3 21 7.5 7.5 21z"/><path d="M7 12.5l2 2M10 9.5l2 2M13 6.5l2 2"/>',
     balanca: '<path d="M12 4v16M6 20h12M4 8h16M7 8l-3 6h6l-3-6zM17 8l-3 6h6l-3-6z"/>',
     chama: '<path d="M12 21c-4 0-7-2.7-7-6.5C5 10 9 8 9 3c3 2 4 4 4 6 1-1 1.6-2 2-3 2.5 2.5 4 5.4 4 8.5C19 18.3 16 21 12 21z"/>',
     coluna: '<rect x="8" y="2" width="8" height="20" rx="3"/><path d="M8 7h8M8 12h8M8 17h8M16 9h4v8"/>',
@@ -268,10 +269,21 @@
   function podar() {
     const corte = primeiroDiaGuardado();
     const corteAvisos = somarDias(dataProducao(), -DIAS_DOS_AVISOS);
+    // o último enchimento de cada dorna de fermentação fica sempre (a dorna pode passar vários dias fermentando).
+    // Olha as anotações direto: o que acabou de chegar da central ainda não está no índice
+    const ultimos = new Map();
+    const quando = (r) => r.valores.inicioEm || r.criadoEm || 0;
+    for (const id in registros) {
+      const r = registros[id];
+      if (r.prancheta !== PID_FERMENTACAO || r.apagado) continue;
+      const x = ultimos.get(Number(r.valores.dorna));
+      if (!x || quando(r) > quando(x)) ultimos.set(Number(r.valores.dorna), r);
+    }
+    const ultimosCiclos = new Set([...ultimos.values()].map((r) => r.id));
     let n = 0;
     Object.keys(registros).forEach((id) => {
       const r = registros[id];
-      if (!r.sincronizado || !/^\d{4}-\d{2}-\d{2}$/.test(r.data) || diasAbertos.has(r.data)) return;
+      if (!r.sincronizado || !/^\d{4}-\d{2}-\d{2}$/.test(r.data) || diasAbertos.has(r.data) || ultimosCiclos.has(id)) return;
       const aviso = r.prancheta === 'avisos' || r.prancheta === 'avisos-recibo';
       if (r.data < (aviso ? corteAvisos : corte)) { delete registros[id]; n++; }
     });
@@ -390,6 +402,132 @@
    * Central: conexão pela rede da usina
    * ========================================================= */
   const sync = { modo: 'verificando', ocupado: false, status: null, statusJson: '' };
+
+
+  /* =========================================================
+   * Volume de vinho (a folga de cada dorna, medida com a trena) e dornas de fermentação
+   *   Volume em litros = (altura - folga) x área da base x 1000: a conta da planilha CONTROLE LTS do escritório.
+   *   As medidas das dornas ficam em Configurações da usina (começam com as da planilha, em forms.js).
+   * ========================================================= */
+  const PID_MEDICAO = 'med_dornas', PID_FERMENTACAO = 'fermentacao';
+  const medidasDasDornas = () => configSistema().medicao || C.medicaoPadrao;
+  const gruposDaMedicao = () => medidasDasDornas().grupos;
+  const grupoDaMedicao = (id) => gruposDaMedicao().find((g) => g.id === id);
+  const temMedida = (d) => !!d && Number(d.altura) > 0 && Number(d.area) > 0;
+  const arred2 = (n) => Math.round(n * 100) / 100;
+  function volumeDe(d, folga) {
+    if (vazio(folga) || !temMedida(d)) return null;
+    return arred2((Number(d.altura) - Number(folga)) * Number(d.area) * 1000);
+  }
+  /** Litros como na planilha (7.229,25). curto: sem as casas, para caber do lado do quadro. */
+  const litros = (n, curto) => (n == null ? '' : `${Number(n).toLocaleString('pt-BR', { minimumFractionDigits: curto ? 0 : 2, maximumFractionDigits: curto ? 0 : 2 })} L`);
+  function volDoRegistro(reg, d) {
+    if (!reg) return null;
+    const x = reg.valores[d.id + '_vol'];
+    return vazio(x) ? volumeDe(d, reg.valores[d.id + '_folga']) : Number(x);
+  }
+  /** Dia de produção + hora (a folha vai das 07:00 às 06:59) em milissegundos. */
+  function momentoDe(data, hhmm) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(data || '') || !/^\d\d:\d\d$/.test(hhmm || '')) return 0;
+    const [h, m] = hhmm.split(':').map(Number);
+    const [y, mo, d] = (h < C.inicioDoDia ? somarDias(data, 1) : data).split('-').map(Number);
+    return new Date(y, mo - 1, d, h, m).getTime();
+  }
+  /** A medição de um dia: cada grupo com as dornas, o subtotal e o total de vinho da produção.
+      aoVivo: { grupo, valores } do grupo que está sendo anotado (o total muda enquanto a pessoa digita). */
+  function medicaoDoDia(data, aoVivo) {
+    const grupos = gruposDaMedicao().map((g) => {
+      const vivo = aoVivo && aoVivo.grupo === g.id;
+      const reg = vivo ? { valores: aoVivo.valores } : pegar(data, PID_MEDICAO, g.id);
+      const v = reg ? reg.valores : {};
+      const linhas = g.dornas.map((d) => ({ d, folga: v[d.id + '_folga'], brix: v[d.id + '_brix'], ferm: v[d.id + '_ferm'], volume: vivo ? volumeDe(d, v[d.id + '_folga']) : volDoRegistro(reg, d) }));
+      const medidas = linhas.filter((l) => l.volume != null);
+      return { g, hora: v.hora || '', operador: (!vivo && reg && reg.operador) || '', linhas, medidas: medidas.length, subtotal: arred2(medidas.reduce((s, l) => s + l.volume, 0)) };
+    });
+    const par = pegar(data, PID_MEDICAO, 'param');
+    const soma = (lista) => arred2(lista.reduce((s, x) => s + x.subtotal, 0));
+    return {
+      grupos, param: par ? par.valores : {}, operadorParam: par ? par.operador || '' : '',
+      producao: soma(grupos.filter((x) => x.g.soma)), tanques: soma(grupos.filter((x) => !x.g.soma)),
+      medidas: grupos.reduce((s, x) => s + x.medidas, 0), total: grupos.reduce((s, x) => s + x.g.dornas.length, 0),
+      hora: (grupos.find((x) => x.hora && x.medidas) || {}).hora || '',
+    };
+  }
+
+  /* Dornas de fermentação: cada enchimento é um registro no dia em que começou a encher.
+     vazia -> enchendo -> fermentando -> na volante (mandando para a coluna) -> com vinho (parou no meio) -> vazia */
+  const numeroDaDorna = (d) => Number(String(d.id).replace(/\D/g, ''));
+  const dornasDeFermentacao = () => { const g = grupoDaMedicao(prancheta(PID_FERMENTACAO).grupoMedicao); return g ? g.dornas.map((d) => ({ n: numeroDaDorna(d), d })) : []; };
+  let ciclos = null, versaoDosCiclos = -1;
+  /** Enchimentos de cada dorna, o mais novo primeiro. */
+  function ciclosPorDorna() {
+    if (!ciclos || versaoDosCiclos !== versaoRegistros) {
+      const m = new Map();
+      for (const [k, lista] of indiceDasFolhas().porFolha) {
+        if (!k.endsWith('|' + PID_FERMENTACAO)) continue;
+        lista.forEach((r) => { const n = Number(r.valores.dorna); if (!m.has(n)) m.set(n, []); m.get(n).push(r); });
+      }
+      m.forEach((l) => l.sort((a, b) => (b.valores.inicioEm || b.criadoEm) - (a.valores.inicioEm || a.criadoEm)));
+      ciclos = m; versaoDosCiclos = versaoRegistros;
+    }
+    return ciclos;
+  }
+  const cicloAtual = (n) => (ciclosPorDorna().get(n) || [])[0] || null;
+  /** O enchimento que estava na dorna num dia (para a folha de um dia que já passou). */
+  const cicloNoDia = (n, data) => (ciclosPorDorna().get(n) || []).find((r) => r.data <= data) || null;
+  function etapaFerm(r) {
+    if (!r || r.valores.esvaziada) return 'vazia';
+    const vol = r.valores.volante || [];
+    if (vol.some((s) => !s.fim)) return 'volante';
+    if (vazio(r.valores.enche_fim)) return 'enchendo';
+    return vol.length ? 'com vinho' : 'fermentando';
+  }
+  const NOME_ETAPA = { vazia: 'vazia', enchendo: 'enchendo', fermentando: 'fermentando', volante: 'na volante', 'com vinho': 'com vinho' };
+  /** A última medição da dorna (Brix, volume, fermentando) depois que ela foi enchida, até o dia pedido. */
+  function medicaoDaDorna(n, ciclo, ateData) {
+    const g = grupoDaMedicao(prancheta(PID_FERMENTACAO).grupoMedicao);
+    const d = g && g.dornas.find((x) => numeroDaDorna(x) === n);
+    if (!d) return null;
+    const desde = ciclo ? ciclo.valores.inicioEm || 0 : 0;
+    const fim = ateData || dataProducao();
+    for (let i = 0; i < DIAS_NO_CHEFE; i++) {
+      const data = somarDias(fim, -i);
+      if (ciclo && data < ciclo.data) break;
+      const reg = pegar(data, PID_MEDICAO, g.id);
+      if (!reg) continue;
+      const v = reg.valores;
+      if (vazio(v[d.id + '_folga']) && vazio(v[d.id + '_brix']) && vazio(v[d.id + '_ferm'])) continue;
+      const em = momentoDe(data, v.hora) || reg.atualizadoEm;
+      if (desde && em < desde) return null; // medida de antes deste enchimento (era o vinho anterior)
+      return { data, hora: v.hora || '', brix: v[d.id + '_brix'], ferm: v[d.id + '_ferm'], volume: volDoRegistro(reg, d), operador: reg.operador || '' };
+    }
+    return null;
+  }
+  /** Quem está mandando para a volante agora. */
+  const naVolante = () => dornasDeFermentacao().map(({ n }) => ({ n, r: cicloAtual(n) })).filter((x) => etapaFerm(x.r) === 'volante')
+    .map((x) => Object.assign({ n: x.n }, (x.r.valores.volante || []).find((s) => !s.fim)));
+  function novoCiclo(n, val, operador) {
+    const agora = Date.now();
+    const data = dataProducao();
+    let inicioEm = momentoDe(data, val.enche_inicio) || agora;
+    if (inicioEm > agora + 60000) inicioEm -= 86400000; // hora de antes das 07:00 anotada depois: foi na véspera
+    return gravar(data, PID_FERMENTACAO, `${n}-${agora.toString(36)}`, Object.assign({ dorna: n, enche_inicio: '', enche_fim: '', brix_inicial: '', inicioEm, volante: [], esvaziada: null }, val), { operador });
+  }
+  const mudarCiclo = (r, mudanca, extra = {}) => gravar(r.data, PID_FERMENTACAO, r.chave, mudanca, extra);
+  /** A folha das dornas de fermentação num dia: o enchimento, a medição e o que foi para a volante naquele dia. */
+  function fermentacaoDoDia(data) {
+    return dornasDeFermentacao().map(({ n, d }) => {
+      let c = cicloNoDia(n, data);
+      if (c && c.valores.esvaziada && c.valores.esvaziada.data < data) c = null; // já estava vazia
+      const v = c ? c.valores : {};
+      const med = c ? medicaoDaDorna(n, c, data) : null;
+      const volante = (ciclosPorDorna().get(n) || []).flatMap((r) => (r.valores.volante || []).filter((s) => s.data === data));
+      return {
+        n, d, ciclo: c, etapa: etapaFerm(c), enchidaEm: c ? c.data : '', inicio: v.enche_inicio || '', fim: v.enche_fim || '', brixInicial: v.brix_inicial || '', operador: c ? c.operador || '' : '',
+        medicao: med, volante, esvaziou: v.esvaziada ? v.esvaziada : null,
+      };
+    });
+  }
 
   /* Central dentro do próprio tablet chefe (só no aplicativo instalado).
      Assim a usina não precisa de um computador ligado o tempo todo. */
@@ -867,6 +1005,7 @@
    * ========================================================= */
   const ed = { alvoId: null, oculto: false, letras: false, texto: '', substituir: true };
   let alvos = [];          // quadros editáveis da tela atual
+  let aoAtualizarEdicao = null; // o que mais a tela atualiza ao teclar (ex.: total do volume de vinho)
   let contextoEdicao = ''; // ex.: "dorna Nº 9"
   const alvoAtual = () => alvos.find((a) => a.id === ed.alvoId);
   const painelVisivel = () => !!alvoAtual() && !ed.oculto;
@@ -1017,6 +1156,7 @@
         <div class="visor ${nivel} ${a.type === 'text' ? 'texto' : ''} ${ed.texto.length > 4 && a.type === 'num' ? 'longo' : ''}">${mostrarNoVisor(a)}${unidade ? `<small>${esc(unidade)}</small>` : ''}</div>
         ${maisMenos ? '<button class="mm" data-ed="+" aria-label="Aumentar">+</button>' : ''}
       </div>
+      ${a.calculo && a.calculo() ? `<p class="calc-painel">Volume: <b>${esc(a.calculo())}</b></p>` : ''}
       ${a.dica ? `<p class="dica-painel">${esc(a.dica)}</p>` : ''}
       ${a.sugestao ? `<p class="dica-painel">${esc(a.sugestao)}</p>` : ''}
       ${a.type === 'time' ? `<div class="fichas"><button class="largo" data-ed="agora">${ico('relogio')} Agora, ${horaAgora()}</button></div>` : ''}
@@ -1029,7 +1169,7 @@
     const ativo = a.id === ed.alvoId && !ed.oculto;
     const nivel = nivelDe(a, v);
     const avisos = avisosDe(a, v);
-    const cls = ['campo', vazio(v) ? '' : 'preenchido', nivel, ativo ? 'ativo' : '', a.largo ? 'largo' : ''].join(' ');
+    const cls = ['campo', vazio(v) ? '' : 'preenchido', nivel, ativo ? 'ativo' : '', a.largo ? 'largo' : '', a.calculo ? 'com-calc' : ''].join(' ');
     const u = a.unidade || (a.getUnidade ? a.getUnidade() : '');
     let mostra;
     if (vazio(v)) mostra = `<span class="val vazio">${esc(a.vazioTexto || (a.type === 'check' ? 'Toque para marcar' : a.type === 'choice' ? 'Toque para escolher' : 'Toque para anotar'))}</span>`;
@@ -1038,7 +1178,9 @@
     // o aviso (pH baixo, Brix alto) fica do lado do número, curto: a caixa não muda de tamanho
     else mostra = `<span class="val">${esc(fmtCampo(a, v))}${u ? `<small>${esc(u)}</small>` : ''}${avisos.length ? `<em class="tag-aviso">${esc(avisos[0].curto)}</em>` : ''}</span>`;
     const rotulo = curto && a.labelCurto ? a.labelCurto : a.label;
-    return `<button class="${cls}" data-quadro="${esc(a.id)}"><span class="rot">${esc(rotulo)}${avisos.length ? ` ${ico('alerta')}` : ''}</span>${mostra}</button>`;
+    // o que sai da conta (volume da dorna) fica na linha do nome, do lado: o número continua grande
+    const calc = !avisos.length && a.calculo ? a.calculo() : '';
+    return `<button class="${cls}" data-quadro="${esc(a.id)}"><span class="rot">${esc(rotulo)}${avisos.length ? ` ${ico('alerta')}` : ''}${calc ? `<em class="tag-calc">${esc(calc)}</em>` : ''}</span>${mostra}</button>`;
   }
   const htmlQuadros = (lista, curto) => lista.map((a) => quadro(a, curto)).join('');
 
@@ -1075,6 +1217,7 @@
     // depois que o teclado abriu e a tela se ajeitou
     if (ativo && ed.alvoId !== ed.rolouPara) requestAnimationFrame(() => { const el = document.querySelector('.campo.ativo'); if (el) el.scrollIntoView({ block: 'nearest' }); });
     ed.rolouPara = ativo ? ed.alvoId : null;
+    if (aoAtualizarEdicao) aoAtualizarEdicao();
     agendarCaber(tudo ? null : refeitos);
   }
   function grupoQuadros(lista) { return `<div class="campos" data-grupo="${lista.map((a) => esc(a.id)).join(',')}">${htmlQuadros(lista)}</div>`; }
@@ -1186,6 +1329,7 @@
   let ultimaChaveTela = '';
   /** Redesenha a tela. Mantém a posição da rolagem quando continua na mesma tela. */
   function render(trocouDeTela) {
+    aoAtualizarEdicao = null;
     let v = view();
     if (foraDaRede() && v.tela !== 'bloqueado') v = { tela: 'bloqueado' };
     const telas = {
@@ -1488,6 +1632,26 @@
   function resumoPrancheta(pid, data) {
     const p = prancheta(pid);
     const hoje = data === dataProducao();
+    if (p.tipo === 'medicao') {
+      const m = medicaoDoDia(data);
+      if (!m.medidas) return { texto: hoje ? 'Nenhuma medição hoje' : 'Nenhuma medição neste dia' };
+      return { texto: `${m.medidas} de ${m.total} dornas medidas${m.hora ? ` (${m.hora})` : ''}. Vinho da produção: ${litros(m.producao, true)}`, estado: 'feito' };
+    }
+    if (p.tipo === 'fermentacao') {
+      if (!hoje) {
+        const enchidas = dornasDeFermentacao().filter(({ n }) => (ciclosPorDorna().get(n) || []).some((r) => r.data === data)).length;
+        return enchidas ? { texto: `${contar(enchidas, 'dorna enchida', 'dornas enchidas')} neste dia`, estado: 'feito' } : { texto: 'Nenhuma dorna enchida neste dia' };
+      }
+      const et = dornasDeFermentacao().map(({ n }) => ({ n, et: etapaFerm(cicloAtual(n)) }));
+      const por = (e) => et.filter((x) => x.et === e).map((x) => x.n);
+      const vol = naVolante();
+      const partes = [];
+      if (vol.length) partes.push(`Volante: Nº ${listaE(vol.map((s) => s.n))} desde ${vol[0].inicio}`);
+      if (por('enchendo').length) partes.push(`Enchendo: Nº ${listaE(por('enchendo'))}`);
+      if (por('fermentando').length) partes.push(`Fermentando: Nº ${listaE(por('fermentando'))}`);
+      if (!partes.length) return { texto: 'Nenhuma dorna com vinho' };
+      return { texto: partes.join('. ') + '.', estado: vol.length || por('enchendo').length ? 'andamento' : 'feito' };
+    }
     if (p.tipo === 'dornas') {
       const linhas = dornasDoDia(data, pid);
       if (!linhas.length) return { texto: hoje ? 'Nada anotado hoje' : 'Nada anotado neste dia' };
@@ -1524,7 +1688,7 @@
     if (hoje && !pegar(data, pid, h)) return { texto: `Falta a leitura das ${rotuloHora(h)}. Feitas: ${feitas} de 24`, estado: 'pendente' };
     return { texto: `${feitas} de 24 leituras feitas`, estado: 'feito' };
   }
-  const iconeDaPrancheta = (pid) => { const p = prancheta(pid); return p.tipo === 'insumo' || p.tipo === 'juntas' ? 'balanca' : p.tipo === 'grade' ? 'relogio' : setorDaPrancheta(pid).icone; };
+  const iconeDaPrancheta = (pid) => { const p = prancheta(pid); if (p.tipo === 'medicao') return 'regua'; if (p.tipo === 'fermentacao') return 'tanque'; return p.tipo === 'insumo' || p.tipo === 'juntas' ? 'balanca' : p.tipo === 'grade' ? 'relogio' : setorDaPrancheta(pid).icone; };
 
   function telaInicio() {
     const s = setorPorId(cfg.papel);
@@ -1556,6 +1720,14 @@
   function chavePadrao(p, pid, data) {
     const lembrada = lembrar[`${data}|${pid}`];
     if (lembrada != null) return lembrada;
+    // volume de vinho: o primeiro grupo que ainda não foi medido hoje
+    if (p.tipo === 'medicao') return (gruposDaMedicao().find((g) => !pegar(data, pid, g.id)) || gruposDaMedicao()[0]).id;
+    // fermentação: a dorna que está indo para a volante, senão a que está enchendo
+    if (p.tipo === 'fermentacao') {
+      const l = dornasDeFermentacao();
+      const et = (n) => etapaFerm(cicloAtual(n));
+      return (l.find((x) => et(x.n) === 'volante') || l.find((x) => et(x.n) === 'enchendo') || l[0] || {}).n;
+    }
     if (p.tipo === 'dornas') {
       const l = dornasDoDia(data, pid);
       const proxima = l.length ? Math.max(...l.map((r) => Number(r.chave))) + 1 : 1;
@@ -1593,15 +1765,31 @@
     const p = prancheta(v.pid);
     const data = dataDaView(v);
     const chave = v.chave != null ? v.chave : chavePadrao(p, v.pid, data);
-    const chaveView = `${data}|${v.pid}|${chave}`;
+    // fermentação: o rascunho é do enchimento que está na dorna (outro aparelho começou um novo: recomeça)
+    const cicloDaTela = p.tipo === 'fermentacao' ? cicloAtual(chave) : null;
+    const chaveView = `${data}|${v.pid}|${chave}${cicloDaTela ? '|' + cicloDaTela.id : ''}`;
     if (rascunho && rascunho.chaveView === chaveView) return { p, data, chave };
     const extras = { operador: '' };
     let valores = {};
     let novo = true;
     let origem = '';
     let horaAuto = [];
+    let ciclo = null;
 
-    if (p.tipo === 'juntas') {
+    if (p.tipo === 'medicao') {
+      const r = pegar(data, v.pid, chave);
+      novo = !r;
+      valores = r ? Object.assign({}, r.valores) : {};
+      extras.operador = r ? r.operador || '' : '';
+      // hora da medição: acompanha o relógio até a pessoa mudar
+      if (!r && chave !== 'param') { valores.hora = horaAgora(); horaAuto.push('hora'); }
+    } else if (p.tipo === 'fermentacao') {
+      const aberto = cicloDaTela && etapaFerm(cicloDaTela) !== 'vazia';
+      valores = { enche_inicio: '', enche_fim: '', brix_inicial: '' };
+      if (aberto) { p.campos.forEach((c) => { valores[c.id] = cicloDaTela.valores[c.id] || ''; }); ciclo = { data: cicloDaTela.data, chave: cicloDaTela.chave }; }
+      novo = !aberto;
+      extras.operador = aberto ? cicloDaTela.operador || '' : '';
+    } else if (p.tipo === 'juntas') {
       p.partes.forEach((pt) => {
         const r = pegar(data, pt.prancheta, chave);
         const folha = prancheta(pt.prancheta);
@@ -1637,13 +1825,35 @@
     }
     // um rascunho novo com valores sugeridos não conta como "mudado" até a pessoa mexer
     // guarda o dia e quem abriu: se o turno trocar ou a folha virar às 07:00 no meio da anotação, salva no dia e no nome certos
-    rascunho = { chaveView, chave, data, operador: operadorAtual(), novo, origem, valores, extras, horaAuto, tocados: {}, original: JSON.parse(JSON.stringify(valores)), originalExtras: JSON.stringify(extras) };
+    rascunho = { chaveView, chave, data, operador: operadorAtual(), novo, origem, valores, extras, horaAuto, ciclo, tocados: {}, original: JSON.parse(JSON.stringify(valores)), originalExtras: JSON.stringify(extras) };
     return { p, data, chave };
   }
 
   function montarAlvos(p, chave) {
     const val = rascunho.valores;
     const campo = (c) => Object.assign({}, c, { opcoes: c.type === 'choice' ? opcoesDe(c) : c.opcoes, get: () => val[c.id], set: (x) => { val[c.id] = x; } });
+    if (p.tipo === 'fermentacao') return p.campos.map(campo);
+    if (p.tipo === 'medicao') {
+      if (chave === 'param') return p.parametros.map(campo);
+      const g = grupoDaMedicao(chave);
+      if (!g) return [];
+      const lista = [{ id: 'hora', label: 'Hora da medição', labelCurto: 'Hora', type: 'time', get: () => val.hora, set: (x) => { val.hora = x; } }];
+      const num = (x) => fmtNum(String(x));
+      g.dornas.forEach((d) => {
+        const idF = d.id + '_folga';
+        lista.push({
+          id: idF, dornaId: d.id, label: `${d.nome}: folga`, labelCurto: 'Folga', type: 'num', dec: 2, unidade: 'm', min: 0,
+          avisos: temMedida(d) ? [{ quando: '>', valor: Number(d.altura), nivel: 'alerta', texto: `Folga maior que a altura da dorna (${num(d.altura)} m)`, curto: 'Maior que a dorna' }] : [],
+          dica: temMedida(d) ? `${d.nome}: altura ${num(d.altura)} m, base ${num(d.area)} m². Volume = (altura − folga) × base × 1000.` : `${d.nome} está sem medida: o escritório cadastra em Configurações da usina.`,
+          // o volume aparece do lado da folga, na hora
+          calculo: () => { const vol = volumeDe(d, val[idF]); return vol != null ? litros(vol, true) : !vazio(val[idF]) && !temMedida(d) ? 'sem medida' : ''; },
+          get: () => val[idF], set: (x) => { val[idF] = x; },
+        });
+        if (g.brix) lista.push({ id: d.id + '_brix', dornaId: d.id, label: `${d.nome}: Brix`, labelCurto: 'Brix', type: 'num', dec: 1, min: 0, max: 40, get: () => val[d.id + '_brix'], set: (x) => { val[d.id + '_brix'] = x; } });
+        if (g.fermentando) lista.push({ id: d.id + '_ferm', dornaId: d.id, label: `${d.nome}: fermentando?`, labelCurto: 'Fermentando', type: 'choice', opcoes: ['Sim', 'Não'], get: () => val[d.id + '_ferm'], set: (x) => { val[d.id + '_ferm'] = x; } });
+      });
+      return lista;
+    }
     if (p.tipo === 'dornas') {
       const ordem = p.grupos ? p.grupos.flatMap((g) => g.campos) : p.campos.map((c) => c.id);
       return ordem.map((id) => p.campos.find((c) => c.id === id)).filter(Boolean).map(campo);
@@ -1725,16 +1935,114 @@
     }).join('')}</div>`;
   }
 
+  /* ---------- Volume de vinho: a folha do dia e os totais ---------- */
+  function totaisMedicaoHtml(data, chave) {
+    const med = medicaoDoDia(data, chave !== 'param' && rascunho ? { grupo: chave, valores: rascunho.valores } : null);
+    const x = med.grupos.find((y) => y.g.id === chave);
+    const parte = x && !x.g.soma ? `${esc(x.g.nome)}: <b>${litros(x.subtotal)}</b>` : x ? `Subtotal: <b>${litros(x.subtotal)}</b>` : '';
+    return `${parte ? `<span class="par-total">${parte}</span>` : ''}<span class="par-total">Vinho da produção: <b>${litros(med.producao)}</b></span>`;
+  }
+  function folhaMedicaoHtml(p, data, chave) {
+    const med = medicaoDoDia(data);
+    const num = (x) => (vazio(x) ? '' : esc(fmtNum(x)));
+    return `<div class="folha">${cabecalhoFolha(p, data)}<div class="tabela-wrap"><table class="papel medicao">
+      <thead><tr><th>Dornas</th><th>Folga (m)</th><th>Volume (L)</th><th>Brix</th><th>Fermentando</th></tr></thead>
+      <tbody>${med.grupos.map((x) => `<tr class="grupo-linha clicavel ${x.g.id === chave ? 'sel' : ''}" data-a="linha" data-chave="${x.g.id}"><td colspan="5"><b>${esc(x.g.nome)}</b>${x.hora && x.medidas ? ` <span>medido às ${esc(x.hora)}${x.operador ? ` por ${esc(x.operador)}` : ''}</span>` : ''}</td></tr>
+        ${x.linhas.map((l) => `<tr class="clicavel" data-a="linha" data-chave="${x.g.id}"><td>${esc(l.d.nome)}</td><td>${num(l.folga)}</td><td><b>${l.volume == null ? (vazio(l.folga) || temMedida(l.d) ? '' : 'sem medida') : esc(litros(l.volume).replace(' L', ''))}</b></td><td>${x.g.brix ? num(l.brix) : ''}</td><td>${x.g.fermentando ? esc(l.ferm || '') : ''}</td></tr>`).join('')}
+        <tr class="subtotal"><td>Subtotal</td><td></td><td><b>${esc(litros(x.subtotal).replace(' L', ''))}</b></td><td colspan="2"></td></tr>`).join('')}
+        <tr class="total"><td>Total geral de vinho da produção</td><td></td><td><b>${esc(litros(med.producao))}</b></td><td colspan="2"></td></tr>
+        <tr class="total"><td>Total nos tanques de álcool</td><td></td><td><b>${esc(litros(med.tanques))}</b></td><td colspan="2"></td></tr></tbody>
+    </table></div></div>
+    <div class="folha" style="margin-top:12px"><div class="folha-cab"><div><b>Parâmetros da produção</b><span>Favor verificar e anotar diariamente</span></div></div><div class="tabela-wrap"><table class="papel">
+      <thead><tr><th></th><th>Brix</th><th>Horário</th></tr></thead>
+      <tbody>${[['Brix no ralo', 'brix_ralo', 'hora_ralo'], ['Brix na hidrólise', 'brix_hid', 'hora_hid'], ['Brix na fermentação', 'brix_ferm', 'hora_ferm']].map(([rot, b, h]) => `<tr class="clicavel" data-a="linha" data-chave="param"><td>${rot}</td><td>${num(med.param[b])}</td><td>${esc(med.param[h] || '')}</td></tr>`).join('')}</tbody>
+    </table></div></div>`;
+  }
+
+  /* ---------- Dornas de fermentação: o cartão da dorna e a folha do dia ---------- */
+  const diaCurto = (iso) => fmtData(iso).slice(0, 5);
+  function cartaoDaDorna(n, r) {
+    const et = etapaFerm(r);
+    const partes = [];
+    if (et !== 'vazia') {
+      const v = r.valores;
+      partes.push(`<p>${ico('tanque')} Enchida em <b>${diaCurto(r.data)}</b>${r.operador ? ` por <b>${esc(r.operador)}</b>` : ''}${v.enche_inicio ? `, das ${esc(v.enche_inicio)}${v.enche_fim ? ` às ${esc(v.enche_fim)}` : ' (ainda enchendo)'}` : ''}. Brix inicial <b>${vazio(v.brix_inicial) ? 'não anotado' : esc(fmtNum(v.brix_inicial))}</b>.</p>`);
+      const m = medicaoDaDorna(n, r);
+      partes.push(m ? `<p>${ico('regua')} ${m.data === dataProducao() ? 'Hoje' : `Em ${diaCurto(m.data)}`}${m.hora ? `, ${esc(m.hora)}` : ''}: Brix <b>${vazio(m.brix) ? 'não anotado' : esc(fmtNum(m.brix))}</b> · <b>${m.volume == null ? 'volume não medido' : litros(m.volume, true)}</b>${m.ferm ? ` · Fermentando: <b>${esc(m.ferm)}</b>` : ''}</p>`
+        : `<p class="apagado">${ico('regua')} Ainda não foi medida depois de encher. A medição da manhã é na folha Volume de vinho.</p>`);
+      const vol = v.volante || [];
+      if (vol.length) partes.push(`<p>${ico('enviar')} Volante: ${vol.map((s) => `${diaCurto(s.data)} das ${esc(s.inicio)}${s.fim ? ` às ${esc(s.fim)}` : ' até agora'}${s.operador ? ` (${esc(s.operador)})` : ''}`).join('; ')}</p>`);
+    } else {
+      const ult = r && r.valores.esvaziada;
+      partes.push(`<p>${ico('tanque')} Dorna vazia.${ult ? ` Esvaziou em ${diaCurto(ult.data)} às ${esc(ult.hora)}.` : ''}${ehCentral() ? '' : ' Quando começar a encher, toque em Começar a encher.'}</p>`);
+    }
+    return `<section class="cartao-dorna etapa-${et.replace(' ', '-')}"><h3>Dorna Nº ${n} <em>${esc(NOME_ETAPA[et])}</em></h3>${partes.join('')}</section>`;
+  }
+  function folhaFermentacaoHtml(p, data, chave) {
+    const linhas = fermentacaoDoDia(data);
+    return `<div class="folha">${cabecalhoFolha(p, data)}<div class="tabela-wrap"><table class="papel">
+      <thead><tr><th>Dorna</th><th>Enchida</th><th>Início</th><th>Fim</th><th>Brix inicial</th><th>Operador</th><th>Medição</th><th>Brix</th><th>Volume (L)</th><th>Fermentando</th><th>Volante no dia</th><th>Esvaziou</th></tr></thead>
+      <tbody>${linhas.map((l) => {
+        const m = l.medicao;
+        return `<tr class="clicavel ${l.n === chave ? 'sel' : ''}" data-a="linha" data-chave="${l.n}"><td><b>${l.n}</b></td>
+          ${l.ciclo ? `<td>${diaCurto(l.enchidaEm)}</td><td>${esc(l.inicio)}</td><td>${esc(l.fim) || '<span class="aberta">enchendo</span>'}</td><td>${esc(fmtNum(l.brixInicial))}</td><td>${esc(l.operador)}</td>
+          <td>${m ? `${diaCurto(m.data)} ${esc(m.hora)}` : ''}</td><td>${m ? esc(fmtNum(m.brix)) : ''}</td><td>${m && m.volume != null ? esc(litros(m.volume).replace(' L', '')) : ''}</td><td>${m ? esc(m.ferm || '') : ''}</td>` : '<td colspan="9" class="dorna-vazia">vazia</td>'}
+          <td>${esc(l.volante.map((s) => `${s.inicio}-${s.fim || '...'}${s.operador ? ' ' + s.operador : ''}`).join('; '))}</td>
+          <td>${l.esvaziou ? `${diaCurto(l.esvaziou.data)} ${esc(l.esvaziou.hora)}` : ''}</td></tr>`;
+      }).join('')}</tbody>
+    </table></div></div>`;
+  }
+
   function telaPrancheta(v) {
+    aoAtualizarEdicao = null;
     const { p, data, chave } = prepararRascunho(v);
     const hoje = data === dataProducao();
     const hAgora = new Date().getHours();
     alvos = montarAlvos(p, chave);
     // a folha do dia (tabela do monitoramento) só é montada quando alguém abre o monitoramento
-    let seletor = '', cabecalhoForm = '', folha = () => '', rotuloSalvar = '', grupos = p.grupos, etapa = '';
+    let seletor = '', cabecalhoForm = '', folha = () => '', rotuloSalvar = '', grupos = p.grupos, etapa = '', antesDosQuadros = '';
     const origem = rascunho.novo && rascunho.origem ? `<span class="aviso">${esc(rascunho.origem)}</span>` : '';
 
-    if (p.tipo === 'dornas') {
+    if (p.tipo === 'medicao') {
+      const med = medicaoDoDia(data);
+      const g = grupoDaMedicao(chave);
+      contextoEdicao = chave === 'param' ? 'Brix da produção' : g ? g.nome : '';
+      const chips = [...med.grupos.map((x) => ({ id: x.g.id, nome: x.g.nome, leg: x.medidas ? `${x.medidas} de ${x.g.dornas.length}` : '' })),
+        { id: 'param', nome: 'Brix da produção', leg: pegar(data, v.pid, 'param') ? 'anotado' : '' }];
+      seletor = `<div class="seletor">${chips.map((x) => `<button data-a="linha" data-chave="${x.id}" class="${x.id === chave ? 'sel' : x.leg ? 'feita' : ''}" ${x.id === chave ? 'data-rolar-para' : ''}>${esc(x.nome)}<small>${esc(x.leg)}</small></button>`).join('')}</div>`;
+      const reg = pegar(data, v.pid, chave);
+      cabecalhoForm = `${reg ? `<span class="aviso ok">${ico('certo')} Anotado por ${esc(reg.operador || 'sem nome')}</span>` : `<span class="aviso">${chave === 'param' ? 'Anote o Brix e o horário' : 'Digite a folga medida com a trena: o volume aparece na hora'}</span>`}
+        <span class="aviso info" id="totais-medicao">${totaisMedicaoHtml(data, chave)}</span>`;
+      aoAtualizarEdicao = () => { const el = document.getElementById('totais-medicao'); if (el) el.innerHTML = totaisMedicaoHtml(data, chave); };
+      grupos = chave === 'param'
+        ? [{ titulo: 'Ralo', campos: ['brix_ralo', 'hora_ralo'] }, { titulo: 'Hidrólise', campos: ['brix_hid', 'hora_hid'] }, { titulo: 'Fermentação', campos: ['brix_ferm', 'hora_ferm'] }]
+        : [{ titulo: 'Hora da medição', campos: ['hora'] }, ...(g ? g.dornas : []).map((d) => ({ titulo: d.nome, campos: alvos.filter((a) => a.dornaId === d.id).map((a) => a.id) }))];
+      rotuloSalvar = `Salvar ${contextoEdicao}`;
+      folha = () => folhaMedicaoHtml(p, data, chave);
+    } else if (p.tipo === 'fermentacao') {
+      const r = cicloAtual(chave);
+      etapa = etapaFerm(r);
+      contextoEdicao = `dorna Nº ${chave}`;
+      seletor = `<div class="seletor">${dornasDeFermentacao().map(({ n }) => {
+        const et = etapaFerm(cicloAtual(n));
+        return `<button data-a="linha" data-chave="${n}" class="${n === chave ? 'sel' : et === 'enchendo' || et === 'volante' ? 'atual' : et === 'vazia' ? '' : 'feita'}" ${n === chave ? 'data-rolar-para' : ''}>Nº ${n}<small>${esc(NOME_ETAPA[et])}</small></button>`;
+      }).join('')}</div>`;
+      const vol = naVolante();
+      const status = {
+        vazia: `<span class="aviso">Nº ${chave} vazia</span>`,
+        enchendo: `<span class="aviso atencao">${ico('tanque')} Enchendo desde ${esc((r && r.valores.enche_inicio) || '')}${r && r.operador ? ` · ${esc(r.operador)}` : ''}</span>`,
+        fermentando: `<span class="aviso ok">${ico('certo')} Fermentando</span>`,
+        volante: `<span class="aviso info">${ico('enviar')} Mandando para a volante</span>`,
+        'com vinho': `<span class="aviso ok">${ico('certo')} Com vinho (já mandou uma parte)</span>`,
+      }[etapa];
+      cabecalhoForm = `${status}<span class="aviso ${vol.length ? 'info' : ''}" id="volante-agora">Volante: ${vol.length ? esc(vol.map((s) => `Nº ${s.n} desde ${s.inicio}${s.operador ? ` (${s.operador})` : ''}`).join(', ')) : 'parada'}</span>
+        ${etapa === 'com vinho' && !ehCentral() ? `<button class="btn pequeno" data-a="ferm-esvaziou">${ico('certo')} Dorna vazia</button>` : ''}
+        ${r && etapa !== 'vazia' ? `<button class="btn pequeno perigo" data-a="ferm-apagar">${ico('lixeira')} Apagar este enchimento</button>` : ''}`;
+      grupos = [{ titulo: 'Enchimento', campos: ['enche_inicio', 'enche_fim'] }, { titulo: 'Brix', campos: ['brix_inicial'] }];
+      rotuloSalvar = `Salvar dorna Nº ${chave}`;
+      antesDosQuadros = cartaoDaDorna(chave, r);
+      folha = () => folhaFermentacaoHtml(p, data, chave);
+    } else if (p.tipo === 'dornas') {
       const linhas = dornasDoDia(data, v.pid);
       const proximo = linhas.length ? Math.max(...linhas.map((r) => Number(r.chave))) + 1 : 1;
       const regAtual = pegar(data, v.pid, chave);
@@ -1851,9 +2159,19 @@
     }
 
     const fixoTopo = `${abasDoSetor(v)}${seletor}${cabecalhoForm ? `<div class="cabecalho-form">${cabecalhoForm}</div>` : ''}`;
-    const conteudo = blocosDeQuadros(grupos, alvos);
+    let quadros = blocosDeQuadros(grupos, alvos);
+    // medição: cada dorna tem folga, Brix e fermentando lado a lado, então o bloco precisa de mais largura
+    if (p.tipo === 'medicao') quadros = quadros.replace('<div class="grupos">', '<div class="grupos grupos-largos">');
+    const conteudo = antesDosQuadros + quadros;
     lembrar[`${data}|${v.pid}`] = chave;
     let rodape = `<button class="btn primario" data-a="salvar">${ico('certo')} ${esc(rotuloSalvar)}</button>`;
+    if (p.tipo === 'fermentacao' && !ehCentral()) {
+      const [acao, icone, texto] = {
+        vazia: ['ferm-encher', 'tanque', `Começar a encher Nº ${chave}`], enchendo: ['ferm-terminou', 'fim', 'Terminou de encher'],
+        fermentando: ['ferm-volante', 'enviar', 'Mandar para a volante'], 'com vinho': ['ferm-volante', 'enviar', 'Mandar para a volante'], volante: ['ferm-parar', 'fim', 'Parou de mandar'],
+      }[etapa];
+      rodape = `<button class="btn" data-a="salvar">${ico('certo')} Salvar</button><button class="btn primario" data-a="${acao}">${ico(icone)} ${esc(texto)}</button>`;
+    }
     if (p.envio && !ehCentral() && (etapa === 'nova' || etapa === 'enchendo')) {
       rodape = `<button class="btn" data-a="salvar">${ico('certo')} Salvar</button><button class="btn primario" data-a="enviar-dorna">${ico('enviar')} Enviar Nº ${chave}</button>`;
     } else if (p.envio && !ehCentral() && etapa === 'enviando') {
@@ -1872,7 +2190,10 @@
     const { data, chave } = rascunho;
     const mudou = (a, b) => JSON.stringify(a == null ? '' : a) !== JSON.stringify(b == null ? '' : b);
     const nomes = new Set();
-    if (p.tipo === 'juntas') {
+    if (p.tipo === 'fermentacao') {
+      const existente = rascunho.ciclo ? pegar(rascunho.ciclo.data, PID_FERMENTACAO, rascunho.ciclo.chave) : null;
+      if (existente && existente.operador && p.campos.some((c) => mudou(rascunho.valores[c.id], rascunho.original[c.id]))) nomes.add(existente.operador);
+    } else if (p.tipo === 'juntas') {
       p.partes.forEach((pt) => {
         const existente = pegar(data, pt.prancheta, chave);
         if (existente && existente.operador && mudou(rascunho.valores[pt.prancheta].qtd, rascunho.original[pt.prancheta].qtd)) nomes.add(existente.operador);
@@ -1919,7 +2240,26 @@
     const data = rascunho.data;
     const chave = rascunho.chave;
 
-    if (p.tipo === 'juntas') {
+    if (p.tipo === 'medicao') {
+      const existente = pegar(data, v.pid, chave);
+      const g = grupoDaMedicao(chave);
+      // o volume vai junto (se a medida da dorna mudar depois, o que já foi medido continua igual)
+      if (g) g.dornas.forEach((d) => { const vol = volumeDe(d, rascunho.valores[d.id + '_folga']); rascunho.valores[d.id + '_vol'] = vol == null ? '' : vol.toFixed(2); });
+      const temAlgo = Object.entries(rascunho.valores).some(([k, x]) => k !== 'hora' && !/_vol$/.test(k) && !vazio(x));
+      const operador = ehCentral() ? (existente && existente.operador) || '' : (existente && existente.operador) || quem;
+      if (temAlgo) gravar(data, v.pid, chave, rascunho.valores, Object.assign({ operador }, marcaAlteracao));
+      else if (existente) apagar(data, v.pid, chave);
+      else if (!automatico) { toast(chave === 'param' ? 'Anote pelo menos um Brix antes de salvar' : 'Anote pelo menos uma folga antes de salvar', 'erro'); return false; }
+      if (!opcoes.silencioso && (temAlgo || existente)) toast(`${chave === 'param' ? 'Brix da produção' : g.nome} salvo`);
+    } else if (p.tipo === 'fermentacao') {
+      const val = {}; p.campos.forEach((c) => { val[c.id] = rascunho.valores[c.id] || ''; });
+      const temAlgo = Object.values(val).some((x) => !vazio(x));
+      const existente = rascunho.ciclo ? pegar(rascunho.ciclo.data, PID_FERMENTACAO, rascunho.ciclo.chave) : null;
+      if (existente) mudarCiclo(existente, val, Object.assign({ operador: existente.operador || quem || '' }, marcaAlteracao));
+      else if (temAlgo) { const novo = novoCiclo(chave, val, quem || ''); rascunho.ciclo = { data: novo.data, chave: novo.chave }; }
+      else if (!automatico) { toast('Anote pelo menos um quadro antes de salvar', 'erro'); return false; }
+      if (!opcoes.silencioso && (existente || temAlgo)) toast(`Dorna Nº ${chave} salva`);
+    } else if (p.tipo === 'juntas') {
       let algum = false;
       p.partes.forEach((pt) => {
         const item = rascunho.valores[pt.prancheta];
@@ -2469,6 +2809,18 @@
             <div class="linha-config"><span class="escolha-ico">${ico('email')}</span><div><b>E-mail</b><small>${esc(cs.email || 'não cadastrado')}</small></div>
               <button class="btn pequeno" data-a="contato" data-campo="email">${cs.email ? 'Trocar' : 'Cadastrar'}</button></div>
           </section>
+          <section class="bloco" id="bloco-medidas">
+            <h2>${ico('regua')} Medidas das dornas</h2>
+            <p class="sub" style="margin:0 0 6px">Para o volume de vinho: volume = (altura − folga) × base × 1000. Começou com as medidas da planilha CONTROLE LTS.</p>
+            ${gruposDaMedicao().map((g) => {
+              const semMedida = g.dornas.filter((d) => !temMedida(d)).length;
+              const iguais = g.dornas.every((d) => d.altura === g.dornas[0].altura && d.area === g.dornas[0].area);
+              const txt = iguais && temMedida(g.dornas[0]) ? `${contar(g.dornas.length, 'dorna', 'dornas')}: altura ${fmtNum(String(g.dornas[0].altura))} m, base ${fmtNum(String(g.dornas[0].area))} m²` : `${contar(g.dornas.length, 'dorna', 'dornas')} com medidas diferentes`;
+              return `<div class="linha-config"><span class="escolha-ico">${ico(g.fermentando ? 'tanque' : 'regua')}</span><div><b>${esc(g.nome)}</b><small>${esc(txt)}${semMedida ? ` · ${contar(semMedida, 'sem medida', 'sem medida')}` : ''}</small></div>
+                <button class="btn pequeno" data-a="medida-grupo" data-grupo="${g.id}">Trocar</button></div>`;
+            }).join('')}
+            ${cs.medicao ? `<div class="linha-botoes"><button class="btn pequeno" data-a="medidas-planilha">Voltar para as medidas da planilha</button></div>` : ''}
+          </section>
           <section class="bloco" id="bloco-base44">
             <h2>${ico('escritorio')} Totais do dia no Base44</h2>
             ${htmlBase44()}
@@ -2575,6 +2927,7 @@
   let modelosPapel = null;
   const papel = () => modelosPapel || (modelosPapel = window.ModelosPapel.montar({
     C, prancheta, setorDaPrancheta, listar, pegar, fmtData, fmtNum, rotuloHoraPapel, HORAS, linhasDeHora, totalInsumo, extrasOperador, somarDias,
+    medicaoDoDia: (data) => medicaoDoDia(data), fermentacaoDoDia,
   }));
   function planilhaDaPrancheta(pid, data) {
     return window.ModelosPapel.paraPlanilha(papel().folha(pid, data));
@@ -2935,6 +3288,20 @@
       [13, '6', '', '02', ''], [14, '6', '', '03', ''], [15, '6', '', '01', ''], [16, '6', '', '02', '']]
       .forEach((l) => ex('caldeira', l[0], { pressao: l[1], temp_agua: l[2], descarga_fundo: l[3], descarga_garrafa: l[4] }, l[0] < 16 ? 'Alberto' : 'Diego'));
     ex('caldeira', 'obs1', { texto: 'DESCARGA DE GARRAFA FEITA AS 07:00' }, 'Alberto');
+    // volume de vinho (os números da planilha do escritório) e as dornas de fermentação
+    const med = (grupo, valores) => { const g = grupoDaMedicao(grupo); g.dornas.forEach((d) => { const vol = volumeDe(d, valores[d.id + '_folga']); if (vol != null) valores[d.id + '_vol'] = vol.toFixed(2); }); ex(PID_MEDICAO, grupo, Object.assign({ hora: '07:30' }, valores), 'Mateus'); };
+    med('sac', { sac1_folga: '0.15', sac1_brix: '18', sac2_folga: '0.2', sac2_brix: '18', sac4_folga: '0.14', sac4_brix: '19' });
+    med('vin', { vin1_folga: '0.9', vin1_brix: '5', vin1_ferm: 'Sim', vin2_folga: '0.15', vin2_brix: '7', vin2_ferm: 'Sim', vin4_folga: '1.1', vin4_brix: '1', vin4_ferm: 'Não', vin10_folga: '0.16', vin10_brix: '7', vin10_ferm: 'Sim' });
+    ex(PID_MEDICAO, 'param', { brix_ralo: '18', hora_ralo: '09:30', brix_hid: '18', hora_hid: '09:30' }, 'Mateus');
+    if (!ciclosPorDorna().size) {
+      const ontem = somarDias(data, -1);
+      const ciclo = (dia, n, v, op) => gravar(dia, PID_FERMENTACAO, `${n}-exemplo`, Object.assign({ dorna: n, enche_inicio: '', enche_fim: '', brix_inicial: '', volante: [], esvaziada: null, inicioEm: momentoDe(dia, v.enche_inicio) }, v), { operador: op });
+      ciclo(ontem, 1, { enche_inicio: '08:10', enche_fim: '10:40', brix_inicial: '8' }, 'Mateus');
+      ciclo(ontem, 2, { enche_inicio: '11:00', enche_fim: '13:25', brix_inicial: '9' }, 'Mateus');
+      ciclo(ontem, 4, { enche_inicio: '02:15', enche_fim: '04:50', brix_inicial: '8', volante: [{ data, inicio: '09:12', fim: '', operador: 'Mateus' }] }, 'Mateus');
+      ciclo(ontem, 10, { enche_inicio: '14:00', enche_fim: '16:30', brix_inicial: '8' }, 'Mateus');
+      ciclo(data, 6, { enche_inicio: '10:05' }, 'Mateus');
+    }
     [[7, '107.3', '150', '371', '2', '93.7'], [8, '107.3', '150', '375', '2', '93.7'], [9, '107.3', '180', '800', '2', '93.9'], [10, '107.3', '180', '800', '2', '93.5'],
       [11, '107.3', '180', '900', '2', '92.9'], [12, '107.1', '180', '372', '2', '91.0'], [13, '107.0', '180', '979', '2', '93.0'], [14, '107.0', '150', '990', '2', '92.4'], [15, '107.3', '150', '981', '2', '92.6']]
       .forEach((l) => ex('destilaria', l[0], { temp_pe_a: l[1], producao: l[2], carregamento: l[3], vapor: l[4], inpm: l[5] }, 'Mateus'));
@@ -3027,7 +3394,7 @@
       case 'inicio-setor': return ir({ tela: 'inicio' }, true);
       case 'painel': return ir({ tela: 'central', data: v.data || dataProducao() }, true);
       case 'linha': {
-        const chave = Number(b.dataset.chave);
+        const chave = /^\d+$/.test(b.dataset.chave) ? Number(b.dataset.chave) : b.dataset.chave;
         if (rascunho && rascunho.chave === chave && !v.monitor) return;
         if (rascunhoSujo()) salvarRascunho(true);
         rascunho = null; ed.alvoId = null;
@@ -3231,6 +3598,114 @@
         else toast(`Não foi: ${r.erro}`, 'erro');
         sync.statusJson = '';
         await carregarBase44();
+        return render();
+      }
+      case 'ferm-encher': {
+        if (!exigeOperador() || !rascunho) return;
+        const n = rascunho.chave;
+        const r = cicloAtual(n);
+        if (r && etapaFerm(r) !== 'vazia' && !(await confirmar(`A Nº ${n} ainda tem vinho`, `Ela foi enchida em ${fmtData(r.data)} e não foi marcada como vazia. Começar um enchimento novo mesmo assim?`, 'Começar'))) return;
+        const val = { enche_inicio: rascunho.valores.enche_inicio || horaAgora(), enche_fim: rascunho.valores.enche_fim || '', brix_inicial: rascunho.valores.brix_inicial || '' };
+        novoCiclo(n, val, operadorAtual());
+        rascunho = null; ed.alvoId = null;
+        toast(`Nº ${n} enchendo desde ${val.enche_inicio}`);
+        return render();
+      }
+      case 'ferm-terminou': {
+        if (!exigeOperador() || !rascunho) return;
+        const n = rascunho.chave;
+        const r = cicloAtual(n);
+        if (!r || etapaFerm(r) === 'vazia') return;
+        const brix = rascunho.valores.brix_inicial;
+        mudarCiclo(r, { enche_inicio: rascunho.valores.enche_inicio || r.valores.enche_inicio, enche_fim: rascunho.valores.enche_fim || horaAgora(), brix_inicial: brix || '' });
+        rascunho = null; ed.alvoId = null;
+        render();
+        // falta o Brix inicial: já abre o teclado nele
+        if (vazio(brix)) { selecionar('brix_inicial'); toast('Nº ' + n + ' cheia. Anote o Brix inicial e toque em Salvar.'); } else toast(`Nº ${n} cheia. Fermentando.`);
+        return;
+      }
+      case 'ferm-volante': {
+        if (!exigeOperador() || !rascunho) return;
+        const n = rascunho.chave;
+        if (rascunhoSujo()) salvarRascunho(true, { silencioso: true });
+        const outras = naVolante().filter((s) => s.n !== n);
+        if (outras.length && !(await confirmar('A volante já está recebendo', `${outras.map((s) => `A Nº ${s.n} está mandando desde ${s.inicio}`).join('. ')}. Mandar a Nº ${n} junto?`, 'Mandar junto'))) return;
+        const r = cicloAtual(n);
+        if (!r || etapaFerm(r) === 'vazia') return;
+        const hora = horaAgora();
+        mudarCiclo(r, { volante: [...(r.valores.volante || []), { data: dataProducao(), inicio: hora, fim: '', operador: operadorAtual(), inicioEm: Date.now() }] });
+        rascunho = null; ed.alvoId = null;
+        toast(`Nº ${n} mandando para a volante desde ${hora}`);
+        return render();
+      }
+      case 'ferm-parar': {
+        if (!exigeOperador() || !rascunho) return;
+        const n = rascunho.chave;
+        const r = cicloAtual(n);
+        if (!r || etapaFerm(r) !== 'volante') return;
+        const resp = await abrirModal(`<h3>Parou de mandar a Nº ${n}</h3><p class="dica">A dorna esvaziou?</p>
+          <div class="acoes-modal"><button class="btn" data-k="nao">Não, ainda tem vinho</button><button class="btn primario" data-k="sim">${ico('certo')} Sim, esvaziou</button></div>
+          <div class="acoes-modal um"><button class="btn" data-k="x">Cancelar</button></div>`, (k, b2, fechar) => fechar(k));
+        if (resp !== 'sim' && resp !== 'nao') return;
+        const hora = horaAgora();
+        const vol = (r.valores.volante || []).map((s) => (s.fim ? s : Object.assign({}, s, { fim: hora, fimEm: Date.now(), operadorFim: operadorAtual() })));
+        mudarCiclo(r, Object.assign({ volante: vol }, resp === 'sim' ? { esvaziada: { data: dataProducao(), hora, em: Date.now(), operador: operadorAtual() } } : {}));
+        rascunho = null; ed.alvoId = null;
+        toast(resp === 'sim' ? `Nº ${n} vazia` : `Nº ${n} parou de mandar às ${hora}`);
+        return render();
+      }
+      case 'ferm-esvaziou': {
+        if (!exigeOperador() || !rascunho) return;
+        const n = rascunho.chave;
+        const r = cicloAtual(n);
+        if (!r || etapaFerm(r) === 'vazia') return;
+        if (!(await confirmar(`A Nº ${n} está vazia?`, 'Marca que não sobrou vinho nela. O próximo passo é Começar a encher.', 'Está vazia'))) return;
+        mudarCiclo(r, { esvaziada: { data: dataProducao(), hora: horaAgora(), em: Date.now(), operador: operadorAtual() } });
+        rascunho = null; ed.alvoId = null;
+        toast(`Nº ${n} vazia`);
+        return render();
+      }
+      case 'ferm-apagar': {
+        if (!rascunho) return;
+        const n = rascunho.chave;
+        const r = cicloAtual(n);
+        if (!r) return;
+        if (!(await confirmar(`Apagar o enchimento da Nº ${n}?`, `O enchimento de ${fmtData(r.data)}${r.valores.enche_inicio ? ` (começou às ${r.valores.enche_inicio})` : ''} sai da folha. Use só se foi anotado por engano.`, 'Apagar', true))) return;
+        if (ehCentral() && r.operador && !(await autorizar([r.operador]))) return;
+        apagar(r.data, PID_FERMENTACAO, r.chave);
+        rascunho = null; ed.alvoId = null;
+        toast(`Enchimento da Nº ${n} apagado`);
+        return render();
+      }
+      case 'medida-grupo': {
+        const g = grupoDaMedicao(b.dataset.grupo);
+        if (!g) return;
+        const num = (x) => (x == null || x === '' ? '' : String(x).replace('.', ','));
+        const resp = await abrirModal(`<h3>Medidas: ${esc(g.nome)}</h3><p class="dica">Altura da dorna e área da base, em metros. Volume = (altura − folga) × base × 1000.</p>
+          <div class="medidas-form"><div class="medidas-cab"><span></span><span>Altura (m)</span><span>Base (m²)</span></div>
+          ${g.dornas.map((d, i) => `<label><span>${esc(d.nome)}</span><input id="alt${i}" inputmode="decimal" autocomplete="off" value="${esc(num(d.altura))}"><input id="area${i}" inputmode="decimal" autocomplete="off" value="${esc(num(d.area))}"></label>`).join('')}</div>
+          <div class="acoes-modal"><button class="btn" data-k="x">Cancelar</button><button class="btn primario" data-k="ok">Salvar</button></div>`,
+        (k, b2, fechar, f) => {
+          if (k === 'x') return fechar(undefined);
+          if (k !== 'ok') return;
+          const ler = (id) => { const t = f.querySelector('#' + id).value.trim().replace(',', '.'); return t === '' ? null : Number(t); };
+          const novas = g.dornas.map((d, i) => ({ altura: ler('alt' + i), area: ler('area' + i) }));
+          const ruim = novas.findIndex((x) => [x.altura, x.area].some((y) => y != null && !(y > 0 && y < 100)));
+          if (ruim >= 0) { toast(`${g.dornas[ruim].nome}: medida errada. Use números como 2,7`, 'erro'); return; }
+          fechar(novas);
+        }, { classe: 'largo' });
+        if (!resp) return;
+        const med = JSON.parse(JSON.stringify(medidasDasDornas()));
+        const gg = med.grupos.find((x) => x.id === g.id);
+        gg.dornas.forEach((d, i) => { d.altura = resp[i].altura; d.area = resp[i].area; });
+        salvarConfigSistema({ medicao: med });
+        toast(`Medidas de ${g.nome} salvas`);
+        return render();
+      }
+      case 'medidas-planilha': {
+        if (!(await confirmar('Voltar para as medidas da planilha?', 'As medidas trocadas aqui voltam a ser as da planilha CONTROLE LTS. As medições já salvas continuam com o volume que tinham.', 'Voltar'))) return;
+        salvarConfigSistema({ medicao: null });
+        toast('Medidas da planilha de volta');
         return render();
       }
       case 'contato': {
@@ -3569,7 +4044,7 @@
       }
       else if (tela === 'prancheta') {
         const pv = { tela, pid: params.get('pid') };
-        if (params.get('chave')) pv.chave = Number(params.get('chave'));
+        if (params.get('chave')) pv.chave = /^\d+$/.test(params.get('chave')) ? Number(params.get('chave')) : params.get('chave');
         if (params.get('monitor')) pv.monitor = true;
         if (ehCentral()) pv.data = dataProducao();
         pilha.push(pv);

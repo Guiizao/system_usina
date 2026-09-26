@@ -66,6 +66,17 @@ const TELAS = [
   ['dorna-enviando', HID + '&chave=6'],
   ['dorna-nova', HID + '&chave=7'],
   ['avisos-chefe-celular', '&papel=central&tela=avisos'],
+  // volume de vinho e dornas de fermentação (destiladores)
+  ['destilaria-inicio', '&papel=destilaria&op=Mateus'],
+  ['volume-vinho', '&papel=destilaria&op=Mateus&tela=prancheta&pid=med_dornas&chave=sac'],
+  ['volume-vinho-teclado', '&papel=destilaria&op=Mateus&tela=prancheta&pid=med_dornas&chave=sac&campo=sac3_folga&teclas=0|,|2|5'],
+  ['volume-vinho-dornas', '&papel=destilaria&op=Mateus&tela=prancheta&pid=med_dornas&chave=vin'],
+  ['volume-vinho-folha', '&papel=destilaria&op=Mateus&tela=prancheta&pid=med_dornas&monitor=1'],
+  ['fermentacao', '&papel=destilaria&op=Mateus&tela=prancheta&pid=fermentacao&chave=1'],
+  ['fermentacao-volante', '&papel=destilaria&op=Mateus&tela=prancheta&pid=fermentacao&chave=4'],
+  ['fermentacao-enchendo', '&papel=destilaria&op=Mateus&tela=prancheta&pid=fermentacao&chave=6'],
+  ['fermentacao-folha', '&papel=destilaria&op=Mateus&tela=prancheta&pid=fermentacao&monitor=1'],
+  ['chefe-usina-medidas', '&papel=central&tela=config', async (a) => a.avaliar('document.getElementById("bloco-medidas").scrollIntoView()')],
 ];
 
 const relatorio = { base: BASE, quando: new Date().toISOString(), telas: [] };

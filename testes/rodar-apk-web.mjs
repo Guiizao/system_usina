@@ -8,6 +8,7 @@ import { abrirNavegador, TAMANHOS } from './navegador.mjs';
 import { novoGrupo, resumo, teste, certo } from './teste.mjs';
 import { testarDornas } from './dornas.mjs';
 import { testarPedidos24 } from './pedidos24.mjs';
+import { testarPedidos26 } from './pedidos26.mjs';
 import { centralNode, pastaTemporaria, APP } from './servidores.mjs';
 
 /** Copia a pasta public e embaralha os .js do mesmo jeito que o gerar-apk.ps1 faz. Devolve a pasta. */
@@ -30,6 +31,9 @@ export async function testarApkWeb(nav, grupos) {
   const g2 = novoGrupo('Código embaralhado do APK: pedidos de 24/09');
   await testarPedidos24(nav, (porta, pasta) => centralNode(porta, pasta, www), 8174, g2);
   grupos.push(g2);
+  const g26 = novoGrupo('Código embaralhado do APK: volume de vinho e dornas de fermentação');
+  await testarPedidos26(nav, (porta, pasta) => centralNode(porta, pasta, www), 8172, g26);
+  grupos.push(g26);
   // a criptografia escrita em JavaScript (navegador sem WebCrypto) também vai embaralhada: tem de dar o mesmo resultado
   const g3 = novoGrupo('Código embaralhado do APK: criptografia escrita em JavaScript');
   const c3 = await centralNode(8173, pastaTemporaria('apk3'), www);

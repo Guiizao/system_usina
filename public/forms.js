@@ -11,6 +11,8 @@
  *   juntas  -> duas pranchetas de insumo na mesma tela (ex.: LPHERA e Cal). Na exportação
  *              cada uma continua sendo uma folha separada, como no papel.
  *   grade   -> itens x horas (controle diário da caldeira / destilaria)
+ *   medicao -> volume de vinho: a folga de cada dorna, medida com a trena de manhã (medidas em "medicaoPadrao")
+ *   fermentacao -> cada dorna de fermentação: enchimento, Brix e volume do dia e envio para a volante
  *
  * Tipos de campo:
  *   num    -> teclado numérico (dec = casas decimais; os botões - e + mudam de 1 em 1
@@ -27,6 +29,39 @@
  */
 window.USINA = {
   empresa: 'UBIRÁLCOOL ÁLCOOL DE CEREAIS',
+
+  /* Medidas das dornas (da planilha CONTROLE LTS do escritório).
+     Volume em litros = (altura - folga) x área da base x 1000. Altura e folga em metros, área em m².
+     O escritório corrige em Configurações da usina (vale para todos os tablets); isto aqui é só o começo.
+     soma: entra no total de vinho da produção (os tanques de álcool têm o total deles). */
+  medicaoPadrao: {
+    grupos: [
+      { id: 'hid', nome: 'Hidrólise', brix: true, soma: true, dornas: [
+        { id: 'hid1', nome: 'Dorna 1', altura: 1, area: 2.01 }, { id: 'hid2', nome: 'Dorna 2', altura: 1, area: 2.01 },
+        { id: 'hid3', nome: 'Dorna 3', altura: 1, area: 2.01 }, { id: 'hid4', nome: 'Dorna 4', altura: 1, area: 2.01 },
+        { id: 'hid5', nome: 'Dorna 5', altura: 1, area: 2.01 }] },
+      { id: 'sac', nome: 'Sacarificação', brix: true, soma: true, dornas: [
+        { id: 'sac1', nome: 'Dorna 1', altura: 2.7, area: 2.835 }, { id: 'sac2', nome: 'Dorna 2', altura: 2.7, area: 2.835 },
+        { id: 'sac3', nome: 'Dorna 3', altura: 2.7, area: 2.835 }, { id: 'sac4', nome: 'Dorna 4', altura: 2.7, area: 2.835 },
+        { id: 'sac5', nome: 'Dorna 5', altura: 2.7, area: 2.835 }, { id: 'sac6', nome: 'Dorna 6', altura: 2.7, area: 2.835 }] },
+      { id: 'desc', nome: 'Dornas de descanso', brix: true, soma: true, dornas: [
+        { id: 'desc8', nome: 'Dorna 8', altura: 2.7, area: 2.835 }, { id: 'desc9', nome: 'Dorna 9', altura: 2.7, area: 2.835 },
+        { id: 'desc10', nome: 'Dorna 10', altura: 2.7, area: 2.835 }, { id: 'desc11', nome: 'Dorna 11', altura: 2.7, area: 2.835 },
+        { id: 'desc12', nome: 'Dorna 12', altura: 2.7, area: 2.835 }] },
+      // as dornas de fermentação (vinho): também aparecem em "Dornas de fermentação"
+      { id: 'vin', nome: 'Vinho (fermentação)', brix: true, fermentando: true, soma: true, dornas: [
+        { id: 'vin1', nome: 'Dorna 1', altura: 6, area: 4.908 }, { id: 'vin2', nome: 'Dorna 2', altura: 6, area: 4.908 },
+        { id: 'vin4', nome: 'Dorna 4', altura: 6, area: 4.908 }, { id: 'vin5', nome: 'Dorna 5', altura: 6, area: 4.908 },
+        { id: 'vin6', nome: 'Dorna 6', altura: 6, area: 4.908 }, { id: 'vin7', nome: 'Dorna 7', altura: 6, area: 4.908 },
+        { id: 'vin8', nome: 'Dorna 8', altura: 6, area: 4.908 }, { id: 'vin9', nome: 'Dorna 9', altura: 6, area: 4.908 },
+        { id: 'vin10', nome: 'Dorna 10', altura: 6, area: 4.908 }, { id: 'vin11', nome: 'Dorna 11', altura: 6, area: 4.908 }] },
+      { id: 'tq', nome: 'Tanques de álcool', brix: false, soma: false, dornas: [
+        { id: 'tq_dest', nome: 'Tanque Destilaria', altura: null, area: null },
+        { id: 'tq_inox1', nome: 'Tanque Inox 1', altura: 3.74, area: 1.606 }, { id: 'tq_inox2', nome: 'Tanque Inox 2', altura: 3.74, area: 1.606 },
+        { id: 'tq_abast1', nome: 'Tanque Abastecimento 1', altura: 2.5, area: 2.01 }, { id: 'tq_abast2', nome: 'Tanque Abastecimento 2', altura: 2.5, area: 2.01 },
+        { id: 'tq_abast3', nome: 'Tanque Abastecimento 3', altura: 5.44, area: 2.835 }, { id: 'tq_neutro', nome: 'Tanque Neutro', altura: 5, area: 6.048 }] },
+    ],
+  },
 
   // Troca de folha: o dia de produção começa às 07:00
   inicioDoDia: 7,
@@ -99,7 +134,7 @@ window.USINA = {
       nome: 'Destilaria e Fermentação',
       icone: 'coluna',
       operadores: ['Mateus'],
-      pranchetas: ['destilaria', 'ins_lactrol', 'ins_ureia'],
+      pranchetas: ['destilaria', 'fermentacao', 'med_dornas', 'ins_lactrol', 'ins_ureia'],
     },
     {
       id: 'nova_destilaria',
@@ -289,6 +324,39 @@ window.USINA = {
         { titulo: 'Coluna e vapor', campos: ['temp_pe_a', 'vapor'] },
         { titulo: 'Produção', campos: ['producao', 'carregamento'] },
         { titulo: 'Álcool', campos: ['inpm'] },
+      ],
+    },
+
+    /* ---------------- VOLUME DE VINHO E FERMENTAÇÃO (destiladores) ---------------- */
+    // Medição da manhã: a folga de cada dorna com a trena. O volume sai na hora (medidas em medicaoPadrao).
+    med_dornas: {
+      tipo: 'medicao',
+      nome: 'Volume de vinho',
+      codigo: 'Controle LTS',
+      titulo: 'Controle de Volume das Dornas (LTS)',
+      papel: { modelo: 'medicao' },
+      // Parâmetros da produção (Brix e horário), anotados junto com a medição
+      parametros: [
+        { id: 'brix_ralo', label: 'Brix no ralo', labelCurto: 'Ralo', type: 'num', dec: 1 },
+        { id: 'hora_ralo', label: 'Horário (ralo)', labelCurto: 'Horário', type: 'time' },
+        { id: 'brix_hid', label: 'Brix na hidrólise', labelCurto: 'Hidrólise', type: 'num', dec: 1 },
+        { id: 'hora_hid', label: 'Horário (hidrólise)', labelCurto: 'Horário', type: 'time' },
+        { id: 'brix_ferm', label: 'Brix na fermentação', labelCurto: 'Fermentação', type: 'num', dec: 1 },
+        { id: 'hora_ferm', label: 'Horário (fermentação)', labelCurto: 'Horário', type: 'time' },
+      ],
+    },
+    // Caderno das dornas de fermentação: as dornas são as do grupo "vin" da medição (1, 2, 4 a 11)
+    fermentacao: {
+      tipo: 'fermentacao',
+      nome: 'Dornas de fermentação',
+      codigo: 'Caderno da fermentação',
+      titulo: 'Controle das Dornas de Fermentação',
+      grupoMedicao: 'vin',
+      papel: { modelo: 'fermentacao' },
+      campos: [
+        { id: 'enche_inicio', label: 'Começou a encher', labelCurto: 'Início', type: 'time', vazioTexto: 'Marca ao começar' },
+        { id: 'enche_fim', label: 'Terminou de encher', labelCurto: 'Fim', type: 'time', vazioTexto: 'Marca ao terminar' },
+        { id: 'brix_inicial', label: 'Brix inicial', type: 'num', dec: 1, min: 0, max: 40, dica: 'Brix da dorna quando terminou de encher.' },
       ],
     },
 

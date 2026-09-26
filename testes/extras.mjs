@@ -43,6 +43,19 @@ export async function testarConfiguracao(grupo) {
   await teste(grupo, 'forms.js: cada folha com modelo de papel tem o modelo pronto', async () => {
     for (const [pid, p] of Object.entries(C.pranchetas)) if (p.papel) certo(modelos.includes(p.papel.modelo), `${pid}: modelo ${p.papel.modelo} não existe em modelos.js`);
   });
+  await teste(grupo, 'forms.js: medidas das dornas dão os volumes da planilha CONTROLE LTS do escritório', async () => {
+    const g = (id) => C.medicaoPadrao.grupos.find((x) => x.id === id);
+    const vol = (d, folga) => Math.round((d.altura - folga) * d.area * 1000 * 100) / 100;
+    const sac = g('sac').dornas;
+    // a foto da planilha do Lucas: folgas 0,15 / 0,20 / 0,14 -> 7.229,25 / 7.087,50 / 7.257,60, subtotal 21.574,35
+    igual([vol(sac[0], 0.15), vol(sac[1], 0.2), vol(sac[3], 0.14)], [7229.25, 7087.5, 7257.6], 'Sacarificação');
+    igual(Math.round((vol(sac[0], 0.15) + vol(sac[1], 0.2) + vol(sac[3], 0.14)) * 100) / 100, 21574.35, 'subtotal');
+    igual(g('vin').dornas.map((d) => d.id), ['vin1', 'vin2', 'vin4', 'vin5', 'vin6', 'vin7', 'vin8', 'vin9', 'vin10', 'vin11'], 'dornas de fermentação (sem a 3)');
+    igual(vol(g('vin').dornas[0], 0.15), 28711.8, 'vinho');
+    igual(vol(g('tq').dornas.find((d) => d.id === 'tq_inox1'), 1), 4400.44, 'tanque de álcool em litros');
+    certo(!g('tq').soma && ['hid', 'sac', 'desc', 'vin'].every((id) => g(id).soma), 'o que soma no total de vinho da produção');
+    certo(C.pranchetas.fermentacao.grupoMedicao === 'vin', 'fermentação usa as dornas do vinho');
+  });
   await teste(grupo, 'forms.js: todo setor tem operadores e a senha do encarregado ainda é a de teste', async () => {
     for (const s of C.setores) certo(s.operadores && s.operadores.length, `${s.nome} sem operadores`);
     return C.pinAdmin === '1234' ? 'lembrete: trocar a senha 1234 antes de usar de verdade' : 'senha trocada';

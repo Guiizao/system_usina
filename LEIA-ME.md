@@ -162,6 +162,25 @@ Medido num tablet simulado 4 vezes mais lento que o computador, com a central gu
 - Dois aparelhos criando a mesma linha sem um saber do outro (o chefe corrigiu nos segundos antes de receber): os valores se juntam, nada se perde.
 - **Código embaralhado no APK**: quem abrir o APK não lê o código do jeito que foi escrito (o mapa para entender erros fica só em `apk/saida/mapas`).
 
+## Volume de vinho e dornas de fermentação (versão 2.6)
+
+Pedido do escritório (Lucas, 26/09/2026), a partir da planilha `CONTROLE LTS`. Fica na **Destilaria e Fermentação**: são os destiladores que medem as dornas e cuidam da fermentação (quando os logins forem separados, só eles terão essas folhas). A Nova Destilaria não mudou.
+
+**Volume de vinho** (medição da manhã, com a trena):
+- Grupos como na planilha: Hidrólise (1 a 5), Sacarificação (1 a 6), Dornas de descanso (8 a 12), Vinho/fermentação (1, 2, 4 a 11), Tanques de álcool e Brix da produção (ralo, hidrólise e fermentação, com horário).
+- O destilador digita a **folga** de cada dorna e o volume aparece na hora, do lado: **volume (L) = (altura − folga) × área da base × 1000**. Folga maior que a altura avisa do lado do número. Nas dornas de vinho também vão o Brix e "Fermentando: Sim/Não" (quem marca é o destilador; o sistema não decide sozinho).
+- No alto: subtotal do grupo e o **total de vinho da produção** (Hidrólise + Sacarificação + Descanso + Vinho, como na planilha). Os tanques de álcool têm o total deles, em litros.
+- O volume é guardado junto com a medição: se a medida da dorna mudar depois, o que já foi medido continua igual.
+- **Medidas das dornas**: tablet chefe > Usina > Medidas das dornas > Trocar (altura e área da base de cada dorna). Começam com os números da planilha; o Tanque Destilaria está sem medida (a planilha não tem). "Voltar para as medidas da planilha" desfaz.
+- Excel e impressão no desenho da planilha CONTROLE LTS (folha "Destilaria - Volume de vinho").
+
+**Dornas de fermentação** (o caderno dos destiladores), dornas 1, 2, 4, 5, 6, 7, 8, 9, 10 e 11:
+- Cada dorna: **Começar a encher** (hora e quem encheu) → **Terminou de encher** (hora; o teclado já abre no Brix inicial) → fermentando → **Mandar para a volante** (hora e quem mandou) → **Parou de mandar** (pergunta se esvaziou: sim, fica vazia; não, fica "com vinho" e pode mandar de novo).
+- O cartão da dorna mostra: enchida em tal dia, por quem, das tantas às tantas, Brix inicial; e a última medição da manhã (Brix, volume, fermentando). O Brix e o volume vêm da folha Volume de vinho: ninguém anota duas vezes.
+- No alto aparece quem está na volante. Mandar uma dorna com outra já na volante pede confirmação.
+- Cada enchimento é uma anotação no dia em que começou a encher. O último enchimento de cada dorna fica sempre nos tablets e a central manda sempre (uma dorna pode passar vários dias fermentando; o tablet do setor guarda só 3 dias).
+- Excel e impressão: folha "Dornas de fermentação", com o enchimento, a medição e a volante do dia.
+
 ## Wi-Fi embaralhado (versão 2.5)
 
 Tudo que passa entre os aparelhos e a central vai embaralhado (`public/cifra.js`, igual no `server.js` e no `ServidorCentral.java`). Quem espiar o Wi-Fi não lê anotação, nome de operador, código nem chave.
@@ -226,13 +245,14 @@ Leva uns 20 minutos e grava o resultado em `testes/saida/resultado.txt`. Testa:
 5. longo prazo, nas duas centrais: 90 dias de uso da usina inteira (a memória do tablet não enche), dias antigos no BackupUsina, troca de turno e virada das 07:00 no meio da anotação, "Terminou a Nº X", tablet chefe trocado e 700 anotações guardadas sem Wi-Fi;
 6. velocidade: cada toque num tablet 4 vezes mais lento, com 90 dias de uso, tem que responder em menos de 100 ms;
 7. os pedidos do teste de 24/09 (aviso curto, senha do operador no tablet chefe, relatórios, WhatsApp, rolagem, trocar o código), nas duas centrais, e o aplicativo com o código embaralhado como vai no APK;
+7c. a versão 2.6, nas duas centrais: volume de vinho (a folga vira litros na hora, igual à planilha; aviso de folga maior que a dorna; medidas trocadas pelo escritório), dornas de fermentação (encher, terminar, Brix inicial, medição da manhã no cartão, volante com duas dornas, parar esvaziando ou não, dorna enchida há 6 dias num tablet novo) e o Excel das duas folhas;
 7b. a versão 2.5, nas duas centrais: Wi-Fi embaralhado (quem espia não lê nada, pacote alterado, repetido ou com relógio errado, aplicativo antigo, criptografia escrita em JavaScript igual à do Node e à do navegador) e os totais no Base44 (com um Base44 de mentira no computador: sozinho quando o dia fecha, de novo quando a folha é corrigida, erro sem internet ou com segredo errado, e a função que vai no Base44 rodando com um Base44 simulado);
 8. leitura de foto, impressão e o aplicativo abrindo sem rede;
 9. todas as telas em 9 tamanhos, procurando texto cortado, palavra quebrada, letra pequena, pouco contraste entre a letra e o fundo e erro de JavaScript (fotos em `testes/saida/telas`).
 
 Os testes usam pastas de dados temporárias: nunca mexem em `dados/`. Só as telas: `node testes/rodar-telas.mjs` (liga uma central de teste sozinho). Só o longo prazo: `node testes/rodar-robustez.mjs`.
 
-O teste para fazer à mão no celular e no tablet está em `Teste-nos-aparelhos-2.5.pdf`, na pasta `Usina`. Só a versão 2.5: `node testes/rodar-pedidos25.mjs`.
+O teste para fazer à mão no celular e no tablet está em `Teste-nos-aparelhos-2.6.pdf`, na pasta `Usina`. Só a versão 2.6: `node testes/rodar-pedidos26.mjs`; só a 2.5: `node testes/rodar-pedidos25.mjs`.
 
 ## Imagens das telas
 
@@ -249,6 +269,8 @@ Salva em `../telas`.
 43 verificações automáticas: conexão com código certo e errado, anotação, botões − e +, aviso de valor fora do normal, cópia da dorna anterior, marcar fim, monitoramento, valores padrão, insumos, senha do operador, trava por inatividade, virada de turno, exportação, relatórios e configurações. Mais: queda de rede com envio depois que volta, sincronização entre dois aparelhos e validação do Excel e do XML.
 
 Versão 2 (16/09/2026): avisos de pH e Brix, telas LPHERA / Cal e Saczyme / Alcolina com a soma das dornas da hora, casinha nas abas, rolagem do painel do chefe que não volta mais para o topo, pastas *Usina, tela de relatórios, janela de Excel ou XML, listas do ralo, cadastro protegido por senha e busca do tablet chefe no Wi-Fi. Testado no navegador contra o servidor: anotação, envio, queda de rede, relatórios e Excel/XML.
+
+Versão 2.6 (26/09/2026), pedido do escritório: volume de vinho (folga medida com a trena vira litros na hora, com as medidas das dornas da planilha CONTROLE LTS e o total da produção) e dornas de fermentação (encher, Brix inicial, Brix e volume do dia, mandar para a volante), na Destilaria e Fermentação.
 
 Versão 2.5 (24/09/2026), ideias aprovadas depois do teste na área: Wi-Fi embaralhado (conectar sem o código passar aberto, uma chave por aparelho, pacote alterado ou repetido recusado, também no navegador do computador) e totais do dia no Base44 (sozinhos quando o dia fecha e de novo se a folha for corrigida, com a função para o Base44 em `integracoes/base44`).
 

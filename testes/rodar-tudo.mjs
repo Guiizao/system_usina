@@ -25,6 +25,7 @@ import { medirDesempenho } from './desempenho.mjs';
 import { testarPedidos24 } from './pedidos24.mjs';
 import { testarCifra } from './cifra.mjs';
 import { testarBase44Central, testarPedidos25, testarFuncaoBase44 } from './pedidos25.mjs';
+import { testarPedidos26 } from './pedidos26.mjs';
 import { testarApkWeb } from './rodar-apk-web.mjs';
 import { centralNode, centralJava, APP } from './servidores.mjs';
 
@@ -103,6 +104,12 @@ try {
   for (const [nome, ligar, porta] of [['computador', centralNode, 8267], ['tablet chefe', centralJava, 8268]]) {
     const g = novoGrupo('Versão 2.5 (Base44 e Wi-Fi embaralhado) na central do ' + nome);
     await testarPedidos25(nav, ligar, porta, g, { correcao: nome === 'computador' });
+    grupos.push(g);
+  }
+  // 4h. versão 2.6: volume de vinho (folga -> litros) e dornas de fermentação com a volante
+  for (const [nome, ligar, porta] of [['computador', centralNode, 8263], ['tablet chefe', centralJava, 8264]]) {
+    const g = novoGrupo('Volume de vinho e dornas de fermentação na central do ' + nome);
+    await testarPedidos26(nav, ligar, porta, g);
     grupos.push(g);
   }
   // 4f. o aplicativo embaralhado (como vai no APK) continua funcionando igual

@@ -495,9 +495,10 @@ async function rotaProtegida(req, res, url, ip) {
         }
         const desde = Number(url.searchParams.get('desde') || 0);
         const base = desde > db.seq ? 0 : desde; // servidor foi zerado: manda tudo
-        // cada aparelho guarda só os últimos dias (a configuração da usina e os avisos vão sempre)
+        // cada aparelho guarda só os últimos dias (a configuração da usina, os avisos e os enchimentos das dornas de
+        // fermentação vão sempre: uma dorna pode passar vários dias fermentando)
         const aPartirDe = url.searchParams.get('aPartirDe');
-        const serve = (r) => !ehDia(aPartirDe) || !ehDia(r.data) || r.data >= aPartirDe || r.prancheta === 'avisos' || r.prancheta === 'avisos-recibo';
+        const serve = (r) => !ehDia(aPartirDe) || !ehDia(r.data) || r.data >= aPartirDe || r.prancheta === 'avisos' || r.prancheta === 'avisos-recibo' || r.prancheta === 'fermentacao';
         return json(res, 200, { seq: db.seq, geracao: config.geracao, registros: Object.values(db.registros).filter((r) => r.seq > base && serve(r)) });
       }
 

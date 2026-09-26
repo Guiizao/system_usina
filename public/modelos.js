@@ -292,7 +292,88 @@
       return { nome: 'Nova Destilaria', paisagem: true, grade: g, imagem: { linha: 0, coluna: n - 5, alturaPx: 62, dx: 30, dy: 2 }, dados };
     }
 
-    const MODELOS = { pop011, pop03, caldeira, destilaria, nova };
+    /* ===== Volume de vinho (planilha CONTROLE LTS do escritório) ===== */
+    function medicao(pid, data) {
+      const m = ctx.medicaoDoDia(data);
+      const n = 5;
+      const g = new Grade([30, 12, 16, 10, 14]);
+      const cab = { b: true, sz: 9, al: 'c', borda: true, fundo: 'D9E2D3' };
+      g.bloco(0, 0, 1, n - 1, 'CONTROLE DE VOLUME DAS DORNAS (LTS)', { b: true, sz: 14, al: 'c', borda: true });
+      g.bloco(2, 0, 2, n - 1, `DATA: ${fmtData(data)}`, { b: true, sz: 10, al: 'l', borda: true });
+      let r = 4;
+      const linhas = [];
+      m.grupos.forEach((x) => {
+        g.bloco(r, 0, r, n - 1, `${x.g.nome.toUpperCase()}${x.hora && x.medidas ? `   (medido às ${x.hora}${x.operador ? ' por ' + x.operador : ''})` : ''}`, { b: true, sz: 10, al: 'l', borda: true, fundo: 'C6D9B4' });
+        r++;
+        ['DORNAS', 'FOLGA', 'VOLUME LTS', 'BRIX', 'FERMENTANDO'].forEach((c, i) => g.set(r, i, c, cab));
+        r++;
+        x.linhas.forEach((l) => {
+          const vals = [l.d.nome, vazio(l.folga) ? '' : numero(l.folga), l.volume == null ? '' : l.volume, x.g.brix && !vazio(l.brix) ? numero(l.brix) : '', x.g.fermentando ? l.ferm || '' : ''];
+          vals.forEach((v, i) => g.set(r, i, v, Object.assign({ sz: 9, al: i ? 'c' : 'l', borda: true }, i === 1 ? { dec: 2 } : i === 2 ? { dec: 2, milhar: true } : {})));
+          linhas.push({ rotulo: `${x.g.nome} - ${l.d.nome}`, preenchida: !vazio(l.folga) || !vazio(l.brix) || !vazio(l.ferm), valores: [x.g.nome, ...vals] });
+          r++;
+        });
+        g.set(r, 0, 'SUB TOTAL', { b: true, sz: 9, al: 'l', borda: true, fundo: 'FCE4B4' });
+        g.set(r, 1, '', BORDA);
+        g.set(r, 2, x.subtotal, { b: true, sz: 9, al: 'c', borda: true, dec: 2, milhar: true, fundo: 'FCE4B4' });
+        g.set(r, 3, '', BORDA); g.set(r, 4, '', BORDA);
+        r += 2;
+      });
+      [['TOTAL GERAL LITROS PRODUÇÃO', m.producao], ['TOTAL TANQUES DE ÁLCOOL (LTS)', m.tanques]].forEach(([rot, val]) => {
+        g.bloco(r, 0, r, 1, rot, { b: true, sz: 10, al: 'l', borda: true, fundo: 'FCE4B4' });
+        g.set(r, 2, val, { b: true, sz: 10, al: 'c', borda: true, dec: 2, milhar: true, fundo: 'FCE4B4' });
+        g.set(r, 3, '', BORDA); g.set(r, 4, '', BORDA);
+        r++;
+      });
+      r++;
+      g.bloco(r, 0, r, n - 1, 'PARÂMETROS DA PRODUÇÃO (FAVOR VERIFICAR E ANOTAR DIARIAMENTE)', { b: true, sz: 10, al: 'l', borda: true, fundo: 'C6D9B4' });
+      r++;
+      ['', 'BRIX', 'HORÁRIO'].forEach((c, i) => g.set(r, i, c, cab));
+      r++;
+      const params = [['BRIX NO RALO', 'brix_ralo', 'hora_ralo'], ['BRIX NA HIDRÓLISE', 'brix_hid', 'hora_hid'], ['BRIX FERMENTAÇÃO', 'brix_ferm', 'hora_ferm']];
+      params.forEach(([rot, b, h]) => {
+        g.set(r, 0, rot, { b: true, sz: 9, al: 'l', borda: true });
+        g.set(r, 1, vazio(m.param[b]) ? '' : numero(m.param[b]), { sz: 9, al: 'c', borda: true });
+        g.set(r, 2, m.param[h] || '', { sz: 9, al: 'c', borda: true });
+        r++;
+      });
+      const dados = {
+        cabecalho: [['Documento', 'CONTROLE DE VOLUME DAS DORNAS (LTS)'], ['Data', fmtData(data)]],
+        colunas: ['Grupo', 'Dorna', 'Folga (m)', 'Volume (L)', 'Brix', 'Fermentando'],
+        linhas,
+        rodape: [['Total geral litros produção', String(m.producao)], ['Total tanques de álcool', String(m.tanques)],
+          ...params.map(([rot, b, h]) => [rot, [m.param[b], m.param[h]].filter((x) => !vazio(x)).join(' às ')])],
+      };
+      return { nome: 'Volume de vinho', paisagem: false, grade: g, dados };
+    }
+
+    /* ===== Caderno das dornas de fermentação ===== */
+    function fermentacao(pid, data) {
+      const lista = ctx.fermentacaoDoDia(data);
+      const colunas = ['DORNA', 'ENCHIDA EM', 'COMEÇOU A ENCHER', 'TERMINOU', 'BRIX INICIAL', 'OPERADOR', 'MEDIÇÃO', 'BRIX', 'VOLUME LTS', 'FERMENTANDO', 'VOLANTE NO DIA', 'ESVAZIOU'];
+      const g = new Grade([8, 10, 10, 10, 9, 14, 12, 7, 12, 11, 30, 12]);
+      const n = colunas.length;
+      g.bloco(0, 0, 1, n - 1, 'CONTROLE DAS DORNAS DE FERMENTAÇÃO', { b: true, sz: 14, al: 'c', borda: true });
+      g.bloco(2, 0, 2, n - 1, `DATA: ${fmtData(data)}`, { b: true, sz: 10, al: 'l', borda: true });
+      colunas.forEach((c, i) => g.set(4, i, c, { b: true, sz: 8, al: 'c', borda: true, quebra: true, fundo: 'D9E2D3' }));
+      g.altura(4, 26);
+      const curta = (iso) => (iso ? fmtData(iso).slice(0, 5) : '');
+      const linhas = lista.map((l) => {
+        const m = l.medicao;
+        const valores = [l.n, l.ciclo ? curta(l.enchidaEm) : 'vazia', l.inicio, l.fim, vazio(l.brixInicial) ? '' : numero(l.brixInicial), l.operador,
+          m ? `${curta(m.data)} ${m.hora}`.trim() : '', m && !vazio(m.brix) ? numero(m.brix) : '', m && m.volume != null ? m.volume : '', m ? m.ferm || '' : '',
+          l.volante.map((s) => `${s.inicio}-${s.fim || '...'}${s.operador ? ' ' + s.operador : ''}`).join('; '), l.esvaziou ? `${curta(l.esvaziou.data)} ${l.esvaziou.hora}` : ''];
+        return { rotulo: `Dorna ${l.n}`, preenchida: !!l.ciclo || !!l.volante.length, valores };
+      });
+      linhas.forEach((l, j) => {
+        l.valores.forEach((v, i) => g.set(5 + j, i, v, Object.assign({ sz: 9, al: i === 5 || i === 10 ? 'l' : 'c', borda: true, b: i === 0, quebra: i === 10 }, i === 8 ? { dec: 2, milhar: true } : {})));
+        g.altura(5 + j, 20);
+      });
+      const dados = { cabecalho: [['Documento', 'CONTROLE DAS DORNAS DE FERMENTAÇÃO'], ['Data', fmtData(data)]], colunas, linhas, rodape: [] };
+      return { nome: 'Fermentação', paisagem: true, grade: g, dados };
+    }
+
+    const MODELOS = { pop011, pop03, caldeira, destilaria, nova, medicao, fermentacao };
     return {
       /** Monta a folha de papel de uma prancheta num dia. */
       folha(pid, data) {
@@ -350,7 +431,7 @@
         const cls = [st.borda ? 'b' : '', st.b ? 'n' : '', `a${st.al || 'l'}`, `v${st.va || 'c'}`, st.quebra ? 'q' : ''].filter(Boolean).join(' ');
         const estilo = `font-size:${((st.sz || 10) * 0.95).toFixed(1)}pt`;
         const logo = f.imagem && f.imagem.linha === r && f.imagem.coluna === c && logoUrl ? `<img class="logo-imp" src="${logoUrl}" alt="Ubirálcool">` : '';
-        const v = typeof cel.v === 'number' ? fmtNum(st.dec ? cel.v.toFixed(st.dec) : String(cel.v)) : cel.v;
+        const v = typeof cel.v === 'number' ? (st.milhar ? cel.v.toLocaleString('pt-BR', { minimumFractionDigits: st.dec || 0, maximumFractionDigits: st.dec || 0 }) : fmtNum(st.dec ? cel.v.toFixed(st.dec) : String(cel.v))) : cel.v;
         html += `<td${rs > 1 ? ` rowspan="${rs}"` : ''}${cs > 1 ? ` colspan="${cs}"` : ''} class="${cls}" style="${estilo}">${logo}${esc(v).replace(/\n/g, '<br>')}</td>`;
       }
       html += '</tr>';
