@@ -26,6 +26,7 @@ import { testarPedidos24 } from './pedidos24.mjs';
 import { testarCifra } from './cifra.mjs';
 import { testarBase44Central, testarPedidos25, testarFuncaoBase44 } from './pedidos25.mjs';
 import { testarPedidos26 } from './pedidos26.mjs';
+import { testarApiLeitura } from './api-leitura.mjs';
 import { testarApkWeb } from './rodar-apk-web.mjs';
 import { centralNode, centralJava, APP } from './servidores.mjs';
 
@@ -69,6 +70,13 @@ for (const [nome, ligar, porta] of [['computador', centralNode, 8265], ['tablet 
   const g = novoGrupo('Totais no Base44, direto na central do ' + nome);
   const c = await ligar(porta);
   try { await testarBase44Central(c, porta + 10, g); } finally { await c.desligar(); }
+  grupos.push(g);
+}
+// 3d. API só de leitura para o sistema do escritório (JSON)
+{
+  const g = novoGrupo('API só de leitura para o sistema do escritório (JSON)');
+  const c = await centralNode(8261);
+  try { await testarApiLeitura(c, g); } finally { await c.desligar(); }
   grupos.push(g);
 }
 // 3b. longo prazo direto na central: dias guardados, dias antigos no BackupUsina, central nova, 90 dias de uso

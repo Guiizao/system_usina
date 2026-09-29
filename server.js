@@ -122,6 +122,51 @@ function jaVisto(iv) {
 }
 const ATUALIZE = 'Atualize o aplicativo: a central agora usa a conexão embaralhada (versão 2.5).';
 
+// ---------- API só de leitura para o sistema do escritório (api-leitura.js) ----------
+// senha de leitura: a do ambiente TOKEN_LEITURA ou uma sorteada na primeira vez (fica em ServidorUsina/config.json)
+if (!config.tokenLeitura) { config.tokenLeitura = crypto.randomBytes(24).toString('base64url'); salvarConfig(); }
+const TOKEN_LEITURA = process.env.TOKEN_LEITURA || config.tokenLeitura;
+const leitura = require('./api-leitura');
+let apiLeituraPronta = null;
+const medidasDoEscritorio = () => { const c = db.registros['config|sistema|geral']; return c && !c.apagado && c.valores ? c.valores.medicao || null : null; };
+const apiDeLeitura = () => apiLeituraPronta || (apiLeituraPronta = leitura.criar(leitura.carregarPranchetas(PUBLICO), medidasDoEscritorio));
+const mesmoSegredo = (a, b) => { const x = Buffer.from(String(a)); const y = Buffer.from(String(b)); return x.length === y.length && crypto.timingSafeEqual(x, y); };
+function diasComAnotacao() {
+  const n = {};
+  Object.values(db.registros).forEach((r) => { if (leitura.publica(r) && !r.apagado) n[r.data] = (n[r.data] || 0) + 1; });
+  fs.readdirSync(PASTAS.backup).forEach((f) => { const m = f.match(/^(\d{4}-\d{2}-\d{2})\.json$/); if (m && !n[m[1]]) n[m[1]] = lerDiaArquivado(m[1]).filter((r) => leitura.publica(r) && !r.apagado).length; });
+  return n;
+}
+function apiLeitura(req, res, url) {
+  if (req.method !== 'GET') return json(res, 405, { erro: 'A API é só de leitura: use GET' });
+  const auth = String(req.headers.authorization || '');
+  if (!/^Bearer\s+/i.test(auth) || !mesmoSegredo(auth.replace(/^Bearer\s+/i, '').trim(), TOKEN_LEITURA)) {
+    return json(res, 401, { erro: 'Senha de leitura errada ou faltando. Mande o cabeçalho Authorization: Bearer <senha>' });
+  }
+  const api = apiDeLeitura();
+  const p = url.pathname;
+  if (p === '/api/v1/esquema') return json(res, 200, api.esquema());
+  if (p === '/api/v1/dias') {
+    const de = url.searchParams.get('de'); const ate = url.searchParams.get('ate');
+    const dias = Object.entries(diasComAnotacao()).filter(([d, n]) => n && (!leitura.ehDia(de) || d >= de) && (!leitura.ehDia(ate) || d <= ate))
+      .sort((a, b) => (a[0] < b[0] ? 1 : -1)).map(([data, anotacoes]) => ({ data, anotacoes }));
+    return json(res, 200, { dias });
+  }
+  const m = p.match(/^\/api\/v1\/dias\/(\d{4}-\d{2}-\d{2})$/);
+  if (m) {
+    const regs = arquivado(m[1]) ? lerDiaArquivado(m[1]) : Object.values(db.registros).filter((r) => r.data === m[1]);
+    return json(res, 200, api.dia(m[1], regs.filter(leitura.publica)));
+  }
+  if (p === '/api/v1/registros') {
+    const desde = Number(url.searchParams.get('desde') || 0) || 0;
+    const limite = Math.min(2000, Math.max(1, Number(url.searchParams.get('limite') || 500) || 500));
+    const novos = Object.values(db.registros).filter((r) => r.seq > desde && leitura.publica(r)).sort((a, b) => a.seq - b.seq);
+    const lote = novos.slice(0, limite);
+    return json(res, 200, { seq: lote.length ? lote[lote.length - 1].seq : db.seq, maisDepois: novos.length > limite, registros: lote.map(api.registro) });
+  }
+  return json(res, 404, { erro: 'rota desconhecida' });
+}
+
 // ---------- totais do dia para o sistema do escritório (Base44) ----------
 // o endereço e o segredo ficam só aqui na central, não vão para os tablets
 if (!config.base44) config.base44 = { url: '', segredo: '', enviados: {} };
@@ -255,7 +300,7 @@ let tentativasTodas = []; // e no total, para quem troca de endereço a cada chu
 // ---------- HTTP ----------
 function cabecalhosCors(res) {
   res.setHeader('Access-Control-Allow-Origin', '*'); // o APK roda em http://localhost
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
 }
 function json(res, status, obj) {
@@ -374,6 +419,9 @@ const servidor = http.createServer(async (req, res) => {
       if (req.method === 'HEAD') return res.end();
       return fs.createReadStream(APK).pipe(res);
     }
+
+    // ----- API só de leitura para o sistema do escritório (JSON, com a senha de leitura) -----
+    if (p.startsWith('/api/v1/')) return apiLeitura(req, res, url);
 
     // ----- rotas protegidas: só por pedido embaralhado com a chave do aparelho -----
     if (p === '/api/c' && req.method === 'POST') {
