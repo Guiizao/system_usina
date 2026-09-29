@@ -422,6 +422,35 @@ public class ServidorCentral {
     if (!tmp.renameTo(arquivo)) throw new IOException("não consegui salvar " + arquivo);
   }
 
+  private String shaDoApk = null;
+  private long apkMedidoEm = -1;
+
+  /**
+   * O que este tablet entrega para os outros se atualizarem (versão 2.7): a versão do aplicativo instalado,
+   * o tamanho e o SHA-256 do APK dele e as novidades (public/novidades.js, que vai dentro do APK).
+   */
+  private synchronized JSONObject versaoDoApk() throws Exception {
+    File apk = new File(contexto.getPackageCodePath());
+    String versao = contexto.getPackageManager().getPackageInfo(contexto.getPackageName(), 0).versionName;
+    if (shaDoApk == null || apkMedidoEm != apk.lastModified()) {
+      MessageDigest resumo = MessageDigest.getInstance("SHA-256");
+      try (InputStream entrada = new FileInputStream(apk)) {
+        byte[] buf = new byte[64 * 1024];
+        int n;
+        while ((n = entrada.read(buf)) > 0) resumo.update(buf, 0, n);
+      }
+      shaDoApk = hex(resumo.digest());
+      apkMedidoEm = apk.lastModified();
+    }
+    JSONObject r = new JSONObject().put("versao", versao).put("tamanho", apk.length()).put("sha256", shaDoApk).put("url", "/apk/pranchetas.apk");
+    try (InputStream entrada = contexto.getAssets().open("public/novidades.js")) {
+      String texto = new String(lerTudo(entrada), StandardCharsets.UTF_8);
+      int ini = texto.indexOf('[', texto.indexOf("NOVIDADES")), fim = texto.lastIndexOf(']');
+      if (ini >= 0 && fim > ini) r.put("novidades", new JSONArray(texto.substring(ini, fim + 1)));
+    } catch (Exception e) { /* sem as novidades, o tablet mostra só a versão */ }
+    return r;
+  }
+
   private static byte[] lerTudo(InputStream entrada) throws IOException {
     ByteArrayOutputStream saida = new ByteArrayOutputStream();
     byte[] buffer = new byte[16384];
@@ -546,6 +575,9 @@ public class ServidorCentral {
 
       // rotas com os dados: só por pedido embaralhado com a chave do aparelho
       if (!autenticado && "/api/c".equals(caminho) && "POST".equals(metodo)) { apiCifrada(consulta, corpo, ip, saida); return; }
+
+      // atualização (versão 2.7): os outros tablets perguntam qual versão este tablet entrega
+      if ("/api/versao".equals(caminho)) { enviarJson(saida, 200, versaoDoApk()); return; }
 
       if ("/apk/pranchetas.apk".equals(caminho)) {
         // entrega o próprio aplicativo instalado neste tablet: é exatamente o mesmo app

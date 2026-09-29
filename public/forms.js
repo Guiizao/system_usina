@@ -31,10 +31,12 @@ window.USINA = {
   empresa: 'UBIRÁLCOOL ÁLCOOL DE CEREAIS',
 
   /* Medidas das dornas (da planilha CONTROLE LTS do escritório).
-     Volume em litros = (altura - folga) x área da base x 1000. Altura e folga em metros, área em m².
+     Volume em litros = (altura - folga) x área da base x 1000 (tanques de álcool: em m³, sem o x1000).
+     Altura e folga em metros, área em m². Grupos como o Lucas respondeu em 28/09/2026.
      O escritório corrige em Configurações da usina (vale para todos os tablets); isto aqui é só o começo.
      soma: entra no total de vinho da produção (os tanques de álcool têm o total deles). */
   medicaoPadrao: {
+    versao: 2, // muda quando os grupos mudam: medidas guardadas de uma versão antiga não valem mais
     grupos: [
       { id: 'hid', nome: 'Hidrólise', brix: true, soma: true, dornas: [
         { id: 'hid1', nome: 'Dorna 1', altura: 1, area: 2.01 }, { id: 'hid2', nome: 'Dorna 2', altura: 1, area: 2.01 },
@@ -44,18 +46,20 @@ window.USINA = {
         { id: 'sac1', nome: 'Dorna 1', altura: 2.7, area: 2.835 }, { id: 'sac2', nome: 'Dorna 2', altura: 2.7, area: 2.835 },
         { id: 'sac3', nome: 'Dorna 3', altura: 2.7, area: 2.835 }, { id: 'sac4', nome: 'Dorna 4', altura: 2.7, area: 2.835 },
         { id: 'sac5', nome: 'Dorna 5', altura: 2.7, area: 2.835 }, { id: 'sac6', nome: 'Dorna 6', altura: 2.7, area: 2.835 }] },
-      { id: 'desc', nome: 'Dornas de descanso', brix: true, soma: true, dornas: [
-        { id: 'desc8', nome: 'Dorna 8', altura: 2.7, area: 2.835 }, { id: 'desc9', nome: 'Dorna 9', altura: 2.7, area: 2.835 },
-        { id: 'desc10', nome: 'Dorna 10', altura: 2.7, area: 2.835 }, { id: 'desc11', nome: 'Dorna 11', altura: 2.7, area: 2.835 },
-        { id: 'desc12', nome: 'Dorna 12', altura: 2.7, area: 2.835 }] },
-      // as dornas de fermentação (vinho): também aparecem em "Dornas de fermentação"
-      { id: 'vin', nome: 'Vinho (fermentação)', brix: true, fermentando: true, soma: true, dornas: [
-        { id: 'vin1', nome: 'Dorna 1', altura: 6, area: 4.908 }, { id: 'vin2', nome: 'Dorna 2', altura: 6, area: 4.908 },
-        { id: 'vin4', nome: 'Dorna 4', altura: 6, area: 4.908 }, { id: 'vin5', nome: 'Dorna 5', altura: 6, area: 4.908 },
-        { id: 'vin6', nome: 'Dorna 6', altura: 6, area: 4.908 }, { id: 'vin7', nome: 'Dorna 7', altura: 6, area: 4.908 },
-        { id: 'vin8', nome: 'Dorna 8', altura: 6, area: 4.908 }, { id: 'vin9', nome: 'Dorna 9', altura: 6, area: 4.908 },
-        { id: 'vin10', nome: 'Dorna 10', altura: 6, area: 4.908 }, { id: 'vin11', nome: 'Dorna 11', altura: 6, area: 4.908 }] },
-      { id: 'tq', nome: 'Tanques de álcool', brix: false, soma: false, dornas: [
+      // fermentação: dornas 7 a 12 (o caderno dos destiladores, com a volante, é destas)
+      { id: 'fer', nome: 'Fermentação', brix: true, fermentando: true, soma: true, dornas: [
+        { id: 'fer7', nome: 'Dorna 7', altura: 2.7, area: 2.835 }, { id: 'fer8', nome: 'Dorna 8', altura: 2.7, area: 2.835 },
+        { id: 'fer9', nome: 'Dorna 9', altura: 2.7, area: 2.835 }, { id: 'fer10', nome: 'Dorna 10', altura: 2.7, area: 2.835 },
+        { id: 'fer11', nome: 'Dorna 11', altura: 2.7, area: 2.835 }, { id: 'fer12', nome: 'Dorna 12', altura: 2.7, area: 2.835 }] },
+      // descanso: dornas 1 a 11 (sem a 3), as grandes
+      { id: 'dsc', nome: 'Dornas de descanso', brix: true, soma: true, dornas: [
+        { id: 'dsc1', nome: 'Dorna 1', altura: 6, area: 4.908 }, { id: 'dsc2', nome: 'Dorna 2', altura: 6, area: 4.908 },
+        { id: 'dsc4', nome: 'Dorna 4', altura: 6, area: 4.908 }, { id: 'dsc5', nome: 'Dorna 5', altura: 6, area: 4.908 },
+        { id: 'dsc6', nome: 'Dorna 6', altura: 6, area: 4.908 }, { id: 'dsc7', nome: 'Dorna 7', altura: 6, area: 4.908 },
+        { id: 'dsc8', nome: 'Dorna 8', altura: 6, area: 4.908 }, { id: 'dsc9', nome: 'Dorna 9', altura: 6, area: 4.908 },
+        { id: 'dsc10', nome: 'Dorna 10', altura: 6, area: 4.908 }, { id: 'dsc11', nome: 'Dorna 11', altura: 6, area: 4.908 }] },
+      // tanques de álcool em m³, como na planilha (sem o x1000)
+      { id: 'tq', nome: 'Tanques de álcool', brix: false, soma: false, unidade: 'm³', dornas: [
         { id: 'tq_dest', nome: 'Tanque Destilaria', altura: null, area: null },
         { id: 'tq_inox1', nome: 'Tanque Inox 1', altura: 3.74, area: 1.606 }, { id: 'tq_inox2', nome: 'Tanque Inox 2', altura: 3.74, area: 1.606 },
         { id: 'tq_abast1', nome: 'Tanque Abastecimento 1', altura: 2.5, area: 2.01 }, { id: 'tq_abast2', nome: 'Tanque Abastecimento 2', altura: 2.5, area: 2.01 },
@@ -99,6 +103,9 @@ window.USINA = {
 
   // Rede da usina
   portaCentral: 8080,
+  // Endereço na internet da pasta com o versao.json e o pranchetas.apk (a nuvem das pranchetas).
+  // Vazio: as atualizações vêm só da central da usina (o computador passa para os tablets).
+  atualizacaoOnline: '',
   // Se o aparelho ficar este tempo sem achar a central, ele trava até voltar para o Wi-Fi da usina
   horasForaDaRede: 12,
 
@@ -296,7 +303,7 @@ window.USINA = {
         { id: 'temp_agua', label: 'Temperat. Água', papel: 'TEMPERAT AGUA', labelCurto: 'Água', unidade: '°C', type: 'num', dec: 0 },
         { id: 'descarga_fundo', label: 'Descarga de Fundo', papel: 'DESCARGA DE FUNDO', labelCurto: 'De fundo', type: 'choice', opcoes: ['01', '02', '03'] },
         { id: 'descarga_garrafa', label: 'Descarga Garrafa', papel: 'DESCARGA GARRAFA', labelCurto: 'Garrafa', type: 'check' },
-        { id: 'retirada_cinza', label: 'Retirada Cinza', papel: 'RETIRADA CINZA', type: 'check' },
+        { id: 'retirada_cinza', label: 'Retirada Cinza', labelCurto: 'Retirada', papel: 'RETIRADA CINZA', type: 'check' },
       ],
       grupos: [
         { titulo: 'Caldeira', campos: ['inicio_aquec', 'parada'] },
@@ -314,10 +321,10 @@ window.USINA = {
       titulo: 'Controle Diário da Destilaria',
       papel: { modelo: 'destilaria' },
       itens: [
-        { id: 'temp_pe_a', label: 'Temp. pé da coluna A', unidade: '°C', type: 'num', dec: 1 },
-        { id: 'producao', label: 'Produção Álcool', papel: 'PRODUÇÃO ÁLCOOL', type: 'num', dec: 0 },
-        { id: 'carregamento', label: 'Carregamento', papel: 'CARREGAMENTO', type: 'num', dec: 0 },
-        { id: 'vapor', label: 'Vapor / Caldeira', papel: 'Vapor/ Caldeira', unidade: 'kgf', type: 'num', dec: 1 },
+        { id: 'temp_pe_a', label: 'Temp. pé da coluna A', labelCurto: 'Pé coluna A', unidade: '°C', type: 'num', dec: 1 },
+        { id: 'producao', label: 'Produção Álcool', labelCurto: 'Produção', papel: 'PRODUÇÃO ÁLCOOL', type: 'num', dec: 0 },
+        { id: 'carregamento', label: 'Carregamento', labelCurto: 'Carreg.', papel: 'CARREGAMENTO', type: 'num', dec: 0 },
+        { id: 'vapor', label: 'Vapor / Caldeira', labelCurto: 'Vapor', papel: 'Vapor/ Caldeira', unidade: 'kgf', type: 'num', dec: 1 },
         { id: 'inpm', label: 'INPM', unidade: '°', type: 'num', dec: 1, min: 80, max: 100 },
       ],
       grupos: [
@@ -345,13 +352,13 @@ window.USINA = {
         { id: 'hora_ferm', label: 'Horário (fermentação)', labelCurto: 'Horário', type: 'time' },
       ],
     },
-    // Caderno das dornas de fermentação: as dornas são as do grupo "vin" da medição (1, 2, 4 a 11)
+    // Caderno das dornas de fermentação: as dornas são as do grupo "fer" da medição (7 a 12)
     fermentacao: {
       tipo: 'fermentacao',
       nome: 'Dornas de fermentação',
       codigo: 'Caderno da fermentação',
       titulo: 'Controle das Dornas de Fermentação',
-      grupoMedicao: 'vin',
+      grupoMedicao: 'fer',
       papel: { modelo: 'fermentacao' },
       campos: [
         { id: 'enche_inicio', label: 'Começou a encher', labelCurto: 'Início', type: 'time', vazioTexto: 'Marca ao começar' },

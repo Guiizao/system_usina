@@ -134,6 +134,8 @@ export async function abrirNavegador({ porta = 9340 + Math.floor(Math.random() *
         await dormir(150);
       },
       /** Relógio que dá para adiantar (troca de turno, virada do dia, travas). Chamar antes de abrir a página. */
+      /** Roda este código antes do app em toda página que abrir (ex.: o plugin do Android de mentira). */
+      async antesDeAbrir(js) { await cdp('Page.addScriptToEvaluateOnNewDocument', { source: js }, sessionId); },
       async relogioFalso() { await cdp('Page.addScriptToEvaluateOnNewDocument', { source: RELOGIO_FALSO }, sessionId); },
       async adiantar(ms) { await a.avaliar(`window.__adiantar(${ms})`); },
       /** Adianta o relógio até a próxima vez que der h:m:s. */
@@ -184,14 +186,16 @@ export const auditarLayout = (minLetra = 11.5) => `(() => {
       const rects = [...r.getClientRects()].filter((x) => x.width > 0);
       // no alto e embaixo, a letra pode passar um pouco da linha (acentos): só conta se passar de 30% da letra
       const folgaV = parseFloat(getComputedStyle(n.parentElement).fontSize) * 0.3 + 1;
-      const fora = rects.some((x) => x.right > bc.right + 1.5 || x.left < bc.left - 1.5 || x.bottom > bc.bottom + folgaV || x.top < bc.top - folgaV);
+      const clip = recorte(n.parentElement);
+      // texto numa lista que rola (para cima e para baixo) dentro da caixa: dá para rolar até ele, não está cortado
+      const rolaDentro = clip && clip !== cx && cx.contains(clip) && /(auto|scroll)/.test(getComputedStyle(clip).overflowY);
+      const fora = rects.some((x) => x.right > bc.right + 1.5 || x.left < bc.left - 1.5 || (!rolaDentro && (x.bottom > bc.bottom + folgaV || x.top < bc.top - folgaV)));
       // texto maior que o próprio elemento (ex.: nome espremido por um selo do lado, que fica por cima)
       const pai = n.parentElement;
       if (getComputedStyle(pai).display !== 'inline') {
         const pb = pai.getBoundingClientRect();
         if (rects.some((x) => x.right > pb.right + 1.5 || x.left < pb.left - 1.5) && !vistos.has(n)) { vistos.add(n); probs.push({ tipo: 'texto-sai-do-elemento', onde: nomeDe(pai), texto: t.trim().slice(0, 60) }); }
       }
-      const clip = recorte(n.parentElement);
       const cortado = clip && rects.some((x) => { const bb = clip.getBoundingClientRect(); return x.right > bb.right + 1.5 || x.bottom > bb.bottom + 1.5; }) && !/(auto|scroll)/.test(getComputedStyle(clip).overflowX + getComputedStyle(clip).overflowY);
       if ((fora || cortado) && !vistos.has(n)) { vistos.add(n); probs.push({ tipo: 'texto-fora-da-caixa', onde: nomeDe(cx), texto: t.trim().slice(0, 60) }); }
       // palavra quebrada no meio (uma palavra em duas linhas)

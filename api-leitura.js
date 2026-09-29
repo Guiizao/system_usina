@@ -42,7 +42,8 @@ function criar(C, medidasAtuais) {
   const setorDa = (pid) => C.setores.find((s) => s.pranchetas.some((x) => x === pid || (pranchetas[x] && pranchetas[x].tipo === 'juntas' && pranchetas[x].partes.some((pt) => pt.prancheta === pid))));
   // folhas que guardam anotação (a tela "juntas" é só duas folhas de insumo lado a lado)
   const folhasDoSetor = (s) => s.pranchetas.flatMap((pid) => (pranchetas[pid].tipo === 'juntas' ? pranchetas[pid].partes.map((pt) => pt.prancheta) : [pid]));
-  const medidas = () => (medidasAtuais && medidasAtuais()) || C.medicaoPadrao;
+  // como no app: as medidas do escritório só valem se forem da mesma versão dos grupos
+  const medidas = () => { const m = medidasAtuais && medidasAtuais(); return m && m.versao === C.medicaoPadrao.versao ? m : C.medicaoPadrao; };
 
   /** Valor no tipo certo: número vira número, o resto fica texto. */
   function valorDe(c, v) {

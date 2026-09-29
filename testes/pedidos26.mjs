@@ -75,11 +75,23 @@ export async function testarPedidos26(nav, ligar, porta, grupo) {
       await tab.tocar('[data-ed="ocultar"]');
     });
 
+    await teste(grupo, 'tanques de álcool em m³, como na planilha (sem o x1000)', async () => {
+      await tab.tocar('[data-a="linha"][data-chave="tq"]');
+      // Tanque Inox 1: (3,74 - 1) x 1,606 = 4,400 m³
+      await tab.tocar('[data-quadro="tq_inox1_folga"]'); await tab.teclar(['1']);
+      igual((await texto(tab, '[data-quadro="tq_inox1_folga"] .tag-calc')).trim(), '4,400 m³', 'volume do tanque do lado da folga');
+      certo((await texto(tab, '#totais-medicao')).includes('4,400 m³'), 'total dos tanques em m³');
+      await tab.tocar('[data-ed="ocultar"]');
+      await tab.tocar('[data-a="salvar"]');
+      const r = await esperarCentral((l) => medicao(l, 'tq'), 'medição dos tanques');
+      igual(r.valores.tq_inox1_vol, '4.400');
+    });
+
     await teste(grupo, 'dorna de fermentação: começar a encher, terminar e anotar o Brix inicial', async () => {
       await tab.tocar('[data-a="aba"][data-id="fermentacao"]');
-      await tab.tocar('[data-a="linha"][data-chave="1"]');
+      await tab.tocar('[data-a="linha"][data-chave="7"]');
       await tab.tocar('[data-a="ferm-encher"]');
-      let c1 = await esperarCentral((l) => ciclos(l, 1)[0], 'enchimento da Nº 1');
+      let c1 = await esperarCentral((l) => ciclos(l, 7)[0], 'enchimento da Nº 7');
       igual(c1.operador, 'Mateus'); certo(/^\d\d:\d\d$/.test(c1.valores.enche_inicio), 'começou a encher'); igual(c1.data, hoje);
       await tab.tocar('[data-a="ferm-terminou"]');
       // já abre o teclado no Brix inicial
@@ -87,32 +99,32 @@ export async function testarPedidos26(nav, ligar, porta, grupo) {
       await tab.teclar(['8']);
       await tab.tocar('[data-ed="ocultar"]');
       await tab.tocar('[data-a="salvar"]');
-      c1 = await esperarCentral((l) => { const x = ciclos(l, 1)[0]; return x && x.valores.brix_inicial === '8' && x.valores.enche_fim ? x : null; }, 'Nº 1 cheia com Brix 8');
+      c1 = await esperarCentral((l) => { const x = ciclos(l, 7)[0]; return x && x.valores.brix_inicial === '8' && x.valores.enche_fim ? x : null; }, 'Nº 7 cheia com Brix 8');
       certo((await texto(tab, '.cartao-dorna')).includes('Ainda não foi medida'), 'o cartão devia dizer que falta a medição');
     });
 
     await teste(grupo, 'a medição da manhã aparece na dorna (Brix, volume e fermentando)', async () => {
       await tab.tocar('[data-a="aba"][data-id="med_dornas"]');
-      await tab.tocar('[data-a="linha"][data-chave="vin"]');
+      await tab.tocar('[data-a="linha"][data-chave="fer"]');
       await tab.tocar('[data-quadro="hora"]'); await tab.tocar('[data-ed="agora"]');
-      await tab.tocar('[data-quadro="vin1_folga"]'); await tab.teclar(['0', ',', '9']);
-      await tab.tocar('[data-quadro="vin1_brix"]'); await tab.teclar(['5']);
-      await tab.tocar('[data-quadro="vin1_ferm"]'); await tab.tocar('[data-ed="o:0"]');
+      await tab.tocar('[data-quadro="fer7_folga"]'); await tab.teclar(['0', ',', '9']);
+      await tab.tocar('[data-quadro="fer7_brix"]'); await tab.teclar(['5']);
+      await tab.tocar('[data-quadro="fer7_ferm"]'); await tab.tocar('[data-ed="o:0"]');
       await tab.tocar('[data-ed="ocultar"]');
       await tab.tocar('[data-a="salvar"]');
-      await esperarCentral((l) => { const m = medicao(l, 'vin'); return m && m.valores.vin1_vol === '25030.80'; }, 'medição do vinho');
+      await esperarCentral((l) => { const m = medicao(l, 'fer'); return m && m.valores.fer7_vol === '5103.00'; }, 'medição da fermentação');
       await tab.tocar('[data-a="aba"][data-id="fermentacao"]');
-      await tab.tocar('[data-a="linha"][data-chave="1"]');
+      await tab.tocar('[data-a="linha"][data-chave="7"]');
       const cartao = await texto(tab, '.cartao-dorna');
-      certo(cartao.includes('Brix 5') && cartao.includes('25.031 L') && cartao.includes('Fermentando: Sim') && cartao.includes('Brix inicial 8'), 'cartão: ' + cartao);
+      certo(cartao.includes('Brix 5') && cartao.includes('5.103 L') && cartao.includes('Fermentando: Sim') && cartao.includes('Brix inicial 8'), 'cartão: ' + cartao);
     });
 
     await teste(grupo, 'mandar para a volante; outra dorna junto pede confirmação; o tablet chefe vê', async () => {
       await tab.tocar('[data-a="ferm-volante"]');
-      await esperarCentral((l) => { const x = ciclos(l, 1)[0]; return x && (x.valores.volante || []).some((s) => !s.fim && s.operador === 'Mateus'); }, 'Nº 1 na volante');
-      certo((await texto(tab, '#volante-agora')).includes('Nº 1 desde'), 'volante no alto');
-      // a Nº 2 enche e também vai para a volante
-      await tab.tocar('[data-a="linha"][data-chave="2"]');
+      await esperarCentral((l) => { const x = ciclos(l, 7)[0]; return x && (x.valores.volante || []).some((s) => !s.fim && s.operador === 'Mateus'); }, 'Nº 7 na volante');
+      certo((await texto(tab, '#volante-agora')).includes('Nº 7 desde'), 'volante no alto');
+      // a Nº 8 enche e também vai para a volante
+      await tab.tocar('[data-a="linha"][data-chave="8"]');
       await tab.tocar('[data-a="ferm-encher"]');
       await tab.tocar('[data-a="ferm-terminou"]');
       await tab.tocar('[data-ed="ocultar"]');
@@ -120,22 +132,22 @@ export async function testarPedidos26(nav, ligar, porta, grupo) {
       await tab.tocar('[data-a="ferm-volante"]');
       await tab.esperar('document.querySelector(".modal") && document.querySelector(".modal").textContent.includes("já está recebendo")', 8000, 'pergunta da volante');
       await tab.tocar('[data-k="sim"]');
-      await esperarCentral((l) => { const x = ciclos(l, 2)[0]; return x && (x.valores.volante || []).some((s) => !s.fim); }, 'Nº 2 na volante');
+      await esperarCentral((l) => { const x = ciclos(l, 8)[0]; return x && (x.valores.volante || []).some((s) => !s.fim); }, 'Nº 8 na volante');
       // tablet chefe: o painel mostra quem está na volante
-      await esc.esperar('document.body.innerText.includes("Volante: Nº 1 e 2")', 25000, 'painel do tablet chefe');
+      await esc.esperar('document.body.innerText.includes("Volante: Nº 7 e 8")', 25000, 'painel do tablet chefe');
     });
 
     await teste(grupo, 'parou de mandar: esvaziou (fica vazia) ou ainda tem vinho', async () => {
-      await tab.tocar('[data-a="linha"][data-chave="1"]');
+      await tab.tocar('[data-a="linha"][data-chave="7"]');
       await tab.tocar('[data-a="ferm-parar"]');
       await tab.tocar('[data-k="sim"]');
-      await esperarCentral((l) => { const x = ciclos(l, 1)[0]; return x && x.valores.esvaziada && x.valores.volante.every((s) => s.fim) ? x : null; }, 'Nº 1 vazia');
-      certo((await texto(tab, '[data-a="linha"][data-chave="1"]')).includes('vazia'), 'Nº 1 não ficou vazia no seletor');
-      await tab.tocar('[data-a="linha"][data-chave="2"]');
+      await esperarCentral((l) => { const x = ciclos(l, 7)[0]; return x && x.valores.esvaziada && x.valores.volante.every((s) => s.fim) ? x : null; }, 'Nº 7 vazia');
+      certo((await texto(tab, '[data-a="linha"][data-chave="7"]')).includes('vazia'), 'Nº 7 não ficou vazia no seletor');
+      await tab.tocar('[data-a="linha"][data-chave="8"]');
       await tab.tocar('[data-a="ferm-parar"]');
       await tab.tocar('[data-k="nao"]');
-      await esperarCentral((l) => { const x = ciclos(l, 2)[0]; return x && !x.valores.esvaziada && x.valores.volante.every((s) => s.fim) ? x : null; }, 'Nº 2 parou com vinho');
-      certo((await texto(tab, '[data-a="linha"][data-chave="2"]')).includes('com vinho'), 'Nº 2 devia ficar com vinho');
+      await esperarCentral((l) => { const x = ciclos(l, 8)[0]; return x && !x.valores.esvaziada && x.valores.volante.every((s) => s.fim) ? x : null; }, 'Nº 8 parou com vinho');
+      certo((await texto(tab, '[data-a="linha"][data-chave="8"]')).includes('com vinho'), 'Nº 8 devia ficar com vinho');
     });
 
     await teste(grupo, 'relatório do dia: Volume de vinho e Dornas de fermentação no Excel, com a conta da planilha', async () => {
@@ -152,11 +164,12 @@ vol = next(ws for ws in wb.worksheets if 'Volume de vinho' in ws.title)
 fer = next(ws for ws in wb.worksheets if 'fermenta' in ws.title.lower())
 valores = [c.value for r in vol.iter_rows() for c in r if c.value is not None]
 ferm = [c.value for r in fer.iter_rows() for c in r if c.value is not None]
-print(json.dumps({'folhas': wb.sheetnames, 'v7229': 7229.25 in valores, 'sub': 21574.35 in valores, 'vin1': 25030.8 in valores, 'ferm': ferm[:60]}, default=str))
+print(json.dumps({'folhas': wb.sheetnames, 'v7229': 7229.25 in valores, 'sub': 21574.35 in valores, 'fer7': 5103.0 in valores, 'tq': 4.4 in valores and 'VOLUME M³' in valores, 'ferm': ferm[:60]}, default=str))
 `, path.join(pasta, xlsx)], { encoding: 'utf8' });
       const r = JSON.parse(saida);
       certo(r.v7229 && r.sub, 'faltou o volume ou o subtotal na folha Volume de vinho');
-      certo(r.vin1, 'faltou o volume da dorna de vinho');
+      certo(r.fer7, 'faltou o volume da dorna de fermentação');
+      certo(r.tq, 'faltou o tanque de álcool em m³');
       certo(r.ferm.includes('Mateus') && r.ferm.some((x) => String(x).includes('Mateus') && String(x).includes('-')), 'faltou o enchimento ou a volante: ' + JSON.stringify(r.ferm).slice(0, 300));
       return r.folhas.filter((f) => /Volume|ferment/i.test(f)).join(' e ');
     });

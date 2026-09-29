@@ -1,0 +1,180 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Guia do projeto - Pranchetas Digitais</title>
+<style>
+  @page { size: A4; margin: 14mm 15mm 14mm; }
+  * { box-sizing: border-box; }
+  body { margin: 0 auto; max-width: 780px; padding: 0 16px; font: 10.5pt/1.45 "Segoe UI", Arial, sans-serif; color: #1b201d; background: #fff; }
+  h1 { font-size: 21pt; margin: 18px 0 2px; }
+  .sub { color: #4f5953; margin: 0 0 14px; }
+  h2 { font-size: 13.5pt; margin: 22px 0 6px; padding-bottom: 3px; border-bottom: 2px solid #27704f; break-after: avoid; }
+  h3 { font-size: 11pt; margin: 14px 0 4px; break-after: avoid; }
+  p { margin: 0 0 8px; }
+  ul, ol { margin: 0 0 8px; padding-left: 22px; }
+  li { margin: 0 0 3px; }
+  code { font-family: Consolas, "Courier New", monospace; font-size: 9.5pt; background: #eef1ee; padding: 0 3px; border-radius: 3px; overflow-wrap: anywhere; }
+  table { width: 100%; border-collapse: collapse; margin: 4px 0 10px; font-size: 9.8pt; }
+  th { text-align: left; background: #1b201d; color: #fff; padding: 4px 6px; font-weight: 600; }
+  td { vertical-align: top; padding: 4px 6px; border-bottom: 1px solid #d6dbd7; }
+  td:first-child { white-space: nowrap; font-weight: 600; }
+  tr { break-inside: avoid; }
+  .nota { border-left: 4px solid #c99a2e; background: #fbf3df; padding: 6px 10px; margin: 8px 0; border-radius: 3px; }
+  .caminho { background: #eef6f1; border: 1.5px solid #27704f; border-radius: 6px; padding: 8px 12px; margin: 8px 0; }
+  .rodape { margin: 22px 0 18px; font-size: 9pt; color: #6a736d; }
+  @media (max-width: 600px) { td:first-child { white-space: normal; } table { font-size: 9pt; } }
+</style>
+</head>
+<body>
+
+<h1>Guia do projeto</h1>
+<p class="sub">Pranchetas Digitais da Ubirálcool, versão 2.7 (29/09/2026). Tudo que o projeto tem, em que linguagem foi feito, como as peças conversam e onde mexer em cada coisa.</p>
+
+<h2>1. O que é</h2>
+<p>As pranchetas de papel dos setores (Hidrólise, Caldeira, Ralo, Destilaria) viraram um aplicativo. Cada setor tem um tablet ou celular. O operador escolhe o nome dele, anota nos quadros e salva. A anotação vai pelo Wi-Fi da usina até a central, que guarda tudo e mostra para o escritório. No fim do dia sai o Excel e o XML no mesmo desenho do papel.</p>
+<p>A central pode ser um computador ligado no Wi-Fi ou o próprio tablet chefe. As duas fazem a mesma coisa. Nada depende de internet: tudo roda dentro da rede da usina.</p>
+
+<h2>2. As peças e as linguagens</h2>
+
+<h3>O aplicativo (a tela)</h3>
+<p>Feito em <b>HTML, CSS e JavaScript puro</b>, sem framework. É o mesmo código no tablet, no celular e no navegador do computador. Fica na pasta <code>public</code>:</p>
+<table>
+  <tr><th>Arquivo</th><th>O que faz</th></tr>
+  <tr><td>index.html</td><td>A página que abre. Só carrega os outros arquivos.</td></tr>
+  <tr><td>app.js</td><td>Tudo da tela: conectar, escolher o operador, os quadros e o teclado, salvar, sincronizar com a central, avisos, relatórios, ajustes e a atualização do aplicativo. É o maior arquivo (cerca de 4.300 linhas).</td></tr>
+  <tr><td>forms.js</td><td>A configuração: setores, folhas, campos, limites de pH e Brix, turnos, senha do encarregado, medidas das dornas. Quase tudo que muda na usina muda aqui.</td></tr>
+  <tr><td>styles.css</td><td>O visual: cores, tamanhos, tela clara e escura, celular e tablet.</td></tr>
+  <tr><td>modelos.js</td><td>O desenho de cada folha de papel (células, mesclas, logo), usado no Excel, na impressão e no XML.</td></tr>
+  <tr><td>xlsx.js</td><td>Monta o arquivo Excel na mão, sem biblioteca. Funciona sem internet.</td></tr>
+  <tr><td>cifra.js</td><td>A criptografia do Wi-Fi (seção 4).</td></tr>
+  <tr><td>leitor.js</td><td>Lê a folha de papel pela foto (seção 6).</td></tr>
+  <tr><td>novidades.js</td><td>O que mudou em cada versão. Aparece depois de atualizar.</td></tr>
+  <tr><td>qrcode.js</td><td>Biblioteca aberta (licença MIT) que desenha o QR code para baixar o aplicativo.</td></tr>
+  <tr><td>sw.js e manifest</td><td>Deixam o aplicativo abrir sem rede quando ele é usado pelo navegador.</td></tr>
+  <tr><td>baixar.html</td><td>A página que o QR code abre para baixar o APK.</td></tr>
+  <tr><td>lib/</td><td>OpenCV.js e a rede neural do leitor (leitor.onnx).</td></tr>
+  <tr><td>fonts/</td><td>A letra Atkinson Hyperlegible, feita para ser fácil de ler. Vai dentro do app.</td></tr>
+</table>
+
+<h3>O APK (Android)</h3>
+<p>O APK é um aplicativo Android de verdade, instalado no aparelho. Ele é montado com o <b>Capacitor 7</b>: a pasta <code>public</code> vai para dentro do APK e as telas são desenhadas pelo componente do próprio Android que mostra HTML (WebView). Não depende de site nem de internet. As partes que precisam do Android foram escritas em <b>Java</b>, na pasta <code>apk/nativo</code>:</p>
+<table>
+  <tr><th>Arquivo</th><th>O que faz</th></tr>
+  <tr><td>ServidorCentral.java</td><td>A central rodando dentro do tablet chefe. Faz o mesmo que o server.js do computador.</td></tr>
+  <tr><td>CentralPlugin.java</td><td>A ponte entre a tela e o Android: liga o servidor, pede permissões, cria as pastas, compartilha no WhatsApp e no e-mail, imprime, liga a tela cheia e baixa e instala a atualização.</td></tr>
+  <tr><td>ServicoCentral.java</td><td>Mantém o servidor ligado com a tela apagada (aviso fixo na barra do Android).</td></tr>
+  <tr><td>LigarAoIniciar.java</td><td>Liga o servidor sozinho quando o tablet chefe reinicia ou quando o aplicativo é atualizado.</td></tr>
+  <tr><td>MainActivity.java</td><td>A tela principal do Android e a tela cheia.</td></tr>
+</table>
+<p>Para gerar o APK: <code>apk/instalar-ferramentas.ps1</code> (uma vez, baixa o Java e o Android SDK para <code>android-build</code> na pasta do usuário) e depois <code>apk/gerar-apk.ps1</code>. Esse script é em <b>PowerShell</b>. Ele copia a pasta public, embaralha o código com o <b>terser</b> (quem abrir o APK não lê o código do jeito que foi escrito), ajusta as permissões do Android, põe o número da versão, compila com o <b>Gradle</b> e deixa o resultado em <code>apk/saida/pranchetas.apk</code> com o <code>versao.json</code> do lado.</p>
+
+<h3>A central no computador</h3>
+<p>Feita em <b>Node.js</b> (JavaScript no computador), no arquivo <code>server.js</code>. Não usa nenhum pacote de fora, só o que vem com o Node. Liga com <code>node server.js</code> e fica na porta 8080. Guarda as anotações, entrega o aplicativo, guarda os relatórios, manda os totais para o Base44 e tem a API para o sistema do escritório (<code>api-leitura.js</code>). O script <code>liberar-firewall.ps1</code> abre a porta no Windows.</p>
+
+<h3>O resto</h3>
+<table>
+  <tr><th>Onde</th><th>Linguagem</th><th>O que é</th></tr>
+  <tr><td>integracoes/base44</td><td>TypeScript (Deno)</td><td>A função que roda dentro do Base44 do escritório e recebe os totais do dia.</td></tr>
+  <tr><td>treino-leitor</td><td>Python (PyTorch, OpenCV)</td><td>O treino da rede neural que lê a letra de mão. Só usado no computador.</td></tr>
+  <tr><td>testes</td><td>JavaScript (Node), Java e Python</td><td>Os testes automáticos (seção 9).</td></tr>
+  <tr><td>dados</td><td>JSON</td><td>As anotações da central do computador. Não é código.</td></tr>
+</table>
+
+<h2>3. Como uma anotação anda</h2>
+<ol>
+  <li>O operador toca num quadro, digita no teclado da tela e toca em Salvar.</li>
+  <li>O aplicativo grava a anotação no próprio aparelho (<code>localStorage</code>). Cada anotação tem um nome fixo: dia, folha e linha (por exemplo <code>2026-09-29|hid_anexo1|6</code>), os valores, quem anotou e a hora.</li>
+  <li>A cada 5 segundos o aparelho fala com a central: manda o que ainda não foi e pergunta o que mudou desde a última vez. A central numera cada mudança, então o aparelho só pede o que é novo.</li>
+  <li>Se duas pessoas mexerem na mesma linha, vale a mais recente.</li>
+  <li>Sem Wi-Fi, o aparelho continua anotando e guarda tudo. Quando a rede volta, manda sozinho. Se ficar mais de 12 horas sem achar a central, ele trava até voltar para a rede.</li>
+  <li>A central guarda em <code>ServidorUsina/registros.json</code>. O painel do escritório vê na hora.</li>
+  <li>O dia da usina vai das 07:00 até as 06:59 do dia seguinte. Às 07:00 o tablet chefe monta o Excel e o XML do dia e guarda em <code>RelatoriosUsina</code>. Os dias antigos vão para <code>BackupUsina</code>.</li>
+  <li>O tablet do setor guarda só os últimos 3 dias, para a memória não encher. A central guarda tudo.</li>
+</ol>
+
+<h2>4. Como os aparelhos conversam (conexões)</h2>
+<table>
+  <tr><th>Conexão</th><th>Como funciona</th></tr>
+  <tr><td>Wi-Fi da usina</td><td>HTTP na porta 8080, só dentro da rede da usina. A central recusa endereço de fora (só aceita 192.168.x.x, 10.x.x.x e 172.16 a 31).</td></tr>
+  <tr><td>Achar a central</td><td>O aplicativo procura sozinho no Wi-Fi (testa os endereços da mesma faixa). Também dá para digitar o endereço que aparece no tablet chefe.</td></tr>
+  <tr><td>Conectar (parear)</td><td>O aparelho digita o código de 6 números da central. O código não passa aberto: os dois combinam um segredo com <b>X25519</b> e só vai uma prova do código. A central devolve a chave própria daquele aparelho, embaralhada.</td></tr>
+  <tr><td>Depois de conectado</td><td>Todo pedido vai embaralhado com a chave do aparelho (<b>AES-256-GCM</b>) pelo endereço <code>/api/c</code>. Pedido alterado, repetido ou com relógio muito errado é recusado. Trocar o código desconecta todo mundo.</td></tr>
+  <tr><td>Baixar o aplicativo</td><td>O tablet chefe mostra um QR code que abre a página <code>/baixar</code>. O APK desce de <code>/apk/pranchetas.apk</code>.</td></tr>
+  <tr><td>Atualização</td><td>O aplicativo pergunta em <code>/api/versao</code> qual versão a central tem. Se for mais nova, aparece o botão Atualizar (seção 7).</td></tr>
+  <tr><td>WhatsApp e e-mail</td><td>O Android abre o WhatsApp ou o e-mail já com o arquivo do dia e o resumo. Quem manda é a pessoa.</td></tr>
+  <tr><td>Impressão</td><td>Pela impressão do próprio Android (também salva em PDF).</td></tr>
+  <tr><td>Base44</td><td>Opcional. Quando o dia fecha, a central manda os totais dos insumos por HTTPS para a função do Base44, com um segredo. Se não estiver configurado, não manda nada e nada quebra.</td></tr>
+  <tr><td>API de leitura</td><td>JSON para o sistema novo do escritório, só leitura, com senha no cabeçalho <code>Authorization: Bearer</code>. Só na central do computador.</td></tr>
+  <tr><td>Nuvem</td><td>Ainda não tem. Vai ser um servidor na internet que recebe uma cópia da central e guarda as atualizações.</td></tr>
+</table>
+<p>No Android 16 e 17 o sistema pede a permissão "Rede local" (ou "Dispositivos por perto") para o aplicativo falar com os outros tablets. O aplicativo pede e explica o que fazer se ela for negada.</p>
+
+<h2>5. Setores e folhas</h2>
+<table>
+  <tr><th>Setor</th><th>Folhas</th></tr>
+  <tr><td>Hidrólise</td><td>Hidrólise (Anexo I), Sacarificação (Anexo II), LPHERA/Cal e Saczyme/Antibiótico. A dorna passa por enchendo, enviando e anotada. A Sacarificação e os insumos acompanham a Hidrólise sozinhos.</td></tr>
+  <tr><td>Caldeira</td><td>Controle diário, hora a hora.</td></tr>
+  <tr><td>Ralo / Pesagem</td><td>Matéria-prima (insumo com total do dia).</td></tr>
+  <tr><td>Destilaria e Fermentação</td><td>Controle diário da destilaria, Volume de vinho (folga medida com a trena vira volume na hora), Dornas de fermentação (encher, Brix inicial, volante), Antibiótico Lactrol e Uréia.</td></tr>
+  <tr><td>Nova Destilaria</td><td>Controle diário.</td></tr>
+</table>
+<p>Os tipos de folha são poucos e se repetem: <b>dornas</b> (uma linha por dorna), <b>grade</b> (uma linha por hora), <b>insumo</b> (quantidade e total do dia), <b>juntas</b> (duas folhas de insumo lado a lado), <b>medição</b> (volume de vinho) e <b>fermentação</b> (o caderno das dornas). Uma folha nova do mesmo tipo é só configuração no <code>forms.js</code>.</p>
+<p>O tablet chefe tem o painel do escritório: pendências de cada setor, avisos para quem está trabalhando, ler folha de papel, relatórios, aparelhos conectados, operadores, medidas das dornas e a configuração da usina.</p>
+
+<h2>6. Ler folha de papel</h2>
+<p>O tablet chefe tira foto de uma folha preenchida à mão e passa para o aplicativo. Tudo acontece dentro do aparelho, sem internet: o <b>OpenCV.js</b> acha a tabela na foto e endireita cada célula, e uma rede neural pequena (<b>ONNX</b>, treinada em Python com letras de mão) lê cada célula. A coluna diz o que pode ser (hora, pH, número, nome do operador), e o que ficou com pouca confiança fica marcado para a pessoa conferir antes de salvar.</p>
+
+<h2>7. Atualização do aplicativo</h2>
+<div class="caminho">Tablet chefe com a versão nova → os outros perguntam em <code>/api/versao</code> → botão Atualizar → o APK desce pelo Wi-Fi → o Android pergunta → atualizou → aparecem as novidades.</div>
+<ul>
+  <li>Com o tablet chefe como central, ele entrega o próprio aplicativo instalado nele. Basta instalar a versão nova à mão só nele.</li>
+  <li>Com o computador como central, ele entrega o APK da pasta <code>apk/saida</code> (com o <code>versao.json</code>, que diz a versão, o tamanho e o SHA-256).</li>
+  <li>O aplicativo confere o tamanho e o SHA-256 do arquivo e se ele é o mesmo aplicativo. O próprio Android confere a assinatura: só aceita APK assinado no mesmo computador.</li>
+  <li>Quando tiver a nuvem, o endereço vai em <code>atualizacaoOnline</code> no <code>forms.js</code> e a central baixa de lá sozinha.</li>
+</ul>
+<div class="nota"><b>Cuidado:</b> o APK é assinado com a chave que fica em <code>.android</code> na pasta do usuário deste computador. Se essa chave se perder, os tablets não aceitam atualizar por cima e cada um vai ter que desinstalar e instalar de novo. Vale guardar uma cópia dessa pasta.</div>
+
+<h2>8. Segurança</h2>
+<ul>
+  <li>Só aparelhos da rede da usina e com o código de conexão.</li>
+  <li>Tudo embaralhado no Wi-Fi (seção 4). No APK usa a criptografia do Android; no navegador do computador usa a versão escrita em <code>cifra.js</code>, que dá o mesmo resultado.</li>
+  <li>Senha do operador (opcional, guardada embaralhada), senha do encarregado para os ajustes e a senha do programador para apagar tudo. Da senha do programador o código só guarda o resumo (SHA-256), nunca a senha.</li>
+  <li>Código do APK embaralhado e licença em <code>LICENCA.txt</code>: uso só com autorização do autor.</li>
+</ul>
+
+<h2>9. Testes</h2>
+<p>Os testes automáticos rodam no computador com <code>node testes/rodar-tudo.mjs</code>. Eles abrem um Chrome sem janela e usam o aplicativo como uma pessoa usaria (tocam, digitam, esperam), com as duas centrais: a do computador e a do tablet chefe (o mesmo <code>ServidorCentral.java</code>, compilado no computador com peças do Android de mentira). Conferem o Excel com Python e passam por todas as telas em 9 tamanhos, procurando texto cortado, letra pequena e botão pequeno. Os testes usam pastas temporárias e nunca mexem nos dados de verdade. O resultado fica em <code>testes/saida/resultado.txt</code> e as fotos das telas em <code>testes/saida/telas</code>.</p>
+<p>O que depende do Android de verdade (câmera, permissões, instalador, WhatsApp) vai no roteiro <b>Teste-nos-aparelhos</b> de cada versão, para fazer à mão.</p>
+
+<h2>10. Onde mudar as coisas</h2>
+<table>
+  <tr><th>Quero mudar</th><th>Onde</th></tr>
+  <tr><td>Campos, limites, folhas, setores</td><td><code>public/forms.js</code></td></tr>
+  <tr><td>Operadores, produtos, medidas das dornas</td><td>No tablet chefe, em Usina (sem mexer no código).</td></tr>
+  <tr><td>Desenho do papel e do Excel</td><td><code>public/modelos.js</code></td></tr>
+  <tr><td>Cores e tamanhos</td><td><code>public/styles.css</code></td></tr>
+  <tr><td>O que acontece na tela</td><td><code>public/app.js</code></td></tr>
+  <tr><td>A central</td><td><code>server.js</code> e <code>apk/nativo/.../ServidorCentral.java</code>: as duas juntas, sempre.</td></tr>
+  <tr><td>Novidades da versão</td><td><code>public/novidades.js</code></td></tr>
+</table>
+
+<h2>11. Soltar uma versão nova</h2>
+<ol>
+  <li>Mudar o <code>VERSAO</code> no começo do <code>app.js</code> e escrever as novidades no <code>novidades.js</code>.</li>
+  <li>Rodar os testes (<code>node testes/rodar-tudo.mjs</code>).</li>
+  <li>Gerar o APK (<code>apk/gerar-apk.ps1</code>).</li>
+  <li>Instalar à mão só no tablet chefe. Os outros atualizam pelo botão.</li>
+  <li>Guardar a versão no Git (a pasta <code>app</code> é um repositório, um commit por versão).</li>
+</ol>
+
+<h2>12. O que falta</h2>
+<ul>
+  <li>A nuvem: um servidor gratuito de estudante (Azure for Students ou o pacote do GitHub para estudantes) que recebe a cópia da central, serve a API para o escritório e guarda as atualizações. A conta tem que ser criada por você.</li>
+  <li>Perguntar para o Lucas: quais são as outras dornas "da família" e a medida do Tanque Destilaria.</li>
+</ul>
+
+<p class="rodape">Pranchetas Digitais 2.7 · © 2026 Guilherme · Todos os direitos reservados</p>
+</body>
+</html>

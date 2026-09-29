@@ -27,6 +27,7 @@ import { testarCifra } from './cifra.mjs';
 import { testarBase44Central, testarPedidos25, testarFuncaoBase44 } from './pedidos25.mjs';
 import { testarPedidos26 } from './pedidos26.mjs';
 import { testarApiLeitura } from './api-leitura.mjs';
+import { testarAtualizacao } from './atualizacao.mjs';
 import { testarApkWeb } from './rodar-apk-web.mjs';
 import { centralNode, centralJava, APP } from './servidores.mjs';
 
@@ -146,6 +147,10 @@ try {
     return longas.length ? `${longas.length} de ${Math.max(...longas)} ms` : 'nenhuma acima de 50 ms';
   });
   grupos.push(gv);
+  // 4e. atualização pelo próprio aplicativo (versão 2.7): central, aplicativo, nuvem e tablet chefe
+  const ga = novoGrupo('Atualização pelo próprio aplicativo e novidades');
+  await testarAtualizacao(nav, ga);
+  grupos.push(ga);
   // 5. extras
   const g5 = novoGrupo('Leitura de foto, impressão e aplicativo sem rede');
   const c5 = await centralNode(8295);

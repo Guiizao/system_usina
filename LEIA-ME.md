@@ -162,19 +162,55 @@ Medido num tablet simulado 4 vezes mais lento que o computador, com a central gu
 - Dois aparelhos criando a mesma linha sem um saber do outro (o chefe corrigiu nos segundos antes de receber): os valores se juntam, nada se perde.
 - **Código embaralhado no APK**: quem abrir o APK não lê o código do jeito que foi escrito (o mapa para entender erros fica só em `apk/saida/mapas`).
 
+## Atualização pelo próprio aplicativo (versão 2.7)
+
+A 2.7 é a última versão instalada à mão. Daqui para frente o aplicativo se atualiza sozinho:
+
+- Cada tablet pergunta para a central, logo depois de abrir e a cada 30 minutos, qual versão ela tem (`/api/versao`). Se for mais nova, aparece o botão amarelo **Atualizar** no alto da tela. Também dá para procurar na hora em Ajustes > Aplicativo > Procurar atualização.
+- Tocando em Atualizar, aparece o que mudou. Tocando de novo, o APK desce pelo Wi-Fi, o aplicativo confere o tamanho e o SHA-256 e abre a janela do Android, que pergunta se pode atualizar. As anotações do tablet continuam.
+- Na primeira vez, o Android pede para liberar "Permitir desta fonte" para as Pranchetas. É só ligar, voltar e tocar em Atualizar de novo.
+- Depois de atualizar, a janela com as novidades aparece uma vez. Em Ajustes > Aplicativo tem "Novidades desta versão" para ver de novo. As novidades ficam em `public/novidades.js` e a primeira da lista tem de ser a versão do `app.js` (o teste confere).
+- **Tablet chefe como central:** ele entrega para os outros o próprio aplicativo instalado nele. Então basta instalar a versão nova à mão só no tablet chefe, e os outros tablets atualizam pelo botão.
+- **Computador como central:** ele entrega o que estiver em `apk/saida` (o `pranchetas.apk` com o `versao.json` do lado, os dois feitos pelo `gerar-apk.ps1`). Se o APK for trocado sem o versao.json, a central não oferece nada, para não mandar arquivo errado.
+- **Nuvem (quando tiver):** em `forms.js`, `atualizacaoOnline` é o endereço da pasta na internet com o `versao.json` e o `pranchetas.apk`. A central do computador olha lá a cada 6 horas, baixa, confere e passa a entregar pelo Wi-Fi. O tablet chefe também olha lá direto. Hoje está vazio.
+- O número de versão do APK sai do `VERSAO` do app.js (2.7.0 vira 20700). O Android só atualiza por cima se o número for maior e se o APK foi assinado no mesmo computador (a chave de assinatura fica em `.android` na pasta do usuário deste computador: não pode perder).
+
+## Respostas do Lucas (versão 2.7)
+
+- Dornas de fermentação: 7 a 12 (2,7 m de altura, 2,835 m² de base). O caderno de encher, Brix inicial e volante fica nelas.
+- Dornas de descanso: 1, 2 e 4 a 11 (6 m, 4,908 m²).
+- Tanques de álcool em m³, como na planilha: (altura − folga) × base, sem o × 1000. O total dos tanques também sai em m³.
+- As medidas trocadas pelo escritório na 2.6 eram dos grupos antigos. Por isso a lista de medidas tem um número de versão (`versao` em `medicaoPadrao`): medida guardada de outra versão é deixada de lado e valem as da planilha.
+- Ainda falta perguntar: quais são as outras dornas "da família" e a medida do Tanque Destilaria.
+
+## Quadros das folhas (versão 2.7)
+
+Os quadros de cada folha ficam do mesmo tamanho e alinhados, e dividem a largura toda: 2 campos ficam meio a meio, 4 ficam em quartos. A altura se ajusta para caber tudo sem esconder nada atrás da barra de Salvar. Se não couber nem assim, a tela rola. Quem faz a conta é `arrumarQuadros()` no app.js, toda vez que a tela muda de tamanho. O botão Apagar tem a mesma altura do aviso de envio.
+
+## API só de leitura para o sistema do escritório (versão 2.7)
+
+A central do computador tem uma API em JSON para o sistema novo do escritório (Evandro, E.C. Tec). Só lê, não muda nada.
+
+- `GET /api/v1/esquema`: as folhas, os campos e as unidades.
+- `GET /api/v1/dias`: os dias que têm anotação.
+- `GET /api/v1/dias/AAAA-MM-DD`: o dia inteiro, folha por folha, igual ao XML.
+- `GET /api/v1/registros?desde=0&limite=500`: as anotações, em ordem, para ir buscando só o que mudou.
+- Precisa do cabeçalho `Authorization: Bearer <senha de leitura>`. A senha é criada sozinha em `ServidorUsina/config.json` (`tokenLeitura`) ou vem de `TOKEN_LEITURA`.
+- Os exemplos que foram para o Evandro estão em `Usina/API-exemplos.zip`. O código fica em `api-leitura.js`.
+
 ## Volume de vinho e dornas de fermentação (versão 2.6)
 
 Pedido do escritório (Lucas, 26/09/2026), a partir da planilha `CONTROLE LTS`. Fica na **Destilaria e Fermentação**: são os destiladores que medem as dornas e cuidam da fermentação (quando os logins forem separados, só eles terão essas folhas). A Nova Destilaria não mudou.
 
 **Volume de vinho** (medição da manhã, com a trena):
-- Grupos como na planilha: Hidrólise (1 a 5), Sacarificação (1 a 6), Dornas de descanso (8 a 12), Vinho/fermentação (1, 2, 4 a 11), Tanques de álcool e Brix da produção (ralo, hidrólise e fermentação, com horário).
-- O destilador digita a **folga** de cada dorna e o volume aparece na hora, do lado: **volume (L) = (altura − folga) × área da base × 1000**. Folga maior que a altura avisa do lado do número. Nas dornas de vinho também vão o Brix e "Fermentando: Sim/Não" (quem marca é o destilador; o sistema não decide sozinho).
-- No alto: subtotal do grupo e o **total de vinho da produção** (Hidrólise + Sacarificação + Descanso + Vinho, como na planilha). Os tanques de álcool têm o total deles, em litros.
+- Grupos como na planilha: Hidrólise (1 a 5), Sacarificação (1 a 6), Fermentação (7 a 12), Dornas de descanso (1, 2 e 4 a 11), Tanques de álcool (em m³) e Brix da produção (ralo, hidrólise e fermentação, com horário). Os grupos de fermentação e descanso mudaram na 2.7, com as respostas do Lucas.
+- O destilador digita a **folga** de cada dorna e o volume aparece na hora, do lado: **volume (L) = (altura − folga) × área da base × 1000**. Folga maior que a altura avisa do lado do número. Nas dornas de fermentação e descanso também vão o Brix e "Fermentando: Sim/Não" (quem marca é o destilador; o sistema não decide sozinho).
+- No alto: subtotal do grupo e o **total de vinho da produção** (Hidrólise + Sacarificação + Fermentação + Descanso, como na planilha). Os tanques de álcool têm o total deles, em m³.
 - O volume é guardado junto com a medição: se a medida da dorna mudar depois, o que já foi medido continua igual.
 - **Medidas das dornas**: tablet chefe > Usina > Medidas das dornas > Trocar (altura e área da base de cada dorna). Começam com os números da planilha; o Tanque Destilaria está sem medida (a planilha não tem). "Voltar para as medidas da planilha" desfaz.
 - Excel e impressão no desenho da planilha CONTROLE LTS (folha "Destilaria - Volume de vinho").
 
-**Dornas de fermentação** (o caderno dos destiladores), dornas 1, 2, 4, 5, 6, 7, 8, 9, 10 e 11:
+**Dornas de fermentação** (o caderno dos destiladores), dornas 7 a 12 (na 2.6 eram 1, 2 e 4 a 11):
 - Cada dorna: **Começar a encher** (hora e quem encheu) → **Terminou de encher** (hora; o teclado já abre no Brix inicial) → fermentando → **Mandar para a volante** (hora e quem mandou) → **Parou de mandar** (pergunta se esvaziou: sim, fica vazia; não, fica "com vinho" e pode mandar de novo).
 - O cartão da dorna mostra: enchida em tal dia, por quem, das tantas às tantas, Brix inicial; e a última medição da manhã (Brix, volume, fermentando). O Brix e o volume vêm da folha Volume de vinho: ninguém anota duas vezes.
 - No alto aparece quem está na volante. Mandar uma dorna com outra já na volante pede confirmação.
@@ -245,6 +281,7 @@ Leva uns 20 minutos e grava o resultado em `testes/saida/resultado.txt`. Testa:
 5. longo prazo, nas duas centrais: 90 dias de uso da usina inteira (a memória do tablet não enche), dias antigos no BackupUsina, troca de turno e virada das 07:00 no meio da anotação, "Terminou a Nº X", tablet chefe trocado e 700 anotações guardadas sem Wi-Fi;
 6. velocidade: cada toque num tablet 4 vezes mais lento, com 90 dias de uso, tem que responder em menos de 100 ms;
 7. os pedidos do teste de 24/09 (aviso curto, senha do operador no tablet chefe, relatórios, WhatsApp, rolagem, trocar o código), nas duas centrais, e o aplicativo com o código embaralhado como vai no APK;
+7d. a versão 2.7: a central dizendo a versão do APK (e não oferecendo se o APK não bater com o versao.json), o aplicativo com um Android de mentira (botão Atualizar, novidades, pedido de download com o SHA-256, falta de permissão, arquivo com defeito, novidades uma vez depois de atualizar), a central do computador baixando da nuvem (e recusando APK diferente ou versão mais velha) e o tablet chefe entregando a versão dele; os tanques em m³ e as dornas 7 a 12 entram nos testes da 2.6;
 7c. a versão 2.6, nas duas centrais: volume de vinho (a folga vira litros na hora, igual à planilha; aviso de folga maior que a dorna; medidas trocadas pelo escritório), dornas de fermentação (encher, terminar, Brix inicial, medição da manhã no cartão, volante com duas dornas, parar esvaziando ou não, dorna enchida há 6 dias num tablet novo) e o Excel das duas folhas;
 7b. a versão 2.5, nas duas centrais: Wi-Fi embaralhado (quem espia não lê nada, pacote alterado, repetido ou com relógio errado, aplicativo antigo, criptografia escrita em JavaScript igual à do Node e à do navegador) e os totais no Base44 (com um Base44 de mentira no computador: sozinho quando o dia fecha, de novo quando a folha é corrigida, erro sem internet ou com segredo errado, e a função que vai no Base44 rodando com um Base44 simulado);
 8. leitura de foto, impressão e o aplicativo abrindo sem rede;
@@ -252,7 +289,7 @@ Leva uns 20 minutos e grava o resultado em `testes/saida/resultado.txt`. Testa:
 
 Os testes usam pastas de dados temporárias: nunca mexem em `dados/`. Só as telas: `node testes/rodar-telas.mjs` (liga uma central de teste sozinho). Só o longo prazo: `node testes/rodar-robustez.mjs`.
 
-O teste para fazer à mão no celular e no tablet está em `Teste-nos-aparelhos-2.6.pdf`, na pasta `Usina`. Só a versão 2.6: `node testes/rodar-pedidos26.mjs`; só a 2.5: `node testes/rodar-pedidos25.mjs`.
+O teste para fazer à mão no celular e no tablet está em `Teste-nos-aparelhos-2.7.pdf`, na pasta `Usina`. Só a atualização: `node testes/rodar-atualizacao.mjs`; só a 2.6: `node testes/rodar-pedidos26.mjs`; só a 2.5: `node testes/rodar-pedidos25.mjs`.
 
 ## Imagens das telas
 
@@ -269,6 +306,8 @@ Salva em `../telas`.
 43 verificações automáticas: conexão com código certo e errado, anotação, botões − e +, aviso de valor fora do normal, cópia da dorna anterior, marcar fim, monitoramento, valores padrão, insumos, senha do operador, trava por inatividade, virada de turno, exportação, relatórios e configurações. Mais: queda de rede com envio depois que volta, sincronização entre dois aparelhos e validação do Excel e do XML.
 
 Versão 2 (16/09/2026): avisos de pH e Brix, telas LPHERA / Cal e Saczyme / Alcolina com a soma das dornas da hora, casinha nas abas, rolagem do painel do chefe que não volta mais para o topo, pastas *Usina, tela de relatórios, janela de Excel ou XML, listas do ralo, cadastro protegido por senha e busca do tablet chefe no Wi-Fi. Testado no navegador contra o servidor: anotação, envio, queda de rede, relatórios e Excel/XML.
+
+Versão 2.7 (29/09/2026): o aplicativo se atualiza sozinho (botão Atualizar, APK pelo Wi-Fi, novidades depois de atualizar, e a nuvem pronta para quando tiver); quadros alinhados, do mesmo tamanho e ocupando a tela toda; respostas do Lucas (fermentação 7 a 12, descanso 1, 2 e 4 a 11, tanques em m³); API só de leitura para o sistema do escritório.
 
 Versão 2.6 (26/09/2026), pedido do escritório: volume de vinho (folga medida com a trena vira litros na hora, com as medidas das dornas da planilha CONTROLE LTS e o total da produção) e dornas de fermentação (encher, Brix inicial, Brix e volume do dia, mandar para a volante), na Destilaria e Fermentação.
 

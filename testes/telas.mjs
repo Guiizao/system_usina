@@ -70,13 +70,21 @@ const TELAS = [
   ['destilaria-inicio', '&papel=destilaria&op=Mateus'],
   ['volume-vinho', '&papel=destilaria&op=Mateus&tela=prancheta&pid=med_dornas&chave=sac'],
   ['volume-vinho-teclado', '&papel=destilaria&op=Mateus&tela=prancheta&pid=med_dornas&chave=sac&campo=sac3_folga&teclas=0|,|2|5'],
-  ['volume-vinho-dornas', '&papel=destilaria&op=Mateus&tela=prancheta&pid=med_dornas&chave=vin'],
+  ['volume-vinho-dornas', '&papel=destilaria&op=Mateus&tela=prancheta&pid=med_dornas&chave=fer'],
+  ['volume-vinho-tanques', '&papel=destilaria&op=Mateus&tela=prancheta&pid=med_dornas&chave=tq'],
   ['volume-vinho-folha', '&papel=destilaria&op=Mateus&tela=prancheta&pid=med_dornas&monitor=1'],
-  ['fermentacao', '&papel=destilaria&op=Mateus&tela=prancheta&pid=fermentacao&chave=1'],
-  ['fermentacao-volante', '&papel=destilaria&op=Mateus&tela=prancheta&pid=fermentacao&chave=4'],
-  ['fermentacao-enchendo', '&papel=destilaria&op=Mateus&tela=prancheta&pid=fermentacao&chave=6'],
+  ['fermentacao', '&papel=destilaria&op=Mateus&tela=prancheta&pid=fermentacao&chave=7'],
+  ['fermentacao-volante', '&papel=destilaria&op=Mateus&tela=prancheta&pid=fermentacao&chave=9'],
+  ['fermentacao-enchendo', '&papel=destilaria&op=Mateus&tela=prancheta&pid=fermentacao&chave=12'],
   ['fermentacao-folha', '&papel=destilaria&op=Mateus&tela=prancheta&pid=fermentacao&monitor=1'],
   ['chefe-usina-medidas', '&papel=central&tela=config', async (a) => a.avaliar('document.getElementById("bloco-medidas").scrollIntoView()')],
+  // versão 2.7: atualização pelo próprio aplicativo e novidades
+  ['atualizacao-inicio', '&papel=hidrolise&op=Guilherme&atualizacao=2.8.0'],
+  ['atualizacao-dorna', HID + '&atualizacao=2.8.0&campo=brix&teclas=1|8'],
+  ['atualizacao-chefe', '&papel=central&atualizacao=2.8.0'],
+  ['atualizacao-janela', '&papel=hidrolise&op=Guilherme&atualizacao=2.8.0&modal=atualizacao'],
+  ['atualizacao-ajustes', '&papel=hidrolise&op=Guilherme&tela=admin&atualizacao=2.8.0'],
+  ['novidades', '&papel=destilaria&op=Mateus&modal=novidades'],
 ];
 
 const relatorio = { base: BASE, quando: new Date().toISOString(), telas: [] };

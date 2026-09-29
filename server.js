@@ -27,7 +27,11 @@ const crypto = require('crypto');
 const PORTA = Number(process.env.PORTA || process.env.PORT || 8080);
 // PASTA_PUBLICA: os testes usam para rodar o aplicativo do jeito que vai no APK (embaralhado)
 const PUBLICO = process.env.PASTA_PUBLICA ? path.resolve(process.env.PASTA_PUBLICA) : path.join(__dirname, 'public');
-const APK = path.join(__dirname, 'apk', 'saida', 'pranchetas.apk');
+// PASTA_APK: os testes usam outra pasta, para não mexer no APK de verdade
+const PASTA_APK = process.env.PASTA_APK ? path.resolve(process.env.PASTA_APK) : path.join(__dirname, 'apk', 'saida');
+const APK = path.join(PASTA_APK, 'pranchetas.apk');
+// versão, tamanho, SHA-256 e novidades do APK (o gerar-apk.ps1 escreve, ou vem da nuvem junto com o APK)
+const APK_VERSAO = path.join(PASTA_APK, 'versao.json');
 // Pastas da usina, todas com final "Usina", dentro de app/dados
 const DADOS = process.env.PASTA_DADOS ? path.resolve(process.env.PASTA_DADOS) : path.join(__dirname, 'dados'); // os testes usam uma pasta separada
 const PASTAS = {
@@ -130,6 +134,62 @@ const leitura = require('./api-leitura');
 let apiLeituraPronta = null;
 const medidasDoEscritorio = () => { const c = db.registros['config|sistema|geral']; return c && !c.apagado && c.valores ? c.valores.medicao || null : null; };
 const apiDeLeitura = () => apiLeituraPronta || (apiLeituraPronta = leitura.criar(leitura.carregarPranchetas(PUBLICO), medidasDoEscritorio));
+
+/* ---------- Atualização do aplicativo (versão 2.7) ----------
+   Os tablets perguntam em /api/versao qual APK a central tem. Se for mais novo que o deles, aparece o botão Atualizar.
+   Com o endereço da nuvem (forms.js: atualizacaoOnline, ou ATUALIZACAO_ONLINE), a central olha lá de tempos em tempos,
+   baixa o APK novo, confere o tamanho e o SHA-256 e passa a entregar para os tablets pelo Wi-Fi. */
+const numeroDaVersao = (v) => { const p = String(v || '').split('.').map((x) => parseInt(x, 10) || 0); return (p[0] || 0) * 10000 + (p[1] || 0) * 100 + (p[2] || 0); };
+function versaoDoApk() {
+  try {
+    const v = JSON.parse(fs.readFileSync(APK_VERSAO, 'utf8'));
+    if (!v.versao || fs.statSync(APK).size !== v.tamanho) return null; // APK trocado sem o versao.json: não oferece
+    return { versao: v.versao, tamanho: v.tamanho, sha256: v.sha256, url: '/apk/pranchetas.apk', novidades: Array.isArray(v.novidades) ? v.novidades : [] };
+  } catch (e) { return null; }
+}
+/** GET simples (http ou https, segue até 3 redirecionamentos). Devolve os bytes. */
+function baixarDaInternet(endereco, limite, voltas = 0) {
+  return new Promise((resolve, reject) => {
+    const cliente = endereco.startsWith('https:') ? https : http;
+    const req = cliente.get(endereco, { timeout: 30000, headers: { 'User-Agent': 'pranchetas-central' } }, (res) => {
+      if ([301, 302, 303, 307, 308].includes(res.statusCode) && res.headers.location && voltas < 3) {
+        res.resume();
+        return resolve(baixarDaInternet(new URL(res.headers.location, endereco).href, limite, voltas + 1));
+      }
+      if (res.statusCode !== 200) { res.resume(); return reject(new Error(`${endereco} respondeu ${res.statusCode}`)); }
+      const partes = []; let total = 0;
+      res.on('data', (b) => { total += b.length; if (total > limite) { req.destroy(new Error('arquivo grande demais')); return; } partes.push(b); });
+      res.on('end', () => resolve(Buffer.concat(partes)));
+      res.on('error', reject);
+    });
+    req.on('timeout', () => req.destroy(new Error('a internet não respondeu')));
+    req.on('error', reject);
+  });
+}
+let procurandoOnline = false;
+async function buscarAtualizacaoOnline() {
+  let base = process.env.ATUALIZACAO_ONLINE;
+  if (base === undefined) { try { base = leitura.carregarPranchetas(PUBLICO).atualizacaoOnline; } catch (e) { base = ''; } }
+  if (!base || procurandoOnline) return;
+  procurandoOnline = true;
+  const raiz = base.replace(/\/?$/, '/');
+  try {
+    const v = JSON.parse((await baixarDaInternet(raiz + 'versao.json', 1024 * 1024)).toString('utf8'));
+    const atual = versaoDoApk();
+    if (!v.versao || numeroDaVersao(v.versao) <= numeroDaVersao(atual ? atual.versao : '0')) return;
+    const apk = await baixarDaInternet(new URL(v.url || 'pranchetas.apk', raiz).href, 300 * 1024 * 1024);
+    if (apk.length !== v.tamanho || crypto.createHash('sha256').update(apk).digest('hex') !== String(v.sha256 || '').toLowerCase()) {
+      throw new Error('o APK da internet veio diferente do versao.json');
+    }
+    fs.mkdirSync(PASTA_APK, { recursive: true });
+    fs.writeFileSync(APK + '.novo', apk);
+    fs.renameSync(APK + '.novo', APK);
+    fs.writeFileSync(APK_VERSAO, JSON.stringify({ versao: v.versao, tamanho: v.tamanho, sha256: String(v.sha256).toLowerCase(), novidades: Array.isArray(v.novidades) ? v.novidades : [] }, null, 2));
+    console.log(`  Versão ${v.versao} do aplicativo baixada da internet. Os tablets já podem atualizar.`);
+  } catch (e) {
+    console.log('  Atualização pela internet: ' + e.message);
+  } finally { procurandoOnline = false; }
+}
 const mesmoSegredo = (a, b) => { const x = Buffer.from(String(a)); const y = Buffer.from(String(b)); return x.length === y.length && crypto.timingSafeEqual(x, y); };
 function diasComAnotacao() {
   const n = {};
@@ -408,6 +468,8 @@ const servidor = http.createServer(async (req, res) => {
       return json(res, 200, { rede: config.nome, cifrado: pacote.toString('base64') });
     }
 
+    if (p === '/api/versao') return json(res, 200, versaoDoApk() || { versao: null });
+
     if (p === '/apk/pranchetas.apk') {
       if (!fs.existsSync(APK)) { res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' }); return res.end('APK ainda não gerado'); }
       res.writeHead(200, {
@@ -626,6 +688,9 @@ async function rotaProtegida(req, res, url, ip) {
 
 arquivarDiasAntigos();
 setInterval(arquivarDiasAntigos, 3600 * 1000).unref();
+// versão nova na internet: olha logo depois de ligar e a cada 6 horas
+setTimeout(buscarAtualizacaoOnline, Number(process.env.ATUALIZACAO_ESPERA_MS || 20000)).unref();
+setInterval(buscarAtualizacaoOnline, 6 * 3600 * 1000).unref();
 
 // ENDERECO=127.0.0.1 deixa a central só neste computador (usado nos testes, para o Windows não perguntar do firewall)
 servidor.listen(PORTA, process.env.ENDERECO || '0.0.0.0', () => {

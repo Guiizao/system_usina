@@ -39,10 +39,10 @@ function comCliente(central) {
 }
 
 /** Central do computador. Devolve { url, pasta, codigo(), chave(), api(), reiniciar(), desligar() }. */
-export async function centralNode(porta, pasta = pastaTemporaria('node'), publico) {
+export async function centralNode(porta, pasta = pastaTemporaria('node'), publico, extras = {}) {
   let proc;
   const ligar = async () => {
-    proc = spawn(process.execPath, [path.join(APP, 'server.js')], { env: Object.assign({}, process.env, { PORTA: String(porta), PASTA_DADOS: pasta, ENDERECO: '127.0.0.1', SENHA_PROGRAMADOR_HASH: HASH_TESTE }, publico ? { PASTA_PUBLICA: publico } : {}), stdio: 'ignore' });
+    proc = spawn(process.execPath, [path.join(APP, 'server.js')], { env: Object.assign({}, process.env, { PORTA: String(porta), PASTA_DADOS: pasta, ENDERECO: '127.0.0.1', SENHA_PROGRAMADOR_HASH: HASH_TESTE, ATUALIZACAO_ONLINE: '' }, publico ? { PASTA_PUBLICA: publico } : {}, extras), stdio: 'ignore' });
     await esperarNoAr(`http://127.0.0.1:${porta}`);
   };
   await ligar();

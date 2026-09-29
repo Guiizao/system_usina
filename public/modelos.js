@@ -305,23 +305,24 @@
       m.grupos.forEach((x) => {
         g.bloco(r, 0, r, n - 1, `${x.g.nome.toUpperCase()}${x.hora && x.medidas ? `   (medido às ${x.hora}${x.operador ? ' por ' + x.operador : ''})` : ''}`, { b: true, sz: 10, al: 'l', borda: true, fundo: 'C6D9B4' });
         r++;
-        ['DORNAS', 'FOLGA', 'VOLUME LTS', 'BRIX', 'FERMENTANDO'].forEach((c, i) => g.set(r, i, c, cab));
+        const m3 = x.g.unidade === 'm³';
+        ['DORNAS', 'FOLGA', m3 ? 'VOLUME M³' : 'VOLUME LTS', 'BRIX', 'FERMENTANDO'].forEach((c, i) => g.set(r, i, c, cab));
         r++;
         x.linhas.forEach((l) => {
           const vals = [l.d.nome, vazio(l.folga) ? '' : numero(l.folga), l.volume == null ? '' : l.volume, x.g.brix && !vazio(l.brix) ? numero(l.brix) : '', x.g.fermentando ? l.ferm || '' : ''];
-          vals.forEach((v, i) => g.set(r, i, v, Object.assign({ sz: 9, al: i ? 'c' : 'l', borda: true }, i === 1 ? { dec: 2 } : i === 2 ? { dec: 2, milhar: true } : {})));
+          vals.forEach((v, i) => g.set(r, i, v, Object.assign({ sz: 9, al: i ? 'c' : 'l', borda: true }, i === 1 ? { dec: 2 } : i === 2 ? { dec: m3 ? 3 : 2, milhar: true } : {})));
           linhas.push({ rotulo: `${x.g.nome} - ${l.d.nome}`, preenchida: !vazio(l.folga) || !vazio(l.brix) || !vazio(l.ferm), valores: [x.g.nome, ...vals] });
           r++;
         });
         g.set(r, 0, 'SUB TOTAL', { b: true, sz: 9, al: 'l', borda: true, fundo: 'FCE4B4' });
         g.set(r, 1, '', BORDA);
-        g.set(r, 2, x.subtotal, { b: true, sz: 9, al: 'c', borda: true, dec: 2, milhar: true, fundo: 'FCE4B4' });
+        g.set(r, 2, x.subtotal, { b: true, sz: 9, al: 'c', borda: true, dec: m3 ? 3 : 2, milhar: true, fundo: 'FCE4B4' });
         g.set(r, 3, '', BORDA); g.set(r, 4, '', BORDA);
         r += 2;
       });
-      [['TOTAL GERAL LITROS PRODUÇÃO', m.producao], ['TOTAL TANQUES DE ÁLCOOL (LTS)', m.tanques]].forEach(([rot, val]) => {
+      [['TOTAL GERAL LITROS PRODUÇÃO', m.producao, 2], ['TOTAL TANQUES DE ÁLCOOL (M³)', m.tanques, 3]].forEach(([rot, val, dec]) => {
         g.bloco(r, 0, r, 1, rot, { b: true, sz: 10, al: 'l', borda: true, fundo: 'FCE4B4' });
-        g.set(r, 2, val, { b: true, sz: 10, al: 'c', borda: true, dec: 2, milhar: true, fundo: 'FCE4B4' });
+        g.set(r, 2, val, { b: true, sz: 10, al: 'c', borda: true, dec, milhar: true, fundo: 'FCE4B4' });
         g.set(r, 3, '', BORDA); g.set(r, 4, '', BORDA);
         r++;
       });
@@ -341,7 +342,7 @@
         cabecalho: [['Documento', 'CONTROLE DE VOLUME DAS DORNAS (LTS)'], ['Data', fmtData(data)]],
         colunas: ['Grupo', 'Dorna', 'Folga (m)', 'Volume (L)', 'Brix', 'Fermentando'],
         linhas,
-        rodape: [['Total geral litros produção', String(m.producao)], ['Total tanques de álcool', String(m.tanques)],
+        rodape: [['Total geral litros produção', String(m.producao)], ['Total tanques de álcool (m³)', String(m.tanques)],
           ...params.map(([rot, b, h]) => [rot, [m.param[b], m.param[h]].filter((x) => !vazio(x)).join(' às ')])],
       };
       return { nome: 'Volume de vinho', paisagem: false, grade: g, dados };

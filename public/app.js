@@ -3,7 +3,7 @@
 (function () {
   'use strict';
   const C = window.USINA;
-  const VERSAO = '2.6.0'; // aparece nos ajustes e vai junto com cada envio para a central
+  const VERSAO = '2.7.0'; // aparece nos ajustes e vai junto com cada envio para a central
   const AUTORIA = '© 2026 Guilherme. Todos os direitos reservados. Uso somente com autorização do autor.';
   const params = new URLSearchParams(location.search);
   const DEMO_IMG = params.has('demo'); // usado só para gerar imagens de apresentação
@@ -410,22 +410,28 @@
    *   As medidas das dornas ficam em Configurações da usina (começam com as da planilha, em forms.js).
    * ========================================================= */
   const PID_MEDICAO = 'med_dornas', PID_FERMENTACAO = 'fermentacao';
-  const medidasDasDornas = () => configSistema().medicao || C.medicaoPadrao;
+  // as medidas trocadas pelo escritório valem só se forem da mesma versão dos grupos (forms.js)
+  const medidasDasDornas = () => { const m = configSistema().medicao; return m && m.versao === C.medicaoPadrao.versao ? m : C.medicaoPadrao; };
+  const emM3 = (g) => !!g && g.unidade === 'm³';
   const gruposDaMedicao = () => medidasDasDornas().grupos;
   const grupoDaMedicao = (id) => gruposDaMedicao().find((g) => g.id === id);
   const temMedida = (d) => !!d && Number(d.altura) > 0 && Number(d.area) > 0;
   const arred2 = (n) => Math.round(n * 100) / 100;
-  function volumeDe(d, folga) {
+  /** Volume da dorna: em litros, ou em m³ nos tanques de álcool (g = o grupo da dorna). */
+  function volumeDe(d, folga, g) {
     if (vazio(folga) || !temMedida(d)) return null;
-    return arred2((Number(d.altura) - Number(folga)) * Number(d.area) * 1000);
+    const v = (Number(d.altura) - Number(folga)) * Number(d.area);
+    return emM3(g) ? Math.round(v * 1000) / 1000 : arred2(v * 1000);
   }
   /** Litros como na planilha (7.229,25). curto: sem as casas, para caber do lado do quadro. */
   const litros = (n, curto) => (n == null ? '' : `${Number(n).toLocaleString('pt-BR', { minimumFractionDigits: curto ? 0 : 2, maximumFractionDigits: curto ? 0 : 2 })} L`);
-  function volDoRegistro(reg, d) {
+  function volDoRegistro(reg, d, g) {
     if (!reg) return null;
     const x = reg.valores[d.id + '_vol'];
-    return vazio(x) ? volumeDe(d, reg.valores[d.id + '_folga']) : Number(x);
+    return vazio(x) ? volumeDe(d, reg.valores[d.id + '_folga'], g) : Number(x);
   }
+  /** Volume com a unidade do grupo: 7.229,25 L ou 4,400 m³ (curto: litros sem as casas). */
+  const volumeTexto = (n, g, curto) => (n == null ? '' : emM3(g) ? `${Number(n).toLocaleString('pt-BR', { minimumFractionDigits: 3, maximumFractionDigits: 3 })} m³` : litros(n, curto));
   /** Dia de produção + hora (a folha vai das 07:00 às 06:59) em milissegundos. */
   function momentoDe(data, hhmm) {
     if (!/^\d{4}-\d{2}-\d{2}$/.test(data || '') || !/^\d\d:\d\d$/.test(hhmm || '')) return 0;
@@ -440,7 +446,7 @@
       const vivo = aoVivo && aoVivo.grupo === g.id;
       const reg = vivo ? { valores: aoVivo.valores } : pegar(data, PID_MEDICAO, g.id);
       const v = reg ? reg.valores : {};
-      const linhas = g.dornas.map((d) => ({ d, folga: v[d.id + '_folga'], brix: v[d.id + '_brix'], ferm: v[d.id + '_ferm'], volume: vivo ? volumeDe(d, v[d.id + '_folga']) : volDoRegistro(reg, d) }));
+      const linhas = g.dornas.map((d) => ({ d, folga: v[d.id + '_folga'], brix: v[d.id + '_brix'], ferm: v[d.id + '_ferm'], volume: vivo ? volumeDe(d, v[d.id + '_folga'], g) : volDoRegistro(reg, d, g) }));
       const medidas = linhas.filter((l) => l.volume != null);
       return { g, hora: v.hora || '', operador: (!vivo && reg && reg.operador) || '', linhas, medidas: medidas.length, subtotal: arred2(medidas.reduce((s, l) => s + l.volume, 0)) };
     });
@@ -499,7 +505,7 @@
       if (vazio(v[d.id + '_folga']) && vazio(v[d.id + '_brix']) && vazio(v[d.id + '_ferm'])) continue;
       const em = momentoDe(data, v.hora) || reg.atualizadoEm;
       if (desde && em < desde) return null; // medida de antes deste enchimento (era o vinho anterior)
-      return { data, hora: v.hora || '', brix: v[d.id + '_brix'], ferm: v[d.id + '_ferm'], volume: volDoRegistro(reg, d), operador: reg.operador || '' };
+      return { data, hora: v.hora || '', brix: v[d.id + '_brix'], ferm: v[d.id + '_ferm'], volume: volDoRegistro(reg, d, g), operador: reg.operador || '' };
     }
     return null;
   }
@@ -789,6 +795,94 @@
   const chaveTurno = () => `${dataProducao()}-${turnoAtual().id}`;
   const operadorAtual = () => (cfg.op && cfg.op.chave === chaveTurno() ? cfg.op.nome : null);
   function definirOperador(nome) { cfg.op = { nome, chave: chaveTurno() }; salvarCfg(); }
+
+  /* =========================================================
+   * Atualização do aplicativo (versão 2.7)
+   * A central diz qual versão ela tem para entregar (api/versao). Se for mais nova que esta,
+   * aparece o botão Atualizar no alto. O APK desce pelo Wi-Fi, o Android confere se foi assinado
+   * pelo mesmo computador e pergunta se pode atualizar. As anotações deste aparelho continuam.
+   * Com a nuvem (C.atualizacaoOnline), o tablet chefe também acha a versão nova pela internet.
+   * ========================================================= */
+  const atualizacao = { nova: null, procurando: false };
+  /** '2.7.0' vira 20700, para comparar versões. É também o número de versão do APK (versionCode). */
+  const numeroDaVersao = (v) => { const p = String(v || '').split('.').map((x) => parseInt(x, 10) || 0); return (p[0] || 0) * 10000 + (p[1] || 0) * 100 + (p[2] || 0); };
+  const podeAtualizar = () => NO_APK && !!pluginCentral && !!pluginCentral.atualizar;
+  async function procurarAtualizacao(avisar) {
+    if (!podeAtualizar() || atualizacao.procurando || cfg.demo) return;
+    atualizacao.procurando = true;
+    const fontes = [];
+    if (cfg.central && !centralNoTablet()) fontes.push(baseCentral() + 'api/versao');
+    if (C.atualizacaoOnline) fontes.push(C.atualizacaoOnline.replace(/\/?$/, '/') + 'versao.json');
+    let melhor = null;
+    for (const fonte of fontes) {
+      const ctrl = new AbortController();
+      const t = setTimeout(() => ctrl.abort(), 8000);
+      try {
+        const v = await (await fetch(fonte, { cache: 'no-store', signal: ctrl.signal })).json();
+        if (v && v.versao && numeroDaVersao(v.versao) > numeroDaVersao(melhor ? melhor.versao : VERSAO)) melhor = Object.assign({}, v, { url: new URL(v.url || 'pranchetas.apk', fonte).href });
+      } catch (e) { /* sem a central ou sem internet: procura de novo mais tarde */ } finally { clearTimeout(t); }
+    }
+    atualizacao.procurando = false;
+    const mudou = (melhor && melhor.versao) !== (atualizacao.nova && atualizacao.nova.versao);
+    atualizacao.nova = melhor;
+    if (mudou && !modalAberto()) render();
+    if (avisar) toast(melhor ? `Tem a versão ${melhor.versao} para instalar` : `Este aparelho já está com a versão mais nova (${VERSAO})`);
+  }
+  /** Novidades das versões depois de "de" até esta. Sem "de": só as desta versão. */
+  const novidadesDesde = (de) => (window.NOVIDADES || []).filter((n) => (de ? numeroDaVersao(n.versao) > numeroDaVersao(de) && numeroDaVersao(n.versao) <= numeroDaVersao(VERSAO) : n.versao === VERSAO));
+  const htmlNovidades = (lista) => `<div class="novidades-lista">${lista.map((n) => `${lista.length > 1 ? `<h4>Versão ${esc(n.versao)}</h4>` : ''}<ul>${(n.itens || []).map((i) => `<li>${esc(i)}</li>`).join('')}</ul>`).join('')}</div>`;
+  function mostrarNovidades(de) {
+    const lista = novidadesDesde(de);
+    if (!lista.length) return;
+    if (modalAberto()) { setTimeout(() => mostrarNovidades(de), 3000); return; } // espera fechar a janela que está aberta (aviso do escritório)
+    abrirModal(`<h3>${de ? `Aplicativo atualizado: versão ${esc(VERSAO)}` : `Novidades da versão ${esc(VERSAO)}`}</h3>
+      ${de ? '<p class="dica">O que mudou:</p>' : ''}${htmlNovidades(lista)}
+      <div class="acoes-modal um"><button class="btn primario" data-k="ok">Entendi</button></div>`, (k, b, fechar) => { if (k === 'ok') fechar(true); }, { classe: 'largo com-novidades' });
+  }
+  /** Abriu numa versão nova: mostra uma vez o que mudou. Aparelho que ainda não tem função escolhida não precisa. */
+  function conferirNovidades() {
+    const antes = cfg.versaoVista || (cfg.papel ? '2.6.0' : VERSAO); // a 2.6 não guardava a versão vista
+    if (cfg.versaoVista !== VERSAO) { cfg.versaoVista = VERSAO; salvarCfg(); }
+    if (numeroDaVersao(antes) < numeroDaVersao(VERSAO)) setTimeout(() => mostrarNovidades(antes), 900);
+  }
+  /** Janela da versão nova: o que mudou e o botão que baixa e abre o instalador do Android. */
+  async function oferecerAtualizacao() {
+    const n = atualizacao.nova;
+    if (!n) return;
+    const lista = Array.isArray(n.novidades) ? n.novidades.filter((x) => numeroDaVersao(x.versao) > numeroDaVersao(VERSAO)) : [];
+    const mb = n.tamanho ? ` (${(n.tamanho / 1048576).toLocaleString('pt-BR', { maximumFractionDigits: 1 })} MB)` : '';
+    let baixando = false;
+    await abrirModal(`<h3>Versão nova: ${esc(n.versao)}</h3>
+      <p class="dica">Este aparelho está com a ${esc(VERSAO)}. As anotações daqui não se perdem.</p>
+      ${lista.length ? htmlNovidades(lista) : ''}
+      <p class="dica passo-atualizacao" id="passo-atualizacao">Toque em Atualizar e confirme na janela do Android${mb}.</p>
+      <div class="acoes-modal"><button class="btn" data-k="x">Depois</button><button class="btn primario" data-k="ok">${ico('instalar')} Atualizar</button></div>`,
+    async (k, b, fechar, f) => {
+      if (k === 'x') return fechar(undefined);
+      if (k !== 'ok' || baixando) return;
+      baixando = true; b.disabled = true;
+      const passo = f.querySelector('#passo-atualizacao');
+      passo.textContent = 'Baixando o aplicativo novo...';
+      let ouvinte = null;
+      try {
+        ouvinte = await pluginCentral.addListener('progressoAtualizacao', (p) => { if (p && p.total) passo.textContent = `Baixando o aplicativo novo: ${Math.floor((p.baixado * 100) / p.total)}%`; });
+      } catch (e) { /* sem a porcentagem, baixa do mesmo jeito */ }
+      try {
+        const r = await pluginCentral.atualizar({ url: n.url, sha256: n.sha256 || '', tamanho: n.tamanho || 0 });
+        if (r && r.precisaPermissao) {
+          passo.textContent = 'Falta uma permissão. Na tela que abriu, ligue "Permitir desta fonte", volte para cá e toque em Atualizar de novo.';
+        } else {
+          fechar(true);
+          toast('Agora toque em Atualizar na janela do Android');
+        }
+      } catch (e) {
+        passo.textContent = `Não deu certo: ${(e && e.message) || e}. Confira o Wi-Fi e tente de novo.`;
+      } finally {
+        baixando = false; b.disabled = false;
+        if (ouvinte && ouvinte.remove) ouvinte.remove();
+      }
+    }, { classe: 'largo com-novidades' });
+  }
 
   /* =========================================================
    * Janelas por cima da tela (fundo escurecido)
@@ -1176,11 +1270,13 @@
     else if (a.type === 'check') mostra = `<span class="val marca">${ico('certo')} ${esc(v)}</span>`;
     else if (a.type === 'text' || a.type === 'choice') mostra = `<span class="val texto">${esc(v)}</span>`;
     // o aviso (pH baixo, Brix alto) fica do lado do número, curto: a caixa não muda de tamanho
-    else mostra = `<span class="val">${esc(fmtCampo(a, v))}${u ? `<small>${esc(u)}</small>` : ''}${avisos.length ? `<em class="tag-aviso">${esc(avisos[0].curto)}</em>` : ''}</span>`;
+    else mostra = `<span class="val">${esc(fmtCampo(a, v))}${u ? `<small>${esc(u)}</small>` : ''}</span>`;
     const rotulo = curto && a.labelCurto ? a.labelCurto : a.label;
-    // o que sai da conta (volume da dorna) fica na linha do nome, do lado: o número continua grande
+    // o aviso (pH baixo) e o que sai da conta (volume da dorna) ficam na linha do nome, do lado:
+    // o número continua grande e numa linha só, e todos os quadros ficam do mesmo tamanho
     const calc = !avisos.length && a.calculo ? a.calculo() : '';
-    return `<button class="${cls}" data-quadro="${esc(a.id)}"><span class="rot">${esc(rotulo)}${avisos.length ? ` ${ico('alerta')}` : ''}${calc ? `<em class="tag-calc">${esc(calc)}</em>` : ''}</span>${mostra}</button>`;
+    const selo = avisos.length ? `<em class="tag-aviso">${esc(avisos[0].curto)}</em>` : calc ? `<em class="tag-calc">${esc(calc)}</em>` : '';
+    return `<button class="${cls}" data-quadro="${esc(a.id)}"><span class="rot"><span class="rot-txt">${esc(rotulo)}</span>${selo}</span>${mostra}</button>`;
   }
   const htmlQuadros = (lista, curto) => lista.map((a) => quadro(a, curto)).join('');
 
@@ -1208,7 +1304,7 @@
     document.querySelectorAll('[data-grupo]').forEach((g) => {
       const ids = g.dataset.grupo.split(',');
       if (!tudo && !ids.some((id) => mexidos.includes(id))) return;
-      g.innerHTML = htmlQuadros(alvos.filter((a) => ids.includes(a.id)), g.classList.contains('par'));
+      g.innerHTML = htmlQuadros(alvos.filter((a) => ids.includes(a.id)), g.dataset.curto === '1');
       refeitos.push(g);
     });
     const p = document.getElementById('painel');
@@ -1218,22 +1314,97 @@
     if (ativo && ed.alvoId !== ed.rolouPara) requestAnimationFrame(() => { const el = document.querySelector('.campo.ativo'); if (el) el.scrollIntoView({ block: 'nearest' }); });
     ed.rolouPara = ativo ? ed.alvoId : null;
     if (aoAtualizarEdicao) aoAtualizarEdicao();
+    if (trocouPainel) arrumarQuadros();
     agendarCaber(tudo ? null : refeitos);
   }
+  /* Os blocos de quadros ocupam a tela inteira: em linhas equilibradas (3 + 2, e não 4 + 1), esticando até a largura
+     toda (cada bloco divide a linha pelo número de quadros), e com os quadros da altura que couber, para nada ficar
+     escondido atrás do botão de salvar. Se nem no tamanho mínimo couber, a lista rola. */
+  // o espaço da tela muda depois de desenhar (letra das abas ajustada, teclado, celular virado): arruma de novo
+  const observarEspaco = typeof ResizeObserver === 'function' ? new ResizeObserver(() => requestAnimationFrame(() => arrumarQuadros())) : null;
+  let espacoObservado = null;
+  function arrumarQuadros(semTitulos) {
+    const caixa = app.querySelector('.edicao main .grupos');
+    if (!caixa) return;
+    const main = caixa.closest('main');
+    if (observarEspaco && espacoObservado !== main) { observarEspaco.disconnect(); observarEspaco.observe(main); espacoObservado = main; }
+    // pouco espaço (teclado aberto no tablet deitado): os títulos dos blocos saem, cada quadro já diz o que é.
+    // Só se assim couber tudo; se nem assim couber, os títulos ficam e a lista rola.
+    caixa.classList.toggle('compacto', semTitulos === 'tentar');
+    caixa.querySelectorAll(':scope > .quebra').forEach((q) => q.remove());
+    const blocos = [...caixa.children].filter((b) => b.classList.contains('grupo'));
+    if (!blocos.length || !caixa.clientWidth) return;
+    const est = getComputedStyle(caixa);
+    const num = (nome, padrao) => parseFloat(est.getPropertyValue(nome)) || padrao;
+    const gap = parseFloat(est.columnGap) || 8;
+    const largura = caixa.clientWidth;
+    const quadros = blocos.map((b) => Number(b.dataset.n) || 1);
+    // quantos quadros cabem numa linha: a largura mínima de cada um, mais o espaço entre eles e a borda de cada bloco
+    const par0 = blocos[0].querySelector('.par');
+    const gapQ = par0 ? parseFloat(getComputedStyle(par0).columnGap) || 8 : 8;
+    const borda = blocos.reduce((s, b) => s + b.offsetWidth - (b.querySelector('.par') || b).clientWidth, 0) / blocos.length;
+    const porBloco = Math.max(1, quadros.reduce((s, n) => s + n, 0) / blocos.length);
+    const umax = Math.max(1, Math.floor((largura + gap + gapQ) / (num('--q-largura-min', 140) + gapQ + (borda + gap) / porBloco)));
+    // bloco com mais quadros que a linha (ou o quadro largo, como a observação) ocupa a linha inteira
+    const unidades = blocos.map((b, i) => (b.classList.contains('grupo-largo') ? umax : Math.min(quadros[i], umax)));
+    const encher = (cabe) => {
+      const linhas = [];
+      unidades.forEach((u, i) => { const l = linhas[linhas.length - 1]; if (!l || l.soma + u > cabe) linhas.push({ soma: u, itens: [i] }); else { l.soma += u; l.itens.push(i); } });
+      return linhas;
+    };
+    let melhor = null;
+    for (let cabe = umax; cabe >= Math.max(...unidades); cabe--) {
+      const linhas = encher(cabe);
+      const somas = linhas.map((l) => l.soma);
+      const nota = linhas.length * 1000 + Math.max(...somas) - Math.min(...somas);
+      if (!melhor || nota < melhor.nota) melhor = { nota, linhas };
+    }
+    blocos.forEach((b, i) => {
+      const colunas = b.classList.contains('grupo-largo') ? 1 : Math.min(quadros[i], umax);
+      b.style.flex = `${unidades[i]} 1 0px`;
+      b.style.setProperty('--colunas', colunas);
+      b.dataset.fileiras = Math.ceil(quadros[i] / colunas);
+    });
+    melhor.linhas.slice(0, -1).forEach((l) => blocos[l.itens[l.itens.length - 1]].after(Object.assign(document.createElement('i'), { className: 'quebra' })));
+    // altura: o espaço que sobra na tela dividido pelas fileiras de quadros (tirando títulos e bordas dos blocos)
+    const q0 = caixa.querySelector('.campo');
+    if (!q0) return;
+    const atual = q0.offsetHeight;
+    let fileiras = 0, sobra = 0;
+    melhor.linhas.forEach((l) => {
+      const f = Math.max(...l.itens.map((i) => Number(blocos[i].dataset.fileiras)));
+      fileiras += f;
+      sobra += Math.max(...l.itens.map((i) => blocos[i].offsetHeight - Number(blocos[i].dataset.fileiras) * atual - (Number(blocos[i].dataset.fileiras) - 1) * gapQ)) + (f - 1) * gapQ;
+    });
+    const estMain = getComputedStyle(main);
+    const acima = caixa.getBoundingClientRect().top - main.getBoundingClientRect().top + main.scrollTop - parseFloat(estMain.paddingTop);
+    const livre = main.clientHeight - parseFloat(estMain.paddingTop) - parseFloat(estMain.paddingBottom) - acima - sobra - melhor.linhas.length * num('--gap-linha', 8) - 2;
+    const naoCabe = livre / fileiras < num('--q-min', 72);
+    if (naoCabe && !semTitulos && caixa.querySelector(':scope > .grupo > h3')) return arrumarQuadros('tentar');
+    if (naoCabe && semTitulos === 'tentar') return arrumarQuadros('manter');
+    const q = Math.max(num('--q-min', 72), Math.min(num('--q-max', 170), Math.floor(livre / fileiras)));
+    caixa.style.setProperty('--q', q + 'px');
+    caixa.classList.add('arrumados');
+  }
+
   function grupoQuadros(lista) { return `<div class="campos" data-grupo="${lista.map((a) => esc(a.id)).join(',')}">${htmlQuadros(lista)}</div>`; }
 
-  /** Quadros em blocos: o que anda junto fica junto (hora início e fim, Brix e BHX...). */
+  /** Quadros em blocos: o que anda junto fica junto (hora início e fim, Brix e BHX...).
+      Quadros sem bloco viram um bloco sem título; o quadro largo (observação) fica numa linha só dele.
+      Quem arruma os blocos na tela é o arrumarQuadros. */
   function blocosDeQuadros(grupos, lista) {
-    if (!grupos) return grupoQuadros(lista);
-    const emGrupo = new Set(grupos.flatMap((g) => g.campos));
+    const bloco = (titulo, doBloco, largo) => `<section class="grupo ${titulo ? '' : 'sem-titulo'} ${largo ? 'grupo-largo' : ''}" data-n="${doBloco.length}">${titulo ? `<h3>${esc(titulo)}</h3>` : ''}
+        <div class="par" ${titulo ? 'data-curto="1"' : ''} data-grupo="${doBloco.map((a) => esc(a.id)).join(',')}">${htmlQuadros(doBloco, !!titulo)}</div></section>`;
+    const emGrupo = new Set((grupos || []).flatMap((g) => g.campos));
     const soltos = lista.filter((a) => !emGrupo.has(a.id));
-    const blocos = grupos.map((g) => {
+    const blocos = (grupos || []).map((g) => {
       const doGrupo = g.campos.map((id) => lista.find((a) => a.id === id)).filter(Boolean);
-      if (!doGrupo.length) return '';
-      return `<section class="grupo"><h3>${esc(g.titulo)}</h3>
-        <div class="par n${Math.min(doGrupo.length, 3)}" data-grupo="${doGrupo.map((a) => esc(a.id)).join(',')}">${htmlQuadros(doGrupo, true)}</div></section>`;
-    }).join('');
-    return `<div class="grupos">${blocos}</div>${soltos.length ? grupoQuadros(soltos) : ''}`;
+      return doGrupo.length ? bloco(g.titulo, doGrupo) : '';
+    });
+    const normais = soltos.filter((a) => !a.largo);
+    if (normais.length) blocos.push(bloco('', normais));
+    soltos.filter((a) => a.largo).forEach((a) => blocos.push(bloco('', [a], true)));
+    return `<div class="grupos">${blocos.join('')}</div>`;
   }
   function telaEdicao(conteudo, rodape, fixoTopo) {
     // as abas e o seletor ficam presos no alto; só os quadros rolam, se precisar
@@ -1297,6 +1468,7 @@
         <div class="titulo ${String(titulo).length > 17 ? 'longo' : ''}"><div class="titulo-linha"><b>${esc(titulo)}</b><em class="turno-topo" id="turno-topo">${esc(turnoAtual().nome)}</em></div>${subtitulo ? `<span id="subtitulo-topo">${esc(subtitulo)}</span>` : ''}</div>
         ${atalhos ? `<div class="atalhos">${atalhos}</div>` : ''}
         <div class="relogio"><b id="relogio">${horaAgora()}</b></div>
+        ${atualizacao.nova ? `<button class="tema atualizar" data-a="atualizacao" aria-label="Atualizar o aplicativo para a versão ${esc(atualizacao.nova.versao)}">${ico('instalar')}<span>Atualizar</span></button>` : ''}
         ${configurado && (view() || {}).tela !== 'admin' ? `<button class="tema" data-a="admin" aria-label="Ajustes do aparelho">${ico('ajustes')}<span>Ajustes</span></button>` : ''}
         <button class="tema" data-a="tema" aria-label="${escuro ? 'Mudar para tela clara' : 'Mudar para tela escura'}">${ico(escuro ? 'sol' : 'lua')}<span>${escuro ? 'Claro' : 'Escuro'}</span></button>
       </header>`;
@@ -1355,6 +1527,7 @@
       app.classList.remove('troca', 'troca-linha'); void app.offsetWidth;
       app.classList.add(outraTela ? 'troca' : 'troca-linha');
     }
+    arrumarQuadros();
     agendarCaber();
     requestAnimationFrame(caberFolhas); // folha inteira na tela (monitoramento)
   }
@@ -1844,9 +2017,9 @@
         lista.push({
           id: idF, dornaId: d.id, label: `${d.nome}: folga`, labelCurto: 'Folga', type: 'num', dec: 2, unidade: 'm', min: 0,
           avisos: temMedida(d) ? [{ quando: '>', valor: Number(d.altura), nivel: 'alerta', texto: `Folga maior que a altura da dorna (${num(d.altura)} m)`, curto: 'Maior que a dorna' }] : [],
-          dica: temMedida(d) ? `${d.nome}: altura ${num(d.altura)} m, base ${num(d.area)} m². Volume = (altura − folga) × base × 1000.` : `${d.nome} está sem medida: o escritório cadastra em Configurações da usina.`,
+          dica: temMedida(d) ? `${d.nome}: altura ${num(d.altura)} m, base ${num(d.area)} m². Volume = (altura − folga) × base${emM3(g) ? ', em m³' : ' × 1000'}.` : `${d.nome} está sem medida: o escritório cadastra em Configurações da usina.`,
           // o volume aparece do lado da folga, na hora
-          calculo: () => { const vol = volumeDe(d, val[idF]); return vol != null ? litros(vol, true) : !vazio(val[idF]) && !temMedida(d) ? 'sem medida' : ''; },
+          calculo: () => { const vol = volumeDe(d, val[idF], g); return vol != null ? volumeTexto(vol, g, true) : !vazio(val[idF]) && !temMedida(d) ? 'sem medida' : ''; },
           get: () => val[idF], set: (x) => { val[idF] = x; },
         });
         if (g.brix) lista.push({ id: d.id + '_brix', dornaId: d.id, label: `${d.nome}: Brix`, labelCurto: 'Brix', type: 'num', dec: 1, min: 0, max: 40, get: () => val[d.id + '_brix'], set: (x) => { val[d.id + '_brix'] = x; } });
@@ -1939,19 +2112,19 @@
   function totaisMedicaoHtml(data, chave) {
     const med = medicaoDoDia(data, chave !== 'param' && rascunho ? { grupo: chave, valores: rascunho.valores } : null);
     const x = med.grupos.find((y) => y.g.id === chave);
-    const parte = x && !x.g.soma ? `${esc(x.g.nome)}: <b>${litros(x.subtotal)}</b>` : x ? `Subtotal: <b>${litros(x.subtotal)}</b>` : '';
+    const parte = x && !x.g.soma ? `${esc(x.g.nome)}: <b>${volumeTexto(x.subtotal, x.g)}</b>` : x ? `Subtotal: <b>${litros(x.subtotal)}</b>` : '';
     return `${parte ? `<span class="par-total">${parte}</span>` : ''}<span class="par-total">Vinho da produção: <b>${litros(med.producao)}</b></span>`;
   }
   function folhaMedicaoHtml(p, data, chave) {
     const med = medicaoDoDia(data);
     const num = (x) => (vazio(x) ? '' : esc(fmtNum(x)));
     return `<div class="folha">${cabecalhoFolha(p, data)}<div class="tabela-wrap"><table class="papel medicao">
-      <thead><tr><th>Dornas</th><th>Folga (m)</th><th>Volume (L)</th><th>Brix</th><th>Fermentando</th></tr></thead>
+      <thead><tr><th>Dornas</th><th>Folga (m)</th><th>Volume</th><th>Brix</th><th>Fermentando</th></tr></thead>
       <tbody>${med.grupos.map((x) => `<tr class="grupo-linha clicavel ${x.g.id === chave ? 'sel' : ''}" data-a="linha" data-chave="${x.g.id}"><td colspan="5"><b>${esc(x.g.nome)}</b>${x.hora && x.medidas ? ` <span>medido às ${esc(x.hora)}${x.operador ? ` por ${esc(x.operador)}` : ''}</span>` : ''}</td></tr>
-        ${x.linhas.map((l) => `<tr class="clicavel" data-a="linha" data-chave="${x.g.id}"><td>${esc(l.d.nome)}</td><td>${num(l.folga)}</td><td><b>${l.volume == null ? (vazio(l.folga) || temMedida(l.d) ? '' : 'sem medida') : esc(litros(l.volume).replace(' L', ''))}</b></td><td>${x.g.brix ? num(l.brix) : ''}</td><td>${x.g.fermentando ? esc(l.ferm || '') : ''}</td></tr>`).join('')}
-        <tr class="subtotal"><td>Subtotal</td><td></td><td><b>${esc(litros(x.subtotal).replace(' L', ''))}</b></td><td colspan="2"></td></tr>`).join('')}
+        ${x.linhas.map((l) => `<tr class="clicavel" data-a="linha" data-chave="${x.g.id}"><td>${esc(l.d.nome)}</td><td>${num(l.folga)}</td><td><b>${l.volume == null ? (vazio(l.folga) || temMedida(l.d) ? '' : 'sem medida') : esc(volumeTexto(l.volume, x.g))}</b></td><td>${x.g.brix ? num(l.brix) : ''}</td><td>${x.g.fermentando ? esc(l.ferm || '') : ''}</td></tr>`).join('')}
+        <tr class="subtotal"><td>Subtotal</td><td></td><td><b>${esc(volumeTexto(x.subtotal, x.g))}</b></td><td colspan="2"></td></tr>`).join('')}
         <tr class="total"><td>Total geral de vinho da produção</td><td></td><td><b>${esc(litros(med.producao))}</b></td><td colspan="2"></td></tr>
-        <tr class="total"><td>Total nos tanques de álcool</td><td></td><td><b>${esc(litros(med.tanques))}</b></td><td colspan="2"></td></tr></tbody>
+        <tr class="total"><td>Total nos tanques de álcool</td><td></td><td><b>${esc(volumeTexto(med.tanques, gruposDaMedicao().find((y) => !y.soma)))}</b></td><td colspan="2"></td></tr></tbody>
     </table></div></div>
     <div class="folha" style="margin-top:12px"><div class="folha-cab"><div><b>Parâmetros da produção</b><span>Favor verificar e anotar diariamente</span></div></div><div class="tabela-wrap"><table class="papel">
       <thead><tr><th></th><th>Brix</th><th>Horário</th></tr></thead>
@@ -2244,7 +2417,7 @@
       const existente = pegar(data, v.pid, chave);
       const g = grupoDaMedicao(chave);
       // o volume vai junto (se a medida da dorna mudar depois, o que já foi medido continua igual)
-      if (g) g.dornas.forEach((d) => { const vol = volumeDe(d, rascunho.valores[d.id + '_folga']); rascunho.valores[d.id + '_vol'] = vol == null ? '' : vol.toFixed(2); });
+      if (g) g.dornas.forEach((d) => { const vol = volumeDe(d, rascunho.valores[d.id + '_folga'], g); rascunho.valores[d.id + '_vol'] = vol == null ? '' : vol.toFixed(emM3(g) ? 3 : 2); });
       const temAlgo = Object.entries(rascunho.valores).some(([k, x]) => k !== 'hora' && !/_vol$/.test(k) && !vazio(x));
       const operador = ehCentral() ? (existente && existente.operador) || '' : (existente && existente.operador) || quem;
       if (temAlgo) gravar(data, v.pid, chave, rascunho.valores, Object.assign({ operador }, marcaAlteracao));
@@ -2811,7 +2984,7 @@
           </section>
           <section class="bloco" id="bloco-medidas">
             <h2>${ico('regua')} Medidas das dornas</h2>
-            <p class="sub" style="margin:0 0 6px">Para o volume de vinho: volume = (altura − folga) × base × 1000. Começou com as medidas da planilha CONTROLE LTS.</p>
+            <p class="sub" style="margin:0 0 6px">Para o volume de vinho: volume = (altura − folga) × base × 1000, em litros. Nos tanques de álcool fica em m³, sem o × 1000. Começou com as medidas da planilha CONTROLE LTS.</p>
             ${gruposDaMedicao().map((g) => {
               const semMedida = g.dornas.filter((d) => !temMedida(d)).length;
               const iguais = g.dornas.every((d) => d.altura === g.dornas[0].altura && d.area === g.dornas[0].area);
@@ -3245,10 +3418,17 @@
             <dl class="kv"><dt>Situação</dt><dd><span class="conexao ${classeConexao()}"><i></i>${esc(textoConexao())}</span></dd>
               <dt>Servidor</dt><dd>${esc(cfg.demo ? 'demonstração' : centralNoTablet() ? 'este próprio aparelho' : cfg.central || location.host)}</dd>
               <dt>Código do aparelho</dt><dd>${esc(cfg.deviceId)}</dd><dt>Esperando envio</dt><dd>${pendentes()}</dd>
-              <dt>Relógio</dt><dd>${esc(cfg.demo ? 'demonstração' : textoRelogio())}</dd><dt>Versão do aplicativo</dt><dd>${VERSAO}</dd></dl>
+              <dt>Relógio</dt><dd>${esc(cfg.demo ? 'demonstração' : textoRelogio())}</dd></dl>
             <div class="linha-botoes">${centralNoTablet()
               ? `<button class="btn pequeno perigo" data-a="desligar-servidor">${ico('servidor')} Desligar o servidor deste aparelho</button>`
               : `${NO_APK && pluginCentral ? `<button class="btn pequeno" data-a="virar-central">${ico('servidor')} Usar este aparelho como servidor</button>` : ''}<button class="btn pequeno perigo" data-a="desconectar">${ico('wifi')} Desconectar da central</button>`}</div>
+          </section>
+          <section class="bloco">
+            <h2>${ico('instalar')} Aplicativo</h2>
+            <dl class="kv"><dt>Versão</dt><dd>${VERSAO}</dd>${atualizacao.nova ? `<dt>Versão nova</dt><dd><b>${esc(atualizacao.nova.versao)}</b></dd>` : ''}</dl>
+            <div class="linha-botoes">
+              ${atualizacao.nova ? `<button class="btn pequeno primario" data-a="atualizacao">${ico('instalar')} Atualizar para a ${esc(atualizacao.nova.versao)}</button>` : podeAtualizar() ? `<button class="btn pequeno" data-a="procurar-atualizacao">Procurar atualização</button>` : ''}
+              <button class="btn pequeno" data-a="novidades">Novidades desta versão</button></div>
           </section>
           <section class="bloco">
             <h2>${ico('planilha')} Dados</h2>
@@ -3289,18 +3469,20 @@
       .forEach((l) => ex('caldeira', l[0], { pressao: l[1], temp_agua: l[2], descarga_fundo: l[3], descarga_garrafa: l[4] }, l[0] < 16 ? 'Alberto' : 'Diego'));
     ex('caldeira', 'obs1', { texto: 'DESCARGA DE GARRAFA FEITA AS 07:00' }, 'Alberto');
     // volume de vinho (os números da planilha do escritório) e as dornas de fermentação
-    const med = (grupo, valores) => { const g = grupoDaMedicao(grupo); g.dornas.forEach((d) => { const vol = volumeDe(d, valores[d.id + '_folga']); if (vol != null) valores[d.id + '_vol'] = vol.toFixed(2); }); ex(PID_MEDICAO, grupo, Object.assign({ hora: '07:30' }, valores), 'Mateus'); };
+    const med = (grupo, valores) => { const g = grupoDaMedicao(grupo); g.dornas.forEach((d) => { const vol = volumeDe(d, valores[d.id + '_folga'], g); if (vol != null) valores[d.id + '_vol'] = vol.toFixed(emM3(g) ? 3 : 2); }); ex(PID_MEDICAO, grupo, Object.assign({ hora: '07:30' }, valores), 'Mateus'); };
     med('sac', { sac1_folga: '0.15', sac1_brix: '18', sac2_folga: '0.2', sac2_brix: '18', sac4_folga: '0.14', sac4_brix: '19' });
-    med('vin', { vin1_folga: '0.9', vin1_brix: '5', vin1_ferm: 'Sim', vin2_folga: '0.15', vin2_brix: '7', vin2_ferm: 'Sim', vin4_folga: '1.1', vin4_brix: '1', vin4_ferm: 'Não', vin10_folga: '0.16', vin10_brix: '7', vin10_ferm: 'Sim' });
+    med('fer', { fer7_folga: '0.9', fer7_brix: '5', fer7_ferm: 'Sim', fer8_folga: '0.15', fer8_brix: '7', fer8_ferm: 'Sim', fer9_folga: '1.1', fer9_brix: '1', fer9_ferm: 'Não', fer11_folga: '0.16', fer11_brix: '7', fer11_ferm: 'Sim' });
+    med('dsc', { dsc2_folga: '0.15', dsc2_brix: '7', dsc10_folga: '0.16', dsc10_brix: '7', dsc11_folga: '4', dsc11_brix: '10' });
+    med('tq', { tq_inox1_folga: '1', tq_abast3_folga: '2.1' });
     ex(PID_MEDICAO, 'param', { brix_ralo: '18', hora_ralo: '09:30', brix_hid: '18', hora_hid: '09:30' }, 'Mateus');
     if (!ciclosPorDorna().size) {
       const ontem = somarDias(data, -1);
       const ciclo = (dia, n, v, op) => gravar(dia, PID_FERMENTACAO, `${n}-exemplo`, Object.assign({ dorna: n, enche_inicio: '', enche_fim: '', brix_inicial: '', volante: [], esvaziada: null, inicioEm: momentoDe(dia, v.enche_inicio) }, v), { operador: op });
-      ciclo(ontem, 1, { enche_inicio: '08:10', enche_fim: '10:40', brix_inicial: '8' }, 'Mateus');
-      ciclo(ontem, 2, { enche_inicio: '11:00', enche_fim: '13:25', brix_inicial: '9' }, 'Mateus');
-      ciclo(ontem, 4, { enche_inicio: '02:15', enche_fim: '04:50', brix_inicial: '8', volante: [{ data, inicio: '09:12', fim: '', operador: 'Mateus' }] }, 'Mateus');
-      ciclo(ontem, 10, { enche_inicio: '14:00', enche_fim: '16:30', brix_inicial: '8' }, 'Mateus');
-      ciclo(data, 6, { enche_inicio: '10:05' }, 'Mateus');
+      ciclo(ontem, 7, { enche_inicio: '08:10', enche_fim: '10:40', brix_inicial: '8' }, 'Mateus');
+      ciclo(ontem, 8, { enche_inicio: '11:00', enche_fim: '13:25', brix_inicial: '9' }, 'Mateus');
+      ciclo(ontem, 9, { enche_inicio: '02:15', enche_fim: '04:50', brix_inicial: '8', volante: [{ data, inicio: '09:12', fim: '', operador: 'Mateus' }] }, 'Mateus');
+      ciclo(ontem, 11, { enche_inicio: '14:00', enche_fim: '16:30', brix_inicial: '8' }, 'Mateus');
+      ciclo(data, 12, { enche_inicio: '10:05' }, 'Mateus');
     }
     [[7, '107.3', '150', '371', '2', '93.7'], [8, '107.3', '150', '375', '2', '93.7'], [9, '107.3', '180', '800', '2', '93.9'], [10, '107.3', '180', '800', '2', '93.5'],
       [11, '107.3', '180', '900', '2', '92.9'], [12, '107.1', '180', '372', '2', '91.0'], [13, '107.0', '180', '979', '2', '93.0'], [14, '107.0', '150', '990', '2', '92.4'], [15, '107.3', '150', '981', '2', '92.6']]
@@ -3337,6 +3519,9 @@
       case 'escala': cfg.escala = b.dataset.valor; salvarCfg(); ajustarEscala(); return render();
       case 'conectar': return conectar();
       case 'procurar-central': return procurarCentral();
+      case 'atualizacao': return oferecerAtualizacao();
+      case 'procurar-atualizacao': return procurarAtualizacao(true);
+      case 'novidades': return mostrarNovidades();
       case 'modo-demo': cfg.demo = true; salvarCfg(); ed.alvoId = null; pilha = [telaInicial()]; return render(true);
       case 'virar-central': return prepararTabletChefe();
       case 'voltar-conectar': cfg.papel = null; salvarCfg(); pilha = [telaInicial()]; return render(true);
@@ -3681,7 +3866,7 @@
         const g = grupoDaMedicao(b.dataset.grupo);
         if (!g) return;
         const num = (x) => (x == null || x === '' ? '' : String(x).replace('.', ','));
-        const resp = await abrirModal(`<h3>Medidas: ${esc(g.nome)}</h3><p class="dica">Altura da dorna e área da base, em metros. Volume = (altura − folga) × base × 1000.</p>
+        const resp = await abrirModal(`<h3>Medidas: ${esc(g.nome)}</h3><p class="dica">Altura da dorna e área da base, em metros. Volume = (altura − folga) × base${emM3(g) ? ', em m³' : ' × 1000, em litros'}.</p>
           <div class="medidas-form"><div class="medidas-cab"><span></span><span>Altura (m)</span><span>Base (m²)</span></div>
           ${g.dornas.map((d, i) => `<label><span>${esc(d.nome)}</span><input id="alt${i}" inputmode="decimal" autocomplete="off" value="${esc(num(d.altura))}"><input id="area${i}" inputmode="decimal" autocomplete="off" value="${esc(num(d.area))}"></label>`).join('')}</div>
           <div class="acoes-modal"><button class="btn" data-k="x">Cancelar</button><button class="btn primario" data-k="ok">Salvar</button></div>`,
@@ -3872,7 +4057,7 @@
     document.documentElement.dataset.escala = cfg.escala || 'normal';
     document.body.style.zoom = z;
   }
-  window.addEventListener('resize', () => { ajustarEscala(); rolarDepois = true; agendarCaber(); });
+  window.addEventListener('resize', () => { ajustarEscala(); rolarDepois = true; arrumarQuadros(); agendarCaber(); });
 
   /* =========================================================
    * Texto que não cabe: diminui a letra em vez de quebrar a palavra no meio
@@ -3901,11 +4086,12 @@
     // primeiro só mede (sem mexer), para a tela não recalcular a cada elemento
     const apertados = lista.filter((el) => el.clientWidth > 0 && !cabe(el)).map((el) => ({ el, base: parseFloat(getComputedStyle(el).fontSize) }));
     apertados.forEach(({ el, base }) => {
-      const minimo = Math.min(base, Math.max(13, base * 0.6));
+      const minimo = el.matches('.campo .val:not(.vazio), .campo .rot') ? Math.min(base, Math.max(13, base * 0.45)) : Math.min(base, Math.max(13, base * 0.6));
       let t = base;
       while (t > minimo && !cabe(el)) { t = Math.max(minimo, t * 0.92); el.style.fontSize = t.toFixed(1) + 'px'; }
       // nem assim coube: vai para a linha de baixo, sempre entre uma palavra e outra
-      if (!cabe(el)) el.style.whiteSpace = 'normal';
+      // (menos o número e o nome do quadro: eles ficam numa linha só, para os quadros ficarem do mesmo tamanho)
+      if (!cabe(el) && !el.matches('.campo .val:not(.vazio), .campo .rot')) el.style.whiteSpace = 'normal';
     });
   }
   /* Ajusta a letra no próximo quadro da tela. Com "partes", só dentro delas (ao teclar, só o quadro e o teclado);
@@ -3924,7 +4110,7 @@
       if (rolarDepois) { rolarDepois = false; rolarSeletor(); }
     });
   }
-  if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => agendarCaber());
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => { arrumarQuadros(); agendarCaber(); });
 
   /* =========================================================
    * Quiosque: tela cheia e tela acesa
@@ -4010,6 +4196,8 @@
     if (params.get('tema')) { cfg.tema = params.get('tema'); aplicarTema(); }
     if (params.get('escala')) { cfg.escala = params.get('escala'); ajustarEscala(); }
     if (params.get('op')) definirOperador(params.get('op'));
+    // &atualizacao=2.8.0 : como fica o alto da tela quando tem versão nova
+    if (params.get('atualizacao')) atualizacao.nova = { versao: params.get('atualizacao'), tamanho: 9751234, url: '/apk/pranchetas.apk', novidades: [{ versao: params.get('atualizacao'), itens: (window.NOVIDADES || [{}])[0].itens || [] }] };
     if (params.get('nomesLongos') && cfg.papel) cfg.operadores[cfg.papel] = ['Romenique', 'Maximiliano Aparecido', 'Carlindo Ferreira Júnior', 'Cleber', 'Guilherme', 'Wellington'];
     // demonstração da seção do Base44 (para conferir a tela)
     if (params.get('base44')) {
@@ -4056,6 +4244,8 @@
       (params.get('teclas') || '').split('|').filter(Boolean).forEach((k) => tecla(k));
     }
     if (params.get('modal') === 'formato') compartilhar('whatsapp', dataProducao());
+    if (params.get('modal') === 'atualizacao') oferecerAtualizacao();
+    if (params.get('modal') === 'novidades') mostrarNovidades('2.6.0');
     if (params.get('aviso') && cfg.papel && !ehCentral() && operadorAtual()) {
       enviarAviso(cfg.papel, operadorAtual(), 'Passe no escritório antes de sair, por favor. O encarregado quer falar sobre a troca de turno de amanhã.');
       verificarAvisos();
@@ -4093,6 +4283,9 @@
     render(true);
     sincronizar();
     setTimeout(verificarAvisos, 800); // aviso que já estava guardado neste aparelho
+    conferirNovidades();
+    // versão nova na central (ou na nuvem): procura logo depois de abrir e a cada 30 minutos
+    if (podeAtualizar()) { setTimeout(procurarAtualizacao, 15000); setInterval(procurarAtualizacao, 30 * 60000); }
     // todos os aparelhos sincronizam a cada 5 segundos
     setInterval(sincronizar, 5000);
     setInterval(() => { if (foraDaRede() && view().tela !== 'bloqueado' && !modalAberto()) render(); }, 60000);

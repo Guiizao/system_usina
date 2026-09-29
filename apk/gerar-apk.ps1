@@ -103,6 +103,17 @@ if ($xml -notmatch 'LigarAoIniciar') {
   [System.IO.File]::WriteAllText($manifesto, $xml, (New-Object System.Text.UTF8Encoding $false))
 }
 
+# Atualização pelo próprio aplicativo (versão 2.7): pode abrir o instalador do Android
+$xml = Get-Content $manifesto -Raw -Encoding utf8
+if ($xml -notmatch 'REQUEST_INSTALL_PACKAGES') {
+  $xml = $xml -replace '</manifest>', "    <uses-permission android:name=`"android.permission.REQUEST_INSTALL_PACKAGES`" />`n</manifest>"
+  [System.IO.File]::WriteAllText($manifesto, $xml, (New-Object System.Text.UTF8Encoding $false))
+}
+
+# Número da versão do APK (versão 2.7): vem do VERSAO do app.js. O Android só atualiza por cima se for maior.
+& node (Join-Path $aqui 'versao-do-apk.js') gradle
+if ($LASTEXITCODE -ne 0) { throw 'Não consegui pôr a versão no build.gradle' }
+
 # SDK para o Gradle
 Set-Content -Path android\local.properties -Value ("sdk.dir=" + ($env:ANDROID_HOME -replace '\\', '\\')) -Encoding ascii
 
@@ -139,4 +150,7 @@ $apk = 'android\app\build\outputs\apk\debug\app-debug.apk'
 if (-not (Test-Path $apk)) { throw 'APK não foi gerado. Veja as mensagens acima.' }
 New-Item -ItemType Directory -Force saida | Out-Null
 Copy-Item $apk saida\pranchetas.apk -Force
+# versao.json do lado do APK: a central usa para oferecer a atualização aos tablets (e vai junto para a nuvem)
+& node (Join-Path $aqui 'versao-do-apk.js') json
+if ($LASTEXITCODE -ne 0) { throw 'Não consegui escrever o versao.json' }
 Log ("PRONTO: saida\pranchetas.apk (" + [math]::Round((Get-Item saida\pranchetas.apk).Length / 1MB, 1) + ' MB)')

@@ -14,4 +14,6 @@ public class Context {
   public ContentResolver getContentResolver() { return new ContentResolver(); }
   public AssetManager getAssets() { return assets; }
   public String getPackageCodePath() { return apk; }
+  public String getPackageName() { return "br.com.ubiralcool.pranchetas"; }
+  public android.content.pm.PackageManager getPackageManager() { return new android.content.pm.PackageManager(); }
 }

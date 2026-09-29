@@ -6,6 +6,7 @@ import android.content.ActivityNotFoundException;
 import android.content.ClipData;
 import android.content.Context;
 import android.content.Intent;
+import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
 import android.net.Uri;
 import android.os.Build;
@@ -29,12 +30,20 @@ import com.getcapacitor.annotation.PermissionCallback;
 
 import java.io.File;
 import java.io.FileOutputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.net.HttpURLConnection;
+import java.net.URL;
+import java.security.MessageDigest;
+import java.util.Arrays;
+import java.util.Locale;
 
 /**
  * Ponte entre a tela (app.js) e o Android:
  * - liga o servidor da usina dentro do tablet chefe e mantém ligado com a tela apagada;
  * - cria as pastas ServidorUsina, RelatoriosUsina e BackupUsina;
- * - envia a folha direto para o WhatsApp ou e-mail do escritório.
+ * - envia a folha direto para o WhatsApp ou e-mail do escritório;
+ * - baixa a versão nova do aplicativo e abre o instalador do Android (versão 2.7).
  */
 @CapacitorPlugin(name = "Central", permissions = {
     // Android 17: permissão "Rede local". Android 16 (alguns aparelhos, como Motorola, já bloqueiam): "Dispositivos por perto".
@@ -277,6 +286,105 @@ public class CentralPlugin extends Plugin {
     } catch (Exception e) {
       chamada.reject("Não consegui preparar o envio: " + e.getMessage());
     }
+  }
+
+  /**
+   * Atualização do aplicativo (versão 2.7). Baixa o APK novo (url), confere o tamanho e o SHA-256,
+   * confere se é este mesmo aplicativo, com a mesma assinatura, e abre o instalador do Android.
+   * Quem confirma é a pessoa, na janela do Android. As anotações guardadas continuam.
+   * Se o Android ainda não deixa este aplicativo instalar, abre a tela para liberar e responde precisaPermissao.
+   * Enquanto baixa, avisa a tela pelo evento progressoAtualizacao (baixado, total).
+   */
+  @PluginMethod
+  public void atualizar(PluginCall chamada) {
+    final Context ctx = getContext();
+    final String endereco = chamada.getString("url", "");
+    final String sha = chamada.getString("sha256", "").toLowerCase(Locale.ROOT);
+    final long tamanho = chamada.getLong("tamanho", 0L);
+    if (!endereco.startsWith("http://") && !endereco.startsWith("https://")) { chamada.reject("endereço da atualização inválido"); return; }
+    if (Build.VERSION.SDK_INT >= 26 && !ctx.getPackageManager().canRequestPackageInstalls()) {
+      try {
+        Intent tela = new Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:" + ctx.getPackageName()));
+        tela.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        ctx.startActivity(tela);
+      } catch (Exception e) { /* alguns aparelhos não têm essa tela: libera em Ajustes > Apps */ }
+      chamada.resolve(new JSObject().put("precisaPermissao", true));
+      return;
+    }
+    new Thread(() -> {
+      File pasta = new File(ctx.getCacheDir(), "atualizacao");
+      File apk = new File(pasta, "pranchetas.apk");
+      try {
+        pasta.mkdirs();
+        MessageDigest resumo = MessageDigest.getInstance("SHA-256");
+        HttpURLConnection conexao = (HttpURLConnection) new URL(endereco).openConnection();
+        conexao.setConnectTimeout(10000);
+        conexao.setReadTimeout(30000);
+        long baixado = 0;
+        try {
+          int codigo = conexao.getResponseCode();
+          if (codigo != 200) throw new IOException("a central respondeu " + codigo);
+          long total = conexao.getContentLength() > 0 ? conexao.getContentLength() : tamanho;
+          long avisado = 0;
+          try (InputStream entrada = conexao.getInputStream(); FileOutputStream saida = new FileOutputStream(apk)) {
+            byte[] buf = new byte[64 * 1024];
+            int n;
+            while ((n = entrada.read(buf)) > 0) {
+              saida.write(buf, 0, n);
+              resumo.update(buf, 0, n);
+              baixado += n;
+              if (baixado - avisado >= 256 * 1024 || baixado == total) {
+                avisado = baixado;
+                notifyListeners("progressoAtualizacao", new JSObject().put("baixado", baixado).put("total", total));
+              }
+            }
+          }
+        } finally {
+          conexao.disconnect();
+        }
+        if (tamanho > 0 && baixado != tamanho) throw new IOException("o arquivo chegou incompleto");
+        if (!sha.isEmpty() && !sha.equals(hexDe(resumo.digest()))) throw new IOException("o arquivo chegou com defeito");
+        PackageManager pm = ctx.getPackageManager();
+        PackageInfo novo = pm.getPackageArchiveInfo(apk.getPath(), 0);
+        if (novo == null || !ctx.getPackageName().equals(novo.packageName)) throw new IOException("o arquivo não é o aplicativo das pranchetas");
+        if (!mesmaAssinatura(pm, ctx.getPackageName(), apk.getPath())) {
+          throw new IOException("esta versão foi gerada em outro computador e o Android não deixa atualizar por cima. Instale à mão");
+        }
+        final Intent instalar = new Intent(Intent.ACTION_VIEW);
+        instalar.setDataAndType(FileProvider.getUriForFile(ctx, ctx.getPackageName() + ".fileprovider", apk), "application/vnd.android.package-archive");
+        instalar.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_ACTIVITY_NEW_TASK);
+        getActivity().runOnUiThread(() -> {
+          try {
+            getActivity().startActivity(instalar);
+            chamada.resolve(new JSObject().put("aberto", true));
+          } catch (Exception e) {
+            chamada.reject("não consegui abrir o instalador do Android");
+          }
+        });
+      } catch (Exception e) {
+        apk.delete();
+        chamada.reject(e.getMessage() != null ? e.getMessage() : "a atualização não baixou");
+      }
+    }).start();
+  }
+
+  /** O APK baixado foi assinado com a mesma chave do aplicativo instalado? Sem conseguir ler, deixa o Android conferir. */
+  private static boolean mesmaAssinatura(PackageManager pm, String pacote, String arquivo) {
+    if (Build.VERSION.SDK_INT < 28) return true;
+    try {
+      PackageInfo instalado = pm.getPackageInfo(pacote, PackageManager.GET_SIGNING_CERTIFICATES);
+      PackageInfo novo = pm.getPackageArchiveInfo(arquivo, PackageManager.GET_SIGNING_CERTIFICATES);
+      if (novo == null || novo.signingInfo == null || instalado.signingInfo == null) return true;
+      return Arrays.equals(instalado.signingInfo.getApkContentsSigners(), novo.signingInfo.getApkContentsSigners());
+    } catch (Exception e) {
+      return true;
+    }
+  }
+
+  private static String hexDe(byte[] b) {
+    StringBuilder s = new StringBuilder();
+    for (byte x : b) s.append(String.format(Locale.ROOT, "%02x", x));
+    return s.toString();
   }
 
   private static boolean instalado(Context ctx, String pacote) {

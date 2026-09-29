@@ -593,7 +593,9 @@ main.config { max-width: 1500px; }
 .linha-config b { display: block; font-size: 19px; }
 .linha-config small { display: block; font-size: 16px; color: var(--tinta-2); word-break: break-all; }
 /* Volume de vinho: o volume da dorna aparece do lado da folga, na hora */
-.grupos.grupos-largos { grid-template-columns: repeat(auto-fit, minmax(min(100%, 380px), 1fr)); }
+/* medição: folga (com o volume do lado), Brix e fermentando precisam de quadros mais largos */
+.edicao main .grupos.grupos-largos { --q-largura-min: 172px; }
+:root[data-dispositivo="celular"] .edicao main .grupos.grupos-largos { --q-largura-min: 150px; }
 .campo.com-calc .rot { display: flex; align-items: center; flex-wrap: wrap; gap: 2px 6px; }
 #totais-medicao { flex-wrap: wrap; column-gap: 14px; row-gap: 2px; }
 #totais-medicao .par-total { white-space: nowrap; }
@@ -623,6 +625,57 @@ table.papel.medicao td:first-child { text-align: left; }
 .medidas-form label, .medidas-cab { display: grid; grid-template-columns: minmax(0, 1.4fr) 1fr 1fr; gap: 8px; align-items: center; }
 .medidas-cab span { font-size: 14px; color: var(--tinta-2); font-weight: 700; }
 .medidas-form input { font: inherit; font-size: 20px; padding: 8px 10px; border: 2px solid var(--linha); border-radius: 8px; background: var(--papel); color: var(--tinta); min-width: 0; width: 100%; }
+
+/* Versão 2.7: os blocos de quadros ocupam a tela (arrumarQuadros, em app.js). A altura dos quadros (--q) é a que cabe
+   entre o alto da tela e o botão de salvar, entre --q-min e --q-max; a largura divide a linha pelo número de quadros. */
+.edicao main .grupos { display: flex; flex-wrap: wrap; align-items: stretch; align-content: start; column-gap: 8px; row-gap: 0; --gap-linha: 8px; --q: 96px; --q-min: 64px; --q-max: 170px; --q-largura-min: 124px; }
+:root[data-dispositivo="celular"] .edicao main .grupos { --q-min: 62px; --q-max: 112px; --q-largura-min: 104px; column-gap: 6px; --gap-linha: 6px; }
+/* entre uma linha de blocos e a outra (a quebra de linha é um elemento vazio, que não pode somar espaço) */
+html:root .edicao main .grupos > .grupo { margin-bottom: var(--gap-linha); }
+@media (orientation: landscape) and (max-height: 620px) { .edicao main .grupos { --q-min: 56px; --q-max: 96px; } }
+.edicao main .grupos > .quebra { flex-basis: 100%; height: 0; }
+html:root .edicao main .grupos.compacto > .grupo > h3 { display: none; }
+html:root .edicao main .grupos.compacto > .grupo { padding-top: 6px; }
+html:root .edicao main .grupos > .grupo { min-width: 0; flex: 1 1 0px; display: flex; flex-direction: column; }
+html:root .edicao main .grupos > .grupo.sem-titulo { background: none; border: 0; padding: 0; }
+html:root .edicao main .grupos .grupo .par { display: grid; grid-template-columns: repeat(var(--colunas, 2), minmax(0, 1fr)); gap: 8px; }
+html:root .edicao main .grupos .grupo .campo { height: var(--q); min-height: 0; padding: 6px 10px; container-type: size; }
+/* quadro alto: o aviso pode ir para a linha de baixo do nome (o número continua cabendo) */
+@container (min-height: 76px) { html:root .edicao main .grupos .grupo .campo .rot { flex-wrap: wrap; row-gap: 0; } }
+html:root .edicao main .grupos .grupo .campo .rot { font-size: clamp(14px, calc(var(--q) * 0.16), 18px); flex-wrap: nowrap; gap: 6px; }
+html:root .edicao main .grupos .grupo .campo .val { font-size: clamp(18px, calc(var(--q) * 0.34), 52px); white-space: nowrap; }
+html:root .edicao main .grupos .grupo .campo .val.vazio { font-size: clamp(13px, calc(var(--q) * 0.17), 19px); white-space: normal; line-height: 1.15; overflow: hidden; }
+html:root .edicao main .grupos .grupo .campo .val.texto { font-size: clamp(16px, calc(var(--q) * 0.24), 30px); white-space: nowrap; }
+html:root .edicao main .grupos .grupo-largo .campo .val.texto { white-space: normal; overflow: hidden; }
+html:root .edicao main .grupos .grupo .campo .val small { font-size: max(13px, .45em); }
+.campo .rot-txt { flex: none; }
+.campo .rot svg.ico { flex: none; }
+.campo .rot .tag-aviso { margin-left: auto; flex: none; font-style: normal; font-size: max(13px, .82em); font-weight: 700; white-space: nowrap; border-radius: 6px; padding: 1px 6px; color: var(--vermelho); background: var(--vermelho-fundo); }
+.campo.atencao .rot .tag-aviso { color: var(--ambar-texto); background: var(--ambar-fundo); }
+.campo.fora .rot .tag-aviso { background: var(--papel); }
+.campo .rot .tag-calc { font-size: max(13px, .88em); }
+/* os avisos e os botões do alto da folha ficam da mesma altura */
+html:root .edicao .barra-trabalho .cabecalho-form .aviso, html:root .edicao .barra-trabalho .cabecalho-form .btn { height: 44px; min-height: 44px; padding-block: 0; box-sizing: border-box; }
+:root[data-dispositivo="celular"] .edicao .barra-trabalho .cabecalho-form .aviso, :root[data-dispositivo="celular"] .edicao .barra-trabalho .cabecalho-form .btn { height: 38px; min-height: 38px; }
+/* letra menor no celular: a tela encolhe 17%, o botão de apagar continua fácil de tocar */
+:root[data-dispositivo="celular"][data-escala="menor"] .edicao .barra-trabalho .cabecalho-form .aviso, :root[data-dispositivo="celular"][data-escala="menor"] .edicao .barra-trabalho .cabecalho-form .btn { height: 42px; min-height: 42px; }
+
+/* Atualização do aplicativo (versão 2.7): botão no alto e lista de novidades */
+.topo .tema.atualizar { background: var(--ambar); color: #221a00; border-color: var(--ambar); }
+.topo .tema.atualizar:active { filter: brightness(.92); }
+/* a janela das novidades: só a lista rola, o título e os botões ficam sempre à vista (celular deitado) */
+.modal.com-novidades { display: flex; flex-direction: column; }
+.modal.com-novidades > * { flex: none; }
+.modal.com-novidades > .novidades-lista { flex: 0 1 auto; min-height: 64px; }
+.novidades-lista { max-height: 55vh; overflow: auto; margin: 0 0 10px; }
+/* painel do escritório (4 atalhos) com o botão Atualizar: Ajustes e Claro/Escuro ficam só com o desenho */
+.topo:has(.tema.atualizar):has(.atalhos > :nth-child(4)) .tema:not(.atualizar) { min-width: 54px; }
+.topo:has(.tema.atualizar):has(.atalhos > :nth-child(4)) .tema:not(.atualizar) span { display: none; }
+.novidades-lista h4 { margin: 12px 0 4px; font-size: 19px; }
+.novidades-lista ul { margin: 0; padding-left: 24px; }
+.novidades-lista li { font-size: 19px; line-height: 1.35; margin: 0 0 8px; color: var(--tinta); }
+:root[data-dispositivo="celular"] .novidades-lista li { font-size: 16px; }
+.passo-atualizacao { font-weight: 700; }
 
 /* Base44: um dia por linha, com a situação do envio */
 #bloco-base44 .linha-config small { word-break: normal; }
