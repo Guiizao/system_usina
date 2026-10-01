@@ -187,12 +187,14 @@ public class ServidorCentral {
     trabalhadores = Executors.newFixedThreadPool(8);
     rodando = true;
     new Thread(this::aceitarConexoes, "servidor-usina").start();
+    iniciarNuvem();
   }
 
   public synchronized void parar() {
     rodando = false;
     try { if (socketServidor != null) socketServidor.close(); } catch (IOException ignorado) { }
     if (trabalhadores != null) trabalhadores.shutdownNow();
+    if (relogioNuvem != null) { relogioNuvem.shutdownNow(); relogioNuvem = null; }
   }
 
   public boolean estaRodando() { return rodando; }
@@ -443,7 +445,7 @@ public class ServidorCentral {
       apkMedidoEm = apk.lastModified();
     }
     JSONObject r = new JSONObject().put("versao", versao).put("tamanho", apk.length()).put("sha256", shaDoApk).put("url", "/apk/pranchetas.apk");
-    try (InputStream entrada = contexto.getAssets().open("public/novidades.js")) {
+    try (InputStream entrada = abrirDoApp("/novidades.js")) {
       String texto = new String(lerTudo(entrada), StandardCharsets.UTF_8);
       int ini = texto.indexOf('[', texto.indexOf("NOVIDADES")), fim = texto.lastIndexOf(']');
       if (ini >= 0 && fim > ini) r.put("novidades", new JSONArray(texto.substring(ini, fim + 1)));
@@ -578,6 +580,8 @@ public class ServidorCentral {
 
       // atualização (versão 2.7): os outros tablets perguntam qual versão este tablet entrega
       if ("/api/versao".equals(caminho)) { enviarJson(saida, 200, versaoDoApk()); return; }
+      // atualização rápida (versão 2.8): o pacote das telas que este tablet usa (pacote.json, assinatura e arquivos)
+      if (caminho.startsWith("/telas/")) { enviarAsset(saida, caminho.substring("/telas".length()), soCabecalho); return; }
 
       if ("/apk/pranchetas.apk".equals(caminho)) {
         // entrega o próprio aplicativo instalado neste tablet: é exatamente o mesmo app
@@ -610,6 +614,7 @@ public class ServidorCentral {
         // quem trocou recebe a chave nova dele (a resposta vai embaralhada com a chave antiga)
         if ("/api/novo-codigo".equals(caminho) && "POST".equals(metodo)) { String codigo = novoCodigo(); enviarJson(saida, 200, new JSONObject().put("codigo", codigo).put("chave", hex(chaveDoAparelho(aparelho)))); return; }
         if ("/api/base44".equals(caminho) && "POST".equals(metodo)) { apiBase44(corpo, saida); return; }
+        if ("/api/nuvem".equals(caminho) && "POST".equals(metodo)) { apiNuvem(corpo, saida); return; }
         if ("/api/relatorio".equals(caminho) && "POST".equals(metodo)) { apiRelatorio(corpo, saida); return; }
         if ("/api/relatorio-apagar".equals(caminho) && "POST".equals(metodo)) { apiRelatorioApagar(corpo, saida); return; }
         enviarJson(saida, 404, new JSONObject().put("erro", "rota desconhecida"));
@@ -683,6 +688,7 @@ public class ServidorCentral {
     if (aceitos > 0) {
       salvarRegistros();
       for (String dia : dias) backupDoDia(dia);
+      agendarNuvem();
     }
     enviarJson(saida, 200, new JSONObject().put("ok", true).put("aceitos", aceitos).put("seq", seq).put("agora", System.currentTimeMillis()).put("geracao", getGeracao()));
   }
@@ -811,7 +817,7 @@ public class ServidorCentral {
     String docs = Build.VERSION.SDK_INT >= 29 ? "Documentos/Usina/" : "";
     enviarJson(saida, 200, new JSONObject()
         .put("seq", seq).put("total", registros.length())
-        .put("codigo", getCodigo()).put("enderecos", ends).put("apk", true).put("base44", estadoBase44(false))
+        .put("codigo", getCodigo()).put("enderecos", ends).put("apk", true).put("base44", estadoBase44(false)).put("nuvem", estadoNuvem())
         .put("pastas", new JSONObject()
             .put("servidor", "ServidorUsina (dentro do aplicativo)")
             .put("relatorios", docs.isEmpty() ? pastaRelatorios.getAbsolutePath() : docs + "RelatoriosUsina")
@@ -989,13 +995,32 @@ public class ServidorCentral {
   /* Entregar arquivos e respostas                                       */
   /* ------------------------------------------------------------------ */
 
+  /** As telas que este tablet usa: as da última atualização rápida (se forem deste APK) ou as que vieram no APK. */
+  private File telasAtivas() {
+    try {
+      String apk = contexto.getPackageManager().getPackageInfo(contexto.getPackageName(), 0).versionName;
+      return AtualizadorDeTelas.pastaAtiva(new File(contexto.getFilesDir(), "telas"), apk);
+    } catch (Exception e) {
+      return null;
+    }
+  }
+
+  /** Um arquivo das telas (rel começa com /). */
+  private InputStream abrirDoApp(String rel) throws IOException {
+    File pasta = telasAtivas();
+    if (pasta != null) {
+      File f = new File(pasta, rel.substring(1));
+      if (f.isFile() && f.getCanonicalPath().startsWith(pasta.getCanonicalPath())) return new FileInputStream(f);
+    }
+    return contexto.getAssets().open("public" + rel);
+  }
+
   private void enviarAsset(OutputStream saida, String caminho, boolean soCabecalho) throws IOException {
     String rel = caminho;
     if (rel.equals("/") || rel.isEmpty()) rel = "/index.html";
     if (rel.equals("/baixar")) rel = "/baixar.html";
     rel = rel.replace("..", "");
-    AssetManager assets = contexto.getAssets();
-    try (InputStream entrada = assets.open("public" + rel)) {
+    try (InputStream entrada = abrirDoApp(rel)) {
       enviar(saida, 200, tipoDoArquivo(rel), lerTudo(entrada), null, soCabecalho);
     } catch (IOException e) {
       enviarTexto(saida, 404, "Não encontrado");
@@ -1304,6 +1329,218 @@ public class ServidorCentral {
         salvarConfig();
       }
       enviarJson(saida, 200, new JSONObject().put("ok", ok).put("erro", ok ? "" : erro).put("status", status));
+      return;
+    }
+    enviarJson(saida, 400, new JSONObject().put("erro", "ação desconhecida"));
+  }
+  /* ------------------------------------------------------------------ */
+  /* Nuvem das Pranchetas (versão 2.8): uma cópia das anotações na       */
+  /* internet. A central manda o que mudou de minuto em minuto. Lá ficam */
+  /* a API de leitura do escritório e as atualizações do aplicativo.     */
+  /* A usina continua funcionando sem internet: a nuvem é só uma cópia.  */
+  /* ------------------------------------------------------------------ */
+
+  private static final int NUVEM_LOTE = 150; // o plano grátis da nuvem dá 10 ms de processamento por pedido
+  private final java.util.concurrent.atomic.AtomicBoolean enviandoNuvem = new java.util.concurrent.atomic.AtomicBoolean(false);
+  private java.util.concurrent.ScheduledExecutorService relogioNuvem;
+
+  private synchronized JSONObject nuvem() throws Exception {
+    JSONObject n = config.optJSONObject("nuvem");
+    if (n == null) { n = new JSONObject().put("url", "").put("segredo", "").put("seq", 0L); config.put("nuvem", n); }
+    return n;
+  }
+
+  private synchronized JSONObject estadoNuvem() throws Exception {
+    JSONObject n = nuvem();
+    boolean ligada = !n.optString("url").isEmpty() && !n.optString("segredo").isEmpty();
+    return new JSONObject().put("ligada", ligada).put("url", n.optString("url")).put("temSegredo", !n.optString("segredo").isEmpty())
+        .put("ultimoEnvio", n.optLong("ultimoEnvio")).put("erro", n.optString("erro")).put("faltam", n.optLong("faltam"));
+  }
+
+  private void iniciarNuvem() {
+    if (relogioNuvem != null) return;
+    relogioNuvem = java.util.concurrent.Executors.newSingleThreadScheduledExecutor();
+    relogioNuvem.scheduleWithFixedDelay(this::enviarParaNuvem, Long.getLong("pranchetas.nuvemEspera", 15000L), 60000L, java.util.concurrent.TimeUnit.MILLISECONDS);
+  }
+
+  /** Chegou anotação nova: manda para a nuvem daqui a pouco. */
+  private void agendarNuvem() {
+    try { if (relogioNuvem != null) relogioNuvem.schedule(this::enviarParaNuvem, 5, java.util.concurrent.TimeUnit.SECONDS); } catch (Exception ignorado) { }
+  }
+
+  private static boolean publica(JSONObject r) {
+    String p = r.optString("prancheta");
+    return ehDia(r.optString("data")) && !"avisos".equals(p) && !"avisos-recibo".equals(p);
+  }
+
+  private static void juntarPendente(Map<String, JSONObject> mapa, JSONObject r, long desde) {
+    if (r == null || !publica(r) || r.optLong("seq") <= desde) return;
+    JSONObject a = mapa.get(r.optString("id"));
+    if (a == null || r.optLong("seq") > a.optLong("seq")) mapa.put(r.optString("id"), r);
+  }
+
+  /** O que falta mandar, em ordem (na primeira vez, também os dias do BackupUsina). */
+  private synchronized List<JSONObject> pendentesNuvem(JSONObject n) {
+    long desde = n.optLong("seq");
+    Map<String, JSONObject> mapa = new HashMap<>();
+    if (!n.optBoolean("arquivosEnviados")) {
+      File[] arquivos = pastaBackup.listFiles();
+      if (arquivos != null) for (File f : arquivos) {
+        String nome = f.getName();
+        if (!nome.matches("\\d{4}-\\d{2}-\\d{2}\\.json") || !arquivado(nome.substring(0, 10))) continue;
+        JSONArray doDia = lerDiaArquivado(nome.substring(0, 10));
+        for (int i = 0; i < doDia.length(); i++) juntarPendente(mapa, doDia.optJSONObject(i), desde);
+      }
+    }
+    for (Iterator<String> it = registros.keys(); it.hasNext(); ) juntarPendente(mapa, registros.optJSONObject(it.next()), desde);
+    List<JSONObject> lista = new ArrayList<>(mapa.values());
+    Collections.sort(lista, (a, b) -> Long.compare(a.optLong("seq"), b.optLong("seq")));
+    return lista;
+  }
+
+  /** As medidas das dornas trocadas pelo escritório (ou nada: valem as da planilha). */
+  private synchronized Object medidasDoEscritorio() {
+    JSONObject c = registros.optJSONObject("config|sistema|geral");
+    JSONObject v = c == null || c.optBoolean("apagado") ? null : c.optJSONObject("valores");
+    JSONObject m = v == null ? null : v.optJSONObject("medicao");
+    return m == null ? JSONObject.NULL : m;
+  }
+
+  private static String resumo(String texto) {
+    try { return hex(MessageDigest.getInstance("SHA-256").digest(texto.getBytes(StandardCharsets.UTF_8))).substring(0, 16); }
+    catch (Exception e) { return ""; }
+  }
+
+  /** Pedido para a nuvem: devolve o código da resposta (0 = sem conexão) e o texto. */
+  private static Object[] pedirNuvem(String url, String segredo, String caminho, JSONObject corpo) {
+    try {
+      HttpURLConnection con = (HttpURLConnection) new URL(url.replaceAll("/+$", "") + "/" + caminho).openConnection();
+      con.setConnectTimeout(15000); con.setReadTimeout(30000);
+      con.setRequestProperty("Authorization", "Bearer " + segredo);
+      if (corpo != null) {
+        con.setRequestMethod("POST"); con.setDoOutput(true);
+        con.setRequestProperty("Content-Type", "application/json");
+        try (OutputStream o = con.getOutputStream()) { o.write(corpo.toString().getBytes(StandardCharsets.UTF_8)); }
+      }
+      int status = con.getResponseCode();
+      InputStream resp = status >= 400 ? con.getErrorStream() : con.getInputStream();
+      String texto = "";
+      if (resp != null) { texto = new String(lerTudo(resp), StandardCharsets.UTF_8); resp.close(); }
+      con.disconnect();
+      return new Object[] { status, texto };
+    } catch (java.net.UnknownHostException | java.net.ConnectException e) {
+      return new Object[] { 0, "Sem internet na central (ou endereço errado)" };
+    } catch (java.net.SocketTimeoutException e) {
+      return new Object[] { 0, "A nuvem não respondeu em 30 segundos" };
+    } catch (Exception e) {
+      return new Object[] { 0, String.valueOf(e.getMessage()) };
+    }
+  }
+
+  private static String erroDaNuvem(Object[] r) {
+    int status = (Integer) r[0];
+    String texto = (String) r[1];
+    if (status == 0) return texto;
+    if (status == 401) return "A nuvem recusou a senha da central";
+    String e = texto;
+    try { e = new JSONObject(texto).optString("erro", texto); } catch (Exception ignorado) { }
+    return "A nuvem respondeu " + status + ": " + (e.length() > 200 ? e.substring(0, 200) : e);
+  }
+
+  /** Manda para a nuvem o que mudou depois do último envio. */
+  void enviarParaNuvem() {
+    if (!enviandoNuvem.compareAndSet(false, true)) return;
+    try {
+      JSONObject n;
+      String url, segredo;
+      synchronized (this) { n = nuvem(); url = n.optString("url"); segredo = n.optString("segredo"); }
+      if (url.isEmpty() || segredo.isEmpty()) return;
+      try {
+        if (!n.optBoolean("conferida")) {
+          // na primeira vez (ou se a nuvem foi trocada ou zerada), confere até onde ela tem
+          Object[] e = pedirNuvem(url, segredo, "central/estado", null);
+          if ((Integer) e[0] != 200) throw new Exception(erroDaNuvem(e));
+          JSONObject j = new JSONObject((String) e[1]);
+          synchronized (this) {
+            if (!getGeracao().equals(j.optString("geracao")) || j.optLong("registros") == 0) {
+              n.put("seq", 0L).put("arquivosEnviados", false).put("formsHash", "").put("medidasHash", "");
+            }
+            n.put("conferida", true);
+          }
+        }
+        // as folhas (forms.js) vêm do aplicativo do tablet chefe, que manda ao abrir
+        JSONObject forms;
+        synchronized (this) { forms = config.optJSONObject("nuvemForms"); }
+        String formsHash = forms == null ? "" : resumo(forms.toString());
+        Object medidas = medidasDoEscritorio();
+        String medidasHash = resumo(String.valueOf(medidas));
+        for (int vez = 0; vez < 40; vez++) {
+          List<JSONObject> pend = pendentesNuvem(n);
+          List<JSONObject> lote = pend.subList(0, Math.min(NUVEM_LOTE, pend.size()));
+          boolean formsMudou = forms != null && !formsHash.equals(n.optString("formsHash"));
+          if (lote.isEmpty() && !formsMudou && medidasHash.equals(n.optString("medidasHash"))) {
+            synchronized (this) { n.put("arquivosEnviados", true).put("faltam", 0L); }
+            break;
+          }
+          JSONArray regs = new JSONArray();
+          for (JSONObject r : lote) regs.put(r);
+          JSONObject corpo = new JSONObject().put("geracao", getGeracao()).put("medidas", medidas).put("registros", regs);
+          if (formsMudou) corpo.put("forms", forms);
+          Object[] r = pedirNuvem(url, segredo, "central/enviar", corpo);
+          if ((Integer) r[0] != 200) throw new Exception(erroDaNuvem(r));
+          synchronized (this) {
+            if (!lote.isEmpty()) n.put("seq", lote.get(lote.size() - 1).optLong("seq"));
+            if (forms != null) n.put("formsHash", formsHash);
+            n.put("medidasHash", medidasHash).put("ultimoEnvio", System.currentTimeMillis()).put("erro", "").put("faltam", (long) Math.max(0, pend.size() - lote.size()));
+          }
+        }
+      } catch (Exception e) {
+        synchronized (this) { try { n.put("erro", String.valueOf(e.getMessage())).put("conferida", false); } catch (Exception ignorado) { } }
+      }
+      synchronized (this) { salvarConfig(); }
+    } catch (Exception ignorado) {
+      // sem configuração: tenta de novo no próximo minuto
+    } finally {
+      enviandoNuvem.set(false);
+    }
+  }
+
+  private void apiNuvem(byte[] corpo, OutputStream saida) throws Exception {
+    JSONObject pedido = new JSONObject(new String(corpo, StandardCharsets.UTF_8));
+    String acao = pedido.optString("acao");
+    JSONObject n = nuvem();
+    // o aplicativo do tablet chefe manda as folhas (forms.js): a nuvem monta a API com elas
+    JSONObject forms = pedido.optJSONObject("forms");
+    if (forms != null) synchronized (this) { config.put("nuvemForms", forms); salvarConfig(); }
+    if ("estado".equals(acao) || "forms".equals(acao)) { enviarJson(saida, 200, estadoNuvem()); return; }
+    if ("configurar".equals(acao)) {
+      String endereco = pedido.optString("url").trim().replaceAll("/+$", "");
+      if (!endereco.isEmpty() && !endereco.matches("(?i)https://[^\\s/]+\\.[^\\s]+") && !endereco.matches("http://127\\.0\\.0\\.1:\\d+")) {
+        enviarJson(saida, 400, new JSONObject().put("erro", "Endereço inválido. Ele começa com https://"));
+        return;
+      }
+      synchronized (this) {
+        if (!endereco.equals(n.optString("url"))) {
+          n.put("url", endereco).put("seq", 0L).put("arquivosEnviados", false).put("conferida", false).put("formsHash", "").put("medidasHash", "")
+           .put("erro", "").put("ultimoEnvio", 0L).put("faltam", 0L);
+        }
+        if (pedido.opt("segredo") instanceof String) {
+          String s = pedido.optString("segredo").trim();
+          n.put("segredo", s.length() > 200 ? s.substring(0, 200) : s).put("conferida", false).put("erro", "");
+        }
+        salvarConfig();
+      }
+      try { if (relogioNuvem != null) relogioNuvem.schedule(this::enviarParaNuvem, 500, java.util.concurrent.TimeUnit.MILLISECONDS); } catch (Exception ignorado) { }
+      enviarJson(saida, 200, estadoNuvem());
+      return;
+    }
+    if ("enviar".equals(acao)) {
+      if (n.optString("url").isEmpty() || n.optString("segredo").isEmpty()) {
+        enviarJson(saida, 400, new JSONObject().put("erro", "Cadastre o endereço e a senha da nuvem"));
+        return;
+      }
+      enviarParaNuvem();
+      enviarJson(saida, 200, estadoNuvem());
       return;
     }
     enviarJson(saida, 400, new JSONObject().put("erro", "ação desconhecida"));

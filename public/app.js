@@ -3,7 +3,7 @@
 (function () {
   'use strict';
   const C = window.USINA;
-  const VERSAO = '2.7.1'; // aparece nos ajustes e vai junto com cada envio para a central
+  const VERSAO = '2.8.0'; // aparece nos ajustes e vai junto com cada envio para a central
   const AUTORIA = '© 2026 Guilherme. Todos os direitos reservados. Uso somente com autorização do autor.';
   const params = new URLSearchParams(location.search);
   const DEMO_IMG = params.has('demo'); // usado só para gerar imagens de apresentação
@@ -797,36 +797,64 @@
   function definirOperador(nome) { cfg.op = { nome, chave: chaveTurno() }; salvarCfg(); }
 
   /* =========================================================
-   * Atualização do aplicativo (versão 2.7)
-   * A central diz qual versão ela tem para entregar (api/versao). Se for mais nova que esta,
-   * aparece o botão Atualizar no alto. O APK desce pelo Wi-Fi, o Android confere se foi assinado
-   * pelo mesmo computador e pergunta se pode atualizar. As anotações deste aparelho continuam.
-   * Com a nuvem (C.atualizacaoOnline), o tablet chefe também acha a versão nova pela internet.
+   * Atualização do aplicativo (versões 2.7 e 2.8). Dois jeitos:
+   *  - rápida (telas): só o HTML, o CSS e o JavaScript mudaram. O pacote das telas vem da central (telas/)
+   *    ou da nuvem, assinado no computador do Guilherme. O aplicativo baixa só o que mudou, mostra a barra
+   *    e abre de novo sozinho, sem janela do Android. Se a versão nova não abrir, volta para a de antes.
+   *  - APK: a parte em Java mudou (o pacote pede um APK mais novo que o deste tablet). O APK desce pelo
+   *    Wi-Fi e o Android pergunta se pode instalar.
+   * Achou versão nova: abre a janela (quando ninguém está anotando) e deixa o botão Atualizar no alto.
+   * As anotações deste aparelho continuam nos dois jeitos.
    * ========================================================= */
-  const atualizacao = { nova: null, procurando: false };
+  const atualizacao = { nova: null, procurando: false, avisada: '', nativa: '' };
   /** '2.7.0' vira 20700, para comparar versões. É também o número de versão do APK (versionCode). */
   const numeroDaVersao = (v) => { const p = String(v || '').split('.').map((x) => parseInt(x, 10) || 0); return (p[0] || 0) * 10000 + (p[1] || 0) * 100 + (p[2] || 0); };
   const podeAtualizar = () => NO_APK && !!pluginCentral && !!pluginCentral.atualizar;
+  async function lerJson(url) {
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), 8000);
+    try { const r = await fetch(url, { cache: 'no-store', signal: ctrl.signal }); return r.ok ? await r.json() : null; } catch (e) { return null; } finally { clearTimeout(t); }
+  }
   async function procurarAtualizacao(avisar) {
     if (!podeAtualizar() || atualizacao.procurando || cfg.demo) return;
     atualizacao.procurando = true;
-    const fontes = [];
-    if (cfg.central && !centralNoTablet()) fontes.push(baseCentral() + 'api/versao');
-    if (C.atualizacaoOnline) fontes.push(C.atualizacaoOnline.replace(/\/?$/, '/') + 'versao.json');
-    let melhor = null;
-    for (const fonte of fontes) {
-      const ctrl = new AbortController();
-      const t = setTimeout(() => ctrl.abort(), 8000);
-      try {
-        const v = await (await fetch(fonte, { cache: 'no-store', signal: ctrl.signal })).json();
-        if (v && v.versao && numeroDaVersao(v.versao) > numeroDaVersao(melhor ? melhor.versao : VERSAO)) melhor = Object.assign({}, v, { url: new URL(v.url || 'pranchetas.apk', fonte).href });
-      } catch (e) { /* sem a central ou sem internet: procura de novo mais tarde */ } finally { clearTimeout(t); }
+    try {
+      if (!atualizacao.nativa && pluginCentral.versaoInstalada) atualizacao.nativa = ((await pluginCentral.versaoInstalada().catch(() => null)) || {}).versao || '';
+      const nativa = atualizacao.nativa || VERSAO;
+      // de onde: a central (para os tablets dos setores) e a nuvem (para o tablet chefe, quando ela estiver ligada)
+      const bases = [];
+      if (cfg.central && !centralNoTablet()) bases.push({ apk: baseCentral() + 'api/versao', telas: baseCentral() + 'telas/' });
+      const nuvem = sync.status && sync.status.nuvem && sync.status.nuvem.ligada ? sync.status.nuvem.url : '';
+      const online = C.atualizacaoOnline ? C.atualizacaoOnline.replace(/\/?$/, '/') : centralNoTablet() && nuvem ? nuvem + '/atualizacao/' : '';
+      if (online) bases.push({ apk: online + 'versao.json', telas: new URL('../telas/', online).href });
+      // a mais nova ganha; na mesma versão, a rápida (sem janela do Android)
+      let melhor = null;
+      const considerar = (c) => {
+        const ref = melhor ? melhor.versao : VERSAO;
+        if (numeroDaVersao(c.versao) > numeroDaVersao(ref) || (melhor && c.versao === melhor.versao && c.tipo === 'telas' && melhor.tipo === 'apk')) melhor = c;
+      };
+      for (const b of bases) {
+        const t = await lerJson(b.telas + 'pacote.json');
+        // o pacote pede um APK mais novo que o deste tablet: esse vem pelo APK
+        if (t && t.versao && numeroDaVersao(t.apkMinimo) <= numeroDaVersao(nativa)) considerar({ tipo: 'telas', versao: t.versao, novidades: t.novidades, base: b.telas });
+        const v = await lerJson(b.apk);
+        if (v && v.versao) considerar(Object.assign({}, v, { tipo: 'apk', url: new URL(v.url || 'pranchetas.apk', b.apk).href }));
+      }
+      const mudou = (melhor && melhor.versao) !== (atualizacao.nova && atualizacao.nova.versao);
+      atualizacao.nova = melhor;
+      if (mudou && !modalAberto()) render();
+      if (avisar) toast(melhor ? `Tem a versão ${melhor.versao} para instalar` : `Este aparelho já está com a versão mais nova (${VERSAO})`);
+      else avisarAtualizacao();
+    } finally {
+      atualizacao.procurando = false;
     }
-    atualizacao.procurando = false;
-    const mudou = (melhor && melhor.versao) !== (atualizacao.nova && atualizacao.nova.versao);
-    atualizacao.nova = melhor;
-    if (mudou && !modalAberto()) render();
-    if (avisar) toast(melhor ? `Tem a versão ${melhor.versao} para instalar` : `Este aparelho já está com a versão mais nova (${VERSAO})`);
+  }
+  /** Achou versão nova: abre a janela uma vez. Se alguém estiver anotando, espera (tenta de novo a cada minuto). */
+  function avisarAtualizacao() {
+    const n = atualizacao.nova;
+    if (!n || atualizacao.avisada === n.versao || !podeRedesenhar()) return;
+    atualizacao.avisada = n.versao;
+    oferecerAtualizacao();
   }
   /** Novidades das versões depois de "de" até esta. Sem "de": só as desta versão. */
   const novidadesDesde = (de) => (window.NOVIDADES || []).filter((n) => (de ? numeroDaVersao(n.versao) > numeroDaVersao(de) && numeroDaVersao(n.versao) <= numeroDaVersao(VERSAO) : n.versao === VERSAO));
@@ -845,32 +873,48 @@
     if (cfg.versaoVista !== VERSAO) { cfg.versaoVista = VERSAO; salvarCfg(); }
     if (numeroDaVersao(antes) < numeroDaVersao(VERSAO)) setTimeout(() => mostrarNovidades(antes), 900);
   }
-  /** Janela da versão nova: o que mudou e o botão que baixa e abre o instalador do Android. */
+  /** Janela da versão nova: o que mudou, a barra do download e o botão Atualizar agora. */
   async function oferecerAtualizacao() {
     const n = atualizacao.nova;
     if (!n) return;
+    const rapida = n.tipo === 'telas';
     const lista = Array.isArray(n.novidades) ? n.novidades.filter((x) => numeroDaVersao(x.versao) > numeroDaVersao(VERSAO)) : [];
-    const mb = n.tamanho ? ` (${(n.tamanho / 1048576).toLocaleString('pt-BR', { maximumFractionDigits: 1 })} MB)` : '';
-    let baixando = false;
+    const mb = !rapida && n.tamanho ? ` (${(n.tamanho / 1048576).toLocaleString('pt-BR', { maximumFractionDigits: 1 })} MB)` : '';
+    let baixando = false, pronto = false;
     await abrirModal(`<h3>Versão nova: ${esc(n.versao)}</h3>
       <p class="dica">Este aparelho está com a ${esc(VERSAO)}. As anotações daqui não se perdem.</p>
       ${lista.length ? htmlNovidades(lista) : ''}
-      <p class="dica passo-atualizacao" id="passo-atualizacao">Toque em Atualizar e confirme na janela do Android${mb}.</p>
-      <div class="acoes-modal"><button class="btn" data-k="x">Depois</button><button class="btn primario" data-k="ok">${ico('instalar')} Atualizar</button></div>`,
+      <div class="barra-progresso" id="barra-atualizacao" hidden><i></i></div>
+      <p class="dica passo-atualizacao" id="passo-atualizacao">${rapida ? 'Toque em Atualizar agora: o aplicativo baixa só o que mudou e abre de novo sozinho.' : `Toque em Atualizar agora e confirme na janela do Android${mb}.`}</p>
+      <div class="acoes-modal"><button class="btn" data-k="x">Depois</button><button class="btn primario" data-k="ok">${ico('instalar')} Atualizar agora</button></div>`,
     async (k, b, fechar, f) => {
-      if (k === 'x') return fechar(undefined);
-      if (k !== 'ok' || baixando) return;
+      if (k === 'x') return baixando || pronto ? undefined : fechar(undefined);
+      if (k !== 'ok' || baixando || pronto) return;
       baixando = true; b.disabled = true;
       const passo = f.querySelector('#passo-atualizacao');
-      passo.textContent = 'Baixando o aplicativo novo...';
+      const barra = f.querySelector('#barra-atualizacao');
+      const mostrar = (feito, total) => {
+        if (!total) return;
+        const pc = Math.min(100, Math.floor((feito * 100) / total));
+        barra.hidden = false; barra.firstElementChild.style.width = pc + '%';
+        passo.textContent = `Baixando: ${pc}%`;
+      };
+      passo.textContent = 'Baixando...';
       let ouvinte = null;
       try {
-        ouvinte = await pluginCentral.addListener('progressoAtualizacao', (p) => { if (p && p.total) passo.textContent = `Baixando o aplicativo novo: ${Math.floor((p.baixado * 100) / p.total)}%`; });
-      } catch (e) { /* sem a porcentagem, baixa do mesmo jeito */ }
+        ouvinte = await pluginCentral.addListener(rapida ? 'progressoTelas' : 'progressoAtualizacao', (p) => { if (p) mostrar(rapida ? p.feito : p.baixado, p.total); });
+      } catch (e) { /* sem a barra, baixa do mesmo jeito */ }
       try {
+        if (rapida) {
+          await pluginCentral.atualizarTelas({ base: n.base, versao: n.versao });
+          pronto = true;
+          mostrar(1, 1);
+          passo.textContent = 'Pronto. Abrindo a versão nova...'; // o aplicativo recarrega sozinho e mostra as novidades
+          return;
+        }
         const r = await pluginCentral.atualizar({ url: n.url, sha256: n.sha256 || '', tamanho: n.tamanho || 0 });
         if (r && r.precisaPermissao) {
-          passo.textContent = 'Falta uma permissão. Na tela que abriu, ligue "Permitir desta fonte", volte para cá e toque em Atualizar de novo.';
+          passo.textContent = 'Falta uma permissão. Na tela que abriu, ligue "Permitir desta fonte", volte para cá e toque em Atualizar agora de novo.';
         } else {
           fechar(true);
           toast('Agora toque em Atualizar na janela do Android');
@@ -878,7 +922,8 @@
       } catch (e) {
         passo.textContent = `Não deu certo: ${(e && e.message) || e}. Confira o Wi-Fi e tente de novo.`;
       } finally {
-        baixando = false; b.disabled = false;
+        baixando = false;
+        if (!pronto) b.disabled = false;
         if (ouvinte && ouvinte.remove) ouvinte.remove();
       }
     }, { classe: 'largo com-novidades' });
@@ -1273,7 +1318,7 @@
     else mostra = `<span class="val">${esc(fmtCampo(a, v))}${u ? `<small>${esc(u)}</small>` : ''}</span>`;
     // nome curto ("B") só vale com o título do bloco à vista ("Colunas"); com os títulos escondidos (tela baixa), vai o nome inteiro
     const rotulo = curto && a.labelCurto && a.labelCurto !== a.label
-      ? `<span class="rot-curto">${esc(a.labelCurto)}</span><span class="rot-longo">${esc(a.label)}</span>` : esc(a.label);
+      ? `<span class="rot-curto">${esc(a.labelCurto).replace(/ Nº (\d+)$/, '<span class="rot-n"> Nº</span> $1')}</span><span class="rot-longo">${esc(a.label)}</span>` : esc(a.label);
     // o aviso (pH baixo) e o que sai da conta (volume da dorna) ficam na linha do nome, do lado:
     // o número continua grande e numa linha só, e todos os quadros ficam do mesmo tamanho
     const calc = !avisos.length && a.calculo ? a.calculo() : '';
@@ -1773,10 +1818,16 @@
       <span class="escolha-ico">${ico(icone)}</span><b>${esc(nome)}</b><small>${esc(detalhe)}</small>${atual ? `<em>${ico('certo')} Este aparelho</em>` : ''}</button>`;
   }
   const nomeDoChefe = () => (pluginCentral ? 'Tablet chefe' : 'Painel do escritório');
+  /** Nome que vai nas anotações. No tablet chefe (que não escolhe operador) vai o nome dele. */
+  const quemAnota = () => operadorAtual() || (ehCentral() ? nomeDoChefe() : null);
+  const ehDoChefe = (nome) => nome === 'escritório' || nome === 'Tablet chefe' || nome === 'Painel do escritório';
+  /** Folha que só o tablet chefe anota (área Vinho e Fermentação): lá o chefe tem os mesmos botões que o tablet do setor teria. */
+  const soDoChefe = (pid) => !!(setorDaPrancheta(pid) || {}).soChefe;
+  const anotaComoSetor = (pid) => !ehCentral() || soDoChefe(pid);
   const detalheDoChefe = () => 'Acompanha todos os setores, manda avisos e relatórios';
   function gradePapeis() {
     return `<div class="papeis">
-      ${todosSetores.map((s) => cartaoPapel(s.id, s.icone, s.nome, pranchetasDo(s.id).map((pid) => prancheta(pid).nome).join(', '), cfg.papel === s.id)).join('')}
+      ${todosSetores.filter((s) => !s.soChefe).map((s) => cartaoPapel(s.id, s.icone, s.nome, pranchetasDo(s.id).map((pid) => prancheta(pid).nome).join(', '), cfg.papel === s.id)).join('')}
       ${cartaoPapel('central', 'escritorio', nomeDoChefe(), detalheDoChefe(), ehCentral())}
     </div>`;
   }
@@ -2017,16 +2068,19 @@
       const num = (x) => fmtNum(String(x));
       g.dornas.forEach((d) => {
         const idF = d.id + '_folga';
+        // o número da dorna vai em cada quadro ("Folga Nº 7"), para saber de qual dorna é olhando um quadro só
+        const n = /^Dorna (\d+)$/.exec(d.nome);
+        const marca = n ? ` Nº ${n[1]}` : '';
         lista.push({
-          id: idF, dornaId: d.id, label: `${d.nome}: folga`, labelCurto: 'Folga', type: 'num', dec: 2, unidade: 'm', min: 0,
+          id: idF, dornaId: d.id, label: `${d.nome}: folga`, labelCurto: 'Folga' + marca, type: 'num', dec: 2, unidade: 'm', min: 0,
           avisos: temMedida(d) ? [{ quando: '>', valor: Number(d.altura), nivel: 'alerta', texto: `Folga maior que a altura da dorna (${num(d.altura)} m)`, curto: 'Maior que a dorna' }] : [],
           dica: temMedida(d) ? `${d.nome}: altura ${num(d.altura)} m, base ${num(d.area)} m². Volume = (altura − folga) × base${emM3(g) ? ', em m³' : ' × 1000'}.` : `${d.nome} está sem medida: o escritório cadastra em Configurações da usina.`,
           // o volume aparece do lado da folga, na hora
           calculo: () => { const vol = volumeDe(d, val[idF], g); return vol != null ? volumeTexto(vol, g, true) : !vazio(val[idF]) && !temMedida(d) ? 'sem medida' : ''; },
           get: () => val[idF], set: (x) => { val[idF] = x; },
         });
-        if (g.brix) lista.push({ id: d.id + '_brix', dornaId: d.id, label: `${d.nome}: Brix`, labelCurto: 'Brix', type: 'num', dec: 1, min: 0, max: 40, get: () => val[d.id + '_brix'], set: (x) => { val[d.id + '_brix'] = x; } });
-        if (g.fermentando) lista.push({ id: d.id + '_ferm', dornaId: d.id, label: `${d.nome}: fermentando?`, labelCurto: 'Fermentando', type: 'choice', opcoes: ['Sim', 'Não'], get: () => val[d.id + '_ferm'], set: (x) => { val[d.id + '_ferm'] = x; } });
+        if (g.brix) lista.push({ id: d.id + '_brix', dornaId: d.id, label: `${d.nome}: Brix`, labelCurto: 'Brix' + marca, type: 'num', dec: 1, min: 0, max: 40, get: () => val[d.id + '_brix'], set: (x) => { val[d.id + '_brix'] = x; } });
+        if (g.fermentando) lista.push({ id: d.id + '_ferm', dornaId: d.id, label: `${d.nome}: fermentando?`, labelCurto: 'Fermentando' + marca, type: 'choice', opcoes: ['Sim', 'Não'], get: () => val[d.id + '_ferm'], set: (x) => { val[d.id + '_ferm'] = x; } });
       });
       return lista;
     }
@@ -2212,7 +2266,7 @@
         'com vinho': `<span class="aviso ok">${ico('certo')} Com vinho (já mandou uma parte)</span>`,
       }[etapa];
       cabecalhoForm = `${status}<span class="aviso ${vol.length ? 'info' : ''}" id="volante-agora">Volante: ${vol.length ? esc(vol.map((s) => `Nº ${s.n} desde ${s.inicio}${s.operador ? ` (${s.operador})` : ''}`).join(', ')) : 'parada'}</span>
-        ${etapa === 'com vinho' && !ehCentral() ? `<button class="btn pequeno" data-a="ferm-esvaziou">${ico('certo')} Dorna vazia</button>` : ''}
+        ${etapa === 'com vinho' && anotaComoSetor(v.pid) ? `<button class="btn pequeno" data-a="ferm-esvaziou">${ico('certo')} Dorna vazia</button>` : ''}
         ${r && etapa !== 'vazia' ? `<button class="btn pequeno perigo" data-a="ferm-apagar">${ico('lixeira')} Apagar este enchimento</button>` : ''}`;
       grupos = [{ titulo: 'Enchimento', campos: ['enche_inicio', 'enche_fim'] }, { titulo: 'Brix', campos: ['brix_inicial'] }];
       rotuloSalvar = `Salvar dorna Nº ${chave}`;
@@ -2341,7 +2395,7 @@
     const conteudo = antesDosQuadros + quadros;
     lembrar[`${data}|${v.pid}`] = chave;
     let rodape = `<button class="btn primario" data-a="salvar">${ico('certo')} ${esc(rotuloSalvar)}</button>`;
-    if (p.tipo === 'fermentacao' && !ehCentral()) {
+    if (p.tipo === 'fermentacao' && anotaComoSetor(v.pid)) {
       const [acao, icone, texto] = {
         vazia: ['ferm-encher', 'tanque', `Começar a encher Nº ${chave}`], enchendo: ['ferm-terminou', 'fim', 'Terminou de encher'],
         fermentando: ['ferm-volante', 'enviar', 'Mandar para a volante'], 'com vinho': ['ferm-volante', 'enviar', 'Mandar para a volante'], volante: ['ferm-parar', 'fim', 'Parou de mandar'],
@@ -2383,7 +2437,7 @@
         if (campos.length || (p.tipo === 'grade' && mudou(rascunho.extras.obs, antes.obs)) || (p.tipo === 'insumo' && mudou(rascunho.extras.operador, antes.operador))) nomes.add(existente.operador);
       }
     }
-    return [...nomes].filter((n) => n && n !== 'escritório');
+    return [...nomes].filter((n) => n && !ehDoChefe(n));
   }
   /** Pede a senha de cada operador (ou do encarregado). Resolve true se todas estão certas. */
   async function autorizar(nomes) {
@@ -2403,7 +2457,8 @@
     const v = view();
     if (!rascunho || v.tela !== 'prancheta') return false;
     // salvando sozinho (troca de turno, virada do dia, saiu da tela): vale o nome de quem abriu a linha
-    const quem = ehCentral() ? '' : operadorAtual() || (automatico ? rascunho.operador : null);
+    // folha que só o tablet chefe anota (Vinho e Fermentação): vai o nome do tablet chefe
+    const quem = ehCentral() ? (soDoChefe(v.pid) ? nomeDoChefe() : '') : operadorAtual() || (automatico ? rascunho.operador : null);
     if (!ehCentral() && !quem) { if (!automatico) exigeOperador(); return false; }
     // tablet chefe mudando o que um operador anotou: só com a senha dele (salvar sozinho, ao sair da tela, não vale)
     const precisaAutorizar = ehCentral() ? quemPrecisaAutorizar() : [];
@@ -2422,7 +2477,8 @@
       // o volume vai junto (se a medida da dorna mudar depois, o que já foi medido continua igual)
       if (g) g.dornas.forEach((d) => { const vol = volumeDe(d, rascunho.valores[d.id + '_folga'], g); rascunho.valores[d.id + '_vol'] = vol == null ? '' : vol.toFixed(emM3(g) ? 3 : 2); });
       const temAlgo = Object.entries(rascunho.valores).some(([k, x]) => k !== 'hora' && !/_vol$/.test(k) && !vazio(x));
-      const operador = ehCentral() ? (existente && existente.operador) || '' : (existente && existente.operador) || quem;
+      // no tablet chefe vale o nome de quem anotou antes; folha só do chefe (Vinho e Fermentação) leva o nome do tablet chefe
+      const operador = ehCentral() ? (existente && existente.operador) || quem || '' : (existente && existente.operador) || quem;
       if (temAlgo) gravar(data, v.pid, chave, rascunho.valores, Object.assign({ operador }, marcaAlteracao));
       else if (existente) apagar(data, v.pid, chave);
       else if (!automatico) { toast(chave === 'param' ? 'Anote pelo menos um Brix antes de salvar' : 'Anote pelo menos uma folga antes de salvar', 'erro'); return false; }
@@ -3001,6 +3057,10 @@
             <h2>${ico('escritorio')} Totais do dia no Base44</h2>
             ${htmlBase44()}
           </section>
+          <section class="bloco" id="bloco-nuvem">
+            <h2>${ico('servidor')} Nuvem (internet)</h2>
+            ${htmlNuvem()}
+          </section>
           <section class="bloco">
             <h2>${ico('balanca')} Listas do ralo</h2>
             <h3>Tipos de produto</h3>${lista('produtos', 'produto')}
@@ -3032,7 +3092,7 @@
                 const on = off.indexOf(pid) < 0;
                 return `<button class="chip-liga ${on ? 'sel' : ''}" data-a="prancheta-liga" data-setor="${s.id}" data-id="${pid}">${on ? ico('certo') : ico('fechar')} ${esc(prancheta(pid).nome)}</button>`;
               }).join('')}</div>
-              <h3 style="margin-top:14px">Operadores <small>${ops.length}</small></h3>
+              ${s.soChefe ? '<p class="sub" style="margin:10px 0 0">Só o tablet chefe anota estas folhas. Nenhum tablet de setor fica com elas.</p>' : `<h3 style="margin-top:14px">Operadores <small>${ops.length}</small></h3>
               <div class="pessoas">${visiveis.map((o) => {
                 const i = ops.indexOf(o);
                 return `<div><span class="nome">${ico('pessoa')} <b>${esc(o.nome)}</b><small class="${o.senha ? '' : 'sem-senha'}">${o.senha ? 'com senha' : 'sem senha'}</small></span>
@@ -3041,7 +3101,7 @@
               }).join('') || '<div class="vazio">Nenhum operador cadastrado</div>'}</div>
               <div class="linha-botoes">
                 ${ops.length > LIMITE_NOMES ? `<button class="btn pequeno" data-a="mostrar-mais" data-setor="${s.id}">${aberto ? 'Mostrar menos' : `Mostrar mais (${ops.length - LIMITE_NOMES})`}</button>` : ''}
-                <button class="btn pequeno" data-a="op-add" data-setor="${s.id}">${ico('mais')} Cadastrar operador</button></div>` : '<p class="sub" style="margin:8px 0 0">Setor desligado. O tablet dele mostra um aviso e não deixa anotar.</p>'}
+                <button class="btn pequeno" data-a="op-add" data-setor="${s.id}">${ico('mais')} Cadastrar operador</button></div>`}` : '<p class="sub" style="margin:8px 0 0">Setor desligado. O tablet dele mostra um aviso e não deixa anotar.</p>'}
           </section>`;
         }).join('')}</div>
       </main>`;
@@ -3251,6 +3311,35 @@
       }
     } finally { base44Ocupado = false; }
   }
+  /* Nuvem das Pranchetas (versão 2.8): a central manda uma cópia das anotações para a internet.
+     O endereço e a senha ficam só na central; aqui o tablet chefe cadastra e vê se está indo. */
+  let nuvemInfo = null;
+  async function carregarNuvem() {
+    try {
+      const r = await postJson('api/nuvem', { acao: 'estado' }, 8000);
+      if (r.ok) { nuvemInfo = await r.json(); if (view().tela === 'config' && podeRedesenhar()) render(); }
+    } catch (e) { /* mostra o que veio na sincronização */ }
+  }
+  function htmlNuvem() {
+    const n = Object.assign({}, sync.status && sync.status.nuvem, nuvemInfo);
+    if (cfg.demo && !nuvemInfo) return '<p class="sub" style="margin:0">Na demonstração não há central para mandar para a nuvem.</p>';
+    const quando = (ms) => new Date(ms).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }).replace(',', ' às');
+    const situacao = !n.ligada ? 'Desligada' : n.erro ? `Erro: ${n.erro}` : n.ultimoEnvio ? `Último envio ${quando(n.ultimoEnvio)}. ${n.faltam ? `Faltam ${contar(n.faltam, 'anotação', 'anotações')}.` : 'Tudo na nuvem.'}` : 'Ainda não mandou';
+    return `<p class="sub" style="margin:0 0 6px">A central manda uma cópia das anotações para a internet. De lá saem a API do sistema do escritório e as atualizações do aplicativo. Sem internet, a usina continua funcionando e a cópia vai quando a internet voltar.</p>
+      <div class="linha-config"><span class="escolha-ico">${ico('servidor')}</span><div><b>Endereço da nuvem</b><small>${esc(n.url ? enderecoCurto(n.url) : 'não cadastrado')}</small></div>
+        <button class="btn pequeno" data-a="nuvem-url">${n.url ? 'Trocar' : 'Cadastrar'}</button></div>
+      <div class="linha-config"><span class="escolha-ico">${ico('codigo')}</span><div><b>Senha da central</b><small>${n.temSegredo ? 'cadastrada (não aparece aqui)' : 'não cadastrada'}</small></div>
+        <button class="btn pequeno" data-a="nuvem-segredo">${n.temSegredo ? 'Trocar' : 'Cadastrar'}</button></div>
+      <div class="linha-config" id="nuvem-situacao"><span class="escolha-ico">${ico('enviar')}</span><div><b>Situação</b><small>${esc(situacao)}</small></div>
+        <button class="btn pequeno" data-a="nuvem-enviar" ${n.ligada ? '' : 'disabled'}>Mandar agora</button></div>`;
+  }
+  async function configurarNuvem(mudanca) {
+    const r = await postJson('api/nuvem', Object.assign({ acao: 'configurar', url: (nuvemInfo && nuvemInfo.url) || '', forms: C }, mudanca), 8000).catch(() => null);
+    if (!r || !r.ok) { toast(r ? ((await r.json().catch(() => ({}))).erro || 'A central recusou') : 'Não consegui falar com a central', 'erro'); return false; }
+    nuvemInfo = await r.json(); if (sync.status) sync.status.nuvem = Object.assign({}, nuvemInfo); sync.statusJson = '';
+    return true;
+  }
+
   async function carregarBase44() {
     try {
       const r = await postJson('api/base44', { acao: 'estado' }, 8000);
@@ -3745,8 +3834,31 @@
         const s = await pedirSenhaModal('Senha do encarregado', 'As configurações da usina valem para todos os tablets.');
         if (s === undefined) return;
         if (s !== C.pinAdmin) return toast('Senha errada', 'erro');
-        carregarBase44();
+        carregarBase44(); carregarNuvem();
         return ir({ tela: 'config' });
+      }
+      case 'nuvem-url': {
+        const valor = await textoLivre({ titulo: 'Endereço da nuvem', dica: 'O endereço que apareceu no fim do publicar.ps1, como https://pranchetas-nuvem.seu-nome.workers.dev. Deixe em branco para parar de mandar.', valor: (nuvemInfo && nuvemInfo.url) || '', tipo: 'url', max: 300 });
+        if (valor === undefined) return;
+        if (valor && !/^https:\/\/\S+\.\S+$/i.test(valor)) return toast('Endereço incompleto. Ele começa com https://', 'erro');
+        if (!(await configurarNuvem({ url: valor }))) return;
+        toast(valor ? 'Endereço salvo. A cópia vai sozinha.' : 'Cópia na nuvem desligada');
+        return render();
+      }
+      case 'nuvem-segredo': {
+        const valor = await textoLivre({ titulo: 'Senha da central', dica: 'A senha da central que apareceu no fim do publicar.ps1 (SEGREDO_CENTRAL).', tipo: 'text', max: 200 });
+        if (!valor) return;
+        if (!(await configurarNuvem({ segredo: valor }))) return;
+        toast('Senha salva');
+        return render();
+      }
+      case 'nuvem-enviar': {
+        toast('Mandando para a nuvem...');
+        const r = await postJson('api/nuvem', { acao: 'enviar' }, 60000).catch(() => null);
+        if (!r || !r.ok) return toast(r ? ((await r.json().catch(() => ({}))).erro || 'A central recusou') : 'Não consegui falar com a central', 'erro');
+        nuvemInfo = await r.json(); if (sync.status) sync.status.nuvem = Object.assign({}, nuvemInfo); sync.statusJson = '';
+        toast(nuvemInfo.erro ? 'Não foi: ' + nuvemInfo.erro : nuvemInfo.faltam ? `Mandou. Faltam ${nuvemInfo.faltam}` : 'Tudo na nuvem', nuvemInfo.erro ? 'erro' : 'ok');
+        return render();
       }
       case 'base44-url': {
         const atual = (base44Info && base44Info.url) || '';
@@ -3794,7 +3906,7 @@
         const r = cicloAtual(n);
         if (r && etapaFerm(r) !== 'vazia' && !(await confirmar(`A Nº ${n} ainda tem vinho`, `Ela foi enchida em ${fmtData(r.data)} e não foi marcada como vazia. Começar um enchimento novo mesmo assim?`, 'Começar'))) return;
         const val = { enche_inicio: rascunho.valores.enche_inicio || horaAgora(), enche_fim: rascunho.valores.enche_fim || '', brix_inicial: rascunho.valores.brix_inicial || '' };
-        novoCiclo(n, val, operadorAtual());
+        novoCiclo(n, val, quemAnota());
         rascunho = null; ed.alvoId = null;
         toast(`Nº ${n} enchendo desde ${val.enche_inicio}`);
         return render();
@@ -3821,7 +3933,7 @@
         const r = cicloAtual(n);
         if (!r || etapaFerm(r) === 'vazia') return;
         const hora = horaAgora();
-        mudarCiclo(r, { volante: [...(r.valores.volante || []), { data: dataProducao(), inicio: hora, fim: '', operador: operadorAtual(), inicioEm: Date.now() }] });
+        mudarCiclo(r, { volante: [...(r.valores.volante || []), { data: dataProducao(), inicio: hora, fim: '', operador: quemAnota(), inicioEm: Date.now() }] });
         rascunho = null; ed.alvoId = null;
         toast(`Nº ${n} mandando para a volante desde ${hora}`);
         return render();
@@ -3837,7 +3949,7 @@
         if (resp !== 'sim' && resp !== 'nao') return;
         const hora = horaAgora();
         const vol = (r.valores.volante || []).map((s) => (s.fim ? s : Object.assign({}, s, { fim: hora, fimEm: Date.now(), operadorFim: operadorAtual() })));
-        mudarCiclo(r, Object.assign({ volante: vol }, resp === 'sim' ? { esvaziada: { data: dataProducao(), hora, em: Date.now(), operador: operadorAtual() } } : {}));
+        mudarCiclo(r, Object.assign({ volante: vol }, resp === 'sim' ? { esvaziada: { data: dataProducao(), hora, em: Date.now(), operador: quemAnota() } } : {}));
         rascunho = null; ed.alvoId = null;
         toast(resp === 'sim' ? `Nº ${n} vazia` : `Nº ${n} parou de mandar às ${hora}`);
         return render();
@@ -3848,7 +3960,7 @@
         const r = cicloAtual(n);
         if (!r || etapaFerm(r) === 'vazia') return;
         if (!(await confirmar(`A Nº ${n} está vazia?`, 'Marca que não sobrou vinho nela. O próximo passo é Começar a encher.', 'Está vazia'))) return;
-        mudarCiclo(r, { esvaziada: { data: dataProducao(), hora: horaAgora(), em: Date.now(), operador: operadorAtual() } });
+        mudarCiclo(r, { esvaziada: { data: dataProducao(), hora: horaAgora(), em: Date.now(), operador: quemAnota() } });
         rascunho = null; ed.alvoId = null;
         toast(`Nº ${n} vazia`);
         return render();
@@ -3859,7 +3971,7 @@
         const r = cicloAtual(n);
         if (!r) return;
         if (!(await confirmar(`Apagar o enchimento da Nº ${n}?`, `O enchimento de ${fmtData(r.data)}${r.valores.enche_inicio ? ` (começou às ${r.valores.enche_inicio})` : ''} sai da folha. Use só se foi anotado por engano.`, 'Apagar', true))) return;
-        if (ehCentral() && r.operador && !(await autorizar([r.operador]))) return;
+        if (ehCentral() && r.operador && !ehDoChefe(r.operador) && !(await autorizar([r.operador]))) return;
         apagar(r.data, PID_FERMENTACAO, r.chave);
         rascunho = null; ed.alvoId = null;
         toast(`Enchimento da Nº ${n} apagado`);
@@ -4072,7 +4184,15 @@
     '.chips-escolha button span', '.escolhas button b', '.cabecalho-form .aviso', '.cabecalho-form .btn', '.opcoes-painel button',
     '.linha-botoes .btn', '.acoes-modal .btn', '.btn.largo', '.aviso-item-cab b', '.aparelho b', '.data-grande b', '.boas-vindas h1',
   ].join(', ');
-  const cabe = (el) => el.scrollWidth <= el.clientWidth + 1 && el.scrollHeight <= el.clientHeight + 1;
+  const cabe = (el) => {
+    // nome do quadro com o selo do lado (aviso ou volume): precisa sobrar um pouco, senão a última letra do selo encosta na borda
+    if (el.children.length > 1 && el.matches('.campo .rot')) {
+      const gap = parseFloat(getComputedStyle(el).columnGap) || 0;
+      const soma = [...el.children].reduce((s, c) => s + c.offsetWidth, 0) + gap * (el.children.length - 1);
+      if (soma > el.clientWidth - 2) return false;
+    }
+    return el.scrollWidth <= el.clientWidth + 1 && el.scrollHeight <= el.clientHeight + 1;
+  };
   function caberTextos(raiz = document) {
     // o selo do turno fica do lado do nome da tela só se o nome couber inteiro; senão ele some (o nome vem primeiro)
     raiz.querySelectorAll('.topo .titulo-linha').forEach((l) => {
@@ -4086,6 +4206,7 @@
     });
     const lista = [...raiz.querySelectorAll(CABER)].filter((el) => el.offsetParent !== null || getComputedStyle(el).position === 'fixed');
     lista.forEach((el) => { el.style.fontSize = ''; el.style.whiteSpace = ''; });
+    raiz.querySelectorAll('.campo.apertado').forEach((q) => q.classList.remove('apertado'));
     // primeiro só mede (sem mexer), para a tela não recalcular a cada elemento
     const apertados = lista.filter((el) => el.clientWidth > 0 && !cabe(el)).map((el) => ({ el, base: parseFloat(getComputedStyle(el).fontSize) }));
     apertados.forEach(({ el, base }) => {
@@ -4095,6 +4216,8 @@
       // nem assim coube: vai para a linha de baixo, sempre entre uma palavra e outra
       // (menos o número e o nome do quadro: eles ficam numa linha só, para os quadros ficarem do mesmo tamanho)
       if (!cabe(el) && !el.matches('.campo .val:not(.vazio), .campo .rot')) el.style.whiteSpace = 'normal';
+      // nome do quadro com o volume do lado que nem na letra mínima cabe: "Folga Nº 2" vira "Folga 2"
+      if (!cabe(el) && el.matches('.campo .rot') && el.querySelector('.rot-n')) el.closest('.campo').classList.add('apertado');
     });
   }
   /* Ajusta a letra no próximo quadro da tela. Com "partes", só dentro delas (ao teclar, só o quadro e o teclado);
@@ -4200,7 +4323,7 @@
     if (params.get('escala')) { cfg.escala = params.get('escala'); ajustarEscala(); }
     if (params.get('op')) definirOperador(params.get('op'));
     // &atualizacao=2.8.0 : como fica o alto da tela quando tem versão nova
-    if (params.get('atualizacao')) atualizacao.nova = { versao: params.get('atualizacao'), tamanho: 9751234, url: '/apk/pranchetas.apk', novidades: [{ versao: params.get('atualizacao'), itens: (window.NOVIDADES || [{}])[0].itens || [] }] };
+    if (params.get('atualizacao')) atualizacao.nova = { tipo: params.get('rapida') ? 'telas' : 'apk', base: '/telas/', versao: params.get('atualizacao'), tamanho: 9751234, url: '/apk/pranchetas.apk', novidades: [{ versao: params.get('atualizacao'), itens: (window.NOVIDADES || [{}])[0].itens || [] }] };
     if (params.get('nomesLongos') && cfg.papel) cfg.operadores[cfg.papel] = ['Romenique', 'Maximiliano Aparecido', 'Carlindo Ferreira Júnior', 'Cleber', 'Guilherme', 'Wellington'];
     // demonstração da seção do Base44 (para conferir a tela)
     if (params.get('base44')) {
@@ -4275,7 +4398,8 @@
   if (DEMO_IMG) iniciarImagens();
   else {
     if (NO_APK && pluginCentral && cfg.servidor === undefined && ehCentral()) { cfg.servidor = true; salvarCfg(); }
-    if (centralNoTablet()) ligarCentralDoTablet().then(sincronizar);
+    // o servidor do tablet chefe (Java) não lê o forms.js: o aplicativo manda as folhas para ele montar a API na nuvem
+    if (centralNoTablet()) ligarCentralDoTablet().then(() => { sincronizar(); postJson('api/nuvem', { acao: 'forms', forms: C }, 8000).catch(() => {}); });
     // não é mais o servidor, mas ele ficou ligado (ligou sozinho ao religar): desliga
     else if (NO_APK && pluginCentral && pluginCentral.estado) pluginCentral.estado().then((r) => { if (r && r.rodando) pluginCentral.parar().catch(() => {}); }).catch(() => {});
     // no aplicativo, quem guarda se a tela cheia está ligada é o Android
@@ -4288,7 +4412,9 @@
     setTimeout(verificarAvisos, 800); // aviso que já estava guardado neste aparelho
     conferirNovidades();
     // versão nova na central (ou na nuvem): procura logo depois de abrir e a cada 30 minutos
-    if (podeAtualizar()) { setTimeout(procurarAtualizacao, 15000); setInterval(procurarAtualizacao, 30 * 60000); }
+    if (podeAtualizar()) { setTimeout(procurarAtualizacao, 15000); setInterval(procurarAtualizacao, 30 * 60000); setInterval(avisarAtualizacao, 60000); }
+    // atualização rápida: a tela abriu, então as telas novas ficam (sem isso, na terceira vez o Android volta para as de antes)
+    if (podeAtualizar() && pluginCentral.telasOk) setTimeout(() => pluginCentral.telasOk().then((r) => { if (r && r.voltou) toast(`A versão ${r.voltou} não abriu direito. Voltei para a anterior.`, 'erro'); }).catch(() => {}), 5000);
     // todos os aparelhos sincronizam a cada 5 segundos
     setInterval(sincronizar, 5000);
     setInterval(() => { if (foraDaRede() && view().tela !== 'bloqueado' && !modalAberto()) render(); }, 60000);

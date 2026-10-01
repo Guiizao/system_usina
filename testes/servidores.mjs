@@ -62,7 +62,7 @@ export async function centralJava(porta, pasta = pastaTemporaria('java')) {
   const fontes = [];
   const juntar = (d) => fs.readdirSync(d, { withFileTypes: true }).forEach((e) => (e.isDirectory() ? juntar(path.join(d, e.name)) : e.name.endsWith('.java') && fontes.push(path.join(d, e.name))));
   juntar(path.join(pastaJava, 'stubs'));
-  fontes.push(path.join(APP, 'apk', 'nativo', 'java', 'br', 'com', 'ubiralcool', 'pranchetas', 'ServidorCentral.java'), path.join(pastaJava, 'RodarServidorJava.java'));
+  fontes.push(path.join(APP, 'apk', 'nativo', 'java', 'br', 'com', 'ubiralcool', 'pranchetas', 'ServidorCentral.java'), path.join(APP, 'apk', 'nativo', 'java', 'br', 'com', 'ubiralcool', 'pranchetas', 'AtualizadorDeTelas.java'), path.join(pastaJava, 'RodarServidorJava.java'));
   fs.rmSync(saida, { recursive: true, force: true });
   execFileSync(path.join(JDK, 'javac.exe'), ['-encoding', 'UTF-8', '-d', saida, ...fontes], { stdio: 'pipe' });
   let proc;

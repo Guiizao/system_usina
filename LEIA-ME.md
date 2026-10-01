@@ -162,6 +162,31 @@ Medido num tablet simulado 4 vezes mais lento que o computador, com a central gu
 - Dois aparelhos criando a mesma linha sem um saber do outro (o chefe corrigiu nos segundos antes de receber): os valores se juntam, nada se perde.
 - **Código embaralhado no APK**: quem abrir o APK não lê o código do jeito que foi escrito (o mapa para entender erros fica só em `apk/saida/mapas`).
 
+## Nuvem das Pranchetas (versão 2.8)
+
+A central (o computador ou o tablet chefe) manda uma cópia das anotações para a internet, de minuto em minuto. Fica no Cloudflare, no plano grátis, sem cartão. De lá saem a API de leitura do escritório (a mesma da central, com os mesmos nomes) e as atualizações do aplicativo. Sem internet a usina continua igual: quando a internet volta, a central manda o que faltou.
+
+- O código fica em `nuvem/` (`src/index.js`, banco D1 em `schema.sql`). A API usa o mesmo `api-leitura.js` da central, por isso ele não usa mais `fs` nem `vm`.
+- Para pôr no ar: `nuvem/publicar.ps1` (o passo a passo está em `nuvem/LEIA-ME.txt`). O banco "pranchetas" já foi criado na conta. No fim aparece o endereço e as duas senhas ficam em `nuvem/segredos.txt` (não vai para o Git).
+- No tablet chefe: Usina > Nuvem (internet) > endereço e senha da central. A situação mostra o último envio, o que falta e o erro, se houver.
+- A configuração da usina (senhas, contatos) e os avisos internos não sobem.
+- O servidor do tablet chefe não lê o `forms.js`: o aplicativo manda as folhas para ele ao abrir, e ele leva para a nuvem.
+- Cada envio grava tudo numa consulta só (o plano grátis deixa 50 consultas por pedido e 10 ms de processamento): lotes de 150 anotações.
+
+## Atualização rápida (versão 2.8)
+
+Quase todo o aplicativo é a pasta `public`. Quando só ela muda, os tablets não precisam instalar APK:
+
+- O `gerar-apk.ps1` monta o pacote das telas (`apk/saida/telas`): os arquivos, o `pacote.json` (versão, apkMinimo e o SHA-256 de cada arquivo) e a assinatura (`pacote.sig`).
+- A assinatura usa uma chave que fica só neste computador, em `.pranchetas\chave-telas.pem` na pasta do usuário. A chave pública vai dentro do APK (`public/chave-telas.txt`). Guarde uma cópia da pasta `.pranchetas`, como a do `.android`: sem ela, a próxima atualização rápida não é aceita e os tablets precisam do APK.
+- O aplicativo acha a versão nova, abre a janela com as novidades e, em Atualizar agora, o `AtualizadorDeTelas.java` baixa só o que mudou, confere a assinatura e cada arquivo, e o Capacitor passa a abrir as telas novas. A barra mostra o andamento. Se a versão nova não abrir duas vezes, o aplicativo volta sozinho para a de antes.
+- `apkMinimo`: a versão em que a parte em Java mudou pela última vez (`apk/nativo-versao.json`, calculado sozinho). Tablet com APK mais velho recebe o APK.
+- Quem entrega: o computador (`/telas/`, de `apk/saida/telas`), o tablet chefe (as telas que ele usa) e a nuvem (o `publicar.ps1` leva junto).
+
+## Vinho e Fermentação só no tablet chefe (versão 2.8)
+
+O Volume de vinho e as Dornas de fermentação (o que o Lucas pediu) saíram da Destilaria e foram para a área "Vinho e Fermentação", que só o tablet chefe vê e anota (`soChefe` no `forms.js`). A Destilaria ficou com a planilha do Mateus. Nas anotações dessas folhas vai o nome do tablet chefe. Cada quadro do vinho mostra o número da dorna ("Folga Nº 7"); se nem com a letra mínima couber, fica "Folga 7".
+
 ## Atualização pelo próprio aplicativo (versão 2.7)
 
 A 2.7 é a última versão instalada à mão. Daqui para frente o aplicativo se atualiza sozinho:
@@ -281,6 +306,8 @@ Leva uns 20 minutos e grava o resultado em `testes/saida/resultado.txt`. Testa:
 5. longo prazo, nas duas centrais: 90 dias de uso da usina inteira (a memória do tablet não enche), dias antigos no BackupUsina, troca de turno e virada das 07:00 no meio da anotação, "Terminou a Nº X", tablet chefe trocado e 700 anotações guardadas sem Wi-Fi;
 6. velocidade: cada toque num tablet 4 vezes mais lento, com 90 dias de uso, tem que responder em menos de 100 ms;
 7. os pedidos do teste de 24/09 (aviso curto, senha do operador no tablet chefe, relatórios, WhatsApp, rolagem, trocar o código), nas duas centrais, e o aplicativo com o código embaralhado como vai no APK;
+7f. a nuvem (o Cloudflare rodando aqui no computador, com o próprio wrangler): as duas centrais mandando a cópia, a API da nuvem igual à da central, correção e apagado chegando, senha errada, e o APK e as telas saindo da nuvem (telas com outra assinatura recusadas);
+7e. a atualização rápida: o pacote assinado, a central entregando, o AtualizadorDeTelas.java baixando, copiando o que não mudou e recusando assinatura errada, arquivo alterado e pacote que pede APK novo, e o aplicativo abrindo a janela sozinho com a barra;
 7d. a versão 2.7: a central dizendo a versão do APK (e não oferecendo se o APK não bater com o versao.json), o aplicativo com um Android de mentira (botão Atualizar, novidades, pedido de download com o SHA-256, falta de permissão, arquivo com defeito, novidades uma vez depois de atualizar), a central do computador baixando da nuvem (e recusando APK diferente ou versão mais velha) e o tablet chefe entregando a versão dele; os tanques em m³ e as dornas 7 a 12 entram nos testes da 2.6;
 7c. a versão 2.6, nas duas centrais: volume de vinho (a folga vira litros na hora, igual à planilha; aviso de folga maior que a dorna; medidas trocadas pelo escritório), dornas de fermentação (encher, terminar, Brix inicial, medição da manhã no cartão, volante com duas dornas, parar esvaziando ou não, dorna enchida há 6 dias num tablet novo) e o Excel das duas folhas;
 7b. a versão 2.5, nas duas centrais: Wi-Fi embaralhado (quem espia não lê nada, pacote alterado, repetido ou com relógio errado, aplicativo antigo, criptografia escrita em JavaScript igual à do Node e à do navegador) e os totais no Base44 (com um Base44 de mentira no computador: sozinho quando o dia fecha, de novo quando a folha é corrigida, erro sem internet ou com segredo errado, e a função que vai no Base44 rodando com um Base44 simulado);
@@ -289,7 +316,7 @@ Leva uns 20 minutos e grava o resultado em `testes/saida/resultado.txt`. Testa:
 
 Os testes usam pastas de dados temporárias: nunca mexem em `dados/`. Só as telas: `node testes/rodar-telas.mjs` (liga uma central de teste sozinho). Só o longo prazo: `node testes/rodar-robustez.mjs`.
 
-O teste para fazer à mão no celular e no tablet está em `Teste-nos-aparelhos-2.7.pdf`, na pasta `Usina`. Só a atualização: `node testes/rodar-atualizacao.mjs`; só a 2.6: `node testes/rodar-pedidos26.mjs`; só a 2.5: `node testes/rodar-pedidos25.mjs`.
+O teste para fazer à mão no celular e no tablet está em `Teste-nos-aparelhos-2.8.pdf`, na pasta `Usina`. Só a nuvem: `node testes/rodar-nuvem.mjs` (precisa do `npm install` em `nuvem`); só a atualização: `node testes/rodar-atualizacao.mjs`; só a 2.6: `node testes/rodar-pedidos26.mjs`; só a 2.5: `node testes/rodar-pedidos25.mjs`.
 
 ## Imagens das telas
 
@@ -306,6 +333,8 @@ Salva em `../telas`.
 43 verificações automáticas: conexão com código certo e errado, anotação, botões − e +, aviso de valor fora do normal, cópia da dorna anterior, marcar fim, monitoramento, valores padrão, insumos, senha do operador, trava por inatividade, virada de turno, exportação, relatórios e configurações. Mais: queda de rede com envio depois que volta, sincronização entre dois aparelhos e validação do Excel e do XML.
 
 Versão 2 (16/09/2026): avisos de pH e Brix, telas LPHERA / Cal e Saczyme / Alcolina com a soma das dornas da hora, casinha nas abas, rolagem do painel do chefe que não volta mais para o topo, pastas *Usina, tela de relatórios, janela de Excel ou XML, listas do ralo, cadastro protegido por senha e busca do tablet chefe no Wi-Fi. Testado no navegador contra o servidor: anotação, envio, queda de rede, relatórios e Excel/XML.
+
+Versão 2.8.0 (01/10/2026): nuvem no Cloudflare (cópia das anotações, API do escritório e atualizações pela internet), atualização rápida das telas sem instalar APK (com barra e volta automática), janela da versão nova, Volume de vinho e Dornas de fermentação só no tablet chefe, número da dorna em cada quadro do vinho.
 
 Versão 2.7.1 (30/09/2026), pedido do Bruno no painel da Nova Destilaria: entrou a Coluna B4 (temperatura do carregamento da coluna B) entre a Coluna B e a Coluna P, e saiu o Início Aquecimento. É a primeira versão que os tablets recebem pelo botão Atualizar.
 

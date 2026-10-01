@@ -651,6 +651,7 @@ html:root .edicao main .grupos .grupo .campo .val small { font-size: max(13px, .
 .campo .rot-txt { flex: none; }
 /* títulos dos blocos escondidos (tela baixa): o quadro mostra o nome inteiro, senão ficam dois "Hidro" sem saber de quê */
 .campo .rot-longo { display: none; }
+.campo.apertado .rot-n { display: none; }
 .edicao main .grupos.compacto .campo .rot-curto { display: none; }
 .edicao main .grupos.compacto .campo .rot-longo { display: inline; }
 .campo .rot svg.ico { flex: none; }
@@ -680,6 +681,9 @@ html:root .edicao .barra-trabalho .cabecalho-form .aviso, html:root .edicao .bar
 .novidades-lista li { font-size: 19px; line-height: 1.35; margin: 0 0 8px; color: var(--tinta); }
 :root[data-dispositivo="celular"] .novidades-lista li { font-size: 16px; }
 .passo-atualizacao { font-weight: 700; }
+.barra-progresso { height: 16px; border-radius: 8px; background: var(--linha-clara); overflow: hidden; margin: 4px 0 8px; flex: none; }
+.barra-progresso > i { display: block; height: 100%; width: 0; background: var(--verde-escuro); transition: width .2s; }
+.barra-progresso[hidden] { display: none; }
 
 /* Base44: um dia por linha, com a situação do envio */
 #bloco-base44 .linha-config small { word-break: normal; }

@@ -32,6 +32,8 @@ const PASTA_APK = process.env.PASTA_APK ? path.resolve(process.env.PASTA_APK) : 
 const APK = path.join(PASTA_APK, 'pranchetas.apk');
 // versão, tamanho, SHA-256 e novidades do APK (o gerar-apk.ps1 escreve, ou vem da nuvem junto com o APK)
 const APK_VERSAO = path.join(PASTA_APK, 'versao.json');
+// atualização rápida (versão 2.8): o pacote das telas (gerar-apk.ps1, ou baixado da nuvem)
+const TELAS = path.join(PASTA_APK, 'telas');
 // Pastas da usina, todas com final "Usina", dentro de app/dados
 const DADOS = process.env.PASTA_DADOS ? path.resolve(process.env.PASTA_DADOS) : path.join(__dirname, 'dados'); // os testes usam uma pasta separada
 const PASTAS = {
@@ -133,7 +135,13 @@ const TOKEN_LEITURA = process.env.TOKEN_LEITURA || config.tokenLeitura;
 const leitura = require('./api-leitura');
 let apiLeituraPronta = null;
 const medidasDoEscritorio = () => { const c = db.registros['config|sistema|geral']; return c && !c.apagado && c.valores ? c.valores.medicao || null : null; };
-const apiDeLeitura = () => apiLeituraPronta || (apiLeituraPronta = leitura.criar(leitura.carregarPranchetas(PUBLICO), medidasDoEscritorio));
+/** As definições das pranchetas (o mesmo forms.js do aplicativo). */
+function carregarPranchetas() {
+  const contexto = { window: {} };
+  require('vm').runInNewContext(fs.readFileSync(path.join(PUBLICO, 'forms.js'), 'utf8'), contexto);
+  return contexto.window.USINA;
+}
+const apiDeLeitura = () => apiLeituraPronta || (apiLeituraPronta = leitura.criar(carregarPranchetas(), medidasDoEscritorio));
 
 /* ---------- Atualização do aplicativo (versão 2.7) ----------
    Os tablets perguntam em /api/versao qual APK a central tem. Se for mais novo que o deles, aparece o botão Atualizar.
@@ -166,14 +174,50 @@ function baixarDaInternet(endereco, limite, voltas = 0) {
     req.on('error', reject);
   });
 }
+/** A chave pública das telas (a mesma que vai dentro do APK). */
+function chaveDasTelas() { try { return process.env.CHAVE_TELAS || fs.readFileSync(path.join(PUBLICO, 'chave-telas.txt'), 'utf8').trim(); } catch (e) { return ''; } }
+function assinaturaConfere(dados, assinatura) {
+  const chave = chaveDasTelas();
+  if (!chave) return false;
+  try { return crypto.verify('sha256', dados, crypto.createPublicKey({ key: Buffer.from(chave, 'base64'), format: 'der', type: 'spki' }), Buffer.from(String(assinatura).trim(), 'base64')); } catch (e) { return false; }
+}
+function pacoteDasTelas() { try { return JSON.parse(fs.readFileSync(path.join(TELAS, 'pacote.json'), 'utf8')); } catch (e) { return null; } }
+/** Baixa da nuvem o pacote das telas mais novo (só o que mudou), confere a assinatura e cada arquivo. */
+async function buscarTelasOnline(raiz) {
+  const pacote = await baixarDaInternet(raiz + 'pacote.json', 2 * 1024 * 1024);
+  const assinatura = (await baixarDaInternet(raiz + 'pacote.sig', 4096)).toString('utf8');
+  if (!assinaturaConfere(pacote, assinatura)) throw new Error('o pacote das telas da internet não tem a assinatura certa');
+  const p = JSON.parse(pacote.toString('utf8'));
+  const atual = pacoteDasTelas();
+  if (atual && numeroDaVersao(p.versao) <= numeroDaVersao(atual.versao)) return;
+  const tmp = TELAS + '.baixando';
+  fs.rmSync(tmp, { recursive: true, force: true });
+  for (const [rel, a] of Object.entries(p.arquivos || {})) {
+    if (!rel || rel.includes('..') || rel.startsWith('/') || rel.includes('\\')) throw new Error('caminho estranho no pacote: ' + rel);
+    const destino = path.join(tmp, rel);
+    fs.mkdirSync(path.dirname(destino), { recursive: true });
+    const velho = atual && atual.arquivos && atual.arquivos[rel] && atual.arquivos[rel].sha256 === a.sha256 ? path.join(TELAS, rel) : null;
+    const dados = velho && fs.existsSync(velho) ? fs.readFileSync(velho) : await baixarDaInternet(raiz + rel.split('/').map(encodeURIComponent).join('/'), 30 * 1024 * 1024);
+    if (dados.length !== a.tamanho || crypto.createHash('sha256').update(dados).digest('hex') !== a.sha256) throw new Error(`o arquivo ${rel} da internet veio com defeito`);
+    fs.writeFileSync(destino, dados);
+  }
+  fs.writeFileSync(path.join(tmp, 'pacote.json'), pacote);
+  fs.writeFileSync(path.join(tmp, 'pacote.sig'), assinatura);
+  fs.rmSync(TELAS, { recursive: true, force: true });
+  fs.renameSync(tmp, TELAS);
+  console.log(`  Telas ${p.versao} baixadas da internet. Os tablets já podem atualizar.`);
+}
 let procurandoOnline = false;
 async function buscarAtualizacaoOnline() {
   let base = process.env.ATUALIZACAO_ONLINE;
-  if (base === undefined) { try { base = leitura.carregarPranchetas(PUBLICO).atualizacaoOnline; } catch (e) { base = ''; } }
+  // sem endereço no forms.js, as atualizações vêm da nuvem das pranchetas (se ela estiver ligada)
+  if (base === undefined) { try { base = carregarPranchetas().atualizacaoOnline || (config.nuvem && config.nuvem.url ? config.nuvem.url + '/atualizacao/' : ''); } catch (e) { base = ''; } }
   if (!base || procurandoOnline) return;
   procurandoOnline = true;
   const raiz = base.replace(/\/?$/, '/');
   try {
+    // as telas (atualização rápida) ficam do lado: .../atualizacao/ e .../telas/
+    await buscarTelasOnline(new URL('../telas/', raiz).href).catch((e) => console.log('  Telas pela internet: ' + e.message));
     const v = JSON.parse((await baixarDaInternet(raiz + 'versao.json', 1024 * 1024)).toString('utf8'));
     const atual = versaoDoApk();
     if (!v.versao || numeroDaVersao(v.versao) <= numeroDaVersao(atual ? atual.versao : '0')) return;
@@ -226,6 +270,86 @@ function apiLeitura(req, res, url) {
   }
   return json(res, 404, { erro: 'rota desconhecida' });
 }
+
+// ---------- Nuvem das Pranchetas (versão 2.8): uma cópia das anotações na internet ----------
+// A central manda, de minuto em minuto, o que mudou. Lá ficam a API de leitura do escritório e as atualizações.
+// A usina continua funcionando sem internet: a nuvem é só uma cópia. O endereço e a senha ficam só aqui.
+if (!config.nuvem) config.nuvem = { url: '', segredo: '', seq: 0 };
+const NUVEM_LOTE = 150; // o plano grátis dá 10 ms de processamento por pedido: lotes pequenos
+function estadoNuvem() {
+  const n = config.nuvem;
+  return { ligada: !!(n.url && n.segredo), url: n.url || '', temSegredo: !!n.segredo, ultimoEnvio: n.ultimoEnvio || 0, erro: n.erro || '', faltam: n.faltam || 0 };
+}
+function pedirNuvem(caminho, corpo) {
+  const n = config.nuvem;
+  return new Promise((resolve) => {
+    let u;
+    try { u = new URL(caminho, n.url.replace(/\/?$/, '/')); } catch (e) { return resolve({ status: 0, erro: 'Endereço da nuvem inválido' }); }
+    const dados = corpo === undefined ? null : Buffer.from(JSON.stringify(corpo));
+    const pedido = (u.protocol === 'http:' ? http : https).request(u, {
+      method: dados ? 'POST' : 'GET', timeout: 30000,
+      headers: Object.assign({ Authorization: 'Bearer ' + n.segredo }, dados ? { 'Content-Type': 'application/json', 'Content-Length': dados.length } : {}),
+    }, (r) => {
+      const partes = [];
+      r.on('data', (c) => partes.push(c));
+      r.on('end', () => { const texto = Buffer.concat(partes).toString('utf8'); let j = null; try { j = JSON.parse(texto); } catch (e) { /* não é JSON */ } resolve({ status: r.statusCode, json: j, texto }); });
+    });
+    pedido.on('timeout', () => pedido.destroy(new Error('A nuvem não respondeu em 30 segundos')));
+    pedido.on('error', (e) => resolve({ status: 0, erro: /ENOTFOUND|EAI_AGAIN|ENETUNREACH|ECONNREFUSED/.test(e.code || '') ? 'Sem internet na central (ou endereço errado)' : e.message }));
+    pedido.end(dados || undefined);
+  });
+}
+const erroDaNuvem = (r) => r.erro || (r.status === 401 ? 'A nuvem recusou a senha da central' : `A nuvem respondeu ${r.status}: ${((r.json && r.json.erro) || r.texto || '').slice(0, 200)}`);
+/** O que falta mandar: o que mudou depois do último envio (e, na primeira vez, também os dias do BackupUsina). */
+function pendentesNuvem(n) {
+  const mapa = new Map();
+  const juntar = (r) => { if (leitura.publica(r) && r.seq > (n.seq || 0)) { const a = mapa.get(r.id); if (!a || r.seq > a.seq) mapa.set(r.id, r); } };
+  if (!n.arquivosEnviados) {
+    fs.readdirSync(PASTAS.backup).forEach((f) => { const m = f.match(/^(\d{4}-\d{2}-\d{2})\.json$/); if (m && arquivado(m[1])) lerDiaArquivado(m[1]).forEach(juntar); });
+  }
+  Object.values(db.registros).forEach(juntar);
+  return [...mapa.values()].sort((a, b) => a.seq - b.seq);
+}
+const resumoHash = (x) => crypto.createHash('sha256').update(JSON.stringify(x === undefined ? null : x)).digest('hex').slice(0, 16);
+let enviandoNuvem = false;
+async function enviarParaNuvem() {
+  const n = config.nuvem;
+  if (!n.url || !n.segredo || enviandoNuvem) return;
+  enviandoNuvem = true;
+  try {
+    // na primeira vez (ou se a nuvem foi trocada/zerada), confere até onde ela tem
+    if (!n.conferida) {
+      const e = await pedirNuvem('central/estado');
+      if (e.status !== 200 || !e.json) throw new Error(erroDaNuvem(e));
+      if (e.json.geracao !== config.geracao || !e.json.registros) { n.seq = 0; n.arquivosEnviados = false; n.formsHash = ''; n.medidasHash = ''; }
+      n.conferida = true;
+    }
+    const forms = carregarPranchetas();
+    const formsHash = resumoHash(forms);
+    const medidas = medidasDoEscritorio();
+    const medidasHash = resumoHash(medidas);
+    for (let vez = 0; vez < 40; vez++) {
+      const pend = pendentesNuvem(n);
+      const lote = pend.slice(0, NUVEM_LOTE);
+      if (!lote.length && n.formsHash === formsHash && n.medidasHash === medidasHash) { n.arquivosEnviados = true; n.faltam = 0; break; }
+      const corpo = { geracao: config.geracao, medidas, registros: lote };
+      if (n.formsHash !== formsHash) corpo.forms = forms;
+      const r = await pedirNuvem('central/enviar', corpo);
+      if (r.status !== 200) throw new Error(erroDaNuvem(r));
+      if (lote.length) n.seq = lote[lote.length - 1].seq;
+      n.formsHash = formsHash; n.medidasHash = medidasHash;
+      n.ultimoEnvio = Date.now(); n.erro = '';
+      n.faltam = Math.max(0, pend.length - lote.length);
+    }
+  } catch (e) {
+    n.erro = e.message; n.conferida = false;
+  } finally {
+    salvarConfig();
+    enviandoNuvem = false;
+  }
+}
+let nuvemTimer = null;
+const agendarNuvem = (ms = 5000) => { if (!config.nuvem.url) return; clearTimeout(nuvemTimer); nuvemTimer = setTimeout(enviarParaNuvem, ms); nuvemTimer.unref(); };
 
 // ---------- totais do dia para o sistema do escritório (Base44) ----------
 // o endereço e o segredo ficam só aqui na central, não vão para os tablets
@@ -470,6 +594,16 @@ const servidor = http.createServer(async (req, res) => {
 
     if (p === '/api/versao') return json(res, 200, versaoDoApk() || { versao: null });
 
+    // atualização rápida: o pacote das telas (pacote.json, assinatura e os arquivos)
+    if (p.startsWith('/telas/')) {
+      const rel = decodeURIComponent(p.slice('/telas/'.length));
+      const arquivo = path.resolve(TELAS, rel);
+      if (!rel || !arquivo.startsWith(path.resolve(TELAS) + path.sep) || !fs.existsSync(arquivo) || !fs.statSync(arquivo).isFile()) { res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' }); return res.end('não existe'); }
+      res.writeHead(200, { 'Content-Type': TIPOS[path.extname(arquivo).toLowerCase()] || 'application/octet-stream', 'Content-Length': fs.statSync(arquivo).size, 'Cache-Control': 'no-store' });
+      if (req.method === 'HEAD') return res.end();
+      return fs.createReadStream(arquivo).pipe(res);
+    }
+
     if (p === '/apk/pranchetas.apk') {
       if (!fs.existsSync(APK)) { res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' }); return res.end('APK ainda não gerado'); }
       res.writeHead(200, {
@@ -557,8 +691,30 @@ async function rotaProtegida(req, res, url, ip) {
           }
         }
         Object.entries(antigos).forEach(([d, lista]) => { aceitos += juntarNoArquivo(d, lista); });
-        if (aceitos) { gravarDisco(); dias.forEach(backupDoDia); }
+        if (aceitos) { gravarDisco(); dias.forEach(backupDoDia); agendarNuvem(); }
         return json(res, 200, { ok: true, aceitos, seq: db.seq, agora: Date.now(), geracao: config.geracao });
+      }
+
+      // nuvem das pranchetas: o tablet chefe cadastra o endereço e a senha; a central manda sozinha
+      if (p === '/api/nuvem' && req.method === 'POST') {
+        const corpo = JSON.parse(await lerCorpo(req, 100000));
+        const n = config.nuvem;
+        if (corpo.acao === 'estado' || corpo.acao === 'forms') return json(res, 200, estadoNuvem()); // o computador lê o forms.js sozinho
+        if (corpo.acao === 'configurar') {
+          const endereco = String(corpo.url || '').trim().replace(/\/+$/, '');
+          if (endereco && !/^https:\/\/[^\s/]+\.[^\s]+$/i.test(endereco) && !/^http:\/\/127\.0\.0\.1:\d+$/.test(endereco)) return json(res, 400, { erro: 'Endereço inválido. Ele começa com https://' });
+          if (endereco !== n.url) Object.assign(n, { url: endereco, seq: 0, arquivosEnviados: false, conferida: false, formsHash: '', medidasHash: '', erro: '', ultimoEnvio: 0, faltam: 0 });
+          if (typeof corpo.segredo === 'string') { n.segredo = corpo.segredo.trim().slice(0, 200); n.conferida = false; n.erro = ''; }
+          salvarConfig();
+          agendarNuvem(500);
+          return json(res, 200, estadoNuvem());
+        }
+        if (corpo.acao === 'enviar') {
+          if (!n.url || !n.segredo) return json(res, 400, { erro: 'Cadastre o endereço e a senha da nuvem' });
+          await enviarParaNuvem();
+          return json(res, 200, estadoNuvem());
+        }
+        return json(res, 400, { erro: 'ação desconhecida' });
       }
 
       // totais do dia para o Base44 (sistema do escritório): o tablet chefe calcula, a central manda pela internet
@@ -616,7 +772,7 @@ async function rotaProtegida(req, res, url, ip) {
         const agora = Date.now();
         return json(res, 200, {
           seq: db.seq, total: Object.keys(db.registros).length,
-          codigo: config.codigo, enderecos: enderecosLocais(), apk: fs.existsSync(APK), base44: estadoBase44(false),
+          codigo: config.codigo, enderecos: enderecosLocais(), apk: fs.existsSync(APK), base44: estadoBase44(false), nuvem: estadoNuvem(),
           pastas: { servidor: PASTAS.servidor, relatorios: PASTAS.relatorios, backup: PASTAS.backup },
           aparelhos: Object.entries(aparelhos).map(([id, a]) => ({
             id, papel: a.papel, operador: a.operador, ip: a.ip, versao: a.versao || '',
@@ -688,6 +844,9 @@ async function rotaProtegida(req, res, url, ip) {
 
 arquivarDiasAntigos();
 setInterval(arquivarDiasAntigos, 3600 * 1000).unref();
+// nuvem: manda o que mudou logo depois de ligar e a cada minuto (e 5 s depois de chegar anotação nova)
+setTimeout(enviarParaNuvem, Number(process.env.NUVEM_ESPERA_MS || 15000)).unref();
+setInterval(enviarParaNuvem, 60 * 1000).unref();
 // versão nova na internet: olha logo depois de ligar e a cada 6 horas
 setTimeout(buscarAtualizacaoOnline, Number(process.env.ATUALIZACAO_ESPERA_MS || 20000)).unref();
 setInterval(buscarAtualizacaoOnline, 6 * 3600 * 1000).unref();

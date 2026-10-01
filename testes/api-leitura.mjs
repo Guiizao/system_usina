@@ -121,7 +121,7 @@ export async function testarApiLeitura(c, grupo, pastaExemplo) {
     const e = (await pedir('/api/v1/esquema')).json;
     const hid = e.setores.find((s) => s.id === 'hidrolise').pranchetas.find((p) => p.id === 'hid_anexo1');
     certo(hid.campos.some((x) => x.id === 'phf' && x.tipo === 'numero' && x.casasDecimais === 1), 'campo do esquema');
-    certo(e.setores.find((s) => s.id === 'destilaria').pranchetas.some((p) => p.id === 'med_dornas' && p.grupos.length), 'grupos da medição');
+    certo(e.setores.find((s) => s.id === 'vinho').pranchetas.some((p) => p.id === 'med_dornas' && p.grupos.length), 'grupos da medição (área do tablet chefe)');
   });
 }
 

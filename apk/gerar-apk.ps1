@@ -11,6 +11,10 @@ $env:Path = "$env:JAVA_HOME\bin;$env:Path"
 function Log($m) { Write-Output ("[{0:HH:mm:ss}] {1}" -f (Get-Date), $m) }
 Set-Location $aqui
 
+# Chave das telas (versão 2.8): na primeira vez cria o par; a pública vai dentro do APK (public\chave-telas.txt)
+& node (Join-Path $aqui 'versao-do-apk.js') chave
+if ($LASTEXITCODE -ne 0) { throw 'Não consegui preparar a chave das telas' }
+
 Log 'Copiando o app para dentro do APK...'
 if (Test-Path www) { Remove-Item www -Recurse -Force }
 Copy-Item ..\public www -Recurse
@@ -109,6 +113,11 @@ if ($xml -notmatch 'REQUEST_INSTALL_PACKAGES') {
   $xml = $xml -replace '</manifest>', "    <uses-permission android:name=`"android.permission.REQUEST_INSTALL_PACKAGES`" />`n</manifest>"
   [System.IO.File]::WriteAllText($manifesto, $xml, (New-Object System.Text.UTF8Encoding $false))
 }
+
+# Pacote das telas (atualização rápida, versão 2.8): a pasta que vai no APK, assinada. Fica dentro do APK
+# (o tablet chefe entrega aos outros) e em saida\telas (o computador entrega e o publicar.ps1 leva para a nuvem).
+& node (Join-Path $aqui 'versao-do-apk.js') telas
+if ($LASTEXITCODE -ne 0) { throw 'Não consegui montar o pacote das telas' }
 
 # Número da versão do APK (versão 2.7): vem do VERSAO do app.js. O Android só atualiza por cima se for maior.
 & node (Join-Path $aqui 'versao-do-apk.js') gradle

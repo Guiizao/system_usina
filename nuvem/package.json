@@ -1,0 +1,8 @@
+{
+  "name": "pranchetas-nuvem",
+  "private": true,
+  "description": "Nuvem das Pranchetas Digitais (Cloudflare Workers + D1)",
+  "devDependencies": {
+    "wrangler": "^4.40.0"
+  }
+}

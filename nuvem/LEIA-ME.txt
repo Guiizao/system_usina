@@ -1,0 +1,38 @@
+﻿NUVEM DAS PRANCHETAS
+
+O que é
+A central da usina (o computador ou o tablet chefe) manda uma cópia das anotações para a internet.
+Fica no Cloudflare, no plano grátis, sem cartão.
+De lá saem duas coisas:
+- a API de leitura para o sistema do escritório (a mesma da central, com os mesmos nomes);
+- as atualizações do aplicativo (o tablet chefe e o computador baixam a versão nova de lá).
+A usina continua funcionando sem internet. A nuvem é só uma cópia; quando a internet volta, a central manda o que faltou.
+
+Como pôr no ar (uma vez)
+1. Crie a conta grátis em https://dash.cloudflare.com/sign-up (só e-mail e senha).
+2. Nesta pasta, botão direito no publicar.ps1 > Executar com o PowerShell.
+   Ele instala o programa do Cloudflare, abre o navegador para você entrar na conta,
+   cria o banco, publica e cria as duas senhas.
+   Na primeira vez ele pode perguntar o nome do seu endereço (workers.dev): escolha um, por exemplo ubiralcool.
+3. No fim aparece o endereço, algo como https://pranchetas-nuvem.ubiralcool.workers.dev
+   As senhas ficam no arquivo segredos.txt, nesta pasta. Guarde esse arquivo.
+4. No tablet chefe: Usina > Nuvem (internet) > Endereço da nuvem e Senha da central.
+   Em um minuto a situação muda para "Tudo na nuvem".
+5. Para o sistema do escritório: mande o endereço com /api/v1/ no fim e a senha de leitura.
+
+Versão nova do aplicativo
+Depois de gerar o APK (apk\gerar-apk.ps1), rode o publicar.ps1 de novo.
+Ele leva o APK novo para a nuvem e os tablets chefe atualizam pelo botão Atualizar.
+
+Limites do plano grátis (sobra muito para a usina)
+100 mil pedidos por dia, banco de 5 GB, arquivo de até 25 MB.
+
+Se precisar fazer à mão (no PowerShell, dentro desta pasta):
+  npx wrangler login
+  npx wrangler d1 create pranchetas          (copie o database_id para o wrangler.toml)
+  npx wrangler d1 execute pranchetas --remote --file schema.sql
+  npx wrangler deploy
+  npx wrangler secret put SEGREDO_CENTRAL
+  npx wrangler secret put TOKEN_LEITURA
+
+Guilherme

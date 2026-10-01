@@ -6,6 +6,7 @@ import android.content.ActivityNotFoundException;
 import android.content.ClipData;
 import android.content.Context;
 import android.content.Intent;
+import android.content.SharedPreferences;
 import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
 import android.net.Uri;
@@ -43,7 +44,8 @@ import java.util.Locale;
  * - liga o servidor da usina dentro do tablet chefe e mantém ligado com a tela apagada;
  * - cria as pastas ServidorUsina, RelatoriosUsina e BackupUsina;
  * - envia a folha direto para o WhatsApp ou e-mail do escritório;
- * - baixa a versão nova do aplicativo e abre o instalador do Android (versão 2.7).
+ * - baixa a versão nova do aplicativo e abre o instalador do Android (versão 2.7);
+ * - atualização rápida: troca as telas sem instalar APK, e volta sozinho se a versão nova não abrir (versão 2.8).
  */
 @CapacitorPlugin(name = "Central", permissions = {
     // Android 17: permissão "Rede local". Android 16 (alguns aparelhos, como Motorola, já bloqueiam): "Dispositivos por perto".
@@ -385,6 +387,90 @@ public class CentralPlugin extends Plugin {
     StringBuilder s = new StringBuilder();
     for (byte x : b) s.append(String.format(Locale.ROOT, "%02x", x));
     return s.toString();
+  }
+
+  /* ---------------- Atualização rápida (versão 2.8): as telas sem instalar APK ---------------- */
+
+  private static final String PREFS_TELAS = "PranchetasTelas";
+
+  private File pastaTelas() { return new File(getContext().getFilesDir(), "telas"); }
+
+  private String versaoDoApk() {
+    try { return getContext().getPackageManager().getPackageInfo(getContext().getPackageName(), 0).versionName; }
+    catch (Exception e) { return ""; }
+  }
+
+  /** Telas novas que não abriram (o aplicativo não confirmou duas vezes): volta para as que vieram no APK. */
+  @Override
+  public void load() {
+    SharedPreferences p = getContext().getSharedPreferences(PREFS_TELAS, Context.MODE_PRIVATE);
+    String pendente = p.getString("pendente", "");
+    if (pendente.isEmpty()) return;
+    int vezes = p.getInt("tentativas", 0) + 1;
+    if (vezes > 2) {
+      getContext().getSharedPreferences(com.getcapacitor.plugin.WebView.WEBVIEW_PREFS_NAME, Context.MODE_PRIVATE).edit()
+          .putString(com.getcapacitor.plugin.WebView.CAP_SERVER_PATH, "").apply();
+      //noinspection ResultOfMethodCallIgnored
+      new File(pastaTelas(), "ativa.txt").delete();
+      p.edit().putString("pendente", "").putString("voltou", pendente).putInt("tentativas", 0).apply();
+    } else {
+      p.edit().putInt("tentativas", vezes).apply();
+    }
+  }
+
+  @PluginMethod
+  public void versaoInstalada(PluginCall chamada) {
+    chamada.resolve(new JSObject().put("versao", versaoDoApk()));
+  }
+
+  /** A tela abriu direito com as telas novas: confirma (e conta se precisou voltar para as antigas). */
+  @PluginMethod
+  public void telasOk(PluginCall chamada) {
+    SharedPreferences p = getContext().getSharedPreferences(PREFS_TELAS, Context.MODE_PRIVATE);
+    String voltou = p.getString("voltou", "");
+    p.edit().putString("pendente", "").putInt("tentativas", 0).putString("voltou", "").apply();
+    chamada.resolve(new JSObject().put("voltou", voltou));
+  }
+
+  /**
+   * Baixa o pacote das telas (base: .../telas/), confere a assinatura e cada arquivo, e troca as telas.
+   * Enquanto baixa, avisa a tela pelo evento progressoTelas (feito, total). No fim o aplicativo recarrega sozinho.
+   */
+  @PluginMethod
+  public void atualizarTelas(PluginCall chamada) {
+    final String base = chamada.getString("base", "");
+    final String versao = chamada.getString("versao", "");
+    if (!base.startsWith("http://") && !base.startsWith("https://")) { chamada.reject("endereço das telas inválido"); return; }
+    new Thread(() -> {
+      try {
+        String chave;
+        try (java.io.InputStream e = getContext().getAssets().open("public/chave-telas.txt")) {
+          chave = new String(AtualizadorDeTelas.ler(e), java.nio.charset.StandardCharsets.UTF_8).trim();
+        }
+        final String apk = versaoDoApk();
+        final File pastaTelas = pastaTelas();
+        if (!pastaTelas.isDirectory() && !pastaTelas.mkdirs()) throw new IOException("não consegui criar a pasta das telas");
+        final File ativa = AtualizadorDeTelas.pastaAtiva(pastaTelas, apk);
+        org.json.JSONObject pacote = AtualizadorDeTelas.baixar(base, versao, chave, apk, pastaTelas,
+            (caminho) -> ativa != null ? new java.io.FileInputStream(new File(ativa, caminho)) : getContext().getAssets().open("public/" + caminho),
+            (feito, total) -> notifyListeners("progressoTelas", new JSObject().put("feito", feito).put("total", total)));
+        final String pasta = pacote.optString("pasta");
+        // as telas novas valem até o APK mudar; se não abrirem, o load() volta para as do APK
+        try (FileOutputStream o = new FileOutputStream(new File(pastaTelas, "ativa.txt"))) {
+          o.write((versao + "|" + apk).getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        }
+        getContext().getSharedPreferences(PREFS_TELAS, Context.MODE_PRIVATE).edit().putString("pendente", versao).putInt("tentativas", 0).apply();
+        getContext().getSharedPreferences(com.getcapacitor.plugin.WebView.WEBVIEW_PREFS_NAME, Context.MODE_PRIVATE).edit()
+            .putString(com.getcapacitor.plugin.WebView.CAP_SERVER_PATH, pasta).apply();
+        // tira as pastas velhas (fica a nova)
+        File[] velhas = pastaTelas.listFiles();
+        if (velhas != null) for (File f : velhas) if (f.isDirectory() && !f.getAbsolutePath().equals(pasta)) AtualizadorDeTelas.apagar(f);
+        chamada.resolve(new JSObject().put("pronto", true).put("versao", versao));
+        new android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(() -> getBridge().setServerBasePath(pasta), 700);
+      } catch (Exception e) {
+        chamada.reject(e.getMessage() != null ? e.getMessage() : "as telas novas não baixaram");
+      }
+    }).start();
   }
 
   private static boolean instalado(Context ctx, String pacote) {

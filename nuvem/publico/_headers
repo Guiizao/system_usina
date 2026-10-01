@@ -1,0 +1,6 @@
+/atualizacao/*
+  Access-Control-Allow-Origin: *
+  Cache-Control: no-store
+/telas/*
+  Access-Control-Allow-Origin: *
+  Cache-Control: no-store

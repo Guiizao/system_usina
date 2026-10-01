@@ -1,6 +1,7 @@
 /* Pranchetas Digitais - © 2026 Guilherme. Todos os direitos reservados. Uso somente com autorização do autor (veja LICENCA.txt). */
 /*
- * Versão 2.6, pedido do escritório (Lucas, 26/09/2026), na Destilaria e Fermentação:
+ * Versão 2.6, pedido do escritório (Lucas, 26/09/2026). Desde a 2.7.2 essas duas folhas ficam só no tablet chefe,
+ * na área "Vinho e Fermentação" (a Destilaria fica com a planilha do Mateus):
  *   - Volume de vinho: a folga de cada dorna medida com a trena; o volume sai na hora, com a conta da planilha
  *     CONTROLE LTS: (altura - folga) x área da base x 1000.
  *   - Dornas de fermentação (1, 2, 4 a 11): começou e terminou de encher, Brix inicial, Brix e volume do dia
@@ -30,6 +31,8 @@ export async function testarPedidos26(nav, ligar, porta, grupo) {
     await a.teclar(c.codigo().split(''));
     await a.tocar('[data-ed="ocultar"]');
     await a.tocar('[data-a="conectar"]');
+    await a.esperar(`!!document.querySelector('[data-a="papel"][data-id="${papel}"]')`, 15000, 'escolha da função');
+    a.papeisOferecidos = await a.avaliar('[...document.querySelectorAll("[data-a=\\"papel\\"]")].map((b) => b.dataset.id)');
     await a.tocar(`[data-a="papel"][data-id="${papel}"]`, null, { esperarMs: 15000 });
     if (operador) await a.tocar(`[data-a="escolher-operador"][data-nome="${operador}"]`);
   }
@@ -39,21 +42,28 @@ export async function testarPedidos26(nav, ligar, porta, grupo) {
   const medicao = (l, grupo) => l.find((r) => r.id === `${hoje}|med_dornas|${grupo}`);
   const ciclos = (l, n) => l.filter((r) => r.prancheta === 'fermentacao' && Number(r.valores.dorna) === n).sort((a, b) => b.valores.inicioEm - a.valores.inicioEm);
 
+  // no navegador (sem o aplicativo) o tablet chefe se chama "Painel do escritório": é o nome que vai nas anotações dele
+  const CHEFE = 'Painel do escritório';
   try {
-    const tab = await novo('tablet da Destilaria', TAMANHOS.tablet);
-    const esc = await novo('tablet chefe', TAMANHOS.computador);
-    await teste(grupo, 'a Destilaria e Fermentação tem as duas folhas novas', async () => {
+    const tab = await novo('tablet chefe', TAMANHOS.tablet);
+    const esc = await novo('computador do escritório', TAMANHOS.computador);
+    const dest = await novo('tablet da Destilaria', TAMANHOS.tablet);
+    await teste(grupo, 'Volume de vinho e Dornas de fermentação só no tablet chefe; a Destilaria fica com a planilha do Mateus', async () => {
       await conectar(esc, 'central');
-      await conectar(tab, 'destilaria', 'Mateus');
-      const lista = await tab.avaliar('[...document.querySelectorAll("[data-a=\\"abrir-prancheta\\"]")].map((b) => b.dataset.id)');
-      certo(lista.includes('med_dornas') && lista.includes('fermentacao'), 'folhas do setor: ' + lista.join(', '));
+      await conectar(tab, 'central');
+      await conectar(dest, 'destilaria', 'Mateus');
+      certo(!dest.papeisOferecidos.includes('vinho'), 'a área do tablet chefe não pode aparecer como função de tablet: ' + dest.papeisOferecidos.join(', '));
+      const lista = await dest.avaliar('[...document.querySelectorAll("[data-a=\\"abrir-prancheta\\"]")].map((b) => b.dataset.id)');
+      certo(lista.includes('destilaria') && !lista.includes('med_dornas') && !lista.includes('fermentacao'), 'folhas da Destilaria: ' + lista.join(', '));
+      await tab.tocar('[data-a="abrir-setor"][data-id="vinho"]');
+      await tab.esperar('!!document.querySelector("[data-a=\\"aba\\"][data-id=\\"fermentacao\\"]")', 8000, 'abas do Vinho e Fermentação');
     });
 
     await teste(grupo, 'volume de vinho: a folga vira litros na hora, igual à planilha (21.574,35 L na Sacarificação)', async () => {
-      await tab.tocar('[data-a="abrir-prancheta"][data-id="med_dornas"]');
       await tab.tocar('[data-a="linha"][data-chave="sac"]');
       await tab.tocar('[data-quadro="sac1_folga"]'); await tab.teclar(['0', ',', '1', '5']);
       igual((await texto(tab, '[data-quadro="sac1_folga"] .tag-calc')).trim(), '7.229 L', 'volume da dorna 1 do lado da folga');
+      certo((await texto(tab, '[data-quadro="sac1_folga"] .rot-txt')).includes('Nº 1'), 'o número da dorna no quadro');
       certo((await texto(tab, '.calc-painel')).includes('7.229 L'), 'volume no teclado');
       await tab.tocar('[data-quadro="sac1_brix"]'); await tab.teclar(['1', '8']);
       await tab.tocar('[data-quadro="sac2_folga"]'); await tab.teclar(['0', ',', '2']);
@@ -64,7 +74,7 @@ export async function testarPedidos26(nav, ligar, porta, grupo) {
       await tab.tocar('[data-a="salvar"]');
       const r = await esperarCentral((l) => medicao(l, 'sac'), 'medição da Sacarificação');
       igual(r.valores.sac1_vol, '7229.25'); igual(r.valores.sac2_vol, '7087.50'); igual(r.valores.sac4_vol, '7257.60');
-      igual(r.valores.sac1_brix, '18'); igual(r.operador, 'Mateus');
+      igual(r.valores.sac1_brix, '18'); igual(r.operador, CHEFE);
       certo(/^\d\d:\d\d$/.test(r.valores.hora || ''), 'hora da medição: ' + r.valores.hora);
     });
 
@@ -92,7 +102,7 @@ export async function testarPedidos26(nav, ligar, porta, grupo) {
       await tab.tocar('[data-a="linha"][data-chave="7"]');
       await tab.tocar('[data-a="ferm-encher"]');
       let c1 = await esperarCentral((l) => ciclos(l, 7)[0], 'enchimento da Nº 7');
-      igual(c1.operador, 'Mateus'); certo(/^\d\d:\d\d$/.test(c1.valores.enche_inicio), 'começou a encher'); igual(c1.data, hoje);
+      igual(c1.operador, CHEFE); certo(/^\d\d:\d\d$/.test(c1.valores.enche_inicio), 'começou a encher'); igual(c1.data, hoje);
       await tab.tocar('[data-a="ferm-terminou"]');
       // já abre o teclado no Brix inicial
       await tab.esperar('!!document.querySelector("[data-quadro=\\"brix_inicial\\"].ativo")', 8000, 'teclado no Brix inicial');
@@ -121,7 +131,7 @@ export async function testarPedidos26(nav, ligar, porta, grupo) {
 
     await teste(grupo, 'mandar para a volante; outra dorna junto pede confirmação; o tablet chefe vê', async () => {
       await tab.tocar('[data-a="ferm-volante"]');
-      await esperarCentral((l) => { const x = ciclos(l, 7)[0]; return x && (x.valores.volante || []).some((s) => !s.fim && s.operador === 'Mateus'); }, 'Nº 7 na volante');
+      await esperarCentral((l) => { const x = ciclos(l, 7)[0]; return x && (x.valores.volante || []).some((s) => !s.fim && s.operador === CHEFE); }, 'Nº 7 na volante');
       certo((await texto(tab, '#volante-agora')).includes('Nº 7 desde'), 'volante no alto');
       // a Nº 8 enche e também vai para a volante
       await tab.tocar('[data-a="linha"][data-chave="8"]');
@@ -133,7 +143,7 @@ export async function testarPedidos26(nav, ligar, porta, grupo) {
       await tab.esperar('document.querySelector(".modal") && document.querySelector(".modal").textContent.includes("já está recebendo")', 8000, 'pergunta da volante');
       await tab.tocar('[data-k="sim"]');
       await esperarCentral((l) => { const x = ciclos(l, 8)[0]; return x && (x.valores.volante || []).some((s) => !s.fim); }, 'Nº 8 na volante');
-      // tablet chefe: o painel mostra quem está na volante
+      // o painel do escritório mostra quem está na volante
       await esc.esperar('document.body.innerText.includes("Volante: Nº 7 e 8")', 25000, 'painel do tablet chefe');
     });
 
@@ -170,7 +180,7 @@ print(json.dumps({'folhas': wb.sheetnames, 'v7229': 7229.25 in valores, 'sub': 2
       certo(r.v7229 && r.sub, 'faltou o volume ou o subtotal na folha Volume de vinho');
       certo(r.fer7, 'faltou o volume da dorna de fermentação');
       certo(r.tq, 'faltou o tanque de álcool em m³');
-      certo(r.ferm.includes('Mateus') && r.ferm.some((x) => String(x).includes('Mateus') && String(x).includes('-')), 'faltou o enchimento ou a volante: ' + JSON.stringify(r.ferm).slice(0, 300));
+      certo(r.ferm.includes(CHEFE) && r.ferm.some((x) => String(x).includes(CHEFE) && String(x).includes('-')), 'faltou o enchimento ou a volante: ' + JSON.stringify(r.ferm).slice(0, 300));
       return r.folhas.filter((f) => /Volume|ferment/i.test(f)).join(' e ');
     });
 
@@ -202,15 +212,16 @@ print(json.dumps({'folhas': wb.sheetnames, 'v7229': 7229.25 in valores, 'sub': 2
       igual(tag, '7.088 L', 'volume com a medida nova');
     });
 
-    await teste(grupo, 'dorna enchida há 6 dias (o tablet guarda só 3) continua aparecendo num tablet que acabou de conectar', async () => {
-      const d = new Date(Date.now() - 7 * 3600000 - 6 * 86400000);
+    await teste(grupo, 'dorna enchida há 25 dias (o tablet chefe guarda 20) continua aparecendo num tablet chefe que acabou de conectar', async () => {
+      const d = new Date(Date.now() - 7 * 3600000 - 25 * 86400000);
       const dia = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-      const t = Date.now() - 6 * 86400000;
-      await c.api('/api/sync', { aparelho: 'teste-antigo', registros: [{ id: `${dia}|fermentacao|9-antigo`, data: dia, prancheta: 'fermentacao', setor: 'destilaria', chave: '9-antigo',
+      const t = Date.now() - 25 * 86400000;
+      await c.api('/api/sync', { aparelho: 'teste-antigo', registros: [{ id: `${dia}|fermentacao|9-antigo`, data: dia, prancheta: 'fermentacao', setor: 'vinho', chave: '9-antigo',
         valores: { dorna: 9, enche_inicio: '08:00', enche_fim: '10:00', brix_inicial: '9', inicioEm: t, volante: [], esvaziada: null }, criadoEm: t, atualizadoEm: t, aparelho: 'teste-antigo', apagado: false, operador: 'Mateus' }] });
-      const outro = await novo('tablet novo da Destilaria', TAMANHOS.tablet);
-      await conectar(outro, 'destilaria', 'Mateus');
-      await outro.tocar('[data-a="abrir-prancheta"][data-id="fermentacao"]');
+      const outro = await novo('tablet chefe novo', TAMANHOS.tablet);
+      await conectar(outro, 'central');
+      await outro.tocar('[data-a="abrir-setor"][data-id="vinho"]');
+      await outro.tocar('[data-a="aba"][data-id="fermentacao"]');
       await outro.esperar('!!document.querySelector("[data-a=\\"linha\\"][data-chave=\\"9\\"]") && document.querySelector("[data-a=\\"linha\\"][data-chave=\\"9\\"]").textContent.includes("fermentando")', 20000, 'Nº 9 fermentando');
       await outro.tocar('[data-a="linha"][data-chave="9"]');
       certo((await texto(outro, '.cartao-dorna')).includes('Brix inicial 9'), 'enchimento antigo no cartão');

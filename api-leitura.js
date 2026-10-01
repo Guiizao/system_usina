@@ -11,33 +11,33 @@
  *
  * Tudo com o cabeçalho  Authorization: Bearer <senha de leitura>.  A configuração da usina (senhas dos operadores,
  * contatos) e os avisos internos nunca saem por aqui.
+ *
+ * O mesmo arquivo roda na central (server.js) e na nuvem (nuvem/src/index.js, Cloudflare): por isso não usa fs nem vm.
  */
-const fs = require('fs');
-const path = require('path');
-const vm = require('vm');
-
-/** As definições das pranchetas (o mesmo forms.js do aplicativo). */
-function carregarPranchetas(pastaPublica) {
-  const contexto = { window: {} };
-  vm.runInNewContext(fs.readFileSync(path.join(pastaPublica, 'forms.js'), 'utf8'), contexto);
-  return contexto.window.USINA;
-}
 
 const ehDia = (d) => /^\d{4}-\d{2}-\d{2}$/.test(d || '');
 const vazio = (v) => v === '' || v == null;
 const pad2 = (n) => String(n).padStart(2, '0');
-/** Hora do relógio com o fuso da usina (-03:00), como texto ISO. */
-function isoLocal(ms) {
+/** Hora com o fuso da usina (-03:00), como texto ISO. fusoMin: minutos do fuso (-180); sem ele, o do relógio deste computador. */
+function isoLocal(ms, fusoMin) {
   if (!ms) return null;
-  const d = new Date(ms);
-  const off = -d.getTimezoneOffset();
+  const off = fusoMin == null ? -new Date(ms).getTimezoneOffset() : fusoMin;
+  const d = new Date(ms + off * 60000); // as horas "do relógio da usina", lidas como UTC
   const s = off >= 0 ? '+' : '-';
-  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}T${pad2(d.getHours())}:${pad2(d.getMinutes())}:${pad2(d.getSeconds())}${s}${pad2(Math.floor(Math.abs(off) / 60))}:${pad2(Math.abs(off) % 60)}`;
+  return `${d.getUTCFullYear()}-${pad2(d.getUTCMonth() + 1)}-${pad2(d.getUTCDate())}T${pad2(d.getUTCHours())}:${pad2(d.getUTCMinutes())}:${pad2(d.getUTCSeconds())}${s}${pad2(Math.floor(Math.abs(off) / 60))}:${pad2(Math.abs(off) % 60)}`;
+}
+/** Hora h do dia AAAA-MM-DD no relógio da usina, em milissegundos. */
+function momento(data, h, fusoMin) {
+  const [y, m, d] = data.split('-').map(Number);
+  return fusoMin == null ? new Date(y, m - 1, d, h).getTime() : Date.UTC(y, m - 1, d, h) - fusoMin * 60000;
 }
 function somarDias(iso, n) { const [y, m, d] = iso.split('-').map(Number); const x = new Date(y, m - 1, d + n); return `${x.getFullYear()}-${pad2(x.getMonth() + 1)}-${pad2(x.getDate())}`; }
 
-/** medidasAtuais: as medidas das dornas trocadas pelo escritório (Configurações da usina), se houver. */
-function criar(C, medidasAtuais) {
+/** medidasAtuais: as medidas das dornas trocadas pelo escritório (Configurações da usina), se houver.
+    opcoes.fusoMin: o fuso da usina em minutos (a nuvem roda em UTC e passa -180). */
+function criar(C, medidasAtuais, opcoes = {}) {
+  const fuso = opcoes.fusoMin;
+  const iso = (ms) => isoLocal(ms, fuso);
   const pranchetas = C.pranchetas;
   const setorDa = (pid) => C.setores.find((s) => s.pranchetas.some((x) => x === pid || (pranchetas[x] && pranchetas[x].tipo === 'juntas' && pranchetas[x].partes.some((pt) => pt.prancheta === pid))));
   // folhas que guardam anotação (a tela "juntas" é só duas folhas de insumo lado a lado)
@@ -54,7 +54,7 @@ function criar(C, medidasAtuais) {
   }
   const campo = (c, v) => Object.assign({ rotulo: c.label, valor: valorDe(c, v) }, c.unidade ? { unidade: c.unidade } : {});
   const camposDe = (lista, valores) => { const o = {}; lista.forEach((c) => { o[c.id] = campo(c, valores[c.id]); }); return o; };
-  const base = (r) => ({ id: r.id, operador: r.operador || null, atualizadoEm: isoLocal(r.atualizadoEm), ...(r.alteradoPeloEscritorio ? { alteradoPeloEscritorio: { em: isoLocal(r.alteradoPeloEscritorio.em), autorizadoPor: r.alteradoPeloEscritorio.autorizadoPor } } : {}) });
+  const base = (r) => ({ id: r.id, operador: r.operador || null, atualizadoEm: iso(r.atualizadoEm), ...(r.alteradoPeloEscritorio ? { alteradoPeloEscritorio: { em: iso(r.alteradoPeloEscritorio.em), autorizadoPor: r.alteradoPeloEscritorio.autorizadoPor } } : {}) });
   const horaDaChave = (k) => `${pad2(Number(k))}:00`;
   const ordemNoDia = (h) => (Number(h) - C.inicioDoDia + 24) % 24;
   const turnoDaHora = (h) => C.turnos.find((t) => h >= t.inicio && h < t.fim) || C.turnos[0];
@@ -129,7 +129,7 @@ function criar(C, medidasAtuais) {
     const med = setores.flatMap((s) => s.pranchetas).find((p) => p.tipo === 'medicao');
     return {
       empresa: C.empresa, data,
-      periodo: { inicio: isoLocal(new Date(...data.split('-').map((x, i) => Number(x) - (i === 1 ? 1 : 0)), C.inicioDoDia).getTime()), fim: isoLocal(new Date(...somarDias(data, 1).split('-').map((x, i) => Number(x) - (i === 1 ? 1 : 0)), C.inicioDoDia).getTime() - 1000) },
+      periodo: { inicio: iso(momento(data, C.inicioDoDia, fuso)), fim: iso(momento(somarDias(data, 1), C.inicioDoDia, fuso) - 1000) },
       totais: { insumos, ...(med ? { vinhoDaProducaoLitros: med.totalDeVinhoDaProducaoLitros } : {}) },
       setores,
     };
@@ -173,4 +173,4 @@ function criar(C, medidasAtuais) {
 /** Anotação que pode sair pela API (a configuração da usina e os avisos internos, não). */
 const publica = (r) => r && ehDia(r.data) && r.prancheta !== 'avisos' && r.prancheta !== 'avisos-recibo';
 
-module.exports = { carregarPranchetas, criar, publica, ehDia, isoLocal };
+module.exports = { criar, publica, ehDia, isoLocal };

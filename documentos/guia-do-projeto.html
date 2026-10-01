@@ -30,11 +30,11 @@
 <body>
 
 <h1>Guia do projeto</h1>
-<p class="sub">Pranchetas Digitais da Ubirálcool, versão 2.7 (29/09/2026). Tudo que o projeto tem, em que linguagem foi feito, como as peças conversam e onde mexer em cada coisa.</p>
+<p class="sub">Pranchetas Digitais da Ubirálcool, versão 2.8 (01/10/2026). Tudo que o projeto tem, em que linguagem foi feito, como as peças conversam e onde mexer em cada coisa.</p>
 
 <h2>1. O que é</h2>
 <p>As pranchetas de papel dos setores (Hidrólise, Caldeira, Ralo, Destilaria) viraram um aplicativo. Cada setor tem um tablet ou celular. O operador escolhe o nome dele, anota nos quadros e salva. A anotação vai pelo Wi-Fi da usina até a central, que guarda tudo e mostra para o escritório. No fim do dia sai o Excel e o XML no mesmo desenho do papel.</p>
-<p>A central pode ser um computador ligado no Wi-Fi ou o próprio tablet chefe. As duas fazem a mesma coisa. Nada depende de internet: tudo roda dentro da rede da usina.</p>
+<p>A central pode ser um computador ligado no Wi-Fi ou o próprio tablet chefe. As duas fazem a mesma coisa. Nada depende de internet: tudo roda dentro da rede da usina. Quando tem internet, a central também manda uma cópia para a nuvem (seção 4).</p>
 
 <h2>2. As peças e as linguagens</h2>
 
@@ -63,7 +63,8 @@
 <table>
   <tr><th>Arquivo</th><th>O que faz</th></tr>
   <tr><td>ServidorCentral.java</td><td>A central rodando dentro do tablet chefe. Faz o mesmo que o server.js do computador.</td></tr>
-  <tr><td>CentralPlugin.java</td><td>A ponte entre a tela e o Android: liga o servidor, pede permissões, cria as pastas, compartilha no WhatsApp e no e-mail, imprime, liga a tela cheia e baixa e instala a atualização.</td></tr>
+  <tr><td>CentralPlugin.java</td><td>A ponte entre a tela e o Android: liga o servidor, pede permissões, cria as pastas, compartilha no WhatsApp e no e-mail, imprime, liga a tela cheia e faz as atualizações.</td></tr>
+  <tr><td>AtualizadorDeTelas.java</td><td>A atualização rápida: baixa o pacote das telas, confere a assinatura e cada arquivo (seção 7).</td></tr>
   <tr><td>ServicoCentral.java</td><td>Mantém o servidor ligado com a tela apagada (aviso fixo na barra do Android).</td></tr>
   <tr><td>LigarAoIniciar.java</td><td>Liga o servidor sozinho quando o tablet chefe reinicia ou quando o aplicativo é atualizado.</td></tr>
   <tr><td>MainActivity.java</td><td>A tela principal do Android e a tela cheia.</td></tr>
@@ -76,6 +77,7 @@
 <h3>O resto</h3>
 <table>
   <tr><th>Onde</th><th>Linguagem</th><th>O que é</th></tr>
+  <tr><td>nuvem</td><td>JavaScript (Cloudflare Workers) e SQL (D1)</td><td>A nuvem: recebe a cópia das anotações, responde a API do escritório e entrega as atualizações.</td></tr>
   <tr><td>integracoes/base44</td><td>TypeScript (Deno)</td><td>A função que roda dentro do Base44 do escritório e recebe os totais do dia.</td></tr>
   <tr><td>treino-leitor</td><td>Python (PyTorch, OpenCV)</td><td>O treino da rede neural que lê a letra de mão. Só usado no computador.</td></tr>
   <tr><td>testes</td><td>JavaScript (Node), Java e Python</td><td>Os testes automáticos (seção 9).</td></tr>
@@ -102,12 +104,12 @@
   <tr><td>Conectar (parear)</td><td>O aparelho digita o código de 6 números da central. O código não passa aberto: os dois combinam um segredo com <b>X25519</b> e só vai uma prova do código. A central devolve a chave própria daquele aparelho, embaralhada.</td></tr>
   <tr><td>Depois de conectado</td><td>Todo pedido vai embaralhado com a chave do aparelho (<b>AES-256-GCM</b>) pelo endereço <code>/api/c</code>. Pedido alterado, repetido ou com relógio muito errado é recusado. Trocar o código desconecta todo mundo.</td></tr>
   <tr><td>Baixar o aplicativo</td><td>O tablet chefe mostra um QR code que abre a página <code>/baixar</code>. O APK desce de <code>/apk/pranchetas.apk</code>.</td></tr>
-  <tr><td>Atualização</td><td>O aplicativo pergunta em <code>/api/versao</code> qual versão a central tem. Se for mais nova, aparece o botão Atualizar (seção 7).</td></tr>
+  <tr><td>Atualização</td><td>O aplicativo pergunta à central (<code>/api/versao</code> e <code>/telas/pacote.json</code>) e à nuvem se tem versão nova. Se tiver, abre a janela com as novidades (seção 7).</td></tr>
   <tr><td>WhatsApp e e-mail</td><td>O Android abre o WhatsApp ou o e-mail já com o arquivo do dia e o resumo. Quem manda é a pessoa.</td></tr>
   <tr><td>Impressão</td><td>Pela impressão do próprio Android (também salva em PDF).</td></tr>
   <tr><td>Base44</td><td>Opcional. Quando o dia fecha, a central manda os totais dos insumos por HTTPS para a função do Base44, com um segredo. Se não estiver configurado, não manda nada e nada quebra.</td></tr>
-  <tr><td>API de leitura</td><td>JSON para o sistema novo do escritório, só leitura, com senha no cabeçalho <code>Authorization: Bearer</code>. Só na central do computador.</td></tr>
-  <tr><td>Nuvem</td><td>Ainda não tem. Vai ser um servidor na internet que recebe uma cópia da central e guarda as atualizações.</td></tr>
+  <tr><td>API de leitura</td><td>JSON para o sistema novo do escritório, só leitura, com senha no cabeçalho <code>Authorization: Bearer</code>. Na central do computador e na nuvem, com as mesmas respostas.</td></tr>
+  <tr><td>Nuvem</td><td>Cloudflare, plano grátis. A central manda o que mudou de minuto em minuto, por HTTPS, com a senha da central. A configuração da usina e os avisos internos não sobem. Sem internet, a cópia espera e vai depois.</td></tr>
 </table>
 <p>No Android 16 e 17 o sistema pede a permissão "Rede local" (ou "Dispositivos por perto") para o aplicativo falar com os outros tablets. O aplicativo pede e explica o que fazer se ela for negada.</p>
 
@@ -117,7 +119,8 @@
   <tr><td>Hidrólise</td><td>Hidrólise (Anexo I), Sacarificação (Anexo II), LPHERA/Cal e Saczyme/Antibiótico. A dorna passa por enchendo, enviando e anotada. A Sacarificação e os insumos acompanham a Hidrólise sozinhos.</td></tr>
   <tr><td>Caldeira</td><td>Controle diário, hora a hora.</td></tr>
   <tr><td>Ralo / Pesagem</td><td>Matéria-prima (insumo com total do dia).</td></tr>
-  <tr><td>Destilaria e Fermentação</td><td>Controle diário da destilaria, Volume de vinho (folga medida com a trena vira volume na hora), Dornas de fermentação (encher, Brix inicial, volante), Antibiótico Lactrol e Uréia.</td></tr>
+  <tr><td>Destilaria e Fermentação</td><td>Controle diário da destilaria (a planilha do Mateus), Antibiótico Lactrol e Uréia.</td></tr>
+  <tr><td>Vinho e Fermentação</td><td>Só no tablet chefe: Volume de vinho (folga medida com a trena vira volume na hora) e Dornas de fermentação (encher, Brix inicial, volante).</td></tr>
   <tr><td>Nova Destilaria</td><td>Controle diário.</td></tr>
 </table>
 <p>Os tipos de folha são poucos e se repetem: <b>dornas</b> (uma linha por dorna), <b>grade</b> (uma linha por hora), <b>insumo</b> (quantidade e total do dia), <b>juntas</b> (duas folhas de insumo lado a lado), <b>medição</b> (volume de vinho) e <b>fermentação</b> (o caderno das dornas). Uma folha nova do mesmo tipo é só configuração no <code>forms.js</code>.</p>
@@ -127,14 +130,16 @@
 <p>O tablet chefe tira foto de uma folha preenchida à mão e passa para o aplicativo. Tudo acontece dentro do aparelho, sem internet: o <b>OpenCV.js</b> acha a tabela na foto e endireita cada célula, e uma rede neural pequena (<b>ONNX</b>, treinada em Python com letras de mão) lê cada célula. A coluna diz o que pode ser (hora, pH, número, nome do operador), e o que ficou com pouca confiança fica marcado para a pessoa conferir antes de salvar.</p>
 
 <h2>7. Atualização do aplicativo</h2>
-<div class="caminho">Tablet chefe com a versão nova → os outros perguntam em <code>/api/versao</code> → botão Atualizar → o APK desce pelo Wi-Fi → o Android pergunta → atualizou → aparecem as novidades.</div>
+<p>Tem dois jeitos, e o aplicativo escolhe sozinho:</p>
+<div class="caminho"><b>Rápida:</b> só as telas mudaram → o aplicativo baixa só os arquivos que mudaram, mostra a barra e abre de novo sozinho, sem janela do Android.<br>
+<b>APK:</b> a parte em Java mudou → o APK desce pelo Wi-Fi e o Android pergunta se pode atualizar.</div>
 <ul>
-  <li>Com o tablet chefe como central, ele entrega o próprio aplicativo instalado nele. Basta instalar a versão nova à mão só nele.</li>
-  <li>Com o computador como central, ele entrega o APK da pasta <code>apk/saida</code> (com o <code>versao.json</code>, que diz a versão, o tamanho e o SHA-256).</li>
-  <li>O aplicativo confere o tamanho e o SHA-256 do arquivo e se ele é o mesmo aplicativo. O próprio Android confere a assinatura: só aceita APK assinado no mesmo computador.</li>
-  <li>Quando tiver a nuvem, o endereço vai em <code>atualizacaoOnline</code> no <code>forms.js</code> e a central baixa de lá sozinha.</li>
+  <li>Quando acha uma versão nova, abre uma janela com as novidades e o botão Atualizar agora. Se não for a hora, toca em Depois e fica o botão amarelo no alto.</li>
+  <li>O pacote das telas é assinado com uma chave que fica só no computador do Guilherme. O aplicativo confere a assinatura e cada arquivo antes de usar: ninguém consegue mandar telas falsas pelo Wi-Fi. Se a versão nova não abrir, ele volta sozinho para a de antes.</li>
+  <li>Quem entrega: o tablet chefe (o que ele usa), o computador (<code>apk/saida</code>) e a nuvem.</li>
+  <li>Depois de atualizar, as novidades aparecem uma vez. Elas ficam em <code>public/novidades.js</code>.</li>
 </ul>
-<div class="nota"><b>Cuidado:</b> o APK é assinado com a chave que fica em <code>.android</code> na pasta do usuário deste computador. Se essa chave se perder, os tablets não aceitam atualizar por cima e cada um vai ter que desinstalar e instalar de novo. Vale guardar uma cópia dessa pasta.</div>
+<div class="nota"><b>Cuidado:</b> duas chaves ficam só neste computador. A do APK fica em <code>.android</code> e a das telas em <code>.pranchetas</code>, as duas na pasta do usuário. Sem a do APK, os tablets não aceitam atualizar por cima e cada um vai ter que desinstalar e instalar de novo. Sem a das telas, a atualização rápida para até o próximo APK. Vale guardar uma cópia das duas pastas.</div>
 
 <h2>8. Segurança</h2>
 <ul>
@@ -164,17 +169,18 @@
 <ol>
   <li>Mudar o <code>VERSAO</code> no começo do <code>app.js</code> e escrever as novidades no <code>novidades.js</code>.</li>
   <li>Rodar os testes (<code>node testes/rodar-tudo.mjs</code>).</li>
-  <li>Gerar o APK (<code>apk/gerar-apk.ps1</code>).</li>
-  <li>Instalar à mão só no tablet chefe. Os outros atualizam pelo botão.</li>
+  <li>Gerar o APK (<code>apk/gerar-apk.ps1</code>). Ele também monta o pacote das telas.</li>
+  <li>Rodar o <code>nuvem/publicar.ps1</code>: a versão nova vai para a nuvem e os tablets atualizam sozinhos. Sem a nuvem, basta a central do computador; com o tablet chefe como central, instala à mão só nele.</li>
   <li>Guardar a versão no Git (a pasta <code>app</code> é um repositório, um commit por versão).</li>
 </ol>
 
 <h2>12. O que falta</h2>
 <ul>
-  <li>A nuvem: um servidor gratuito de estudante (Azure for Students ou o pacote do GitHub para estudantes) que recebe a cópia da central, serve a API para o escritório e guarda as atualizações. A conta tem que ser criada por você.</li>
+  <li>Pôr a nuvem no ar: rodar o <code>nuvem/publicar.ps1</code> uma vez (ele pede para entrar na conta do Cloudflare pelo navegador) e cadastrar o endereço e a senha no tablet chefe.</li>
   <li>Perguntar para o Lucas: quais são as outras dornas "da família" e a medida do Tanque Destilaria.</li>
+  <li>Pessoas, permissões e o registro de tudo que acontece no sistema (proposta em andamento).</li>
 </ul>
 
-<p class="rodape">Pranchetas Digitais 2.7 · © 2026 Guilherme · Todos os direitos reservados</p>
+<p class="rodape">Pranchetas Digitais 2.8 · © 2026 Guilherme · Todos os direitos reservados</p>
 </body>
 </html>

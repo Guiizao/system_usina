@@ -28,6 +28,7 @@ import { testarBase44Central, testarPedidos25, testarFuncaoBase44 } from './pedi
 import { testarPedidos26 } from './pedidos26.mjs';
 import { testarApiLeitura } from './api-leitura.mjs';
 import { testarAtualizacao } from './atualizacao.mjs';
+import { testarNuvem } from './nuvem.mjs';
 import { testarApkWeb } from './rodar-apk-web.mjs';
 import { centralNode, centralJava, APP } from './servidores.mjs';
 
@@ -151,6 +152,10 @@ try {
   const ga = novoGrupo('Atualização pelo próprio aplicativo e novidades');
   await testarAtualizacao(nav, ga);
   grupos.push(ga);
+  // 4f. nuvem das pranchetas (Cloudflare rodando aqui no computador): cópia das anotações, API e atualização
+  const gn = novoGrupo('Nuvem das Pranchetas (Cloudflare, rodando no computador)');
+  await testarNuvem(gn);
+  grupos.push(gn);
   // 5. extras
   const g5 = novoGrupo('Leitura de foto, impressão e aplicativo sem rede');
   const c5 = await centralNode(8295);

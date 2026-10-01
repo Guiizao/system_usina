@@ -141,7 +141,17 @@ window.USINA = {
       nome: 'Destilaria e Fermentação',
       icone: 'coluna',
       operadores: ['Mateus'],
-      pranchetas: ['destilaria', 'fermentacao', 'med_dornas', 'ins_lactrol', 'ins_ureia'],
+      pranchetas: ['destilaria', 'ins_lactrol', 'ins_ureia'],
+    },
+    {
+      // o que o Lucas pediu (planilha CONTROLE LTS): só o tablet chefe anota (decisão de 01/10/2026).
+      // soChefe: não aparece na escolha da função dos tablets dos setores, só no painel do tablet chefe
+      id: 'vinho',
+      nome: 'Vinho e Fermentação',
+      icone: 'regua',
+      soChefe: true,
+      operadores: [],
+      pranchetas: ['med_dornas', 'fermentacao'],
     },
     {
       id: 'nova_destilaria',

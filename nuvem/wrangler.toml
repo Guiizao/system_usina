@@ -1,0 +1,14 @@
+# Pranchetas Digitais - (c) 2026 Guilherme. Nuvem das Pranchetas no Cloudflare (plano grátis).
+# O banco "pranchetas" já foi criado na conta do Cloudflare (01/10/2026).
+name = "pranchetas-nuvem"
+main = "src/index.js"
+compatibility_date = "2026-09-01"
+
+# versao.json e pranchetas.apk: arquivos estáticos (até 25 MB cada, de graça e sem cartão)
+[assets]
+directory = "./publico"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "pranchetas"
+database_id = "8fbc79a9-262c-4563-a65a-24fb854b6a26"
