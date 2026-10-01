@@ -31,7 +31,7 @@ export function diaDaUsina(data, aparelho = 'semeado') {
   for (let h = 0; h < 24; h++) {
     l.push(reg('caldeira', 'caldeira', h, { pressao: '6', temp_agua: '42', descarga_fundo: '02', descarga_garrafa: 'OK' }, { operador: 'Alberto' }));
     l.push(reg('destilaria', 'destilaria', h, { temp_pe_a: '107.3', producao: '150', carregamento: '371', vapor: '2', inpm: '93.7' }, { operador: 'Mateus' }));
-    l.push(reg('nova_destilaria', 'nova_destilaria', h, { coluna_hidro: '90.1', coluna_b: '80', coluna_p: '70', cond_hidro: '40', cond_b: '41', cond_p: '42', vapor: '2', producao_lth: '300', inpm: '93' }, { operador: 'Operador 1' }));
+    l.push(reg('nova_destilaria', 'nova_destilaria', h, { coluna_hidro: '90.1', coluna_b: '80', coluna_b4: '105', coluna_p: '70', cond_hidro: '40', cond_b: '41', cond_p: '42', vapor: '2', producao_lth: '300', inpm: '93' }, { operador: 'Operador 1' }));
   }
   for (let h = 0; h < 20; h++) l.push(reg('ins_materia_prima', 'ralo', h, { qtd: '160', unidade: 'kg', produto: 'MASSA' }, { operador: 'Jair' }));
   for (let t2 = 1; t2 <= 3; t2++) for (const pid of ['caldeira', 'destilaria', 'nova_destilaria']) l.push(reg(pid, pid, 'obs' + t2, { texto: 'TUDO NORMAL NO TURNO' }));

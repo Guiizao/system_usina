@@ -150,7 +150,8 @@ export async function testarAtualizacao(nav, grupo) {
       await a.avaliar(`(() => { const x = JSON.parse(localStorage.getItem('usina.cfg')); x.versaoVista = '2.6.0'; localStorage.setItem('usina.cfg', JSON.stringify(x)); })()`);
       await a.recarregar();
       await a.esperar(`document.querySelector(".modal") && document.querySelector(".modal").textContent.includes("Aplicativo atualizado: versão ${VERSAO}")`, 10000, 'janela das novidades');
-      igual(await a.avaliar('[...document.querySelectorAll(".modal li")].map((l) => l.textContent)'), novidades()[0].itens);
+      // veio da 2.6: mostra o que mudou em todas as versões depois dela
+      igual(await a.avaliar('[...document.querySelectorAll(".modal li")].map((l) => l.textContent)'), novidades().flatMap((n) => n.itens));
       await a.tocar('.modal [data-k="ok"]');
       igual(await a.avaliar('JSON.parse(localStorage.getItem("usina.cfg")).versaoVista'), VERSAO);
       await a.recarregar();

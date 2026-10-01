@@ -63,6 +63,14 @@ export async function testarConfiguracao(grupo) {
     certo(C.medicaoPadrao.versao >= 2, 'versão das medidas');
     certo(C.pranchetas.fermentacao.grupoMedicao === 'fer', 'o caderno usa as dornas de fermentação 7 a 12');
   });
+  await teste(grupo, 'forms.js: Nova Destilaria com a B4 entre a Coluna B e a Coluna P, sem o Início Aquecimento (pedido do Bruno)', async () => {
+    const p = C.pranchetas.nova_destilaria;
+    const ids = p.itens.map((c) => c.id);
+    igual(ids.slice(0, 4), ['coluna_hidro', 'coluna_b', 'coluna_b4', 'coluna_p'], 'ordem das colunas');
+    certo(!ids.includes('inicio_aquec'), 'o Início Aquecimento devia ter saído');
+    const nosGrupos = p.grupos.flatMap((g) => g.campos);
+    certo(ids.every((id) => nosGrupos.includes(id)) && nosGrupos.every((id) => ids.includes(id)), 'todo campo num grupo e todo grupo com campo que existe');
+  });
   await teste(grupo, 'forms.js: todo setor tem operadores e a senha do encarregado ainda é a de teste', async () => {
     for (const s of C.setores) certo(s.operadores && s.operadores.length, `${s.nome} sem operadores`);
     return C.pinAdmin === '1234' ? 'lembrete: trocar a senha 1234 antes de usar de verdade' : 'senha trocada';

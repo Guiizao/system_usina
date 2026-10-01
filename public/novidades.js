@@ -4,6 +4,16 @@
    Depois do sinal de igual vem JSON puro, porque o servidor do tablet chefe (Java) também lê este arquivo. */
 window.NOVIDADES = [
   {
+    "versao": "2.7.1",
+    "data": "2026-09-30",
+    "itens": [
+      "Nova Destilaria: entrou a Coluna B4 (temperatura do carregamento da coluna B), entre a Coluna B e a Coluna P, como o Bruno pediu.",
+      "Nova Destilaria: saiu o Início Aquecimento.",
+      "Quando a tela fica apertada e os títulos dos blocos somem, cada quadro mostra o nome inteiro (Coluna Hidro, Condensador Hidro).",
+      "Bloco que não cabe numa linha se divide por igual: 4 quadros ficam 2 em cima e 2 embaixo."
+    ]
+  },
+  {
     "versao": "2.7.0",
     "data": "2026-09-29",
     "itens": [

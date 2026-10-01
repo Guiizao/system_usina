@@ -649,6 +649,10 @@ html:root .edicao main .grupos .grupo .campo .val.texto { font-size: clamp(16px,
 html:root .edicao main .grupos .grupo-largo .campo .val.texto { white-space: normal; overflow: hidden; }
 html:root .edicao main .grupos .grupo .campo .val small { font-size: max(13px, .45em); }
 .campo .rot-txt { flex: none; }
+/* títulos dos blocos escondidos (tela baixa): o quadro mostra o nome inteiro, senão ficam dois "Hidro" sem saber de quê */
+.campo .rot-longo { display: none; }
+.edicao main .grupos.compacto .campo .rot-curto { display: none; }
+.edicao main .grupos.compacto .campo .rot-longo { display: inline; }
 .campo .rot svg.ico { flex: none; }
 .campo .rot .tag-aviso { margin-left: auto; flex: none; font-style: normal; font-size: max(13px, .82em); font-weight: 700; white-space: nowrap; border-radius: 6px; padding: 1px 6px; color: var(--vermelho); background: var(--vermelho-fundo); }
 .campo.atencao .rot .tag-aviso { color: var(--ambar-texto); background: var(--ambar-fundo); }

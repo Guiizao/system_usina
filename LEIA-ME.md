@@ -307,6 +307,8 @@ Salva em `../telas`.
 
 Versão 2 (16/09/2026): avisos de pH e Brix, telas LPHERA / Cal e Saczyme / Alcolina com a soma das dornas da hora, casinha nas abas, rolagem do painel do chefe que não volta mais para o topo, pastas *Usina, tela de relatórios, janela de Excel ou XML, listas do ralo, cadastro protegido por senha e busca do tablet chefe no Wi-Fi. Testado no navegador contra o servidor: anotação, envio, queda de rede, relatórios e Excel/XML.
 
+Versão 2.7.1 (30/09/2026), pedido do Bruno no painel da Nova Destilaria: entrou a Coluna B4 (temperatura do carregamento da coluna B) entre a Coluna B e a Coluna P, e saiu o Início Aquecimento. É a primeira versão que os tablets recebem pelo botão Atualizar.
+
 Versão 2.7 (29/09/2026): o aplicativo se atualiza sozinho (botão Atualizar, APK pelo Wi-Fi, novidades depois de atualizar, e a nuvem pronta para quando tiver); quadros alinhados, do mesmo tamanho e ocupando a tela toda; respostas do Lucas (fermentação 7 a 12, descanso 1, 2 e 4 a 11, tanques em m³); API só de leitura para o sistema do escritório.
 
 Versão 2.6 (26/09/2026), pedido do escritório: volume de vinho (folga medida com a trena vira litros na hora, com as medidas das dornas da planilha CONTROLE LTS e o total da produção) e dornas de fermentação (encher, Brix inicial, Brix e volume do dia, mandar para a volante), na Destilaria e Fermentação.

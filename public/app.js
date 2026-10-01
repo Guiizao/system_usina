@@ -3,7 +3,7 @@
 (function () {
   'use strict';
   const C = window.USINA;
-  const VERSAO = '2.7.0'; // aparece nos ajustes e vai junto com cada envio para a central
+  const VERSAO = '2.7.1'; // aparece nos ajustes e vai junto com cada envio para a central
   const AUTORIA = '© 2026 Guilherme. Todos os direitos reservados. Uso somente com autorização do autor.';
   const params = new URLSearchParams(location.search);
   const DEMO_IMG = params.has('demo'); // usado só para gerar imagens de apresentação
@@ -1271,12 +1271,14 @@
     else if (a.type === 'text' || a.type === 'choice') mostra = `<span class="val texto">${esc(v)}</span>`;
     // o aviso (pH baixo, Brix alto) fica do lado do número, curto: a caixa não muda de tamanho
     else mostra = `<span class="val">${esc(fmtCampo(a, v))}${u ? `<small>${esc(u)}</small>` : ''}</span>`;
-    const rotulo = curto && a.labelCurto ? a.labelCurto : a.label;
+    // nome curto ("B") só vale com o título do bloco à vista ("Colunas"); com os títulos escondidos (tela baixa), vai o nome inteiro
+    const rotulo = curto && a.labelCurto && a.labelCurto !== a.label
+      ? `<span class="rot-curto">${esc(a.labelCurto)}</span><span class="rot-longo">${esc(a.label)}</span>` : esc(a.label);
     // o aviso (pH baixo) e o que sai da conta (volume da dorna) ficam na linha do nome, do lado:
     // o número continua grande e numa linha só, e todos os quadros ficam do mesmo tamanho
     const calc = !avisos.length && a.calculo ? a.calculo() : '';
     const selo = avisos.length ? `<em class="tag-aviso">${esc(avisos[0].curto)}</em>` : calc ? `<em class="tag-calc">${esc(calc)}</em>` : '';
-    return `<button class="${cls}" data-quadro="${esc(a.id)}"><span class="rot"><span class="rot-txt">${esc(rotulo)}</span>${selo}</span>${mostra}</button>`;
+    return `<button class="${cls}" data-quadro="${esc(a.id)}"><span class="rot"><span class="rot-txt">${rotulo}</span>${selo}</span>${mostra}</button>`;
   }
   const htmlQuadros = (lista, curto) => lista.map((a) => quadro(a, curto)).join('');
 
@@ -1360,7 +1362,8 @@
       if (!melhor || nota < melhor.nota) melhor = { nota, linhas };
     }
     blocos.forEach((b, i) => {
-      const colunas = b.classList.contains('grupo-largo') ? 1 : Math.min(quadros[i], umax);
+      // bloco que não cabe numa linha se divide por igual: 4 quadros ficam 2 e 2 (não 3 e 1), 5 ficam 3 e 2
+      const colunas = b.classList.contains('grupo-largo') ? 1 : quadros[i] <= umax ? quadros[i] : Math.ceil(quadros[i] / Math.ceil(quadros[i] / umax));
       b.style.flex = `${unidades[i]} 1 0px`;
       b.style.setProperty('--colunas', colunas);
       b.dataset.fileiras = Math.ceil(quadros[i] / colunas);
