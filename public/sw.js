@@ -1,8 +1,9 @@
 /* Pranchetas Digitais - © 2026 Guilherme. Todos os direitos reservados. Uso somente com autorização do autor (veja LICENCA.txt). */
 // Service worker: deixa o app abrir mesmo sem Wi-Fi (quando aberto pelo navegador).
-const CACHE = 'pranchetas-v17';
-const ARQUIVOS = ['./', 'index.html', 'styles.css', 'forms.js', 'xlsx.js', 'modelos.js', 'leitor.js', 'qrcode.js', 'cifra.js', 'novidades.js', 'app.js', 'manifest.webmanifest',
-  'icons/icon-192.png', 'icons/icon-512.png', 'icons/logo.png', 'fonts/atkinson-hyperlegible-400.woff2', 'fonts/atkinson-hyperlegible-700.woff2'];
+const CACHE = 'pranchetas-v18';
+const ARQUIVOS = ['./', 'index.html', 'styles.css', 'forms.js', 'xlsx.js', 'modelos.js', 'pdf.js', 'leitor.js', 'qrcode.js', 'cifra.js', 'novidades.js', 'app.js', 'manifest.webmanifest',
+  'icons/icon-192.png', 'icons/icon-512.png', 'icons/logo.png', 'fonts/atkinson-hyperlegible-400.woff2', 'fonts/atkinson-hyperlegible-700.woff2',
+  'fonts/atkinson-pdf-400.ttf', 'fonts/atkinson-pdf-700.ttf'];
 
 self.addEventListener('install', (e) => {
   e.waitUntil(caches.open(CACHE).then((c) => c.addAll(ARQUIVOS)).then(() => self.skipWaiting()));

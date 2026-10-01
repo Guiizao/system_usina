@@ -10,6 +10,7 @@ import path from 'node:path';
 import { abrirNavegador, TAMANHOS, dormir } from './navegador.mjs';
 import { centralNode, centralJava, APP } from './servidores.mjs';
 import { diaDaUsina, diasAtras } from './robustez.mjs';
+import { entrarComoChefe } from './teste.mjs';
 
 const LENTIDAO = 4;
 
@@ -47,6 +48,7 @@ export async function medirDesempenho(ligar, porta, nav) {
       await a.tocar('[data-ed="ocultar"]');
       await a.tocar('[data-a="conectar"]');
       await a.tocar(`[data-a="papel"][data-id="${papel}"]`, null, { esperarMs: 15000 });
+      if (papel === 'central') await entrarComoChefe(a);
       if (operador) await a.tocar(`[data-a="escolher-operador"][data-nome="${operador}"]`);
       await a.esperar('JSON.parse(localStorage.getItem("usina.cfg") || "{}").ultimoSeq > 0', 30000, 'primeira sincronização');
       await nav.cdp('Emulation.setCPUThrottlingRate', { rate: LENTIDAO }, a.sessionId);

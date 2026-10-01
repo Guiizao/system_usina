@@ -7,7 +7,7 @@
  */
 import { TAMANHOS, dormir } from './navegador.mjs';
 import { SENHA_PROGRAMADOR_TESTE } from './servidores.mjs';
-import { teste, certo, igual, teclasDaSenha } from './teste.mjs';
+import { teste, certo, igual, entrarComoChefe, senhaSeAparecer } from './teste.mjs';
 
 export async function testarDornas(nav, central, grupo) {
   const api = (rota) => central.api(rota);
@@ -34,6 +34,7 @@ export async function testarDornas(nav, central, grupo) {
     await a.tocar('[data-ed="ocultar"]');
     await a.tocar('[data-a="conectar"]');
     await a.tocar(`[data-a="papel"][data-id="${papel}"]`, null, { esperarMs: 15000 });
+    if (papel === 'central') await entrarComoChefe(a);
     if (operador) await a.tocar(`[data-a="escolher-operador"][data-nome="${operador}"]`);
   }
   const selecionada = () => tab.avaliar('(document.querySelector(".seletor button.sel") || {}).textContent || ""');
@@ -158,7 +159,7 @@ export async function testarDornas(nav, central, grupo) {
     });
     await teste(grupo, 'apagar todos os dados do sistema (senha do programador) limpa a central e o tablet', async () => {
       await esc.tocar('[data-a="config"]');
-      await esc.teclar(teclasDaSenha());
+      await senhaSeAparecer(esc);
       await esc.tocar('[data-a="zerar-tudo"]');
       await esc.tocar('[data-k="sim"]');
       await esc.teclar([...SENHA_PROGRAMADOR_TESTE.split(''), 'ok']);

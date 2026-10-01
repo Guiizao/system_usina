@@ -30,7 +30,7 @@
 <body>
 
 <h1>Guia do projeto</h1>
-<p class="sub">Pranchetas Digitais da Ubirálcool, versão 2.8 (01/10/2026). Tudo que o projeto tem, em que linguagem foi feito, como as peças conversam e onde mexer em cada coisa.</p>
+<p class="sub">Pranchetas Digitais da Ubirálcool, versão 2.10 (01/10/2026). Tudo que o projeto tem, em que linguagem foi feito, como as peças conversam e onde mexer em cada coisa.</p>
 
 <h2>1. O que é</h2>
 <p>As pranchetas de papel dos setores (Hidrólise, Caldeira, Ralo, Destilaria) viraram um aplicativo. Cada setor tem um tablet ou celular. O operador escolhe o nome dele, anota nos quadros e salva. A anotação vai pelo Wi-Fi da usina até a central, que guarda tudo e mostra para o escritório. No fim do dia sai o Excel e o XML no mesmo desenho do papel.</p>
@@ -44,7 +44,7 @@
   <tr><th>Arquivo</th><th>O que faz</th></tr>
   <tr><td>index.html</td><td>A página que abre. Só carrega os outros arquivos.</td></tr>
   <tr><td>app.js</td><td>Tudo da tela: conectar, escolher o operador, os quadros e o teclado, salvar, sincronizar com a central, avisos, relatórios, ajustes e a atualização do aplicativo. É o maior arquivo (cerca de 4.300 linhas).</td></tr>
-  <tr><td>forms.js</td><td>A configuração: setores, folhas, campos, limites de pH e Brix, turnos, senha do encarregado, medidas das dornas. Quase tudo que muda na usina muda aqui.</td></tr>
+  <tr><td>forms.js</td><td>A configuração: setores, folhas, campos, limites de pH e Brix, turnos, senha do administrador, níveis e funções das pessoas, medidas das dornas. Quase tudo que muda na usina muda aqui.</td></tr>
   <tr><td>styles.css</td><td>O visual: cores, tamanhos, tela clara e escura, celular e tablet.</td></tr>
   <tr><td>modelos.js</td><td>O desenho de cada folha de papel (células, mesclas, logo), usado no Excel, na impressão e no XML.</td></tr>
   <tr><td>xlsx.js</td><td>Monta o arquivo Excel na mão, sem biblioteca. Funciona sem internet.</td></tr>
@@ -125,6 +125,8 @@
 </table>
 <p>Os tipos de folha são poucos e se repetem: <b>dornas</b> (uma linha por dorna), <b>grade</b> (uma linha por hora), <b>insumo</b> (quantidade e total do dia), <b>juntas</b> (duas folhas de insumo lado a lado), <b>medição</b> (volume de vinho) e <b>fermentação</b> (o caderno das dornas). Uma folha nova do mesmo tipo é só configuração no <code>forms.js</code>.</p>
 <p>O tablet chefe tem o painel do escritório: pendências de cada setor, avisos para quem está trabalhando, ler folha de papel, relatórios, aparelhos conectados, operadores, medidas das dornas e a configuração da usina.</p>
+<p>No tablet chefe cada pessoa entra com a sua senha (o nome fica no alto da tela). O administrador cadastra as pessoas, escolhe o nível de cada uma (Administrador, Encarregado ou Consulta), liga ou desliga funções por pessoa e limita o que cada tablet chefe faz. O <b>Registro do sistema</b> mostra o dia: quem anotou ou mudou o quê, com o antes e o depois, quem entrou e saiu, aparelho sem sinal ou atualizado e mudanças na configuração. O registro fica só na central.</p>
+<p>Desde a 2.10 o painel mostra os <b>gráficos do dia</b> (Brix, pH e temperaturas, hora a hora, com as linhas dos avisos), e a tela <b>Folhas e avisos</b> deixa mudar o nome dos quadros, a unidade, a faixa esperada e os avisos sem versão nova. A folha do dia também sai em <b>PDF</b>, uma página por folha, montado dentro do aparelho (<code>pdf.js</code>).</p>
 
 <h2>6. Ler folha de papel</h2>
 <p>O tablet chefe tira foto de uma folha preenchida à mão e passa para o aplicativo. Tudo acontece dentro do aparelho, sem internet: o <b>OpenCV.js</b> acha a tabela na foto e endireita cada célula, e uma rede neural pequena (<b>ONNX</b>, treinada em Python com letras de mão) lê cada célula. A coluna diz o que pode ser (hora, pH, número, nome do operador), e o que ficou com pouca confiança fica marcado para a pessoa conferir antes de salvar.</p>
@@ -145,7 +147,8 @@
 <ul>
   <li>Só aparelhos da rede da usina e com o código de conexão.</li>
   <li>Tudo embaralhado no Wi-Fi (seção 4). No APK usa a criptografia do Android; no navegador do computador usa a versão escrita em <code>cifra.js</code>, que dá o mesmo resultado.</li>
-  <li>Senha do operador (opcional, guardada embaralhada), senha do encarregado para os ajustes e a senha do programador para apagar tudo. Da senha do programador o código só guarda o resumo (SHA-256), nunca a senha.</li>
+  <li>Senha do operador (opcional, guardada embaralhada), senha de cada pessoa do tablet chefe e a senha do programador para apagar tudo. Das senhas das pessoas e da do programador a central só guarda o resumo, nunca a senha. Cinco senhas erradas em um minuto fazem esperar.</li>
+  <li>Cada pessoa só faz o que o nível dela deixa, e cada tablet chefe pode ter um limite. Os ajustes dos tablets dos setores abrem com a senha de quem tem essa permissão.</li>
   <li>Código do APK embaralhado e licença em <code>LICENCA.txt</code>: uso só com autorização do autor.</li>
 </ul>
 
@@ -158,6 +161,7 @@
   <tr><th>Quero mudar</th><th>Onde</th></tr>
   <tr><td>Campos, limites, folhas, setores</td><td><code>public/forms.js</code></td></tr>
   <tr><td>Operadores, produtos, medidas das dornas</td><td>No tablet chefe, em Usina (sem mexer no código).</td></tr>
+  <tr><td>Pessoas, senhas e permissões</td><td>No tablet chefe, tocando no nome no alto > Pessoas e permissões (só o administrador).</td></tr>
   <tr><td>Desenho do papel e do Excel</td><td><code>public/modelos.js</code></td></tr>
   <tr><td>Cores e tamanhos</td><td><code>public/styles.css</code></td></tr>
   <tr><td>O que acontece na tela</td><td><code>public/app.js</code></td></tr>
@@ -178,9 +182,9 @@
 <ul>
   <li>Pôr a nuvem no ar: rodar o <code>nuvem/publicar.ps1</code> uma vez (ele pede para entrar na conta do Cloudflare pelo navegador) e cadastrar o endereço e a senha no tablet chefe.</li>
   <li>Perguntar para o Lucas: quais são as outras dornas "da família" e a medida do Tanque Destilaria.</li>
-  <li>Pessoas, permissões e o registro de tudo que acontece no sistema (proposta em andamento).</li>
+  <li>Testar nos aparelhos o roteiro da 2.10 (pessoas, registro, gráficos, Folhas e avisos e o PDF).</li>
 </ul>
 
-<p class="rodape">Pranchetas Digitais 2.8 · © 2026 Guilherme · Todos os direitos reservados</p>
+<p class="rodape">Pranchetas Digitais 2.10 · © 2026 Guilherme · Todos os direitos reservados</p>
 </body>
 </html>

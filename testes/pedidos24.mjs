@@ -9,7 +9,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { TAMANHOS, dormir } from './navegador.mjs';
-import { teste, certo, igual, teclasDaSenha } from './teste.mjs';
+import { teste, certo, igual, entrarComoChefe, senhaSeAparecer } from './teste.mjs';
 
 export async function testarPedidos24(nav, ligar, porta, grupo) {
   const c = await ligar(porta);
@@ -29,6 +29,7 @@ export async function testarPedidos24(nav, ligar, porta, grupo) {
     await a.tocar('[data-ed="ocultar"]');
     await a.tocar('[data-a="conectar"]');
     await a.tocar(`[data-a="papel"][data-id="${papel}"]`, null, { esperarMs: 15000 });
+    if (papel === 'central') await entrarComoChefe(a);
     if (operador) await a.tocar(`[data-a="escolher-operador"][data-nome="${operador}"]`);
   }
   const hoje = () => { const d = new Date(); if (d.getHours() < 7) d.setDate(d.getDate() - 1); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
@@ -59,7 +60,7 @@ export async function testarPedidos24(nav, ligar, porta, grupo) {
 
     await teste(grupo, 'tablet chefe mudando o que o operador anotou: pede a senha dele; senha errada não salva', async () => {
       // o encarregado cadastra a senha de Guilherme
-      await esc.tocar('[data-a="config"]'); await esc.teclar(teclasDaSenha());
+      await esc.tocar('[data-a="config"]'); await senhaSeAparecer(esc);
       await esc.tocar('[data-a="op-senha"][data-setor="hidrolise"][data-i="0"]'); await esc.teclar(['4', '3', '2', '1', 'ok']);
       await esc.tocar('[data-a="voltar"]');
       await esc.tocar('[data-a="abrir-setor"][data-id="hidrolise"]');
@@ -141,7 +142,7 @@ export async function testarPedidos24(nav, ligar, porta, grupo) {
     });
 
     await teste(grupo, 'apagar os dados deste aparelho: volta para escolher onde ele vai ficar', async () => {
-      await chefeCel.tocar('[data-a="admin"]'); await chefeCel.teclar(teclasDaSenha());
+      await chefeCel.tocar('[data-a="admin"]'); await senhaSeAparecer(chefeCel);
       await chefeCel.tocar('[data-a="limpar-tudo"]'); await chefeCel.tocar('[data-k="sim"]');
       await chefeCel.esperar('document.body.innerText.includes("Onde este aparelho vai ficar?")', 8000, 'escolher a função de novo');
       igual(await chefeCel.avaliar('Object.keys(JSON.parse(localStorage.getItem("usina.registros") || "{}")).filter((id) => !id.startsWith("config")).length'), 0, 'anotações que sobraram');

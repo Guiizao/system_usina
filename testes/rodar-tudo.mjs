@@ -9,6 +9,7 @@
  *  4d. velocidade de cada toque num tablet 4 vezes mais lento
  *  4e. pedidos do teste de 24/09 (aviso curto, senha do operador no tablet chefe, relatórios, WhatsApp...), nas duas
  *  4f. o aplicativo com o código embaralhado, como vai no APK
+ *  4i. pessoas, permissões e registro do sistema no tablet chefe (versão 2.9), nas duas
  * Resultado em testes/saida/resultado.json e testes/saida/resultado.txt
  */
 import fs from 'node:fs';
@@ -29,6 +30,8 @@ import { testarPedidos26 } from './pedidos26.mjs';
 import { testarApiLeitura } from './api-leitura.mjs';
 import { testarAtualizacao } from './atualizacao.mjs';
 import { testarNuvem } from './nuvem.mjs';
+import { testarPessoas } from './pessoas.mjs';
+import { testarPedidos210 } from './pedidos210.mjs';
 import { testarApkWeb } from './rodar-apk-web.mjs';
 import { centralNode, centralJava, APP } from './servidores.mjs';
 
@@ -120,6 +123,18 @@ try {
   for (const [nome, ligar, porta] of [['computador', centralNode, 8263], ['tablet chefe', centralJava, 8264]]) {
     const g = novoGrupo('Volume de vinho e dornas de fermentação na central do ' + nome);
     await testarPedidos26(nav, ligar, porta, g);
+    grupos.push(g);
+  }
+  // 4i. versão 2.9: quem está usando o tablet chefe, o que cada um pode fazer e o registro do sistema
+  for (const [nome, ligar, porta] of [['computador', (p, d, x) => centralNode(p, d, undefined, x), 8257], ['tablet chefe', centralJava, 8258]]) {
+    const g = novoGrupo('Pessoas, permissões e registro na central do ' + nome);
+    await testarPessoas(nav, ligar, porta, g);
+    grupos.push(g);
+  }
+  // 4j. versão 2.10: PDF, gráficos do dia e Folhas e avisos
+  for (const [nome, ligar, porta] of [['computador', (p, d) => centralNode(p, d), 8255], ['tablet chefe', centralJava, 8256]]) {
+    const g = novoGrupo('Versão 2.10 (PDF, gráficos e folhas) na central do ' + nome);
+    await testarPedidos210(nav, ligar, porta, g);
     grupos.push(g);
   }
   // 4f. o aplicativo embaralhado (como vai no APK) continua funcionando igual

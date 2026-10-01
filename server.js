@@ -351,6 +351,93 @@ async function enviarParaNuvem() {
 let nuvemTimer = null;
 const agendarNuvem = (ms = 5000) => { if (!config.nuvem.url) return; clearTimeout(nuvemTimer); nuvemTimer = setTimeout(enviarParaNuvem, ms); nuvemTimer.unref(); };
 
+// ---------- Pessoas do escritório (versão 2.9) ----------
+// Cada pessoa tem nome, nível e a sua senha (só a senha já diz quem é). A senha fica só aqui, embaralhada com sal:
+// nem a central guarda a senha em si. Quem entra num tablet chefe fica como responsável dele.
+// Só o administrador cadastra pessoas e mexe nas permissões (o que cada uma pode fazer fica no aplicativo, forms.js).
+const NIVEIS_VALIDOS = ['administrador', 'encarregado', 'consulta'];
+function resumoDaSenha(pin, sal) {
+  let h = crypto.createHash('sha256').update(sal + ':' + pin).digest();
+  for (let i = 0; i < 20000; i++) h = crypto.createHmac('sha256', h).update(String(pin)).digest();
+  return h.toString('hex');
+}
+const guardarSenha = (pin) => { const sal = crypto.randomBytes(16).toString('hex'); return { sal, resumo: resumoDaSenha(pin, sal) }; };
+if (!Array.isArray(config.pessoas)) {
+  // primeira vez: o administrador é o Guilherme, com a senha que já era a do encarregado
+  let pin = '159357';
+  try { pin = String(carregarPranchetas().pinAdmin || pin); } catch (e) { /* fica a de sempre */ }
+  config.pessoas = [Object.assign({ id: 'p' + crypto.randomBytes(4).toString('hex'), nome: 'Guilherme', nivel: 'administrador', extras: {}, ativo: true, criadoEm: Date.now() }, guardarSenha(pin))];
+  salvarConfig();
+}
+if (!config.sessoes) config.sessoes = {};
+if (!config.aparelhosChefe) config.aparelhosChefe = {};
+if (!config.aparelhosVistos) config.aparelhosVistos = {};
+const pessoaPublica = (p) => ({ id: p.id, nome: p.nome, nivel: p.nivel, extras: p.extras || {}, ativo: p.ativo !== false, temSenha: !!p.resumo });
+const pessoaDaSenha = (pin) => config.pessoas.find((p) => p.ativo !== false && p.resumo && mesmoSegredo(resumoDaSenha(String(pin), p.sal), p.resumo));
+const pessoaDoAparelho = (id) => { const s = config.sessoes[id]; return s ? config.pessoas.find((p) => p.id === s.pessoaId && p.ativo !== false) || null : null; };
+const tetoDoAparelho = (id) => { const a = config.aparelhosChefe[id]; return a && Array.isArray(a.teto) ? a.teto : null; };
+let formsDaCentral = null;
+const formsLidas = () => formsDaCentral || (formsDaCentral = carregarPranchetas());
+/** Nome do aparelho para o registro e para a lista: o que o administrador deu, ou a função dele. */
+function nomeDoAparelho(id) {
+  const proprio = config.aparelhosChefe[id] && config.aparelhosChefe[id].nome;
+  if (proprio) return proprio;
+  // o nome que o próprio aparelho mandou (Tablet da Hidrólise, Tablet chefe...)
+  const dele = (aparelhos[id] && aparelhos[id].nome) || (config.aparelhosVistos[id] && config.aparelhosVistos[id].nome);
+  if (dele) return dele;
+  const papel = (aparelhos[id] && aparelhos[id].papel) || (config.aparelhosVistos[id] && config.aparelhosVistos[id].papel);
+  if (papel === 'central') return 'Tablet chefe';
+  let s = null;
+  try { s = formsLidas().setores.find((x) => x.id === papel); } catch (e) { /* sem o forms */ }
+  return s ? `Tablet da ${s.nome}` : 'Aparelho ' + String(id).slice(-6);
+}
+const tentativasSenha = {};
+
+/* ---------- Registro do sistema (versão 2.9) ----------
+   Cada linha é uma anotação da folha "registro" (hora, tipo, quem, aparelho, texto e o antes e depois).
+   O aplicativo escreve o que a pessoa fez (ele sabe o antes e o depois); a central escreve o que só ela vê:
+   entradas no tablet chefe, aparelho novo, sem sinal ou atualizado, código trocado e pessoas.
+   Não vai para os tablets dos setores, nem para a API e a nuvem: o tablet chefe pede o dia quando abre o registro. */
+const pad2c = (n) => String(n).padStart(2, '0');
+function diaDaUsina(ms = Date.now()) {
+  let inicio = 7;
+  try { inicio = formsLidas().inicioDoDia; } catch (e) { /* 7 da manhã */ }
+  const d = new Date(ms - inicio * 3600000);
+  return `${d.getFullYear()}-${pad2c(d.getMonth() + 1)}-${pad2c(d.getDate())}`;
+}
+function registrar(tipo, texto, extra = {}) {
+  const em = Date.now();
+  const data = diaDaUsina(em);
+  const chave = em.toString(36) + '-' + crypto.randomBytes(3).toString('hex');
+  const id = `${data}|registro|${chave}`;
+  db.seq += 1;
+  db.registros[id] = { id, data, prancheta: 'registro', setor: 'central', chave, valores: Object.assign({ em, tipo, quem: '', aparelho: '', texto }, extra), criadoEm: em, atualizadoEm: em, aparelho: 'central', operador: extra.quem || '', apagado: false, seq: db.seq, recebidoEm: em };
+  gravarDisco();
+}
+/** O que mudou num aparelho que falou com a central: novo, outra versão, outra função, voltou do sem sinal. */
+function eventosDoAparelho(id, antes, corpo) {
+  const visto = config.aparelhosVistos[id];
+  const nome = nomeDoAparelho(id);
+  if (!visto) {
+    config.aparelhosVistos[id] = { papel: corpo.papel || '', nome: String(corpo.nome || '').slice(0, 60), versao: corpo.versao || '', desde: Date.now() };
+    salvarConfig();
+    registrar('aparelho', `${nome} conectou na central pela primeira vez`, { aparelho: nome });
+    return;
+  }
+  let mudou = false;
+  if (corpo.versao && visto.versao && corpo.versao !== visto.versao) { registrar('aparelho', `${nome} atualizou da versão ${visto.versao} para a ${corpo.versao}`, { aparelho: nome, antes: visto.versao, depois: corpo.versao }); mudou = true; }
+  if (corpo.papel && visto.papel && corpo.papel !== visto.papel) { registrar('aparelho', `${nome} mudou de função`, { aparelho: nome, antes: visto.papel, depois: corpo.papel }); mudou = true; }
+  if (mudou || (corpo.versao && !visto.versao) || (corpo.papel && !visto.papel) || (corpo.nome && corpo.nome !== visto.nome)) { visto.versao = corpo.versao || visto.versao; visto.papel = corpo.papel || visto.papel; visto.nome = String(corpo.nome || visto.nome || '').slice(0, 60); salvarConfig(); }
+  if (antes && antes.semSinal) registrar('aparelho', `${nome} voltou a falar com a central (ficou ${Math.max(1, Math.round((Date.now() - antes.vistoEm) / 60000))} min sem sinal)`, { aparelho: nome });
+}
+const SEM_SINAL_MS = Number(process.env.REGISTRO_SEM_SINAL_MS || 120000);
+setInterval(() => {
+  const agora = Date.now();
+  Object.entries(aparelhos).forEach(([id, a]) => {
+    if (!a.semSinal && agora - a.vistoEm > SEM_SINAL_MS) { a.semSinal = true; registrar('aparelho', `${nomeDoAparelho(id)} ficou sem sinal`, { aparelho: nomeDoAparelho(id) }); }
+  });
+}, Math.min(15000, SEM_SINAL_MS / 2)).unref();
+
 // ---------- totais do dia para o sistema do escritório (Base44) ----------
 // o endereço e o segredo ficam só aqui na central, não vão para os tablets
 if (!config.base44) config.base44 = { url: '', segredo: '', enviados: {} };
@@ -660,7 +747,11 @@ async function rotaProtegida(req, res, url, ip) {
   try {
       if (p === '/api/sync' && req.method === 'POST') {
         const corpo = JSON.parse(await lerCorpo(req));
-        if (corpo.aparelho) aparelhos[corpo.aparelho] = { papel: corpo.papel, operador: corpo.operador, versao: corpo.versao || '', vistoEm: Date.now(), ip };
+        if (corpo.aparelho) {
+          const antes = aparelhos[corpo.aparelho];
+          aparelhos[corpo.aparelho] = { papel: corpo.papel, nome: String(corpo.nome || '').slice(0, 60), operador: corpo.operador, versao: corpo.versao || '', vistoEm: Date.now(), ip };
+          eventosDoAparelho(corpo.aparelho, antes, corpo);
+        }
         guardarErros(corpo.aparelho, corpo.erros, ip);
         // aparelho com anotações de antes de zerar: não aceita, manda ele limpar.
         // Aparelho que acabou de conectar numa central nova (tablet chefe trocado ou reinstalado): aceita o que ele tem.
@@ -693,6 +784,92 @@ async function rotaProtegida(req, res, url, ip) {
         Object.entries(antigos).forEach(([d, lista]) => { aceitos += juntarNoArquivo(d, lista); });
         if (aceitos) { gravarDisco(); dias.forEach(backupDoDia); agendarNuvem(); }
         return json(res, 200, { ok: true, aceitos, seq: db.seq, agora: Date.now(), geracao: config.geracao });
+      }
+
+      // pessoas do escritório: entrar com a senha, sair, e (só o administrador) cadastrar e dar permissões
+      if (p === '/api/pessoas' && req.method === 'POST') {
+        const corpo = JSON.parse(await lerCorpo(req, 100000));
+        const quem = pessoaDoAparelho(req.aparelho);
+        const aqui = nomeDoAparelho(req.aparelho);
+        if (corpo.acao === 'entrar' || corpo.acao === 'verificar') {
+          const agora = Date.now();
+          const t = (tentativasSenha[req.aparelho] = (tentativasSenha[req.aparelho] || []).filter((x) => agora - x < 60000));
+          if (t.length >= 5) return json(res, 429, { erro: 'Muitas senhas erradas. Espere um minuto.' });
+          const pessoa = /^\d{4,8}$/.test(String(corpo.pin || '')) ? pessoaDaSenha(corpo.pin) : null;
+          if (!pessoa) { t.push(agora); registrar('entrada', `Senha errada no ${aqui}`, { aparelho: aqui }); return json(res, 403, { erro: 'Senha errada' }); }
+          if (corpo.acao === 'entrar') {
+            const antes = pessoaDoAparelho(req.aparelho);
+            config.sessoes[req.aparelho] = { pessoaId: pessoa.id, em: agora };
+            salvarConfig();
+            if (!antes || antes.id !== pessoa.id) registrar('entrada', `${pessoa.nome} entrou no ${aqui}`, { quem: pessoa.nome, aparelho: aqui });
+          }
+          return json(res, 200, { pessoa: pessoaPublica(pessoa), teto: tetoDoAparelho(req.aparelho) });
+        }
+        if (corpo.acao === 'sair') {
+          if (quem) { delete config.sessoes[req.aparelho]; salvarConfig(); registrar('entrada', `${quem.nome} saiu do ${aqui}${corpo.motivo ? ` (${String(corpo.motivo).slice(0, 60)})` : ''}`, { quem: quem.nome, aparelho: aqui }); }
+          return json(res, 200, { ok: true });
+        }
+        if (corpo.acao === 'quem') return json(res, 200, { pessoa: quem ? pessoaPublica(quem) : null, teto: tetoDoAparelho(req.aparelho) });
+        // daqui para baixo, só o administrador
+        if (!quem || quem.nivel !== 'administrador') return json(res, 403, { erro: 'Só o administrador mexe nas pessoas e permissões' });
+        const lista = () => json(res, 200, { pessoas: config.pessoas.map(pessoaPublica), aparelhos: config.aparelhosChefe });
+        if (corpo.acao === 'lista') return lista();
+        if (corpo.acao === 'salvar') {
+          const d = corpo.pessoa || {};
+          const nome = String(d.nome || '').trim().slice(0, 40);
+          if (!nome) return json(res, 400, { erro: 'Falta o nome' });
+          if (!NIVEIS_VALIDOS.includes(d.nivel)) return json(res, 400, { erro: 'Nível inválido' });
+          const existente = d.id ? config.pessoas.find((x) => x.id === d.id) : null;
+          if (d.id && !existente) return json(res, 404, { erro: 'Pessoa não encontrada' });
+          if (config.pessoas.some((x) => x !== existente && x.nome.toLowerCase() === nome.toLowerCase())) return json(res, 400, { erro: 'Já tem uma pessoa com esse nome' });
+          const pin = d.pin == null || d.pin === '' ? null : String(d.pin);
+          if (pin !== null && !/^\d{4,8}$/.test(pin)) return json(res, 400, { erro: 'A senha tem de 4 a 8 números' });
+          if (!existente && !pin) return json(res, 400, { erro: 'Falta a senha' });
+          if (pin && config.pessoas.some((x) => x !== existente && x.resumo && mesmoSegredo(resumoDaSenha(pin, x.sal), x.resumo))) return json(res, 400, { erro: 'Essa senha já é de outra pessoa. Escolha outra.' });
+          const ativo = d.ativo !== false;
+          const admins = config.pessoas.filter((x) => x !== existente && x.nivel === 'administrador' && x.ativo !== false).length;
+          if (existente && existente.nivel === 'administrador' && (d.nivel !== 'administrador' || !ativo) && !admins) return json(res, 400, { erro: 'Precisa ficar pelo menos um administrador' });
+          const extras = {};
+          Object.entries(d.extras || {}).forEach(([k, v]) => { if (/^[a-z_]{2,30}$/.test(k) && typeof v === 'boolean') extras[k] = v; });
+          const novo = existente || { id: 'p' + crypto.randomBytes(4).toString('hex'), criadoEm: Date.now() };
+          const antes = existente ? { nome: existente.nome, nivel: existente.nivel, ativo: existente.ativo !== false, extras: JSON.stringify(existente.extras || {}) } : null;
+          Object.assign(novo, { nome, nivel: d.nivel, extras, ativo }, pin ? guardarSenha(pin) : {});
+          if (!existente) config.pessoas.push(novo);
+          if (!ativo) Object.keys(config.sessoes).forEach((k) => { if (config.sessoes[k].pessoaId === novo.id) delete config.sessoes[k]; });
+          salvarConfig();
+          const nomeNivel = { administrador: 'Administrador', encarregado: 'Encarregado', consulta: 'Consulta' };
+          const partes = [];
+          if (!antes) partes.push(`cadastrou ${nome} (${nomeNivel[d.nivel]})`);
+          else {
+            if (antes.nome !== nome) partes.push(`mudou o nome de ${antes.nome} para ${nome}`);
+            if (antes.nivel !== d.nivel) partes.push(`mudou ${nome} de ${nomeNivel[antes.nivel]} para ${nomeNivel[d.nivel]}`);
+            if (antes.ativo !== ativo) partes.push(`${ativo ? 'reativou' : 'desativou'} ${nome}`);
+            if (antes.extras !== JSON.stringify(extras)) partes.push(`mudou as funções de ${nome}`);
+            if (pin) partes.push(`trocou a senha de ${nome}`);
+          }
+          if (partes.length) registrar('configuracao', `${quem.nome} ${partes.join(', ')}`, { quem: quem.nome, aparelho: aqui });
+          return lista();
+        }
+        if (corpo.acao === 'aparelho') {
+          const id = String(corpo.id || '').slice(0, 80);
+          if (!id) return json(res, 400, { erro: 'Falta o aparelho' });
+          const a = config.aparelhosChefe[id] || (config.aparelhosChefe[id] = {});
+          const nomeAntes = nomeDoAparelho(id);
+          if (typeof corpo.nome === 'string') a.nome = corpo.nome.trim().slice(0, 40);
+          if ('teto' in corpo) a.teto = Array.isArray(corpo.teto) ? corpo.teto.filter((x) => /^[a-z_]{2,30}$/.test(x)) : null;
+          salvarConfig();
+          registrar('configuracao', `${quem.nome} mudou o que o ${nomeAntes} pode fazer${a.nome && a.nome !== nomeAntes ? ` (agora se chama ${a.nome})` : ''}`, { quem: quem.nome, aparelho: aqui });
+          return lista();
+        }
+        return json(res, 400, { erro: 'ação desconhecida' });
+      }
+
+      // registro do sistema de um dia (o tablet chefe pede quando abre o registro)
+      if (p === '/api/registro') {
+        const dia = url.searchParams.get('dia');
+        if (!ehDia(dia)) return json(res, 400, { erro: 'dia inválido' });
+        const todos = arquivado(dia) ? lerDiaArquivado(dia) : Object.values(db.registros).filter((r) => r.data === dia);
+        return json(res, 200, { registros: todos.filter((r) => r.prancheta === 'registro' && !r.apagado).sort((a, b) => (a.valores.em || 0) - (b.valores.em || 0)) });
       }
 
       // nuvem das pranchetas: o tablet chefe cadastra o endereço e a senha; a central manda sozinha
@@ -756,7 +933,7 @@ async function rotaProtegida(req, res, url, ip) {
         const dia = url.searchParams.get('dia');
         if (dia) { // o tablet chefe abriu um dia que não guarda mais
           if (!ehDia(dia)) return json(res, 400, { erro: 'dia inválido' });
-          const lista = arquivado(dia) ? lerDiaArquivado(dia) : Object.values(db.registros).filter((r) => r.data === dia);
+          const lista = (arquivado(dia) ? lerDiaArquivado(dia) : Object.values(db.registros).filter((r) => r.data === dia)).filter((r) => r.prancheta !== 'registro');
           return json(res, 200, { seq: db.seq, geracao: config.geracao, registros: lista });
         }
         const desde = Number(url.searchParams.get('desde') || 0);
@@ -764,7 +941,8 @@ async function rotaProtegida(req, res, url, ip) {
         // cada aparelho guarda só os últimos dias (a configuração da usina, os avisos e os enchimentos das dornas de
         // fermentação vão sempre: uma dorna pode passar vários dias fermentando)
         const aPartirDe = url.searchParams.get('aPartirDe');
-        const serve = (r) => !ehDia(aPartirDe) || !ehDia(r.data) || r.data >= aPartirDe || r.prancheta === 'avisos' || r.prancheta === 'avisos-recibo' || r.prancheta === 'fermentacao';
+        // o registro do sistema não vai (o tablet chefe pede o dia quando abre o registro)
+        const serve = (r) => r.prancheta !== 'registro' && (!ehDia(aPartirDe) || !ehDia(r.data) || r.data >= aPartirDe || r.prancheta === 'avisos' || r.prancheta === 'avisos-recibo' || r.prancheta === 'fermentacao');
         return json(res, 200, { seq: db.seq, geracao: config.geracao, registros: Object.values(db.registros).filter((r) => r.seq > base && serve(r)) });
       }
 
@@ -776,6 +954,7 @@ async function rotaProtegida(req, res, url, ip) {
           pastas: { servidor: PASTAS.servidor, relatorios: PASTAS.relatorios, backup: PASTAS.backup },
           aparelhos: Object.entries(aparelhos).map(([id, a]) => ({
             id, papel: a.papel, operador: a.operador, ip: a.ip, versao: a.versao || '',
+            nome: nomeDoAparelho(id), pessoa: a.papel === 'central' && pessoaDoAparelho(id) ? pessoaDoAparelho(id).nome : '', teto: tetoDoAparelho(id),
             online: agora - a.vistoEm < 30000, minutos: Math.round((agora - a.vistoEm) / 60000),
           })),
         });
@@ -826,6 +1005,8 @@ async function rotaProtegida(req, res, url, ip) {
         });
         config.geracoesZeradas = [...(config.geracoesZeradas || []), config.geracao].slice(-50);
         config.geracao = crypto.randomBytes(6).toString('hex'); salvarConfig();
+        const quemZerou = pessoaDoAparelho(req.aparelho);
+        registrar('configuracao', `${quemZerou ? quemZerou.nome : 'Alguém'} apagou todas as anotações do sistema (${apagados}). A cópia ficou no BackupUsina.`, { quem: quemZerou ? quemZerou.nome : '', aparelho: nomeDoAparelho(req.aparelho) });
         gravarDisco();
         return json(res, 200, { ok: true, apagados, geracao: config.geracao, copia: `BackupUsina/antes-de-zerar-${carimbo}.json` });
       }
@@ -833,6 +1014,8 @@ async function rotaProtegida(req, res, url, ip) {
       // trocar o código também troca a chave: todos os outros aparelhos são desconectados (aparelho perdido ou roubado)
       if (p === '/api/novo-codigo' && req.method === 'POST') {
         config.codigo = novoCodigo(); config.chave = crypto.randomBytes(18).toString('hex'); salvarConfig();
+        const quemTrocou = pessoaDoAparelho(req.aparelho);
+        registrar('configuracao', `${quemTrocou ? quemTrocou.nome : 'Alguém'} trocou o código de conexão. Os outros aparelhos precisam conectar de novo.`, { quem: quemTrocou ? quemTrocou.nome : '', aparelho: nomeDoAparelho(req.aparelho) });
         // quem trocou recebe a chave nova dele (a resposta vai embaralhada com a chave antiga)
         return json(res, 200, { codigo: config.codigo, chave: chaveDoAparelho(req.aparelho).toString('hex') });
       }

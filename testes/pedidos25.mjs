@@ -7,7 +7,7 @@
  */
 import http from 'node:http';
 import { TAMANHOS, dormir } from './navegador.mjs';
-import { teste, certo, igual, teclasDaSenha } from './teste.mjs';
+import { teste, certo, igual, entrarComoChefe, senhaSeAparecer } from './teste.mjs';
 
 /** Base44 de mentira: guarda cada envio. responder = status que ele devolve (200, 401...). */
 export async function base44Falso(porta) {
@@ -108,6 +108,7 @@ export async function testarPedidos25(nav, ligar, porta, grupo, { correcao = tru
     await a.tocar('[data-ed="ocultar"]');
     await a.tocar('[data-a="conectar"]');
     await a.tocar(`[data-a="papel"][data-id="${papel}"]`, null, { esperarMs: 15000 });
+    if (papel === 'central') await entrarComoChefe(a);
     if (operador) await a.tocar(`[data-a="escolher-operador"][data-nome="${operador}"]`);
   }
   const esperarBase44 = async (filtro, descricao, ms = 30000) => {
@@ -145,7 +146,7 @@ export async function testarPedidos25(nav, ligar, porta, grupo, { correcao = tru
     await teste(grupo, 'configurações da usina: situação de cada dia, mandar de novo e criar o segredo', async () => {
       await semNotificacao(esc);
       await esc.tocar('[data-a="config"]');
-      await esc.teclar(teclasDaSenha());
+      await senhaSeAparecer(esc);
       // o endereço aparece encurtado (só o nome do site): aqui, 127.0.0.1
       await esc.esperar('!!document.querySelector("#bloco-base44") && document.querySelector("#bloco-base44").textContent.includes("127.0.0.1")', 15000, 'endereço na tela');
       const texto = await esc.avaliar('document.querySelector("#bloco-base44").textContent');

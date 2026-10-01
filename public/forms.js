@@ -75,7 +75,48 @@ window.USINA = {
     { id: 3, nome: '3º Turno', inicio: 0, fim: 7 },
   ],
 
+  // Senha de emergência dos ajustes dos tablets dos setores, quando a central não responde (é a do administrador).
+  // Com a central, quem entra é cada pessoa com a sua senha (Pessoas e permissões, no tablet chefe).
   pinAdmin: '159357',
+
+  // Pessoas do escritório (versão 2.9): o que cada nível pode fazer no tablet chefe.
+  // O administrador ajusta por pessoa (ligar ou desligar uma função) e por tablet chefe (o que aquele aparelho deixa fazer).
+  // "Pessoas e permissões" é só do administrador e não aparece na lista.
+  funcoes: [
+    { id: 'anotar', nome: 'Anotar nas folhas do tablet chefe (Vinho e Fermentação)' },
+    { id: 'corrigir', nome: 'Corrigir o que os setores anotaram' },
+    { id: 'avisos', nome: 'Mandar avisos aos setores' },
+    { id: 'relatorios', nome: 'Relatórios: gerar, enviar, imprimir e apagar' },
+    { id: 'ler_folha', nome: 'Ler folha de papel pela foto' },
+    { id: 'usina', nome: 'Configurar a usina (operadores, setores, listas e medidas)' },
+    { id: 'folhas', nome: 'Mudar as folhas (nomes dos quadros, unidades e avisos)' },
+    { id: 'conexao', nome: 'Conectar tablets e trocar o código de conexão' },
+    { id: 'integracoes', nome: 'Nuvem e Base44' },
+    { id: 'ajustes', nome: 'Ajustes dos tablets (função do aparelho, operadores, apagar dados)' },
+    { id: 'registro', nome: 'Ver o registro do sistema' },
+  ],
+  niveis: {
+    administrador: { nome: 'Administrador', funcoes: 'todas' },
+    encarregado: { nome: 'Encarregado', funcoes: ['anotar', 'corrigir', 'avisos', 'relatorios', 'ler_folha', 'usina', 'conexao', 'ajustes'] },
+    consulta: { nome: 'Consulta', funcoes: ['relatorios'] },
+  },
+
+  // Gráficos do dia no tablet chefe (versão 2.10). Cada um junta quadros de uma folha, na ordem em que aparecem.
+  // No painel vão os quatro primeiros que tiverem anotação no dia. As linhas tracejadas são os avisos do quadro.
+  graficos: [
+    { prancheta: 'hid_anexo1', titulo: 'Hidrólise: Brix', campos: ['brix', 'bhx'] },
+    { prancheta: 'hid_anexo1', titulo: 'Hidrólise: pH', campos: ['phf', 'phf2'] },
+    { prancheta: 'nova_destilaria', titulo: 'Nova Destilaria: colunas', campos: ['coluna_hidro', 'coluna_b', 'coluna_b4', 'coluna_p'] },
+    { prancheta: 'destilaria', titulo: 'Destilaria: pé da coluna A', campos: ['temp_pe_a'] },
+    { prancheta: 'hid_anexo2', titulo: 'Sacarificação: Brix', campos: ['bhx'] },
+    { prancheta: 'hid_anexo2', titulo: 'Sacarificação: pH', campos: ['phf'] },
+    { prancheta: 'nova_destilaria', titulo: 'Nova Destilaria: condensadores', campos: ['cond_hidro', 'cond_b', 'cond_p'] },
+    { prancheta: 'nova_destilaria', titulo: 'Nova Destilaria: vapor', campos: ['vapor'] },
+    { prancheta: 'destilaria', titulo: 'Destilaria: vapor', campos: ['vapor'] },
+    { prancheta: 'destilaria', titulo: 'Destilaria: INPM', campos: ['inpm'] },
+    { prancheta: 'caldeira', titulo: 'Caldeira: pressão', campos: ['pressao'] },
+    { prancheta: 'caldeira', titulo: 'Caldeira: temperatura da água', campos: ['temp_agua'] },
+  ],
 
   // Dados que aparecem no cabeçalho e no rodapé das folhas de papel (Excel, XML e impressão saem iguais)
   documentos: {

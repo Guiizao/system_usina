@@ -6,7 +6,7 @@ Guia com o passo a passo ilustrado: https://claude.ai/artifact/CmJHBvqjeGRWHVYE5
 
 ## Antes de instalar
 
-1. A senha do encarregado (ajustes e configurações da usina) fica em `public/forms.js` (`pinAdmin`). Desde a versão 2.4 é 159357.
+1. A senha do administrador fica em `public/forms.js` (`pinAdmin`, 159357 desde a versão 2.4). Na primeira vez que a central liga na versão 2.9, ela cadastra o Guilherme como administrador com essa senha. Nos tablets dos setores ela só vale quando a central está fora do ar.
 2. Gere o aplicativo, se mexeu em algo:
 
 ```bash
@@ -68,7 +68,7 @@ Tudo em `public/forms.js`:
 | Minutos parado até pedir a senha de novo | `minutosSemMexer` |
 | Horas fora da rede até travar | `horasForaDaRede` |
 
-Operadores, senhas dos operadores, WhatsApp e e-mail do escritório, tipos de produto e fornecedores do ralo e quais pranchetas aparecem em cada setor são configurados no tablet chefe, em **Usina** (pede a senha do encarregado).
+Operadores, senhas dos operadores, WhatsApp e e-mail do escritório, tipos de produto e fornecedores do ralo e quais pranchetas aparecem em cada setor são configurados no tablet chefe, em **Usina** (só quem entrou com permissão para isso). Pessoas e senhas do tablet chefe ficam em **Pessoas e permissões** (só o administrador).
 
 Tamanho da tela (Menor, Normal, Maior) é por aparelho, na engrenagem.
 
@@ -161,6 +161,28 @@ Medido num tablet simulado 4 vezes mais lento que o computador, com a central gu
 - **Trocar o código de conexão** desconecta todos os outros aparelhos (aparelho perdido ou roubado): eles só voltam com o código novo.
 - Dois aparelhos criando a mesma linha sem um saber do outro (o chefe corrigiu nos segundos antes de receber): os valores se juntam, nada se perde.
 - **Código embaralhado no APK**: quem abrir o APK não lê o código do jeito que foi escrito (o mapa para entender erros fica só em `apk/saida/mapas`).
+
+## PDF, gráficos e Folhas e avisos (versão 2.10)
+
+A 2.10 só mexeu nas telas: quem já tem a 2.10 instalada recebe as próximas pela atualização rápida.
+
+- **Exportar em PDF**: na janela de enviar ou guardar a folha do dia apareceu o PDF, ao lado do Excel e do XML. Vale a mesma escolha de setores, e cada folha de papel vira uma página do arquivo (em pé ou deitada, como no papel, com o logo). O PDF é montado dentro do aparelho, sem internet e sem biblioteca de fora (`public/pdf.js`). A letra é a do aplicativo, em `public/fonts/atkinson-pdf-400.ttf` e `-700.ttf` (só as letras do português, licença OFL), e vai dentro do arquivo. Ele não é guardado na central: lá ficam só o Excel e o XML.
+- **Gráficos do dia**: no painel do tablet chefe, embaixo dos setores, aparecem os quatro primeiros gráficos que têm anotação no dia; "Ver todos" abre a tela com todos e o filtro por setor. Folha hora a hora: o ponto fica na hora da linha. Dornas: na hora em que começou o envio (ou no horário da dorna). As linhas tracejadas são os avisos do quadro (pH 5, Brix 25). Quais gráficos existem fica em `forms.js` (`graficos`). Quem tem a função Relatórios vê.
+- **Folhas e avisos** (função nova "Mudar as folhas", só o administrador ou quem ganhar): nome do quadro, nome curto, unidade, dica, faixa esperada e os avisos de cada quadro; nos insumos, as unidades. Fica na configuração da usina (`folhas`) e chega em todos os tablets pela sincronização. O `forms.js` continua sendo o original: "Voltar ao original" apaga só a mudança. O desenho das folhas de papel não muda. Toda mudança vai para o registro, com o antes e o depois.
+- Tablet do setor com uma anotação pela metade só pega o aviso novo depois de salvar (a tela não se redesenha no meio da anotação).
+
+## Pessoas, permissões e registro (versão 2.9)
+
+No tablet chefe cada pessoa entra com a sua senha, e a senha já diz quem é. O nome fica no alto da tela; tocando nele dá para sair, abrir Pessoas e permissões ou o Registro do sistema. Depois de 30 minutos sem mexer (`minutosSemMexer`) precisa entrar de novo.
+
+- **Níveis prontos**: Administrador (pode tudo, inclusive pessoas), Encarregado (anotar e corrigir, avisos, relatórios, ler folha, Usina, conexão e ajustes) e Consulta (só relatórios). Em cada pessoa dá para ligar ou desligar uma função a mais ou a menos. A lista fica em `forms.js` (`funcoes` e `niveis`).
+- **Cada tablet chefe** pode ganhar um nome e um limite do que se faz nele, seja quem for. O administrador pode tudo em qualquer um.
+- **Senhas**: a central guarda só o resumo de cada senha (com sal), em `ServidorUsina/config.json`. Duas pessoas não podem ter a mesma senha, e não dá para desativar o último administrador. Cinco senhas erradas em um minuto fazem esperar um minuto.
+- **Tablets dos setores**: os ajustes abrem com a senha de quem tem a permissão de ajustes (a central confere). Sem central, vale a `pinAdmin`.
+- **Corrigir o que um operador anotou**: operador com senha continua digitando a dele; operador sem senha não pede nada se quem entrou pode corrigir (fica no registro quem foi).
+- **Registro do sistema**: uma lista por dia (das 07:00 às 06:59), com filtro. O aplicativo escreve quem anotou ou mudou o quê, com o antes e o depois de cada quadro; a central escreve quem entrou e saiu, senha errada, aparelho novo, sem sinal, que voltou ou que atualizou, código trocado, dados apagados e mudanças em pessoas e na Usina. As linhas ficam na central, como anotações da folha `registro`: não vão para os tablets dos setores, nem para a API e a nuvem.
+- O aparelho manda o próprio nome junto com a sincronização ("Tablet da Hidrólise"), e é esse nome que aparece no registro e na lista de aparelhos.
+- Se o tablet chefe está com uma linha aberta, sem mexer, e chega a anotação daquela linha vinda do setor, a tela passa a mostrar o que foi anotado (antes ficava a linha vazia e, se salvasse, apagava o que o operador tinha posto).
 
 ## Nuvem das Pranchetas (versão 2.8)
 
@@ -306,6 +328,8 @@ Leva uns 20 minutos e grava o resultado em `testes/saida/resultado.txt`. Testa:
 5. longo prazo, nas duas centrais: 90 dias de uso da usina inteira (a memória do tablet não enche), dias antigos no BackupUsina, troca de turno e virada das 07:00 no meio da anotação, "Terminou a Nº X", tablet chefe trocado e 700 anotações guardadas sem Wi-Fi;
 6. velocidade: cada toque num tablet 4 vezes mais lento, com 90 dias de uso, tem que responder em menos de 100 ms;
 7. os pedidos do teste de 24/09 (aviso curto, senha do operador no tablet chefe, relatórios, WhatsApp, rolagem, trocar o código), nas duas centrais, e o aplicativo com o código embaralhado como vai no APK;
+7h. a versão 2.10, nas duas centrais: o setor anotando e o painel do chefe com os gráficos (pontos e a linha do aviso), a tela com todos os gráficos e o filtro, o PDF só da Hidrólise (uma página por folha, com o logo), o chefe mudando o aviso do pH e o nome do Brix e o tablet do setor usando o novo, o registro com o antes e o depois e o voltar ao original;
+7g. a versão 2.9, nas duas centrais: o administrador criado sozinho, cadastro só pelo administrador (senha repetida e último administrador recusados), pessoa desativada, cinco senhas erradas, Consulta barrado e Encarregado liberado, limite do tablet chefe, ajustes do setor com a senha de quem pode, o registro com o antes e o depois, aparelho sem sinal, a tela do registro com o filtro e o cadastro pela tela;
 7f. a nuvem (o Cloudflare rodando aqui no computador, com o próprio wrangler): as duas centrais mandando a cópia, a API da nuvem igual à da central, correção e apagado chegando, senha errada, e o APK e as telas saindo da nuvem (telas com outra assinatura recusadas);
 7e. a atualização rápida: o pacote assinado, a central entregando, o AtualizadorDeTelas.java baixando, copiando o que não mudou e recusando assinatura errada, arquivo alterado e pacote que pede APK novo, e o aplicativo abrindo a janela sozinho com a barra;
 7d. a versão 2.7: a central dizendo a versão do APK (e não oferecendo se o APK não bater com o versao.json), o aplicativo com um Android de mentira (botão Atualizar, novidades, pedido de download com o SHA-256, falta de permissão, arquivo com defeito, novidades uma vez depois de atualizar), a central do computador baixando da nuvem (e recusando APK diferente ou versão mais velha) e o tablet chefe entregando a versão dele; os tanques em m³ e as dornas 7 a 12 entram nos testes da 2.6;
@@ -316,7 +340,7 @@ Leva uns 20 minutos e grava o resultado em `testes/saida/resultado.txt`. Testa:
 
 Os testes usam pastas de dados temporárias: nunca mexem em `dados/`. Só as telas: `node testes/rodar-telas.mjs` (liga uma central de teste sozinho). Só o longo prazo: `node testes/rodar-robustez.mjs`.
 
-O teste para fazer à mão no celular e no tablet está em `Teste-nos-aparelhos-2.8.pdf`, na pasta `Usina`. Só a nuvem: `node testes/rodar-nuvem.mjs` (precisa do `npm install` em `nuvem`); só a atualização: `node testes/rodar-atualizacao.mjs`; só a 2.6: `node testes/rodar-pedidos26.mjs`; só a 2.5: `node testes/rodar-pedidos25.mjs`.
+O teste para fazer à mão no celular e no tablet está em `Teste-nos-aparelhos-2.10.pdf`, na pasta `Usina`. Só a 2.10: `node testes/rodar-pedidos210.mjs`; só pessoas e registro: `node testes/rodar-pessoas.mjs`. Só a nuvem: `node testes/rodar-nuvem.mjs` (precisa do `npm install` em `nuvem`); só a atualização: `node testes/rodar-atualizacao.mjs`; só a 2.6: `node testes/rodar-pedidos26.mjs`; só a 2.5: `node testes/rodar-pedidos25.mjs`.
 
 ## Imagens das telas
 
@@ -333,6 +357,10 @@ Salva em `../telas`.
 43 verificações automáticas: conexão com código certo e errado, anotação, botões − e +, aviso de valor fora do normal, cópia da dorna anterior, marcar fim, monitoramento, valores padrão, insumos, senha do operador, trava por inatividade, virada de turno, exportação, relatórios e configurações. Mais: queda de rede com envio depois que volta, sincronização entre dois aparelhos e validação do Excel e do XML.
 
 Versão 2 (16/09/2026): avisos de pH e Brix, telas LPHERA / Cal e Saczyme / Alcolina com a soma das dornas da hora, casinha nas abas, rolagem do painel do chefe que não volta mais para o topo, pastas *Usina, tela de relatórios, janela de Excel ou XML, listas do ralo, cadastro protegido por senha e busca do tablet chefe no Wi-Fi. Testado no navegador contra o servidor: anotação, envio, queda de rede, relatórios e Excel/XML.
+
+Versão 2.10.0 (01/10/2026): exportar em PDF escolhendo os setores (uma página por folha, igual ao papel), gráficos do dia no painel do tablet chefe e a tela Folhas e avisos para mudar nomes, unidades e avisos sem versão nova. Foi junto com a 2.9 no mesmo APK.
+
+Versão 2.9.0 (01/10/2026): cada pessoa entra no tablet chefe com a sua senha, níveis Administrador, Encarregado e Consulta com ajuste por pessoa, limite do que cada tablet chefe faz, registro do sistema com o antes e o depois, ajustes dos setores com a senha de quem pode, e a linha aberta no tablet chefe que agora mostra a anotação que chegou do setor.
 
 Versão 2.8.0 (01/10/2026): nuvem no Cloudflare (cópia das anotações, API do escritório e atualizações pela internet), atualização rápida das telas sem instalar APK (com barra e volta automática), janela da versão nova, Volume de vinho e Dornas de fermentação só no tablet chefe, número da dorna em cada quadro do vinho.
 

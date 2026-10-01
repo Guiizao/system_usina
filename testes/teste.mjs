@@ -6,6 +6,20 @@ import fs from 'node:fs';
 export const SENHA_ENCARREGADO = (fs.readFileSync(new URL('../public/forms.js', import.meta.url), 'utf8').match(/pinAdmin:\s*'(\d+)'/) || [])[1];
 /** Teclas para digitar a senha do encarregado e confirmar. */
 export const teclasDaSenha = () => [...SENHA_ENCARREGADO.split(''), 'ok'];
+/** Tablet chefe (versão 2.9): entra com a senha do administrador (a central nova cadastra o Guilherme com ela). */
+export async function entrarComoChefe(a) {
+  // a notificação ("Aparelho conectado") fica em cima do botão no alto: fecha antes de tocar
+  await a.avaliar('(() => { const t = document.getElementById("toast"); if (t && !t.hidden) t.click(); })()');
+  await new Promise((r) => setTimeout(r, 400));
+  await a.tocar('[data-a="pessoa"]');
+  await a.teclar(teclasDaSenha());
+  await a.esperar('!!(JSON.parse(localStorage.getItem("usina.cfg") || "{}").pessoa)', 10000, 'entrar no tablet chefe');
+}
+/** Digita a senha só se ela for pedida (quem já entrou no tablet chefe com permissão não precisa de novo). */
+export async function senhaSeAparecer(a) {
+  try { await a.esperar('!!document.querySelector(".modal .visor")', 1500); } catch { return; }
+  await a.teclar(teclasDaSenha());
+}
 export function novoGrupo(titulo) { console.log(`\n== ${titulo}`); return { titulo, resultados: [] }; }
 
 export async function teste(grupo, nome, fn) {

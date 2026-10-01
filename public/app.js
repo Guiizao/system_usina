@@ -3,7 +3,7 @@
 (function () {
   'use strict';
   const C = window.USINA;
-  const VERSAO = '2.8.0'; // aparece nos ajustes e vai junto com cada envio para a central
+  const VERSAO = '2.10.0'; // aparece nos ajustes e vai junto com cada envio para a central
   const AUTORIA = '© 2026 Guilherme. Todos os direitos reservados. Uso somente com autorização do autor.';
   const params = new URLSearchParams(location.search);
   const DEMO_IMG = params.has('demo'); // usado só para gerar imagens de apresentação
@@ -62,6 +62,9 @@
    * ========================================================= */
   const ICONES = {
     voltar: '<path d="M15 5l-7 7 7 7"/>', seta: '<path d="M9 5l7 7-7 7"/>',
+    grafico: '<path d="M4 4v16h16"/><path d="M7 15l4-5 3 3 5-6"/>',
+    documento: '<path d="M7 3h7l5 5v13H7z"/><path d="M14 3v5h5"/><path d="M10 13h6M10 17h6"/>',
+    lapis: '<path d="M4 20l4-1 11-11-3-3L5 16z"/><path d="M14 6l3 3"/>',
     casa: '<path d="M3 11l9-7 9 7"/><path d="M5 10v10h5v-6h4v6h5V10"/>',
     relogio: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
     pessoa: '<circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 3.6-7 8-7s8 3 8 7"/>',
@@ -172,6 +175,8 @@
   const CFG_SISTEMA = { data: 'config', pid: 'sistema', chave: 'geral' };
   const configSistema = () => (pegar(CFG_SISTEMA.data, CFG_SISTEMA.pid, CFG_SISTEMA.chave) || { valores: {} }).valores;
   function salvarConfigSistema(mudanca) {
+    const partes = typeof textoDaConfig === 'function' ? textoDaConfig(mudanca) : [];
+    if (partes.length) registrar('configuracao', `${quemEstaAqui()} ${partes.join(', ')}`);
     gravar(CFG_SISTEMA.data, CFG_SISTEMA.pid, CFG_SISTEMA.chave, mudanca, { operador: 'escritório' });
   }
   const listaDaUsina = (nome) => configSistema()[nome] || (nome === 'produtos' ? C.produtosPadrao : C.fornecedoresPadrao) || [];
@@ -267,6 +272,8 @@
   const diasBuscando = new Set();
   /** Tira do aparelho as anotações antigas que já estão na central. O que não foi enviado nunca sai. */
   function podar() {
+    // o registro do sistema fica na central: depois de chegar lá, sai do tablet
+    Object.keys(registros).forEach((id) => { const r = registros[id]; if (r.prancheta === 'registro' && r.sincronizado) delete registros[id]; });
     const corte = primeiroDiaGuardado();
     const corteAvisos = somarDias(dataProducao(), -DIAS_DOS_AVISOS);
     // o último enchimento de cada dorna de fermentação fica sempre (a dorna pode passar vários dias fermentando).
@@ -632,7 +639,7 @@
       const envio = Object.values(registros).filter((r) => !r.sincronizado).slice(0, LOTE_ENVIO);
       const erros = errosGuardados.slice();
       const antesDoEnvio = Date.now();
-      const r1 = await postJson('api/sync', { aparelho: cfg.deviceId, papel: cfg.papel, operador: operadorAtual(), versao: VERSAO, geracao: cfg.geracao || '', novaConexao: !!cfg.novaConexao, registros: envio, erros }, 15000);
+      const r1 = await postJson('api/sync', { aparelho: cfg.deviceId, papel: cfg.papel, nome: nomeDesteAparelho(), operador: operadorAtual(), versao: VERSAO, geracao: cfg.geracao || '', novaConexao: !!cfg.novaConexao, registros: envio, erros }, 15000);
       if (r1.status === 401) {
         // o servidor está neste aparelho: pega a chave nova com ele (o código de conexão foi trocado)
         if (centralNoTablet()) { try { const e = await pluginCentral.estado(); if (e && e.chave) { usarChaveDaRede(e.chave); salvarCfg(); } } catch (x) { /* tenta de novo */ } return; }
@@ -782,10 +789,18 @@
   document.addEventListener('pointerdown', marcarAtividade, { passive: true });
   document.addEventListener('keydown', marcarAtividade, { passive: true });
   function travarPorInatividade() {
-    if (ehCentral() || !cfg.papel || !operadorAtual()) return;
+    if (ehCentral()) {
+      if (cfg.pessoa && !cfg.demo) {
+        if (Date.now() - pessoaAtivaEm >= limitePessoa()) sairDoChefe(`ficou ${C.minutosSemMexer || 30} minutos sem mexer`);
+        else if (cfg.pessoaAtivaEm !== pessoaAtivaEm) { cfg.pessoaAtivaEm = pessoaAtivaEm; salvarCfg(); }
+      }
+      return;
+    }
+    if (!cfg.papel || !operadorAtual()) return;
     if (Date.now() - ultimaAtividade < (C.minutosSemMexer || 30) * 60000) return;
     if (modalAberto()) fecharModalAtual();
     if (rascunhoSujo()) salvarRascunho(true);
+    registrar('entrada', `${operadorAtual()} saiu do ${nomeDesteAparelho()} (ficou ${C.minutosSemMexer || 30} minutos sem mexer)`);
     cfg.op = null; salvarCfg();
     rascunho = null; ed.alvoId = null;
     pilha = [telaInicial(), { tela: 'operador', travado: true }];
@@ -794,7 +809,11 @@
   }
   const chaveTurno = () => `${dataProducao()}-${turnoAtual().id}`;
   const operadorAtual = () => (cfg.op && cfg.op.chave === chaveTurno() ? cfg.op.nome : null);
-  function definirOperador(nome) { cfg.op = { nome, chave: chaveTurno() }; salvarCfg(); }
+  function definirOperador(nome) {
+    const antes = operadorAtual();
+    cfg.op = { nome, chave: chaveTurno() }; salvarCfg();
+    if (antes !== nome && !cfg.demo && typeof registrar === 'function') registrar('entrada', `${nome} entrou no ${nomeDesteAparelho()}${antes ? ` (no lugar de ${antes})` : ''}`);
+  }
 
   /* =========================================================
    * Atualização do aplicativo (versões 2.7 e 2.8). Dois jeitos:
@@ -930,6 +949,594 @@
   }
 
   /* =========================================================
+   * Pessoas do escritório e registro do sistema (versão 2.9)
+   * No tablet chefe cada pessoa entra com a sua senha (só a senha já diz quem é). O painel fica sempre à vista;
+   * quando alguém faz algo que precisa de permissão, o aplicativo pede a senha uma vez. Depois de 30 minutos
+   * sem mexer, a pessoa sai sozinha. O que cada uma pode fazer: o nível dela (forms.js), o ajuste do
+   * administrador e o que aquele tablet chefe deixa fazer. O administrador pode tudo.
+   * O registro guarda cada mudança (hora, quem, aparelho, antes e depois). O aplicativo escreve o que a pessoa
+   * fez; a central escreve entradas, aparelhos e código. Ele não fica nos tablets: o chefe pede o dia na central.
+   * ========================================================= */
+  const PID_REGISTRO = 'registro';
+  // quando a pessoa mexeu pela última vez (um toque depois de 30 minutos parado não volta a valer: tem de entrar de novo)
+  let pessoaAtivaEm = Number(cfg.pessoaAtivaEm) || 0;
+  const limitePessoa = () => (C.minutosSemMexer || 30) * 60000;
+  let demoSemPessoa = false; // demonstração do tablet chefe sem ninguém (para conferir a tela)
+  const pessoaAtual = () => {
+    if (cfg.demo && ehCentral()) return demoSemPessoa ? null : { nome: 'Guilherme', nivel: 'administrador', extras: {}, teto: null };
+    if (!ehCentral() || !cfg.pessoa) return null;
+    return Date.now() - pessoaAtivaEm < limitePessoa() ? cfg.pessoa : null;
+  };
+  document.addEventListener('pointerdown', () => { if (pessoaAtual()) pessoaAtivaEm = Date.now(); }, { passive: true, capture: true });
+  /** O que a pessoa pode fazer: o nível, o ajuste do administrador e o que este tablet chefe deixa. */
+  function funcoesDe(p) {
+    if (!p) return new Set();
+    const todas = C.funcoes.map((f) => f.id);
+    if (p.nivel === 'administrador') return new Set([...todas, 'pessoas']);
+    const nivel = C.niveis[p.nivel] || { funcoes: [] };
+    const s = new Set(nivel.funcoes === 'todas' ? todas : nivel.funcoes);
+    Object.entries(p.extras || {}).forEach(([f, sim]) => { if (sim) s.add(f); else s.delete(f); });
+    if (Array.isArray(p.teto)) [...s].forEach((f) => { if (!p.teto.includes(f)) s.delete(f); });
+    return s;
+  }
+  const pode = (f) => funcoesDe(pessoaAtual()).has(f);
+  const nomeDaFuncao = (f) => ((C.funcoes.find((x) => x.id === f) || {}).nome || 'isso').replace(/ \(.*\)$/, '').toLowerCase();
+  /** Antes de uma ação do tablet chefe: confere a permissão (e pede a senha se ninguém entrou). */
+  async function exigir(f) {
+    if (pode(f)) { pessoaAtivaEm = Date.now(); return true; }
+    if (!ehCentral()) return verificarNoSetor(f);
+    if (!pessoaAtual()) {
+      if (!(await entrarNoChefe())) return false;
+      if (pode(f)) return true;
+    }
+    toast(`${pessoaAtual().nome} não pode ${nomeDaFuncao(f)}. Peça ao administrador.`, 'erro');
+    return false;
+  }
+  async function entrarNoChefe() {
+    const pin = await pedirSenhaModal('Quem está usando?', 'Digite a sua senha. Ela diz quem você é.');
+    if (pin === undefined) return false;
+    const r = await postJson('api/pessoas', { acao: 'entrar', pin }, 10000).catch(() => null);
+    if (!r) { toast('Não consegui falar com a central', 'erro'); return false; }
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) { toast(d.erro || 'Senha errada', 'erro'); return false; }
+    pessoaAtivaEm = Date.now();
+    cfg.pessoa = Object.assign({}, d.pessoa, { teto: d.teto || null }); cfg.pessoaAtivaEm = pessoaAtivaEm; salvarCfg();
+    toast(`Olá, ${d.pessoa.nome}`);
+    render();
+    return true;
+  }
+  function sairDoChefe(motivo) {
+    if (!cfg.pessoa) return;
+    postJson('api/pessoas', { acao: 'sair', motivo: motivo || '' }, 5000).catch(() => {});
+    cfg.pessoa = null; salvarCfg();
+    render();
+  }
+  /** Tablet de setor (ajustes, liberar operador): a central confere a senha. Sem a central, só a senha de emergência. */
+  async function verificarNoSetor(f, titulo, dica) {
+    const pin = await pedirSenhaModal(titulo, dica);
+    if (pin === undefined) return false;
+    const r = cfg.demo ? null : await postJson('api/pessoas', { acao: 'verificar', pin }, 6000).catch(() => null);
+    if (!r) {
+      if (pin === C.pinAdmin) return true;
+      toast(cfg.demo ? 'Senha errada' : 'Sem a central: só a senha do administrador funciona agora', 'erro');
+      return false;
+    }
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) { toast(d.erro || 'Senha errada', 'erro'); return false; }
+    if (!funcoesDe(d.pessoa).has(f)) { toast(`${d.pessoa.nome} não pode ${nomeDaFuncao(f)}`, 'erro'); return false; }
+    registrar('entrada', `${d.pessoa.nome} liberou ${nomeDaFuncao(f)} no ${nomeDesteAparelho()}`);
+    return true;
+  }
+
+  const nomeDesteAparelho = () => (ehCentral() ? nomeDoChefe() : setorPorId(cfg.papel) ? `Tablet da ${setorPorId(cfg.papel).nome}` : 'aparelho');
+  const quemEstaAqui = () => operadorAtual() || (pessoaAtual() && pessoaAtual().nome) || (ehCentral() ? nomeDoChefe() : 'Sem operador');
+  /** Uma linha no registro do sistema. tipo: anotacao, entrada, aparelho ou configuracao. */
+  function registrar(tipo, texto, mudancas) {
+    if (cfg.demo || !cfg.chave) return;
+    const em = Date.now();
+    const chave = em.toString(36) + '-' + Math.random().toString(36).slice(2, 6);
+    gravar(dataProducao(), PID_REGISTRO, chave, Object.assign({ em, tipo, quem: quemEstaAqui(), aparelho: nomeDesteAparelho(), texto }, mudancas && mudancas.length ? { mudancas } : {}), { operador: quemEstaAqui() });
+  }
+  const valorNoRegistro = (x) => {
+    if (x == null || x === '') return '(vazio)';
+    if (Array.isArray(x)) return x.length ? x.map((s) => (s && typeof s === 'object' ? [s.inicio, s.fim].filter(Boolean).join('-') : String(s))).join(', ') : '(vazio)';
+    if (typeof x === 'object') return x.hora || x.data || '(marcado)';
+    return /^-?\d+\.\d+$/.test(String(x)) ? String(x).replace('.', ',') : String(x);
+  };
+  /** O que mudou no rascunho (antes e depois de cada quadro, com o nome do quadro). */
+  function mudancasDoRascunho() {
+    const nomes = {}; alvos.forEach((a) => { nomes[a.id] = a.label; });
+    const lista = [];
+    const comparar = (antes, depois, prefixo) => Object.keys(Object.assign({}, antes, depois)).forEach((k) => {
+      const a = antes ? antes[k] : undefined, d = depois ? depois[k] : undefined;
+      const objeto = (x) => x && typeof x === 'object' && !Array.isArray(x) && !('hora' in x) && !('data' in x);
+      if (objeto(a) || objeto(d)) return comparar(a || {}, d || {}, (prancheta(k) || {}).nome || k);
+      if (/_vol$|^dorna$|Em$/.test(k)) return; // o volume sai da folga; os outros são de controle
+      if (JSON.stringify(a == null ? '' : a) === JSON.stringify(d == null ? '' : d)) return;
+      lista.push({ campo: (prefixo ? prefixo + ': ' : '') + (nomes[k] || k), antes: valorNoRegistro(a), depois: valorNoRegistro(d) });
+    });
+    comparar(rascunho.original, rascunho.valores, '');
+    const extrasAntes = JSON.parse(rascunho.originalExtras || '{}');
+    if ((extrasAntes.obs || '') !== (rascunho.extras.obs || '')) lista.push({ campo: 'Observação', antes: valorNoRegistro(extrasAntes.obs), depois: valorNoRegistro(rascunho.extras.obs) });
+    return lista.slice(0, 40);
+  }
+  /** O que mudou na configuração da usina, em palavras (nunca as senhas). */
+  function textoDaConfig(mudanca) {
+    const atual = configSistema();
+    const partes = [];
+    const nomeSetor = (id) => (setorPorId(id) || {}).nome || id;
+    Object.keys(mudanca).forEach((k) => {
+      const antes = atual[k], depois = mudanca[k];
+      if (JSON.stringify(antes) === JSON.stringify(depois)) return;
+      if (k === 'operadores') {
+        new Set([...Object.keys(antes || {}), ...Object.keys(depois || {})]).forEach((s) => {
+          const a = ((antes || {})[s] || []).map(comoOperador), d = ((depois || {})[s] || []).map(comoOperador);
+          d.filter((o) => !a.some((x) => x.nome === o.nome)).forEach((o) => partes.push(`cadastrou ${o.nome} na ${nomeSetor(s)}`));
+          a.filter((o) => !d.some((x) => x.nome === o.nome)).forEach((o) => partes.push(`tirou ${o.nome} da ${nomeSetor(s)}`));
+          d.forEach((o) => { const x = a.find((y) => y.nome === o.nome); if (x && x.senha !== o.senha) partes.push(`${o.senha ? 'trocou' : 'tirou'} a senha de ${o.nome}`); });
+        });
+      } else if (k === 'setoresDesligados') {
+        (depois || []).filter((s) => !(antes || []).includes(s)).forEach((s) => partes.push(`desligou o setor ${nomeSetor(s)}`));
+        (antes || []).filter((s) => !(depois || []).includes(s)).forEach((s) => partes.push(`ligou o setor ${nomeSetor(s)}`));
+      } else if (k === 'pranchetasDesligadas') partes.push('mudou as folhas ligadas dos setores');
+      else if (k === 'medicao') partes.push(depois ? 'mudou as medidas das dornas' : 'voltou para as medidas da planilha');
+      else if (k === 'folhas') { /* quem mexe nas folhas escreve o que mudou (editarCampoDaFolha) */ }
+      else partes.push({ produtos: 'mudou a lista de produtos', fornecedores: 'mudou a lista de fornecedores', whatsapp: 'mudou o WhatsApp do escritório', email: 'mudou o e-mail do escritório' }[k] || `mudou ${k}`);
+    });
+    return partes;
+  }
+
+  /* ---------- Pessoas e permissões (só o administrador) ---------- */
+  function telaPessoas(v) {
+    if (!v.lista && !v.carregando) carregarPessoas(v);
+    const l = v.lista || { pessoas: [], aparelhos: {} };
+    const nivel = (n) => (C.niveis[n] || {}).nome || n;
+    const resumoFuncoes = (p) => { const f = funcoesDe(Object.assign({}, p, { teto: null })); return p.nivel === 'administrador' ? 'tudo' : `${f.size} de ${C.funcoes.length} funções`; };
+    const st = sync.status;
+    const chefes = new Map();
+    ((st && st.aparelhos) || []).filter((a) => a.papel === 'central').forEach((a) => chefes.set(a.id, a));
+    Object.keys(l.aparelhos || {}).forEach((id) => { if (!chefes.has(id)) chefes.set(id, { id, papel: 'central', nome: l.aparelhos[id].nome, online: false, minutos: 0 }); });
+    return `${topo('Pessoas e permissões', 'Só o administrador mexe aqui', true)}
+      <main class="config tela-pessoas">
+        <div class="config-grade">
+          <section class="bloco">
+            <h2>${ico('pessoas')} Pessoas</h2>
+            <p class="sub" style="margin:0 0 8px">Cada pessoa entra no tablet chefe com a sua senha. A senha já diz quem é.</p>
+            ${v.carregando && !v.lista ? '<p class="sub">Buscando na central...</p>' : l.pessoas.map((p) => `<div class="linha-config ${p.ativo ? '' : 'desligado'}"><span class="escolha-ico">${ico('pessoa')}</span>
+              <div><b>${esc(p.nome)}</b><small>${esc(nivel(p.nivel))} · ${esc(resumoFuncoes(p))}${p.ativo ? '' : ' · não entra mais'}</small></div>
+              <button class="btn pequeno" data-a="pessoa-editar" data-id="${esc(p.id)}">Mudar</button></div>`).join('')}
+            <div class="linha-botoes"><button class="btn pequeno" data-a="pessoa-nova">${ico('mais')} Cadastrar pessoa</button></div>
+          </section>
+          <section class="bloco">
+            <h2>${ico('escritorio')} Tablets chefe</h2>
+            <p class="sub" style="margin:0 0 8px">O que cada tablet chefe deixa fazer, seja quem for (o administrador pode tudo em qualquer um).</p>
+            ${[...chefes.values()].map((a) => {
+              const teto = (l.aparelhos[a.id] || {}).teto;
+              return `<div class="linha-config"><span class="escolha-ico">${ico('escritorio')}</span>
+                <div><b>${esc(a.nome || 'Tablet chefe')}</b><small>${a.online ? `Ligado${a.pessoa ? `, ${esc(a.pessoa)}` : ', ninguém entrou'}` : 'Sem sinal'} · ${Array.isArray(teto) ? `${teto.length} de ${C.funcoes.length} funções` : 'tudo liberado'}${a.id === cfg.deviceId ? ' · este aparelho' : ''}</small></div>
+                <button class="btn pequeno" data-a="aparelho-chefe" data-id="${esc(a.id)}">Mudar</button></div>`;
+            }).join('') || '<p class="sub">Nenhum tablet chefe falou com a central ainda.</p>'}
+          </section>
+        </div>
+      </main>`;
+  }
+  async function carregarPessoas(v) {
+    if (cfg.demo) {
+      v.lista = { pessoas: [
+        { id: 'p1', nome: 'Guilherme', nivel: 'administrador', extras: {}, ativo: true, temSenha: true },
+        { id: 'p2', nome: 'Fernando', nivel: 'encarregado', extras: { integracoes: true }, ativo: true, temSenha: true },
+        { id: 'p3', nome: 'Lucas', nivel: 'consulta', extras: { ler_folha: true }, ativo: true, temSenha: true },
+        { id: 'p4', nome: 'Bruno', nivel: 'encarregado', extras: {}, ativo: false, temSenha: true },
+      ], aparelhos: { [cfg.deviceId]: { nome: 'Tablet do escritório', teto: null }, demo2: { nome: 'Tablet da sala de controle', teto: ['anotar', 'avisos', 'relatorios'] } } };
+      return;
+    }
+    v.carregando = true;
+    const r = await postJson('api/pessoas', { acao: 'lista' }, 10000).catch(() => null);
+    v.carregando = false;
+    if (!r) { toast('Não consegui falar com a central', 'erro'); return; }
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) { toast(d.erro || 'A central recusou', 'erro'); voltar(); return; }
+    v.lista = d;
+    if (view() === v) render();
+  }
+  /** Os quadradinhos das funções (marcado = pode). */
+  const chipsDeFuncoes = (marcadas, prefixo) => `<div class="chips funcoes">${C.funcoes.map((f) => `<button class="chip-liga ${marcadas.has(f.id) ? 'sel' : ''}" data-k="${prefixo}:${f.id}">${marcadas.has(f.id) ? ico('certo') : ico('fechar')} ${esc(f.nome)}</button>`).join('')}</div>`;
+  async function editarPessoa(v, id) {
+    const atual = id ? (v.lista.pessoas.find((p) => p.id === id) || null) : null;
+    const estado = { nivel: atual ? atual.nivel : 'encarregado', extras: Object.assign({}, atual ? atual.extras : {}), ativo: atual ? atual.ativo : true };
+    const marcadas = () => funcoesDe({ nivel: estado.nivel, extras: estado.extras });
+    const desenhar = (f) => {
+      f.querySelectorAll('[data-k^="n:"]').forEach((b) => b.classList.toggle('sel', b.dataset.k === 'n:' + estado.nivel));
+      f.querySelector('#funcoes-pessoa').innerHTML = estado.nivel === 'administrador' ? '<p class="sub">O administrador pode tudo, inclusive pessoas e permissões.</p>' : chipsDeFuncoes(marcadas(), 'f');
+      f.querySelector('[data-k="ativo"]').classList.toggle('sel', estado.ativo);
+    };
+    const resp = await abrirModal(`<h3>${atual ? `Mudar ${esc(atual.nome)}` : 'Cadastrar pessoa'}</h3>
+      <div class="form-pessoa">
+        <label>Nome <input id="p-nome" maxlength="40" autocomplete="off" value="${esc(atual ? atual.nome : '')}"></label>
+        <label>Senha (4 a 8 números)${atual ? ' <small>deixe em branco para não trocar</small>' : ''} <input id="p-pin" inputmode="numeric" maxlength="8" autocomplete="off" value=""></label>
+        <div class="segmentos">${Object.entries(C.niveis).map(([k, n]) => `<button data-k="n:${k}">${esc(n.nome)}</button>`).join('')}</div>
+        <div id="funcoes-pessoa"></div>
+        <div class="chips"><button class="chip-liga" data-k="ativo">${ico('certo')} Pode entrar</button></div>
+      </div>
+      <div class="acoes-modal"><button class="btn" data-k="x">Cancelar</button><button class="btn primario" data-k="ok">Salvar</button></div>`,
+    async (k, b, fechar, f) => {
+      if (k === 'x') return fechar(undefined);
+      if (k.startsWith('n:')) { estado.nivel = k.slice(2); return desenhar(f); }
+      if (k.startsWith('f:')) {
+        const fn = k.slice(2);
+        const padrao = funcoesDe({ nivel: estado.nivel, extras: {} }).has(fn);
+        const agora = marcadas().has(fn);
+        if (!agora === padrao) delete estado.extras[fn]; else estado.extras[fn] = !agora;
+        return desenhar(f);
+      }
+      if (k === 'ativo') { estado.ativo = !estado.ativo; return desenhar(f); }
+      if (k !== 'ok') return;
+      const nome = f.querySelector('#p-nome').value.trim();
+      const pin = f.querySelector('#p-pin').value.trim();
+      if (!nome) return toast('Escreva o nome', 'erro');
+      if (pin && !/^\d{4,8}$/.test(pin)) return toast('A senha tem de 4 a 8 números', 'erro');
+      if (!atual && !pin) return toast('Escolha a senha da pessoa', 'erro');
+      const r = await postJson('api/pessoas', { acao: 'salvar', pessoa: { id: atual ? atual.id : '', nome, nivel: estado.nivel, extras: estado.nivel === 'administrador' ? {} : estado.extras, ativo: estado.ativo, pin } }, 15000).catch(() => null);
+      if (!r) return toast('Não consegui falar com a central', 'erro');
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) return toast(d.erro || 'A central recusou', 'erro');
+      fechar(d);
+    }, { classe: 'largo com-form', aoAbrir: (f) => desenhar(f) });
+    if (!resp) return;
+    v.lista = resp;
+    toast(atual ? 'Pessoa salva' : 'Pessoa cadastrada');
+    render();
+  }
+  async function editarAparelhoChefe(v, id) {
+    const atual = (v.lista.aparelhos || {})[id] || {};
+    const st = sync.status;
+    const info = ((st && st.aparelhos) || []).find((a) => a.id === id) || {};
+    let teto = Array.isArray(atual.teto) ? new Set(atual.teto) : new Set(C.funcoes.map((f) => f.id));
+    const desenhar = (f) => { f.querySelector('#funcoes-aparelho').innerHTML = chipsDeFuncoes(teto, 'f'); };
+    const resp = await abrirModal(`<h3>Tablet chefe</h3><p class="dica">${esc(id)}</p>
+      <div class="form-pessoa">
+        <label>Nome do aparelho <input id="a-nome" maxlength="40" autocomplete="off" value="${esc(atual.nome || info.nome || '')}" placeholder="Ex.: Tablet do escritório"></label>
+        <p class="sub" style="margin:4px 0">O que pode ser feito neste aparelho:</p>
+        <div id="funcoes-aparelho"></div>
+      </div>
+      <div class="acoes-modal"><button class="btn" data-k="x">Cancelar</button><button class="btn primario" data-k="ok">Salvar</button></div>`,
+    async (k, b, fechar, f) => {
+      if (k === 'x') return fechar(undefined);
+      if (k.startsWith('f:')) { const fn = k.slice(2); if (teto.has(fn)) teto.delete(fn); else teto.add(fn); return desenhar(f); }
+      if (k !== 'ok') return;
+      const tudo = C.funcoes.every((x) => teto.has(x.id));
+      const r = await postJson('api/pessoas', { acao: 'aparelho', id, nome: f.querySelector('#a-nome').value.trim(), teto: tudo ? null : [...teto] }, 10000).catch(() => null);
+      if (!r) return toast('Não consegui falar com a central', 'erro');
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) return toast(d.erro || 'A central recusou', 'erro');
+      fechar(d);
+    }, { classe: 'largo com-form', aoAbrir: (f) => desenhar(f) });
+    if (!resp) return;
+    v.lista = resp;
+    toast('Tablet chefe salvo');
+    render();
+  }
+
+  /* ---------- Registro do sistema ---------- */
+  const TIPOS_REGISTRO = [['', 'Tudo'], ['anotacao', 'Anotações'], ['entrada', 'Entradas'], ['aparelho', 'Aparelhos'], ['configuracao', 'Configurações']];
+  function telaRegistro(v) {
+    if (!v.data) v.data = dataProducao();
+    if (!v.linhas && !v.carregando) carregarRegistro(v);
+    const hoje = dataProducao();
+    const linhas = (v.linhas || []).filter((r) => !v.tipo || r.valores.tipo === v.tipo).slice().reverse();
+    const hora = (ms) => new Date(ms).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+    return `${topo('Registro do sistema', `${fmtData(v.data)} · o que aconteceu, de hora em hora`, true)}
+      <main class="registro">
+        <div class="barra-dia">
+          <div class="nav-data">
+            <button class="btn" data-a="registro-dia" data-n="-1" aria-label="Dia anterior">${ico('voltar')}</button>
+            <div class="data-grande"><b>${fmtData(v.data)}</b><span>${diaSemana(v.data)}, das 07:00 até 06:59 do dia seguinte</span></div>
+            <button class="btn" data-a="registro-dia" data-n="1" aria-label="Próximo dia" ${v.data >= hoje ? 'disabled' : ''}>${ico('seta')}</button>
+          </div>
+        </div>
+        <div class="segmentos filtros-registro">${TIPOS_REGISTRO.map(([t, n]) => `<button class="${(v.tipo || '') === t ? 'sel' : ''}" data-a="registro-tipo" data-tipo="${t}">${n}</button>`).join('')}</div>
+        <div class="lista-registro">${v.carregando && !v.linhas ? '<p class="sub">Buscando na central...</p>' : linhas.map((r) => {
+          const x = r.valores;
+          return `<div class="reg-linha reg-${esc(x.tipo)}"><b class="reg-hora">${hora(x.em)}</b><div class="reg-texto"><p>${esc(x.texto)}</p>
+            <small>${esc([x.quem, x.aparelho].filter(Boolean).join(' · '))}</small>
+            ${(x.mudancas || []).length ? `<ul>${x.mudancas.map((m) => `<li>${esc(m.campo)}: <s>${esc(m.antes)}</s> → <b>${esc(m.depois)}</b></li>`).join('')}</ul>` : ''}
+            ${x.antes && x.depois ? `<ul><li><s>${esc(x.antes)}</s> → <b>${esc(x.depois)}</b></li></ul>` : ''}</div></div>`;
+        }).join('') || '<p class="sub">Nada registrado neste dia.</p>'}</div>
+      </main>`;
+  }
+  async function carregarRegistro(v) {
+    v.carregando = true;
+    if (cfg.demo) { v.linhas = registroDeExemplo(v.data); v.carregando = false; return; }
+    const r = await buscar('api/registro?dia=' + v.data, {}, 10000).catch(() => null);
+    v.carregando = false;
+    if (!r || !r.ok) { toast('Não consegui buscar o registro na central', 'erro'); v.linhas = []; }
+    else v.linhas = ((await r.json().catch(() => ({}))).registros || []);
+    if (view() === v) render();
+  }
+  /** Demonstração (imagens e auditoria das telas). */
+  function registroDeExemplo(data) {
+    const [y, m, d] = data.split('-').map(Number);
+    const em = (h, mi) => new Date(y, m - 1, d, h, mi).getTime();
+    const l = (h, mi, tipo, texto, quem, aparelho, mudancas) => ({ valores: { em: em(h, mi), tipo, texto, quem, aparelho, mudancas } });
+    return [
+      l(7, 2, 'entrada', 'Guilherme entrou no Tablet chefe', 'Guilherme', 'Tablet chefe'),
+      l(7, 10, 'entrada', 'Felipe entrou no Tablet da Hidrólise', 'Felipe', 'Tablet da Hidrólise'),
+      l(8, 43, 'anotacao', 'Felipe anotou Hidrólise Nº 1', 'Felipe', 'Tablet da Hidrólise', [{ campo: 'PHF', antes: '(vazio)', depois: '3,5' }, { campo: 'Brix', antes: '(vazio)', depois: '20' }]),
+      l(9, 5, 'anotacao', 'Fernando mudou Hidrólise Nº 1', 'Fernando', 'Tablet chefe', [{ campo: 'Brix', antes: '20', depois: '21' }]),
+      l(9, 30, 'aparelho', 'Tablet da Caldeira ficou sem sinal', '', 'Tablet da Caldeira'),
+      l(9, 41, 'aparelho', 'Tablet da Caldeira voltou a falar com a central (ficou 11 min sem sinal)', '', 'Tablet da Caldeira'),
+      l(10, 2, 'configuracao', 'Guilherme cadastrou Jair na Ralo / Pesagem', 'Guilherme', 'Tablet chefe'),
+      l(10, 15, 'aparelho', 'Tablet da Destilaria atualizou da versão 2.8.0 para a 2.9.0', '', 'Tablet da Destilaria'),
+    ];
+  }
+
+  /* =========================================================
+   * Gráficos do dia (versão 2.10): Brix, pH e temperaturas, hora a hora.
+   * Quais gráficos e quais quadros entram em cada um ficam no forms.js (graficos).
+   * Folha hora a hora: o ponto fica na hora da linha. Dornas: na hora em que a dorna
+   * começou a ser enviada (ou no horário dela; sem horário, quando foi anotada).
+   * ========================================================= */
+  const numeroDe = (v) => { if (vazio(v)) return null; const n = Number(String(v).replace(',', '.')); return isNaN(n) ? null : n; };
+  function graficosDoDia(data, setorId) {
+    const ligadas = new Set(setores().flatMap((s) => s.pranchetas.flatMap(folhasDe)));
+    return (C.graficos || []).filter((gr) => ligadas.has(gr.prancheta)).map((gr) => {
+      const p = prancheta(gr.prancheta);
+      const setor = setorDaPrancheta(gr.prancheta);
+      if (!p || !setor || (setorId && setor.id !== setorId)) return null;
+      const campos = (p.tipo === 'grade' ? p.itens : p.campos) || [];
+      const hora = campos.find((c) => c.type === 'time');
+      const xDe = (r) => {
+        if (p.tipo === 'grade') return /^\d+$/.test(r.chave) ? ordemNoDia(Number(r.chave)) * 60 + 30 : null;
+        const h = r.valores[(p.envio || {}).inicio] || (hora && r.valores[hora.id]);
+        if (h && /^\d{1,2}:\d{2}$/.test(h)) return minutosDoDia(h);
+        const d = new Date(r.criadoEm);
+        return minutosDoDia(`${d.getHours()}:${d.getMinutes()}`);
+      };
+      const regs = listar(data, gr.prancheta).filter((r) => !r.apagado);
+      const series = gr.campos.map((id) => campos.find((c) => c.id === id)).filter(Boolean).map((c, i) => ({
+        nome: c.label, cor: (i % 4) + 1, dec: c.dec || 0,
+        pontos: regs.map((r) => {
+          const y = numeroDe(r.valores[c.id]);
+          const x = xDe(r);
+          return y == null || x == null ? null : { x, y, onde: p.tipo === 'dornas' ? `Nº ${r.chave}` : rotuloHora(Number(r.chave)) };
+        }).filter(Boolean).sort((a, b) => a.x - b.x),
+      }));
+      // as linhas dos avisos (pH 5, Brix 25...) aparecem tracejadas
+      const faixas = [];
+      gr.campos.forEach((id) => { const c = campos.find((x) => x.id === id); (c && c.avisos || []).forEach((a) => { if (!faixas.some((f) => f.valor === a.valor)) faixas.push({ valor: a.valor, nivel: a.nivel || 'alerta', texto: a.curto || a.texto }); }); });
+      const unidade = (campos.find((c) => c.id === gr.campos[0]) || {}).unidade || '';
+      return { id: gr.titulo, titulo: gr.titulo, setor, unidade, series, faixas, temDados: series.some((s) => s.pontos.length) };
+    }).filter(Boolean);
+  }
+  /** Um gráfico de linhas: as linhas em SVG (esticam com a caixa) e os números em texto normal (letra de verdade em qualquer tela). */
+  function htmlDoGrafico(gr, compacto) {
+    const ys = gr.series.flatMap((s) => s.pontos.map((p) => p.y));
+    const cab = `<div class="graf-cab"><b>${esc(gr.titulo)}</b>${gr.unidade ? `<small>${esc(gr.unidade)}</small>` : ''}</div>`;
+    if (!ys.length) return `<div class="grafico vazio">${cab}<p class="sub">Nada anotado ainda neste dia.</p></div>`;
+    const perto = gr.faixas.filter((f) => f.valor >= Math.min(...ys) - (Math.max(...ys) - Math.min(...ys) + 2) && f.valor <= Math.max(...ys) + (Math.max(...ys) - Math.min(...ys) + 2));
+    let min = Math.min(...ys, ...perto.map((f) => f.valor)), max = Math.max(...ys, ...perto.map((f) => f.valor));
+    if (max - min < 1) { min -= 1; max += 1; }
+    const passo = [0.1, 0.2, 0.5, 1, 2, 5, 10, 20, 50, 100, 200, 500, 1000, 2000, 5000].find((s) => (max - min) / s <= 4) || 10000;
+    min = Math.floor(min / passo) * passo; max = Math.ceil(max / passo) * passo;
+    if (max === min) max = min + passo;
+    const X = (x) => (x / 1440) * 100;
+    const Y = (y) => (1 - (y - min) / (max - min)) * 100;
+    const dec = passo < 1 ? 1 : 0;
+    const marcas = [];
+    for (let v = min; v <= max + passo / 2; v += passo) marcas.push(Math.round(v * 10) / 10);
+    const linhas = marcas.map((v) => `<line x1="0" x2="100" y1="${Y(v).toFixed(2)}" y2="${Y(v).toFixed(2)}" class="graf-grade"/>`).join('')
+      + perto.map((f) => `<line x1="0" x2="100" y1="${Y(f.valor).toFixed(2)}" y2="${Y(f.valor).toFixed(2)}" class="graf-faixa ${f.nivel}"/>`).join('')
+      + gr.series.filter((s) => s.pontos.length > 1).map((s) => `<polyline class="graf-linha s${s.cor}" points="${s.pontos.map((p) => `${X(p.x).toFixed(2)},${Y(p.y).toFixed(2)}`).join(' ')}"/>`).join('');
+    const pontos = gr.series.flatMap((s) => s.pontos.map((p) => `<i class="graf-ponto s${s.cor}" style="left:${X(p.x).toFixed(2)}%;top:${Y(p.y).toFixed(2)}%" title="${esc(`${s.nome} ${p.onde}: ${fmtNum(p.y.toFixed(s.dec))}`)}"></i>`)).join('');
+    const horas = [0, 3, 6, 9, 12, 15, 18, 21].map((i) => `<span style="left:${X(i * 60).toFixed(2)}%">${pad2((C.inicioDoDia + i) % 24)}h</span>`).join('');
+    const legenda = gr.series.map((s) => { const u = s.pontos[s.pontos.length - 1]; return `<span class="graf-leg"><i class="s${s.cor}"></i>${esc(s.nome)}${u ? ` <b>${esc(fmtNum(u.y.toFixed(s.dec)))}</b>${compacto ? '' : ` <small>(${esc(u.onde)})</small>`}` : ''}</span>`; }).join('');
+    return `<div class="grafico ${compacto ? 'compacto' : ''}">${cab}
+      <div class="graf-corpo"><div class="graf-y">${marcas.map((v) => `<span style="top:${Y(v).toFixed(2)}%">${esc(fmtNum(v.toFixed(dec)))}</span>`).join('')}</div>
+        <div class="graf-area"><svg viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">${linhas}</svg>${pontos}</div></div>
+      <div class="graf-x">${horas}</div>
+      <div class="graf-legenda">${legenda}${perto.length && !compacto ? perto.map((f) => `<span class="graf-leg limite ${f.nivel}"><i></i>${esc(f.texto)} (${esc(fmtNum(String(f.valor)))})</span>`).join('') : ''}</div></div>`;
+  }
+  /** No painel: os primeiros gráficos que têm anotação no dia. */
+  function htmlGraficosDoPainel(data) {
+    const com = graficosDoDia(data).filter((g) => g.temDados);
+    return `<section class="graficos-painel">
+      <div class="titulo-secao"><h2>Gráficos do dia</h2><button class="btn pequeno" data-a="graficos">${ico('grafico')} Ver todos</button></div>
+      ${com.length ? `<div class="graficos-grade">${com.slice(0, 4).map((g) => `<button class="grafico-botao" data-a="graficos" data-setor="${g.setor.id}">${htmlDoGrafico(g, true)}</button>`).join('')}</div>`
+        : '<p class="sub">Os gráficos aparecem quando os setores anotarem Brix, pH e temperaturas.</p>'}
+    </section>`;
+  }
+  function telaGraficos(v) {
+    if (!v.data) v.data = dataProducao();
+    const hoje = dataProducao();
+    const todos = graficosDoDia(v.data);
+    const setoresCom = [...new Map(todos.map((g) => [g.setor.id, g.setor])).values()];
+    const lista = todos.filter((g) => !v.setor || g.setor.id === v.setor);
+    return `${topo('Gráficos do dia', `${fmtData(v.data)} · Brix, pH e temperaturas, hora a hora`, true)}
+      <main class="graficos">
+        <div class="barra-dia">
+          <div class="nav-data">
+            <button class="btn" data-a="graficos-dia" data-n="-1" aria-label="Dia anterior">${ico('voltar')}</button>
+            <div class="data-grande"><b>${fmtData(v.data)}</b><span>${diaSemana(v.data)}, das 07:00 até 06:59 do dia seguinte</span></div>
+            <button class="btn" data-a="graficos-dia" data-n="1" aria-label="Próximo dia" ${v.data >= hoje ? 'disabled' : ''}>${ico('seta')}</button>
+          </div>
+        </div>
+        <div class="segmentos filtros-registro"><button class="${v.setor ? '' : 'sel'}" data-a="graficos-setor" data-setor="">Todos</button>${setoresCom.map((s) => `<button class="${v.setor === s.id ? 'sel' : ''}" data-a="graficos-setor" data-setor="${s.id}">${esc(s.nome)}</button>`).join('')}</div>
+        ${diasBuscando.has(v.data) ? '<p class="sub">Buscando as anotações na central...</p>' : ''}
+        <div class="graficos-lista">${lista.map((g) => htmlDoGrafico(g, false)).join('') || '<p class="sub">Nenhum gráfico para estes setores.</p>'}</div>
+      </main>`;
+  }
+
+  /* =========================================================
+   * Folhas e avisos (versão 2.10): o tablet chefe muda nomes, unidades, a faixa esperada
+   * e os avisos (pH 5, Brix 25...) sem precisar de versão nova. Fica na configuração da usina
+   * (configSistema().folhas) e chega em todos os tablets pela sincronização.
+   * O que vem do forms.js é o original: "Voltar ao original" apaga só a mudança.
+   * ========================================================= */
+  const EDITAVEIS = ['label', 'labelCurto', 'unidade', 'min', 'max', 'dica', 'avisos'];
+  const ORIGINAL_DOS_CAMPOS = new Map();
+  const ORIGINAL_DAS_UNIDADES = new Map();
+  let folhasAplicadas = '';
+  const camposDaFolha = (p) => (p.tipo === 'grade' ? p.itens : p.tipo === 'medicao' ? p.parametros : p.tipo === 'dornas' || p.tipo === 'fermentacao' ? p.campos : null) || [];
+  const copia = (x) => (x === undefined ? undefined : JSON.parse(JSON.stringify(x)));
+  /** Põe as mudanças das folhas por cima do forms.js. Devolve true se mudou algo. */
+  function aplicarFolhas() {
+    const f = configSistema().folhas || {};
+    const json = JSON.stringify(f);
+    if (json === folhasAplicadas) return false;
+    folhasAplicadas = json;
+    Object.entries(C.pranchetas).forEach(([pid, p]) => {
+      camposDaFolha(p).forEach((c) => {
+        if (!ORIGINAL_DOS_CAMPOS.has(c)) { const o = {}; EDITAVEIS.forEach((k) => { o[k] = copia(c[k]); }); ORIGINAL_DOS_CAMPOS.set(c, o); }
+        const o = ORIGINAL_DOS_CAMPOS.get(c);
+        const m = (f[pid] || {})[c.id] || {};
+        EDITAVEIS.forEach((k) => {
+          const v = m[k] !== undefined ? m[k] : o[k];
+          if (v === undefined || v === null || v === '') delete c[k]; else c[k] = copia(v);
+        });
+        if (!c.label) c.label = o.label; // o nome nunca fica vazio
+      });
+      if (p.tipo === 'insumo') {
+        if (!ORIGINAL_DAS_UNIDADES.has(pid)) ORIGINAL_DAS_UNIDADES.set(pid, p.unidades.slice());
+        const u = ((f[pid] || {})._unidades || []).filter(Boolean);
+        p.unidades = u.length ? u.slice() : ORIGINAL_DAS_UNIDADES.get(pid).slice();
+        p.unidade = p.unidades[0];
+      }
+    });
+    return true;
+  }
+  const normalizarAvisos = (lista) => (lista || []).map((a) => ({ quando: a.quando, valor: a.valor, nivel: a.nivel || 'alerta', texto: a.texto, curto: a.curto || String(a.texto).split(':')[0].slice(0, 24) }));
+  const QUANDO = [['<', 'abaixo de'], ['<=', 'até'], ['>=', 'a partir de'], ['>', 'acima de']];
+  const resumoDoCampo = (c) => [
+    c.unidade || '',
+    c.min != null || c.max != null ? `esperado de ${c.min != null ? fmtNum(String(c.min)) : '...'} a ${c.max != null ? fmtNum(String(c.max)) : '...'}` : '',
+    (c.avisos || []).map((a) => `${a.nivel === 'atencao' ? 'atenção' : 'aviso'} ${(QUANDO.find((q) => q[0] === a.quando) || [0, a.quando])[1]} ${fmtNum(String(a.valor))}`).join(', '),
+  ].filter(Boolean).join(' · ');
+  function telaFolhas(v) {
+    const mud = configSistema().folhas || {};
+    const vistas = new Set();
+    return `${topo('Folhas e avisos', 'O que mudar aqui vale para todos os tablets', true)}
+      <main class="config tela-folhas">
+        <p class="sub">Mude o nome dos quadros, a unidade, a faixa esperada e os avisos (como pH abaixo de 5 ou Brix acima de 25). O desenho das folhas de papel não muda.</p>
+        <div class="config-grade">${todosSetores.map((s) => {
+          const pids = s.pranchetas.flatMap(folhasDe).filter((pid) => !vistas.has(pid) && vistas.add(pid));
+          const blocos = pids.map((pid) => {
+            const p = prancheta(pid);
+            const campos = camposDaFolha(p).filter((c) => c.type === 'num' || c.type === 'time' || c.type === 'choice' || c.type === 'check' || c.type === 'text');
+            const linhas = campos.map((c) => `<div class="linha-config"><div><b>${esc(c.label)}${(mud[pid] || {})[c.id] ? ' <span class="selo-mudado">mudado</span>' : ''}</b><small>${esc(resumoDoCampo(c) || 'sem aviso')}</small></div>
+              <button class="btn pequeno" data-a="folha-campo" data-pid="${pid}" data-id="${esc(c.id)}">Mudar</button></div>`).join('');
+            const unidades = p.tipo === 'insumo' ? `<div class="linha-config"><div><b>Unidades${(mud[pid] || {})._unidades ? ' <span class="selo-mudado">mudado</span>' : ''}</b><small>${esc(p.unidades.join(', '))}</small></div>
+              <button class="btn pequeno" data-a="folha-unidades" data-pid="${pid}">Mudar</button></div>` : '';
+            return linhas || unidades ? `<h3 class="folha-titulo">${esc(p.nome)}</h3>${linhas}${unidades}` : '';
+          }).join('');
+          return blocos ? `<section class="bloco"><h2>${ico(s.icone)} ${esc(s.nome)}</h2>${blocos}</section>` : '';
+        }).join('')}</div>
+      </main>`;
+  }
+  function salvarFolhas(novo, texto) {
+    const limpo = {};
+    Object.entries(novo).forEach(([pid, m]) => { const x = {}; Object.entries(m).forEach(([k, v]) => { if (v && Object.keys(v).length) x[k] = v; }); if (Object.keys(x).length) limpo[pid] = x; });
+    salvarConfigSistema({ folhas: limpo });
+    registrar('configuracao', `${quemEstaAqui()} ${texto}`);
+    aplicarFolhas();
+  }
+  async function editarCampoDaFolha(pid, id) {
+    const p = prancheta(pid);
+    const c = camposDaFolha(p).find((x) => x.id === id);
+    if (!c) return;
+    const o = ORIGINAL_DOS_CAMPOS.get(c) || {};
+    const num = c.type === 'num';
+    const avisos = copia(c.avisos || []);
+    const linhaAviso = (a, i) => `<div class="aviso-editar" data-texto="${esc(a.texto || '')}" data-curto="${esc(a.curto || '')}">
+        <select class="av-quando">${QUANDO.map(([q, t]) => `<option value="${q}" ${a.quando === q ? 'selected' : ''}>${t}</option>`).join('')}</select>
+        <input class="av-valor" inputmode="decimal" value="${esc(a.valor == null ? '' : fmtNum(String(a.valor)))}" aria-label="Valor">
+        <select class="av-nivel"><option value="alerta" ${a.nivel !== 'atencao' ? 'selected' : ''}>Aviso vermelho</option><option value="atencao" ${a.nivel === 'atencao' ? 'selected' : ''}>Atenção (amarelo)</option></select>
+        <input class="av-texto" maxlength="80" value="${esc(a.texto || '')}" placeholder="O que aparece (ex.: pH baixo: coloque cal)" aria-label="Texto do aviso">
+        <button class="btn pequeno" data-k="av-x:${i}" aria-label="Tirar este aviso">${ico('lixeira')}</button></div>`;
+    const lerAvisos = (f) => [...f.querySelectorAll('.aviso-editar')].map((d) => ({
+      quando: d.querySelector('.av-quando').value, valor: numeroDe(d.querySelector('.av-valor').value),
+      nivel: d.querySelector('.av-nivel').value, texto: d.querySelector('.av-texto').value.trim(),
+      // o texto curto (do lado do número) continua o mesmo enquanto o texto não muda
+      curto: d.querySelector('.av-texto').value.trim() === d.dataset.texto && d.dataset.curto ? d.dataset.curto : '',
+    }));
+    const desenharAvisos = (f) => { f.querySelector('#avisos-campo').innerHTML = avisos.map(linhaAviso).join('') || '<p class="sub">Sem aviso neste quadro.</p>'; };
+    const mudado = !!((configSistema().folhas || {})[pid] || {})[id];
+    const resp = await abrirModal(`<h3>${esc(c.label)}</h3><p class="dica">${esc(p.nome)}${o.label && o.label !== c.label ? ` · no forms.js: ${esc(o.label)}` : ''}</p>
+      <div class="form-pessoa form-folha">
+        <label>Nome do quadro <input id="f-label" maxlength="40" value="${esc(c.label || '')}"></label>
+        <label>Nome curto <small>quando o nome não cabe</small><input id="f-curto" maxlength="20" value="${esc(c.labelCurto || '')}"></label>
+        ${num ? `<label>Unidade <small>ex.: °C, kgf, copos</small><input id="f-unidade" maxlength="12" value="${esc(c.unidade || '')}"></label>
+        <label>Dica <small>aparece embaixo do teclado</small><input id="f-dica" maxlength="160" value="${esc(c.dica || '')}"></label>
+        <label>Menor valor esperado <input id="f-min" inputmode="decimal" value="${esc(c.min == null ? '' : fmtNum(String(c.min)))}"></label>
+        <label>Maior valor esperado <input id="f-max" inputmode="decimal" value="${esc(c.max == null ? '' : fmtNum(String(c.max)))}"></label>
+        <div class="avisos-bloco"><b>Avisos</b><div id="avisos-campo"></div><button class="btn pequeno" data-k="av-mais">${ico('mais')} Pôr aviso</button></div>`
+        : `<label>Dica <small>aparece embaixo do teclado</small><input id="f-dica" maxlength="160" value="${esc(c.dica || '')}"></label>`}
+        ${mudado ? '<div class="linha-botoes"><button class="btn pequeno" data-k="original">Voltar ao original</button></div>' : ''}
+      </div>
+      <div class="acoes-modal"><button class="btn" data-k="x">Cancelar</button><button class="btn primario" data-k="ok">Salvar</button></div>`,
+    (k, b, fechar, f) => {
+      if (k === 'x') return fechar(undefined);
+      if (k === 'original') return fechar('original');
+      if (k === 'av-mais') { avisos.splice(0, avisos.length, ...lerAvisos(f)); avisos.push({ quando: '<', valor: null, nivel: 'alerta', texto: '' }); return desenharAvisos(f); }
+      if (k.startsWith('av-x:')) { avisos.splice(0, avisos.length, ...lerAvisos(f)); avisos.splice(Number(k.slice(5)), 1); return desenharAvisos(f); }
+      if (k !== 'ok') return;
+      const label = f.querySelector('#f-label').value.trim();
+      if (!label) return toast('O quadro precisa de um nome', 'erro');
+      const m = { label, labelCurto: f.querySelector('#f-curto').value.trim(), dica: f.querySelector('#f-dica').value.trim() };
+      if (num) {
+        m.unidade = f.querySelector('#f-unidade').value.trim();
+        const mn = f.querySelector('#f-min').value.trim(), mx = f.querySelector('#f-max').value.trim();
+        m.min = mn ? numeroDe(mn) : null; m.max = mx ? numeroDe(mx) : null;
+        if ((mn && m.min == null) || (mx && m.max == null)) return toast('A faixa esperada tem de ser número', 'erro');
+        if (m.min != null && m.max != null && m.min > m.max) return toast('O menor valor está maior que o maior', 'erro');
+        const av = lerAvisos(f);
+        if (av.some((a) => a.valor == null)) return toast('Cada aviso precisa de um número', 'erro');
+        if (av.some((a) => !a.texto)) return toast('Escreva o que o aviso diz', 'erro');
+        m.avisos = normalizarAvisos(av);
+      }
+      fechar(m);
+    }, { classe: 'largo com-form', aoAbrir: (f) => { if (num) desenharAvisos(f); } });
+    if (resp === undefined) return;
+    const todas = copia(configSistema().folhas || {});
+    todas[pid] = todas[pid] || {};
+    const antes = { label: c.label, unidade: c.unidade, min: c.min, max: c.max, avisos: resumoDoCampo(c) };
+    if (resp === 'original') {
+      delete todas[pid][id];
+      salvarFolhas(todas, `voltou ${c.label} (${p.nome}) para o original`);
+      toast('Voltou ao original');
+      return render();
+    }
+    // só guarda o que ficou diferente do original
+    const dif = {};
+    Object.keys(resp).forEach((k) => {
+      const orig = k === 'avisos' ? normalizarAvisos(o.avisos) : o[k] === undefined ? (k === 'min' || k === 'max' ? null : '') : o[k];
+      if (JSON.stringify(resp[k] == null || resp[k] === '' ? (k === 'avisos' ? [] : k === 'min' || k === 'max' ? null : '') : resp[k]) !== JSON.stringify(orig)) dif[k] = resp[k] === '' ? null : resp[k];
+    });
+    todas[pid][id] = dif;
+    const partes = [];
+    if (dif.label !== undefined && resp.label !== antes.label) partes.push(`nome ${antes.label} -> ${resp.label}`);
+    if (num && (resp.unidade || '') !== (antes.unidade || '')) partes.push(`unidade ${antes.unidade || '(sem)'} -> ${resp.unidade || '(sem)'}`);
+    salvarFolhas(todas, `mudou ${resp.label} (${p.nome})${partes.length ? ': ' + partes.join(', ') : ''}`);
+    const depois = resumoDoCampo(c);
+    if (num && depois !== antes.avisos) registrar('configuracao', `${quemEstaAqui()} mudou a faixa e os avisos de ${c.label} (${p.nome})`, [{ campo: c.label, antes: antes.avisos || '(sem)', depois: depois || '(sem)' }]);
+    toast('Folha salva. Os tablets recebem na próxima sincronização.');
+    render();
+  }
+  async function editarUnidadesDaFolha(pid) {
+    const p = prancheta(pid);
+    const txt = await textoLivre({ titulo: `Unidades de ${p.nome}`, dica: 'Separe por vírgula. A primeira é a que já vem marcada.', valor: p.unidades.join(', '), max: 60 });
+    if (txt === undefined) return;
+    const lista = [...new Set(txt.split(',').map((x) => x.trim()).filter(Boolean))].slice(0, 6);
+    const todas = copia(configSistema().folhas || {});
+    todas[pid] = todas[pid] || {};
+    const orig = (ORIGINAL_DAS_UNIDADES.get(pid) || p.unidades).join(', ');
+    if (!lista.length || lista.join(', ') === orig) delete todas[pid]._unidades; else todas[pid]._unidades = lista;
+    const antes = p.unidades.join(', ');
+    salvarFolhas(todas, `mudou as unidades de ${p.nome}: ${antes} -> ${(lista.length ? lista : [orig]).join(', ')}`);
+    toast('Unidades salvas');
+    render();
+  }
+
+  /* =========================================================
    * Janelas por cima da tela (fundo escurecido)
    * ========================================================= */
   const raizModal = document.getElementById('modal-root');
@@ -965,7 +1572,7 @@
   const movimentoReduzido = () => window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   function pedirSenhaModal(titulo, dica) {
     let s = '';
-    const desenhar = (f) => { f.querySelector('.visor').innerHTML = s ? s.replace(/./g, '•') : '<span class="apagado">----</span>'; };
+    const desenhar = (f) => { f.querySelector('.visor').innerHTML = s ? s.replace(/./g, '•') : '<small>Digite a senha</small>'; };
     return abrirModal(`<h3>${esc(titulo || 'Senha do encarregado')}</h3><p class="dica">${esc(dica || 'Os ajustes do aparelho ficam protegidos.')}</p>
       <div class="visor"></div>
       <div class="teclas">${[7, 8, 9, 4, 5, 6, 1, 2, 3].map((n) => `<button data-k="${n}">${n}</button>`).join('')}<button data-k="c" class="menor">Limpar</button><button data-k="0">0</button><button data-k="b">${ico('apagar')}</button></div>
@@ -1003,6 +1610,7 @@
       : `<div class="escolhas">
         <button data-k="f:xlsx"><span class="escolha-ico">${ico('planilha')}</span><b>Excel</b><small>Planilha com as folhas do dia, igual ao papel</small></button>
         <button data-k="f:xml"><span class="escolha-ico">${ico('codigo')}</span><b>XML</b><small>Arquivo para o sistema do escritório</small></button>
+        <button data-k="f:pdf"><span class="escolha-ico">${ico('documento')}</span><b>PDF</b><small>Uma página para cada folha, igual ao papel</small></button>
         ${comTexto ? `<button data-k="f:texto"><span class="escolha-ico">${ico('nota')}</span><b>Resumo em texto</b><small>Mensagem organizada por setor, com os totais de cada insumo</small></button>` : ''}
       </div>
       <div class="acoes-modal um"><button class="btn" data-k="x">Cancelar</button></div>`;
@@ -1524,7 +2132,9 @@
   function atalhosOperador() {
     const op = operadorAtual();
     const v = view();
-    return `${!ehCentral() ? `<button class="atalho ${op ? '' : 'alerta'}" data-a="trocar-operador">${ico('pessoa')}<span>${esc(op || 'Seu nome')}</span></button>` : ''}
+    const p = ehCentral() ? pessoaAtual() : null;
+    return `${!ehCentral() ? `<button class="atalho ${op ? '' : 'alerta'}" data-a="trocar-operador">${ico('pessoa')}<span>${esc(op || 'Seu nome')}</span></button>`
+      : `<button class="atalho pessoa-chefe ${p ? '' : 'alerta'}" data-a="pessoa" aria-label="${p ? `${esc(p.nome)}: toque para sair` : 'Entrar com a sua senha'}">${ico('pessoa')}<span>${esc(p ? p.nome : 'Entrar')}</span></button>`}
       ${v && v.tela === 'prancheta' ? `<button class="atalho ${v.monitor ? 'sel' : ''}" data-a="monitor">${ico('planilha')}<span>${v.monitor ? 'Anotar' : 'Monitorar'}</span></button>` : ''}`;
   }
   function aplicarTema() {
@@ -1550,11 +2160,13 @@
   /** Redesenha a tela. Mantém a posição da rolagem quando continua na mesma tela. */
   function render(trocouDeTela) {
     aoAtualizarEdicao = null;
+    aplicarFolhas(); // mudança nas folhas que chegou do tablet chefe
     let v = view();
     if (foraDaRede() && v.tela !== 'bloqueado') v = { tela: 'bloqueado' };
     const telas = {
       conectar: telaConectar, preparando: telaPreparando, bloqueado: telaBloqueado, configurar: telaConfigurar, operador: telaOperador,
       inicio: telaInicio, prancheta: telaPrancheta, central: telaCentral, relatorios: telaRelatorios, leitura: telaLeitura, config: telaConfig, admin: telaAdmin, avisos: telaAvisos,
+      pessoas: telaPessoas, registro: telaRegistro, graficos: telaGraficos, folhas: telaFolhas,
     };
     const chaveTela = JSON.stringify([v.tela, v.pid, v.data, v.monitor]);
     const outraTela = chaveTela !== ultimaChaveTela;
@@ -1819,7 +2431,7 @@
   }
   const nomeDoChefe = () => (pluginCentral ? 'Tablet chefe' : 'Painel do escritório');
   /** Nome que vai nas anotações. No tablet chefe (que não escolhe operador) vai o nome dele. */
-  const quemAnota = () => operadorAtual() || (ehCentral() ? nomeDoChefe() : null);
+  const quemAnota = () => operadorAtual() || (ehCentral() ? (pessoaAtual() || {}).nome || nomeDoChefe() : null);
   const ehDoChefe = (nome) => nome === 'escritório' || nome === 'Tablet chefe' || nome === 'Painel do escritório';
   /** Folha que só o tablet chefe anota (área Vinho e Fermentação): lá o chefe tem os mesmos botões que o tablet do setor teria. */
   const soDoChefe = (pid) => !!(setorDaPrancheta(pid) || {}).soChefe;
@@ -1988,6 +2600,13 @@
   const extrasOperador = (p) => (p.camposOperador || []).filter((c) => !p.camposEscritorio.some((e) => e.id === c.id));
   const operadorPreenche = (p, id) => (p.camposOperador || []).some((c) => c.id === id);
 
+  /** Quando foi mexida a anotação que está na linha (0 se ainda não tem). */
+  function fonteDaFolha(p, pid, data, chave) {
+    if (p.tipo === 'fermentacao') { const c = cicloAtual(chave); return c ? c.atualizadoEm || 0 : 0; }
+    if (p.tipo === 'juntas') return p.partes.map((pt) => (pegar(data, pt.prancheta, chave) || {}).atualizadoEm || 0).join(',');
+    return (pegar(data, pid, chave) || {}).atualizadoEm || 0;
+  }
+
   function prepararRascunho(v) {
     const p = prancheta(v.pid);
     const data = dataDaView(v);
@@ -1995,7 +2614,9 @@
     // fermentação: o rascunho é do enchimento que está na dorna (outro aparelho começou um novo: recomeça)
     const cicloDaTela = p.tipo === 'fermentacao' ? cicloAtual(chave) : null;
     const chaveView = `${data}|${v.pid}|${chave}${cicloDaTela ? '|' + cicloDaTela.id : ''}`;
-    if (rascunho && rascunho.chaveView === chaveView) return { p, data, chave };
+    // se outro aparelho mandar a anotação desta linha enquanto a pessoa só olha, a tela mostra a nova
+    const fonte = fonteDaFolha(p, v.pid, data, chave);
+    if (rascunho && rascunho.chaveView === chaveView && (rascunho.fonte === fonte || rascunhoSujo())) return { p, data, chave };
     const extras = { operador: '' };
     let valores = {};
     let novo = true;
@@ -2052,7 +2673,7 @@
     }
     // um rascunho novo com valores sugeridos não conta como "mudado" até a pessoa mexer
     // guarda o dia e quem abriu: se o turno trocar ou a folha virar às 07:00 no meio da anotação, salva no dia e no nome certos
-    rascunho = { chaveView, chave, data, operador: operadorAtual(), novo, origem, valores, extras, horaAuto, ciclo, tocados: {}, original: JSON.parse(JSON.stringify(valores)), originalExtras: JSON.stringify(extras) };
+    rascunho = { chaveView, fonte, chave, data, operador: operadorAtual(), novo, origem, valores, extras, horaAuto, ciclo, tocados: {}, original: JSON.parse(JSON.stringify(valores)), originalExtras: JSON.stringify(extras) };
     return { p, data, chave };
   }
 
@@ -2415,7 +3036,8 @@
      Linha nova e campos do escritório (NF, lote, validade, fornecedor, verificado por) não pedem senha. */
   function quemPrecisaAutorizar() {
     const v = view();
-    if (!ehCentral() || !rascunho || v.tela !== 'prancheta') return [];
+    // folhas só do tablet chefe (Vinho e Fermentação): quem anota é o escritório; a mudança fica no registro
+    if (!ehCentral() || !rascunho || v.tela !== 'prancheta' || soDoChefe(v.pid)) return [];
     const p = prancheta(v.pid);
     const { data, chave } = rascunho;
     const mudou = (a, b) => JSON.stringify(a == null ? '' : a) !== JSON.stringify(b == null ? '' : b);
@@ -2445,6 +3067,7 @@
     for (const nome of nomes) {
       const op = setor ? operadorPorNome(setor.id, nome) : null;
       const comSenha = !!(op && op.senha);
+      if (!comSenha && pode('corrigir')) continue; // operador sem senha: quem entrou no tablet chefe autoriza (fica no registro)
       const s = await pedirSenhaModal(comSenha ? `Senha de ${nome}` : 'Senha do encarregado',
         comSenha ? `Para mudar o que ${nome} anotou, ${nome} digita a senha. Assim os dois ficam sabendo da alteração.` : `${nome} não tem senha cadastrada: o encarregado autoriza a alteração.`);
       if (s === undefined) return false;
@@ -2458,7 +3081,7 @@
     if (!rascunho || v.tela !== 'prancheta') return false;
     // salvando sozinho (troca de turno, virada do dia, saiu da tela): vale o nome de quem abriu a linha
     // folha que só o tablet chefe anota (Vinho e Fermentação): vai o nome do tablet chefe
-    const quem = ehCentral() ? (soDoChefe(v.pid) ? nomeDoChefe() : '') : operadorAtual() || (automatico ? rascunho.operador : null);
+    const quem = ehCentral() ? (soDoChefe(v.pid) ? (pessoaAtual() || {}).nome || nomeDoChefe() : '') : operadorAtual() || (automatico ? rascunho.operador : null);
     if (!ehCentral() && !quem) { if (!automatico) exigeOperador(); return false; }
     // tablet chefe mudando o que um operador anotou: só com a senha dele (salvar sozinho, ao sair da tela, não vale)
     const precisaAutorizar = ehCentral() ? quemPrecisaAutorizar() : [];
@@ -2466,7 +3089,8 @@
       toast(`A alteração não foi salva: para mudar o que ${listaE(precisaAutorizar)} anotou, toque em Salvar e digite a senha.`, 'erro');
       return false;
     }
-    const marcaAlteracao = precisaAutorizar.length ? { alteradoPeloEscritorio: { em: Date.now(), autorizadoPor: precisaAutorizar } } : {};
+    const marcaAlteracao = precisaAutorizar.length ? { alteradoPeloEscritorio: { em: Date.now(), autorizadoPor: precisaAutorizar, por: (pessoaAtual() || {}).nome || '' } } : {};
+    const novoAntes = !!rascunho.novo;
     const p = prancheta(v.pid);
     const data = rascunho.data;
     const chave = rascunho.chave;
@@ -2533,8 +3157,15 @@
       const et = p.envio && temAlgo ? etapaDaDorna(p, pegar(data, v.pid, chave)) : '';
       if (!opcoes.silencioso) toast(`${nome} salva${et && et !== 'anotada' ? ` (${et})` : ''}`);
     }
+    const mudou = mudancasDoRascunho();
+    if (mudou.length) {
+      const linha = p.tipo === 'medicao' ? ((grupoDaMedicao(chave) || {}).nome || 'Brix da produção') : p.tipo === 'fermentacao' || p.tipo === 'dornas' ? `Nº ${chave}` : `das ${rotuloHoraPapel(chave)}`;
+      const todosVazios = mudou.every((m) => m.antes === '(vazio)');
+      registrar('anotacao', `${quemEstaAqui()} ${novoAntes || todosVazios ? 'anotou' : 'mudou'} ${p.nome} ${linha}${precisaAutorizar.length ? ` (o que ${listaE(precisaAutorizar)} tinha anotado)` : ''}`, mudou);
+    }
     rascunho.original = JSON.parse(JSON.stringify(rascunho.valores));
     rascunho.originalExtras = JSON.stringify(rascunho.extras);
+    rascunho.fonte = fonteDaFolha(p, v.pid, data, chave); // o que acabou de salvar não conta como anotação de fora
     return true;
   }
 
@@ -2549,7 +3180,9 @@
    * ========================================================= */
   function atalhosChefe() {
     const abertos = avisosEmAberto().length;
-    return `<button class="atalho" data-a="avisos" aria-label="Avisos${abertos ? `, ${abertos} esperando` : ''}">${ico('sino')}<span>Avisos</span>${abertos ? `<em class="contador">${abertos}</em>` : ''}</button>
+    const p = pessoaAtual();
+    return `<button class="atalho pessoa-chefe ${p ? '' : 'alerta'}" data-a="pessoa" aria-label="${p ? `${esc(p.nome)}: toque para sair` : 'Entrar com a sua senha'}">${ico('pessoa')}<span>${esc(p ? p.nome : 'Entrar')}</span></button>
+      <button class="atalho" data-a="avisos" aria-label="Avisos${abertos ? `, ${abertos} esperando` : ''}">${ico('sino')}<span>Avisos</span>${abertos ? `<em class="contador">${abertos}</em>` : ''}</button>
       <button class="atalho" data-a="ler-folha">${ico('camera')}<span>Ler folha</span></button>
       <button class="atalho" data-a="relatorios">${ico('pasta')}<span>Relatórios</span></button>
       <button class="atalho" data-a="config">${ico('pessoas')}<span>Usina</span></button>`;
@@ -2600,6 +3233,7 @@
                 <span class="texto"><b>${esc(s.nome)}</b>${aparelho ? `<span class="conexao ${sinal}"><i></i>${esc(aparelho)}</span>` : ''}
                 <span class="situacao">${esc(situacao)}</span></span><span class="seta">${ico('seta')}</span></button>`;
             }).join('')}</div>
+            ${htmlGraficosDoPainel(data)}
           </section>
 
           <aside class="lateral-chefe">
@@ -3015,6 +3649,7 @@
       gravar(L.data, L.pid, l.chave, valores, { operador: operador || 'Lido da folha', origem: 'foto' });
       n++;
     });
+    registrar('anotacao', `${quemEstaAqui()} salvou ${contar(n, 'linha lida', 'linhas lidas')} da folha de papel (${(prancheta(v.pid) || {}).nome || ''})`);
     toast(`${contar(n, 'linha salva', 'linhas salvas')} da folha de papel`);
     ir({ tela: 'prancheta', pid: L.pid, data: L.data, monitor: true }, true);
   }
@@ -3032,6 +3667,7 @@
     return `${topo('Configurações da usina', 'Vale para todos os tablets', true)}
       <main class="config">
         <p class="sub">O que você mudar aqui chega nos tablets dos setores em alguns segundos.</p>
+        ${pode('pessoas') || pode('registro') || pode('folhas') ? `<div class="linha-botoes" style="margin:0 0 10px">${pode('pessoas') ? `<button class="btn pequeno" data-a="pessoas">${ico('pessoas')} Pessoas e permissões</button>` : ''}${pode('registro') ? `<button class="btn pequeno" data-a="registro">${ico('planilha')} Registro do sistema</button>` : ''}${pode('folhas') ? `<button class="btn pequeno" data-a="folhas">${ico('lapis')} Folhas e avisos</button>` : ''}</div>` : ''}
         <div class="config-grade">
           <section class="bloco">
             <h2>${ico('enviar')} Enviar para o escritório</h2>
@@ -3112,10 +3748,11 @@
     const lista = st && st.aparelhos ? st.aparelhos.slice().sort((a, b) => a.minutos - b.minutos) : [];
     if (!lista.length) return '<p class="sub" style="margin:0">Nenhum aparelho mandou nada desde que a central ligou.</p>';
     return `<div class="aparelhos">${lista.map((a) => {
-      const nome = a.papel === 'central' ? nomeDoChefe() : (setorPorId(a.papel) || {}).nome || 'sem setor';
+      const nome = a.nome || (a.papel === 'central' ? nomeDoChefe() : (setorPorId(a.papel) || {}).nome || 'sem setor');
       const velho = a.versao && a.versao !== VERSAO;
+      const responsavel = a.papel === 'central' ? (a.pessoa ? `Responsável: ${a.pessoa}` : 'Ninguém entrou') : a.operador || 'ninguém no turno';
       return `<div class="aparelho"><span class="conexao ${a.online ? 'ok' : 'off'}"><i></i>${a.online ? 'Ligado' : `Sem sinal há ${a.minutos} min`}</span>
-        <b>${esc(nome)}</b><small>${esc(a.operador || 'ninguém no turno')} · ${esc(a.id)} · versão ${esc(a.versao || 'antiga')}${velho ? ' (atualizar)' : ''}</small></div>`;
+        <b>${esc(nome)}</b><small>${esc(responsavel)} · ${esc(a.id)} · versão ${esc(a.versao || 'antiga')}${velho ? ' (atualizar)' : ''}</small></div>`;
     }).join('')}</div>`;
   }
   async function verErros() {
@@ -3195,7 +3832,7 @@
     window.print();
   }
   const folhasDosSetores = (setorIds) => setores().filter((s) => setorIds.includes(s.id)).flatMap((s) => s.pranchetas.flatMap(folhasDe));
-  const MIME = { xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', xml: 'application/xml' };
+  const MIME = { xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', xml: 'application/xml', pdf: 'application/pdf' };
   function gerarArquivo(formato, data, setorIds) {
     const pids = folhasDosSetores(setorIds);
     // o relatório do dia (todos os setores) tem sempre o mesmo nome: um por dia; só alguns setores ganham o nome deles
@@ -3203,6 +3840,35 @@
     const nome = `Pranchetas_${data}${parcial ? '_' + setorIds.join('-') : ''}`;
     if (formato === 'xml') return new File([gerarXml(data, pids)], nome + '.xml', { type: MIME.xml });
     return new File([window.criarXlsx(pids.map((pid) => planilhaDaPrancheta(pid, data)), LOGO_PNG)], nome + '.xlsx', { type: MIME.xlsx });
+  }
+  /** PDF das folhas (pdf.js): uma página para cada folha de papel. A letra e o logo são buscados uma vez só. */
+  let pecasDoPdf = null;
+  async function pecasPdf() {
+    if (pecasDoPdf) return pecasDoPdf;
+    const fonte = (n) => fetch(`fonts/atkinson-pdf-${n}.ttf`).then((r) => { if (!r.ok) throw new Error('fonte'); return r.arrayBuffer(); });
+    const [normal, negrito] = await Promise.all([fonte(400), fonte(700)]);
+    let logo = null;
+    try {
+      const im = new Image();
+      im.src = 'icons/logo.png';
+      await im.decode();
+      const cv = document.createElement('canvas');
+      cv.width = im.naturalWidth; cv.height = im.naturalHeight;
+      const cx = cv.getContext('2d');
+      cx.fillStyle = '#fff'; cx.fillRect(0, 0, cv.width, cv.height); cx.drawImage(im, 0, 0);
+      const b64 = cv.toDataURL('image/jpeg', 0.92).split(',')[1];
+      logo = { jpeg: Uint8Array.from(atob(b64), (ch) => ch.charCodeAt(0)), largura: cv.width, altura: cv.height };
+    } catch (e) { /* sem o logo, o PDF sai do mesmo jeito */ }
+    pecasDoPdf = { fontes: [normal, negrito], logo };
+    return pecasDoPdf;
+  }
+  async function gerarPdf(data, setorIds) {
+    const pids = folhasDosSetores(setorIds);
+    const parcial = setorIds.length < setores().length;
+    const nome = `Pranchetas_${data}${parcial ? '_' + setorIds.join('-') : ''}`;
+    const pecas = await pecasPdf();
+    const bytes = window.criarPdf(pids.map((pid) => papel().folha(pid, data)), Object.assign({ fmtNum, titulo: `Pranchetas Ubirálcool ${fmtData(data)}` }, pecas));
+    return new File([bytes], nome + '.pdf', { type: MIME.pdf });
   }
   const paraBase64 = (arquivo) => new Promise((ok, erro) => {
     const fr = new FileReader();
@@ -3392,19 +4058,21 @@
     }
     const nomes = { whatsapp: 'Enviar pelo WhatsApp', email: 'Enviar por e-mail', outros: 'Compartilhar com outro aplicativo', baixar: 'Guardar no servidor e no aparelho' };
     let arquivo = arquivoPronto;
-    let formato = arquivo ? (/\.xml$/i.test(arquivo.name) ? 'xml' : 'xlsx') : null;
+    let formato = arquivo ? (/\.xml$/i.test(arquivo.name) ? 'xml' : /\.pdf$/i.test(arquivo.name) ? 'pdf' : 'xlsx') : null;
     let escolhidos = setores().map((s) => s.id);
     if (!arquivo) {
       const escolha = await escolherEnvio(destino === 'escritorio' ? `Enviar para o escritório (${alvo === 'whatsapp' ? 'WhatsApp' : 'e-mail'})` : nomes[alvo], alvo === 'whatsapp');
       if (!escolha) return;
       formato = escolha.formato; escolhidos = escolha.setores;
       await buscarDia(data); // dia antigo: as anotações vêm da central antes de montar o arquivo
-      if (formato !== 'texto') arquivo = gerarArquivo(formato, data, escolhidos);
+      if (formato === 'pdf') {
+        try { arquivo = await gerarPdf(data, escolhidos); } catch (e) { return toast('Não consegui montar o PDF', 'erro'); }
+      } else if (formato !== 'texto') arquivo = gerarArquivo(formato, data, escolhidos);
     }
     const texto = formato === 'texto' ? resumoDoDia(data, escolhidos) : `Pranchetas Ubirálcool, folha de ${fmtData(data)}`;
     const assunto = `Pranchetas Ubirálcool - ${fmtData(data)}`;
     // só o relatório com todos os setores fica guardado (um por dia, na pasta RelatoriosUsina)
-    if (arquivo && !arquivoPronto && escolhidos.length === setores().length) guardarNaCentral(data, [arquivo]);
+    if (arquivo && !arquivoPronto && formato !== 'pdf' && escolhidos.length === setores().length) guardarNaCentral(data, [arquivo]);
 
     if (alvo === 'baixar') {
       if (!arquivo) return;
@@ -3597,12 +4265,55 @@
     if (t) return tecla(t.dataset.ed);
   });
 
+  /** Ações do tablet chefe e a função que cada uma precisa ("folha": anotar nas folhas do chefe ou corrigir as dos setores). */
+  const PRECISA = {
+    salvar: 'folha', 'enviar-dorna': 'folha', 'terminar-dorna': 'folha', 'copiar-vemde': 'folha', 'apagar-linha': 'folha',
+    'ferm-encher': 'anotar', 'ferm-terminou': 'anotar', 'ferm-volante': 'anotar', 'ferm-parar': 'anotar', 'ferm-esvaziou': 'anotar', 'ferm-apagar': 'anotar',
+    compartilhar: 'relatorios', relatorios: 'relatorios', 'relatorio-enviar': 'relatorios', 'relatorio-apagar': 'relatorios', 'gerar-hoje': 'relatorios', imprimir: 'relatorios',
+    'aviso-enviar': 'avisos', 'aviso-cancelar': 'avisos', 'ler-folha': 'ler_folha', 'leitura-salvar': 'ler_folha',
+    config: 'usina', 'medida-grupo': 'usina', 'medidas-planilha': 'usina', contato: 'usina', 'lista-add': 'usina', 'lista-remove': 'usina',
+    'setor-liga': 'usina', 'prancheta-liga': 'usina', 'op-add': 'usina', 'op-senha': 'usina', 'op-remove': 'usina',
+    'nuvem-url': 'integracoes', 'nuvem-segredo': 'integracoes', 'nuvem-enviar': 'integracoes', 'base44-url': 'integracoes', 'base44-segredo': 'integracoes', 'base44-enviar': 'integracoes',
+    'novo-codigo': 'conexao',
+    graficos: 'relatorios', folhas: 'folhas', 'folha-campo': 'folhas', 'folha-unidades': 'folhas',
+  };
   app.addEventListener('click', async (e) => {
     const b = e.target.closest('[data-a]');
     if (!b || modalAberto()) return;
     const a = b.dataset.a;
     const v = view();
+    // tablet chefe: confere se quem está usando pode fazer isso (e pede a senha se ninguém entrou)
+    if (ehCentral() && PRECISA[a]) {
+      const f = PRECISA[a] === 'folha' ? (soDoChefe(v.pid) ? 'anotar' : 'corrigir') : PRECISA[a];
+      if (!(await exigir(f))) return;
+    }
     switch (a) {
+      case 'pessoa': {
+        if (!pessoaAtual()) return entrarNoChefe();
+        const p = pessoaAtual();
+        const opcoes = [pode('pessoas') ? '<button class="btn" data-k="pessoas">Pessoas e permissões</button>' : '', pode('registro') ? '<button class="btn" data-k="registro">Registro do sistema</button>' : '', pode('folhas') ? '<button class="btn" data-k="folhas">Folhas e avisos</button>' : ''].join('');
+        const resp = await abrirModal(`<h3>${esc(p.nome)}</h3><p class="dica">${esc((C.niveis[p.nivel] || {}).nome || p.nivel)} neste tablet chefe.</p>
+          ${opcoes ? `<div class="linha-botoes">${opcoes}</div>` : ''}
+          <div class="acoes-modal"><button class="btn" data-k="x">Fechar</button><button class="btn primario" data-k="sair">${ico('voltar')} Sair</button></div>`, (k, b2, fechar) => fechar(k), {});
+        if (resp === 'sair') { sairDoChefe(); toast('Saiu. O painel continua à vista.'); }
+        if (resp === 'pessoas') return ir({ tela: 'pessoas' });
+        if (resp === 'registro') return ir({ tela: 'registro', data: dataProducao() });
+        if (resp === 'folhas') return ir({ tela: 'folhas' });
+        return;
+      }
+      case 'pessoas': if (!(await exigir('pessoas'))) return; return ir({ tela: 'pessoas' });
+      case 'registro': if (!(await exigir('registro'))) return; return ir({ tela: 'registro', data: dataProducao() });
+      case 'registro-dia': { const d = somarDias(v.data, Number(b.dataset.n)); if (d > dataProducao()) return; pilha[pilha.length - 1] = { tela: 'registro', data: d, tipo: v.tipo }; return render(); }
+      case 'registro-tipo': v.tipo = b.dataset.tipo || ''; return render();
+      case 'pessoa-nova': return editarPessoa(v, '');
+      case 'pessoa-editar': return editarPessoa(v, b.dataset.id);
+      case 'aparelho-chefe': return editarAparelhoChefe(v, b.dataset.id);
+      case 'graficos': return ir({ tela: 'graficos', data: v.data || dataProducao(), setor: b.dataset.setor || '' });
+      case 'graficos-dia': { const d = somarDias(v.data, Number(b.dataset.n)); if (d > dataProducao()) return; pilha[pilha.length - 1] = Object.assign({}, v, { data: d }); return render(true); }
+      case 'graficos-setor': v.setor = b.dataset.setor || ''; return render();
+      case 'folhas': return ir({ tela: 'folhas' });
+      case 'folha-campo': return editarCampoDaFolha(b.dataset.pid, b.dataset.id);
+      case 'folha-unidades': return editarUnidadesDaFolha(b.dataset.pid);
       case 'voltar': return voltar();
       case 'tema':
         cfg.tema = cfg.tema === 'escuro' ? 'claro' : 'escuro'; salvarCfg(); aplicarTema();
@@ -3643,8 +4354,7 @@
           if (embaralharSenha(nome, digitada) !== op.senha) {
             const comEncarregado = await confirmar('Senha errada', 'Se esqueceu a senha, o encarregado pode liberar com a senha dele.', 'Chamar encarregado', false);
             if (!comEncarregado) return;
-            const senhaChefe = await pedirSenhaModal('Senha do encarregado', `Liberar ${nome} neste turno.`);
-            if (senhaChefe !== C.pinAdmin) return toast('Senha errada', 'erro');
+            if (!(await verificarNoSetor('ajustes', 'Senha do encarregado', `Liberar ${nome} neste turno.`))) return;
           }
         }
         definirOperador(nome); toast(`Bom trabalho, ${nome}`);
@@ -3654,9 +4364,7 @@
         return;
       }
       case 'admin': {
-        const s = await pedirSenhaModal();
-        if (s === undefined) return;
-        if (s !== C.pinAdmin) return toast('Senha errada', 'erro');
+        if (!(await (ehCentral() ? exigir('ajustes') : verificarNoSetor('ajustes')))) return;
         return ir({ tela: 'admin' });
       }
       case 'abrir-prancheta': return ir({ tela: 'prancheta', pid: b.dataset.id });
@@ -3753,6 +4461,7 @@
           const data = dataDaView(v);
           if (ehCentral() && dona && dona.operador && dona.operador !== 'escritório' && !(await autorizar([dona.operador]))) return;
           if (p.vemDe) { apagar(data, v.pid, k); somarInsumosDoDia(data); } else apagarDorna(data, v.pid, k);
+          registrar('anotacao', `${quemEstaAqui()} apagou ${prancheta(v.pid).nome} Nº ${k}`);
           toast(`Dorna Nº ${k} apagada`); rascunho = null; ed.alvoId = null;
           delete lembrar[`${data}|${v.pid}`];
           pilha[pilha.length - 1] = Object.assign({}, v, { chave: undefined }); render(true);
@@ -3801,6 +4510,7 @@
         if (!f.setor) return toast('Escolha o setor', 'erro');
         if (texto.length < 2) return toast('Escreva a mensagem do aviso', 'erro');
         enviarAviso(f.setor, f.nome, texto.slice(0, TAMANHO_AVISO));
+        registrar('anotacao', `${quemEstaAqui()} mandou um aviso para ${f.nome || 'quem estiver'} na ${(setorPorId(f.setor) || {}).nome || f.setor}: "${texto.slice(0, 120)}"`);
         const setor = setorPorId(f.setor).nome;
         const agora = !cfg.demo && trabalhandoAgora(f.setor, f.nome);
         toast(agora ? `Aviso enviado. Aparece agora na tela da ${setor}.` : `Aviso guardado. Aparece quando ${f.nome || 'alguém'} entrar na ${setor}.`);
@@ -3830,10 +4540,7 @@
         v.carregado = false; return render();
       }
       case 'config': {
-        // mexe no número do escritório, operadores e setores de todos os tablets: pede a senha do encarregado
-        const s = await pedirSenhaModal('Senha do encarregado', 'As configurações da usina valem para todos os tablets.');
-        if (s === undefined) return;
-        if (s !== C.pinAdmin) return toast('Senha errada', 'erro');
+        // mexe no número do escritório, operadores e setores de todos os tablets: a permissão foi conferida antes (PRECISA)
         carregarBase44(); carregarNuvem();
         return ir({ tela: 'config' });
       }
@@ -3908,6 +4615,7 @@
         const val = { enche_inicio: rascunho.valores.enche_inicio || horaAgora(), enche_fim: rascunho.valores.enche_fim || '', brix_inicial: rascunho.valores.brix_inicial || '' };
         novoCiclo(n, val, quemAnota());
         rascunho = null; ed.alvoId = null;
+        registrar('anotacao', `${quemEstaAqui()}: dorna Nº ${n} começou a encher às ${val.enche_inicio}`);
         toast(`Nº ${n} enchendo desde ${val.enche_inicio}`);
         return render();
       }
@@ -3935,6 +4643,7 @@
         const hora = horaAgora();
         mudarCiclo(r, { volante: [...(r.valores.volante || []), { data: dataProducao(), inicio: hora, fim: '', operador: quemAnota(), inicioEm: Date.now() }] });
         rascunho = null; ed.alvoId = null;
+        registrar('anotacao', `${quemEstaAqui()}: dorna Nº ${n} começou a mandar para a volante às ${hora}`);
         toast(`Nº ${n} mandando para a volante desde ${hora}`);
         return render();
       }
@@ -3951,6 +4660,7 @@
         const vol = (r.valores.volante || []).map((s) => (s.fim ? s : Object.assign({}, s, { fim: hora, fimEm: Date.now(), operadorFim: operadorAtual() })));
         mudarCiclo(r, Object.assign({ volante: vol }, resp === 'sim' ? { esvaziada: { data: dataProducao(), hora, em: Date.now(), operador: quemAnota() } } : {}));
         rascunho = null; ed.alvoId = null;
+        registrar('anotacao', `${quemEstaAqui()}: dorna Nº ${n} parou de mandar para a volante às ${hora}${resp === 'sim' ? ' e ficou vazia' : ', ainda com vinho'}`);
         toast(resp === 'sim' ? `Nº ${n} vazia` : `Nº ${n} parou de mandar às ${hora}`);
         return render();
       }
@@ -3962,6 +4672,7 @@
         if (!(await confirmar(`A Nº ${n} está vazia?`, 'Marca que não sobrou vinho nela. O próximo passo é Começar a encher.', 'Está vazia'))) return;
         mudarCiclo(r, { esvaziada: { data: dataProducao(), hora: horaAgora(), em: Date.now(), operador: quemAnota() } });
         rascunho = null; ed.alvoId = null;
+        registrar('anotacao', `${quemEstaAqui()}: dorna Nº ${n} ficou vazia`);
         toast(`Nº ${n} vazia`);
         return render();
       }
@@ -3974,6 +4685,7 @@
         if (ehCentral() && r.operador && !ehDoChefe(r.operador) && !(await autorizar([r.operador]))) return;
         apagar(r.data, PID_FERMENTACAO, r.chave);
         rascunho = null; ed.alvoId = null;
+        registrar('anotacao', `${quemEstaAqui()} apagou o enchimento da dorna Nº ${n}`);
         toast(`Enchimento da Nº ${n} apagado`);
         return render();
       }
@@ -4346,7 +5058,8 @@
     } else {
       pilha = [telaInicial()];
       if (tela === 'operador') { cfg.op = null; pilha.push({ tela: 'operador' }); }
-      else if (tela === 'config' || tela === 'admin' || tela === 'relatorios') pilha.push({ tela });
+      else if (tela === 'config' || tela === 'admin' || tela === 'relatorios' || tela === 'pessoas' || tela === 'registro' || tela === 'folhas') pilha.push({ tela });
+      else if (tela === 'graficos') pilha.push({ tela, data: dataProducao(), setor: params.get('setor') || '' });
       else if (tela === 'avisos') {
         // exemplos: um lido, um na tela e um esperando
         const a1 = enviarAviso('hidrolise', 'Guilherme', 'Passe no escritório antes de sair, por favor.');
@@ -4372,6 +5085,8 @@
     if (params.get('modal') === 'formato') compartilhar('whatsapp', dataProducao());
     if (params.get('modal') === 'atualizacao') oferecerAtualizacao();
     if (params.get('modal') === 'novidades') mostrarNovidades('2.6.0');
+    if (params.get('ninguem')) { demoSemPessoa = true; render(true); }
+    if (params.get('modal') === 'entrar') entrarNoChefe();
     if (params.get('aviso') && cfg.papel && !ehCentral() && operadorAtual()) {
       enviarAviso(cfg.papel, operadorAtual(), 'Passe no escritório antes de sair, por favor. O encarregado quer falar sobre a troca de turno de amanhã.');
       verificarAvisos();

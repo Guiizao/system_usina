@@ -15,7 +15,7 @@ import { centralNode, pastaTemporaria, APP } from './servidores.mjs';
 export function copiaEmbaralhada() {
   const destino = pastaTemporaria('www');
   fs.cpSync(path.join(APP, 'public'), destino, { recursive: true });
-  for (const js of ['app.js', 'forms.js', 'modelos.js', 'xlsx.js', 'leitor.js', 'cifra.js']) { // qrcode.js (MIT) vai como está
+  for (const js of ['app.js', 'forms.js', 'modelos.js', 'pdf.js', 'xlsx.js', 'leitor.js', 'cifra.js']) { // qrcode.js (MIT) vai como está
     const arquivo = path.join(destino, js);
     execSync(`npx terser "${arquivo}" --compress --mangle --comments "/Guilherme/" -o "${arquivo}"`, { cwd: path.join(APP, 'apk'), stdio: 'pipe' });
   }

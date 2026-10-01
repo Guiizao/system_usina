@@ -7,7 +7,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { TAMANHOS, dormir } from './navegador.mjs';
-import { teste, certo, igual, teclasDaSenha } from './teste.mjs';
+import { teste, certo, igual, entrarComoChefe, senhaSeAparecer } from './teste.mjs';
 
 export async function testarAparelhos(nav, central, grupo) {
   const U = central.url + '/';
@@ -37,6 +37,7 @@ export async function testarAparelhos(nav, central, grupo) {
     await a.tocar('[data-ed="ocultar"]');
     await a.tocar('[data-a="conectar"]');
     await a.tocar(`[data-a="papel"][data-id="${papel}"]`, null, { esperarMs: 15000 });
+    if (papel === 'central') await entrarComoChefe(a);
     if (operador) await a.tocar(`[data-a="escolher-operador"][data-nome="${operador}"]`);
   }
   async function trocarOperador(a, nome) {
@@ -172,7 +173,7 @@ export async function testarAparelhos(nav, central, grupo) {
     await teste(grupo, 'senha do operador: o escritório cadastra e o tablet passa a pedir', async () => {
       await esc.tocar('[data-a="voltar"]');
       await esc.tocar('[data-a="config"]');
-      await esc.teclar(teclasDaSenha());
+      await senhaSeAparecer(esc);
       await esc.tocar('[data-a="op-senha"][data-setor="hidrolise"][data-i="2"]');
       await esc.teclar(['4', '3', '2', '1', 'ok']);
       await esc.esperar('document.body.innerText.includes("Senha de Carlindo trocada")', 5000);

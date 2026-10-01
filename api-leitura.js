@@ -171,6 +171,6 @@ function criar(C, medidasAtuais, opcoes = {}) {
 }
 
 /** Anotação que pode sair pela API (a configuração da usina e os avisos internos, não). */
-const publica = (r) => r && ehDia(r.data) && r.prancheta !== 'avisos' && r.prancheta !== 'avisos-recibo';
+const publica = (r) => r && ehDia(r.data) && r.prancheta !== 'avisos' && r.prancheta !== 'avisos-recibo' && r.prancheta !== 'registro';
 
 module.exports = { criar, publica, ehDia, isoLocal };

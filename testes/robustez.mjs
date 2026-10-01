@@ -12,7 +12,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { TAMANHOS, dormir } from './navegador.mjs';
-import { teste, certo, igual } from './teste.mjs';
+import { teste, certo, igual, entrarComoChefe, senhaSeAparecer } from './teste.mjs';
 import { pastaTemporaria, SENHA_PROGRAMADOR_TESTE } from './servidores.mjs';
 
 const iso = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
@@ -181,6 +181,7 @@ export async function testarRobustezAparelhos(nav, ligar, porta, grupo) {
     await a.tocar('[data-ed="ocultar"]');
     await a.tocar('[data-a="conectar"]');
     await a.tocar(`[data-a="papel"][data-id="${papel}"]`, null, { esperarMs: 15000 });
+    if (papel === 'central') await entrarComoChefe(a);
   }
   const tamanhoGuardado = (a) => a.avaliar('(localStorage.getItem("usina.registros") || "").length');
   const diasGuardados = (a) => a.avaliar('[...new Set(Object.values(JSON.parse(localStorage.getItem("usina.registros") || "{}")).map((r) => r.data))].sort()');

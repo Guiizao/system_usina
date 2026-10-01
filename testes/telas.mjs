@@ -89,6 +89,24 @@ const TELAS = [
   ['atualizacao-janela-rapida', '&papel=hidrolise&op=Guilherme&atualizacao=9.8.0&rapida=1&modal=atualizacao'],
   ['atualizacao-ajustes', '&papel=hidrolise&op=Guilherme&tela=admin&atualizacao=9.8.0'],
   ['novidades', '&papel=destilaria&op=Mateus&modal=novidades'],
+  // versão 2.9: pessoas, permissões e registro do sistema no tablet chefe
+  ['chefe-ninguem', '&papel=central&ninguem=1'],
+  ['chefe-entrar', '&papel=central&ninguem=1&modal=entrar'],
+  ['chefe-menu-pessoa', '&papel=central', async (a) => { await a.tocar('[data-a="pessoa"]'); await dormir(200); }],
+  ['chefe-pessoas', '&papel=central&tela=pessoas'],
+  ['chefe-pessoa-nova', '&papel=central&tela=pessoas', async (a) => { await a.tocar('[data-a="pessoa-nova"]'); await dormir(200); }],
+  ['chefe-pessoa-mudar', '&papel=central&tela=pessoas', async (a) => { await a.tocar('[data-a="pessoa-editar"][data-id="p3"]'); await dormir(200); }],
+  ['chefe-tablet-permissoes', '&papel=central&tela=pessoas', async (a) => { await a.tocar('[data-a="aparelho-chefe"][data-id="demo2"]'); await dormir(200); }],
+  ['chefe-registro', '&papel=central&tela=registro'],
+  ['chefe-registro-entradas', '&papel=central&tela=registro', async (a) => { await a.tocar('[data-a="registro-tipo"][data-tipo="entrada"]'); await dormir(200); }],
+  // versão 2.10: gráficos, folhas e avisos, PDF
+  ['chefe-painel-graficos', '&papel=central', async (a) => a.avaliar('(document.querySelector(".graficos-painel") || document.body).scrollIntoView()')],
+  ['chefe-graficos', '&papel=central&tela=graficos'],
+  ['chefe-graficos-hidrolise', '&papel=central&tela=graficos&setor=hidrolise'],
+  ['chefe-folhas', '&papel=central&tela=folhas'],
+  ['chefe-folha-ph', '&papel=central&tela=folhas', async (a) => { await a.tocar('[data-a="folha-campo"][data-pid="hid_anexo1"][data-id="phf"]'); await dormir(200); }],
+  ['chefe-folha-unidades', '&papel=central&tela=folhas', async (a) => { await a.tocar('[data-a="folha-unidades"][data-pid="ins_lphera"]'); await dormir(200); }],
+  ['chefe-enviar-pdf', '&papel=central', async (a) => { await a.tocar('[data-a="compartilhar"][data-destino="whatsapp"]'); await dormir(200); }],
 ];
 
 const relatorio = { base: BASE, quando: new Date().toISOString(), telas: [] };

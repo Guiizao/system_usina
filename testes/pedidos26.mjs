@@ -11,7 +11,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { TAMANHOS, dormir } from './navegador.mjs';
-import { teste, certo, igual, teclasDaSenha } from './teste.mjs';
+import { teste, certo, igual, entrarComoChefe, senhaSeAparecer } from './teste.mjs';
 
 const diaProducao = () => { const d = new Date(Date.now() - 7 * 3600000); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
 
@@ -34,6 +34,7 @@ export async function testarPedidos26(nav, ligar, porta, grupo) {
     await a.esperar(`!!document.querySelector('[data-a="papel"][data-id="${papel}"]')`, 15000, 'escolha da função');
     a.papeisOferecidos = await a.avaliar('[...document.querySelectorAll("[data-a=\\"papel\\"]")].map((b) => b.dataset.id)');
     await a.tocar(`[data-a="papel"][data-id="${papel}"]`, null, { esperarMs: 15000 });
+    if (papel === 'central') await entrarComoChefe(a);
     if (operador) await a.tocar(`[data-a="escolher-operador"][data-nome="${operador}"]`);
   }
   const semNotificacao = async (a) => { await a.avaliar('(() => { const t = document.getElementById("toast"); if (!t.hidden) t.click(); })()'); await dormir(350); };
@@ -42,8 +43,8 @@ export async function testarPedidos26(nav, ligar, porta, grupo) {
   const medicao = (l, grupo) => l.find((r) => r.id === `${hoje}|med_dornas|${grupo}`);
   const ciclos = (l, n) => l.filter((r) => r.prancheta === 'fermentacao' && Number(r.valores.dorna) === n).sort((a, b) => b.valores.inicioEm - a.valores.inicioEm);
 
-  // no navegador (sem o aplicativo) o tablet chefe se chama "Painel do escritório": é o nome que vai nas anotações dele
-  const CHEFE = 'Painel do escritório';
+  // no tablet chefe, o nome que vai nas anotações é o de quem entrou (a central nova cadastra o Guilherme)
+  const CHEFE = 'Guilherme';
   try {
     const tab = await novo('tablet chefe', TAMANHOS.tablet);
     const esc = await novo('computador do escritório', TAMANHOS.computador);
@@ -188,7 +189,7 @@ print(json.dumps({'folhas': wb.sheetnames, 'v7229': 7229.25 in valores, 'sub': 2
       await semNotificacao(esc);
       await esc.tocar('[data-a="voltar"]');
       await esc.tocar('[data-a="config"]');
-      await esc.teclar(teclasDaSenha());
+      await senhaSeAparecer(esc);
       await esc.tocar('[data-a="medida-grupo"][data-grupo="sac"]');
       await esc.avaliar('(() => { const i = document.getElementById("alt2"); i.value = "3"; return true; })()');
       await esc.tocar('[data-k="ok"]');

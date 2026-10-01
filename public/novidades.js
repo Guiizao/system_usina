@@ -4,6 +4,27 @@
    Depois do sinal de igual vem JSON puro, porque o servidor do tablet chefe (Java) também lê este arquivo. */
 window.NOVIDADES = [
   {
+    "versao": "2.10.0",
+    "data": "2026-10-01",
+    "itens": [
+      "Exportar em PDF: na hora de enviar ou guardar a folha do dia, escolha PDF. Cada folha vira uma página, igual ao papel, só dos setores marcados.",
+      "Gráficos do dia no painel do tablet chefe: Brix, pH e temperaturas das colunas, hora a hora, com as linhas dos avisos. Toque num gráfico para ver todos.",
+      "Folhas e avisos: o tablet chefe muda o nome dos quadros, a unidade, a faixa esperada e os avisos (pH 5, Brix 25...) sem precisar de versão nova. Vale para todos os tablets."
+    ]
+  },
+  {
+    "versao": "2.9.0",
+    "data": "2026-10-01",
+    "itens": [
+      "Tablet chefe: cada pessoa entra com a sua senha e o nome dela fica no alto da tela. Depois de 30 minutos sem mexer, precisa entrar de novo.",
+      "Pessoas e permissões (só o administrador): cadastrar pessoas e senhas, escolher o nível (Administrador, Encarregado ou Consulta) e ligar ou desligar o que cada um pode fazer.",
+      "Cada tablet chefe pode ganhar um nome e um limite do que se faz nele, seja quem for. O administrador pode tudo em qualquer um.",
+      "Registro do sistema: a lista do dia com quem anotou ou mudou o quê (com o antes e o depois), quem entrou e saiu, aparelho sem sinal ou atualizado e mudanças na Usina.",
+      "Nos tablets dos setores, os ajustes abrem com a senha de quem tem permissão.",
+      "Correção: se o tablet chefe estava com a folha aberta quando a anotação do setor chegou, a tela agora mostra o que foi anotado."
+    ]
+  },
+  {
     "versao": "2.8.0",
     "data": "2026-10-01",
     "itens": [
