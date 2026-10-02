@@ -67,7 +67,10 @@ export async function centralJava(porta, pasta = pastaTemporaria('java'), extras
   execFileSync(path.join(JDK, 'javac.exe'), ['-encoding', 'UTF-8', '-d', saida, ...fontes], { stdio: 'pipe' });
   let proc;
   const ligar = async () => {
-    proc = spawn(path.join(JDK, 'java.exe'), ['-Dpranchetas.ip=127.0.0.1', '-Dpranchetas.senhaProgramadorHash=' + HASH_TESTE, ...(extras.REGISTRO_SEM_SINAL_MS ? ['-Dpranchetas.semSinal=' + extras.REGISTRO_SEM_SINAL_MS] : []), '-cp', saida, 'RodarServidorJava', String(porta), pasta, APP], { stdio: 'ignore' });
+    const opcoes = [
+      ...(extras.REGISTRO_SEM_SINAL_MS ? ['-Dpranchetas.semSinal=' + extras.REGISTRO_SEM_SINAL_MS] : []),
+    ];
+    proc = spawn(path.join(JDK, 'java.exe'), ['-Dpranchetas.ip=127.0.0.1', '-Dpranchetas.senhaProgramadorHash=' + HASH_TESTE, ...opcoes, '-cp', saida, 'RodarServidorJava', String(porta), pasta, APP], { stdio: 'ignore' });
     await esperarNoAr(`http://127.0.0.1:${porta}`);
   };
   await ligar();

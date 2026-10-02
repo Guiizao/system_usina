@@ -9,6 +9,7 @@
  *   POST /central/enviar     a central manda as anotações novas      (Authorization: Bearer <SEGREDO_CENTRAL>)
  *   GET  /central/estado     a central pergunta até onde a nuvem tem  (Authorization: Bearer <SEGREDO_CENTRAL>)
  *   GET  /api/v1/...         a API de leitura, igual à da central     (Authorization: Bearer <TOKEN_LEITURA>)
+ *   GET  /aparelho/<id>      o aplicativo pergunta se este aparelho foi bloqueado (sem senha; responde só sobre ele)
  *   GET  /atualizacao/...    versao.json e pranchetas.apk (arquivos da pasta publico, sem passar por aqui)
  *
  * Banco: D1 (SQLite). O plano grátis deixa 50 consultas por pedido, então cada envio grava tudo
@@ -85,6 +86,13 @@ async function receber(req, env) {
       SELECT data, COUNT(*) FROM registros WHERE apagado = 0 AND data IN (SELECT value FROM json_each(?)) GROUP BY data
       ON CONFLICT(data) DO UPDATE SET anotacoes = excluded.anotacoes`).bind(dias));
   }
+  // aparelhos bloqueados: a central manda a lista inteira quando ela muda (vazia = ninguém bloqueado)
+  if (Array.isArray(corpo.bloqueios)) {
+    const lista = corpo.bloqueios.filter((b) => b && typeof b.id === 'string' && /^[\w.-]{1,80}$/.test(b.id)).slice(0, 500)
+      .map((b) => ({ id: b.id, em: Number(b.em) || 0, modo: b.modo === 'senha' ? 'senha' : 'trava', apagar: !!b.apagar, sal: String(b.sal || '').slice(0, 64), resumo: String(b.resumo || '').slice(0, 64) }));
+    consultas.push(env.DB.prepare('DELETE FROM bloqueios'));
+    if (lista.length) consultas.push(env.DB.prepare("INSERT INTO bloqueios (id, json) SELECT json_extract(value, '$.id'), value FROM json_each(?) WHERE true").bind(JSON.stringify(lista)));
+  }
   await env.DB.batch(consultas);
   const maior = regs.reduce((m, r) => Math.max(m, Number(r.seq)), 0);
   return responder(200, { ok: true, recebidos: regs.length, seq: maior });
@@ -145,6 +153,13 @@ export default {
         if (p === '/central/enviar' && req.method === 'POST') return await receber(req, env);
         if (p === '/central/estado' && req.method === 'GET') return await estado(env);
         return responder(404, { erro: 'rota desconhecida' });
+      }
+      // o aplicativo pergunta se foi bloqueado (versão 2.11): só responde sobre o aparelho pedido
+      const ap = p.match(/^\/aparelho\/([\w.-]{1,80})$/);
+      if (ap && req.method === 'GET') {
+        const linha = await env.DB.prepare('SELECT json FROM bloqueios WHERE id = ?').bind(ap[1]).first();
+        const b = linha ? JSON.parse(linha.json) : null;
+        return responder(200, { bloqueio: b ? { em: b.em, modo: b.modo, apagar: b.apagar, sal: b.sal, resumo: b.resumo } : null });
       }
       if (p.startsWith('/api/v1/')) {
         if (req.method !== 'GET') return responder(405, { erro: 'A API é só de leitura: use GET' });

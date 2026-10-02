@@ -44,6 +44,21 @@ cmd /c "npx cap sync android" 2>&1 | Select-Object -Last 3
 Log 'Copiando o código da central...'
 Copy-Item (Join-Path $aqui 'nativo\java\*') (Join-Path $aqui 'android\app\src\main\java') -Recurse -Force
 
+# Proteção (versão 2.11): o aplicativo confere a assinatura do próprio APK. Grava o valor certo, tirado da chave
+# deste computador (a mesma que assina o APK). Cópia remontada e assinada com outra chave não abre.
+$keystore = Join-Path $env:USERPROFILE '.android\debug.keystore'
+if (-not (Test-Path $keystore)) { throw 'Falta a chave do APK (.android\debug.keystore na pasta do usuário). Sem ela os tablets não aceitam a atualização.' }
+$ErrorActionPreference = 'Continue'
+$certificado = & "$env:JAVA_HOME\bin\keytool.exe" -list -v -keystore $keystore -alias androiddebugkey -storepass android 2>&1 | Out-String
+$ErrorActionPreference = 'Stop'
+$achou = [regex]::Match($certificado, 'SHA256:\s*([0-9A-Fa-f:]{95})')
+if (-not $achou.Success) { throw 'Não consegui ler a assinatura da chave do APK' }
+$assinatura = ($achou.Groups[1].Value -replace ':', '').ToLower()
+$arquivoAssinatura = Join-Path $aqui 'android\app\src\main\java\br\com\ubiralcool\pranchetas\Assinatura.java'
+$javaAssinatura = "/* Gerado pelo gerar-apk.ps1 (versao 2.11): a assinatura do APK (SHA-256 do certificado). */`npackage br.com.ubiralcool.pranchetas;`n`nfinal class Assinatura {`n  static final String ESPERADA = `"$assinatura`";`n  private Assinatura() { }`n}`n"
+[System.IO.File]::WriteAllText($arquivoAssinatura, $javaAssinatura, (New-Object System.Text.UTF8Encoding $false))
+Log ('Assinatura do APK gravada no aplicativo: ' + $assinatura.Substring(0, 16) + '...')
+
 # Permissões do servidor (aviso fixo, Wi-Fi ligado, bateria) e acesso ao WhatsApp
 Log 'Ajustando o AndroidManifest...'
 $manifesto = Join-Path $aqui 'android\app\src\main\AndroidManifest.xml'
@@ -157,6 +172,17 @@ Set-Location $aqui
 
 $apk = 'android\app\build\outputs\apk\debug\app-debug.apk'
 if (-not (Test-Path $apk)) { throw 'APK não foi gerado. Veja as mensagens acima.' }
+# confere: o APK pronto tem de estar assinado com a mesma chave gravada dentro dele (senão ele mesmo não abriria)
+$apksigner = Get-ChildItem "$env:ANDROID_HOME\build-tools" -Directory | Sort-Object Name -Descending | ForEach-Object { Join-Path $_.FullName 'apksigner.bat' } | Where-Object { Test-Path $_ } | Select-Object -First 1
+$ErrorActionPreference = 'Continue'
+$certificados = & $apksigner verify --print-certs $apk 2>&1 | Out-String
+$ErrorActionPreference = 'Stop'
+$conferida = [regex]::Match($certificados, 'certificate SHA-256 digest:\s*([0-9a-f]{64})')
+if (-not $conferida.Success -or $conferida.Groups[1].Value -ne $assinatura) {
+  Remove-Item $apk -Force
+  throw 'A assinatura do APK não bate com a gravada dentro dele. O APK foi apagado para não travar os tablets.'
+}
+Log 'Assinatura conferida: este APK só abre assinado com a chave deste computador.'
 New-Item -ItemType Directory -Force saida | Out-Null
 Copy-Item $apk saida\pranchetas.apk -Force
 # versao.json do lado do APK: a central usa para oferecer a atualização aos tablets (e vai junto para a nuvem)

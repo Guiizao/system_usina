@@ -32,6 +32,8 @@ import { testarAtualizacao } from './atualizacao.mjs';
 import { testarNuvem } from './nuvem.mjs';
 import { testarPessoas } from './pessoas.mjs';
 import { testarPedidos210 } from './pedidos210.mjs';
+import { testarSeguranca } from './seguranca.mjs';
+import { testarPedidos211 } from './pedidos211.mjs';
 import { testarApkWeb } from './rodar-apk-web.mjs';
 import { centralNode, centralJava, APP } from './servidores.mjs';
 
@@ -135,6 +137,17 @@ try {
   for (const [nome, ligar, porta] of [['computador', (p, d) => centralNode(p, d), 8255], ['tablet chefe', centralJava, 8256]]) {
     const g = novoGrupo('Versão 2.10 (PDF, gráficos e folhas) na central do ' + nome);
     await testarPedidos210(nav, ligar, porta, g);
+    grupos.push(g);
+  }
+  // 4k. versão 2.11: aparelhos (quem usa, nome no Android, modelo, endereço) e bloqueio, direto na central e no aplicativo
+  for (const [nome, ligar, porta] of [['computador', (p, d, x) => centralNode(p, d, undefined, x), 8253], ['tablet chefe', centralJava, 8254]]) {
+    const g = novoGrupo('Bloqueio e informações dos aparelhos, direto na central do ' + nome);
+    await testarSeguranca(ligar, porta, g);
+    grupos.push(g);
+  }
+  for (const [nome, ligar, porta] of [['computador', (p, d) => centralNode(p, d), 8251], ['tablet chefe', centralJava, 8252]]) {
+    const g = novoGrupo('Versão 2.11 (aparelhos e bloqueio) no aplicativo, na central do ' + nome);
+    await testarPedidos211(nav, ligar, porta, g);
     grupos.push(g);
   }
   // 4f. o aplicativo embaralhado (como vai no APK) continua funcionando igual

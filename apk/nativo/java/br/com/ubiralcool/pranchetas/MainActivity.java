@@ -29,6 +29,9 @@ public class MainActivity extends BridgeActivity {
     registerPlugin(CentralPlugin.class);
     super.onCreate(estadoSalvo);
 
+    // cópia alterada (assinada com outra chave): não abre (versão 2.11)
+    if (!Protecao.assinaturaConfere(this)) { avisarCopiaAlterada(); return; }
+
     // totem: a tela não apaga enquanto o aplicativo está aberto
     getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
     telaCheia = getSharedPreferences(PREFERENCIAS, Context.MODE_PRIVATE).getBoolean("telaCheia", false);
@@ -67,6 +70,16 @@ public class MainActivity extends BridgeActivity {
     WindowInsetsControllerCompat barras = WindowCompat.getInsetsController(getWindow(), getWindow().getDecorView());
     barras.setAppearanceLightStatusBars(false);
     barras.setAppearanceLightNavigationBars(false);
+  }
+
+  private void avisarCopiaAlterada() {
+    if (getBridge() != null && getBridge().getWebView() != null) getBridge().getWebView().loadUrl("about:blank");
+    new android.app.AlertDialog.Builder(this)
+        .setTitle("Cópia alterada")
+        .setMessage("Esta cópia do aplicativo Pranchetas foi alterada e não pode ser usada. Instale o aplicativo original, pela central da usina.")
+        .setCancelable(false)
+        .setPositiveButton("Fechar", (janela, botao) -> finishAndRemoveTask())
+        .show();
   }
 
   /** Chamado pela tela de ajustes do aparelho. Fica guardado mesmo fechando o aplicativo. */

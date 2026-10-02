@@ -107,6 +107,14 @@ const TELAS = [
   ['chefe-folha-ph', '&papel=central&tela=folhas', async (a) => { await a.tocar('[data-a="folha-campo"][data-pid="hid_anexo1"][data-id="phf"]'); await dormir(200); }],
   ['chefe-folha-unidades', '&papel=central&tela=folhas', async (a) => { await a.tocar('[data-a="folha-unidades"][data-pid="ins_lphera"]'); await dormir(200); }],
   ['chefe-enviar-pdf', '&papel=central', async (a) => { await a.tocar('[data-a="compartilhar"][data-destino="whatsapp"]'); await dormir(200); }],
+  // versão 2.11: aparelhos (quem usa, nome no Android, modelo, endereço) e bloqueio
+  ['chefe-aparelhos', '&papel=central&tela=aparelhos'],
+  ['chefe-aparelho-mais', '&papel=central&tela=aparelhos&aparelho=ap-hid001'],
+  ['chefe-aparelho-bloqueado', '&papel=central&tela=aparelhos&aparelho=ap-vel003'],
+  ['chefe-bloquear', '&papel=central&tela=aparelhos&aparelho=ap-hid001', async (a) => { await a.tocar('.modal [data-k="bloquear"]'); await dormir(200); }],
+  ['bloqueado-senha', '&papel=hidrolise&op=Felipe&bloqueio=senha&apagar=1'],
+  ['bloqueado-digitar', '&papel=hidrolise&op=Felipe&bloqueio=senha', async (a) => { await a.tocar('[data-a="liberar-senha"]'); await dormir(200); }],
+  ['bloqueado-trava', '&papel=hidrolise&op=Felipe&bloqueio=trava'],
 ];
 
 const relatorio = { base: BASE, quando: new Date().toISOString(), telas: [] };

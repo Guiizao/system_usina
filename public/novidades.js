@@ -4,6 +4,16 @@
    Depois do sinal de igual vem JSON puro, porque o servidor do tablet chefe (Java) também lê este arquivo. */
 window.NOVIDADES = [
   {
+    "versao": "2.11.0",
+    "data": "2026-10-02",
+    "itens": [
+      "Aparelhos: no painel do tablet chefe, toque em \"aparelhos ligados\". Em cima aparece quem está usando; embaixo, o nome do aparelho no Android e o modelo. No + aparecem o endereço na rede, a versão do aplicativo e quando ele conectou.",
+      "Bloquear aparelho (só o administrador): na hora você escolhe se ele pede uma senha para liberar ou se trava de vez, e se apaga as anotações guardadas nele. Longe da usina, com internet, ele trava quando abrir o aplicativo (precisa da nuvem ligada). Tudo vai para o registro do sistema.",
+      "Cópia alterada do aplicativo não abre: o aplicativo confere a própria assinatura.",
+      "Correção: a nuvem não guarda mais a senha do administrador."
+    ]
+  },
+  {
     "versao": "2.10.0",
     "data": "2026-10-01",
     "itens": [

@@ -3,7 +3,7 @@
 (function () {
   'use strict';
   const C = window.USINA;
-  const VERSAO = '2.10.0'; // aparece nos ajustes e vai junto com cada envio para a central
+  const VERSAO = '2.11.0'; // aparece nos ajustes e vai junto com cada envio para a central
   const AUTORIA = '© 2026 Guilherme. Todos os direitos reservados. Uso somente com autorização do autor.';
   const params = new URLSearchParams(location.search);
   const DEMO_IMG = params.has('demo'); // usado só para gerar imagens de apresentação
@@ -63,6 +63,7 @@
   const ICONES = {
     voltar: '<path d="M15 5l-7 7 7 7"/>', seta: '<path d="M9 5l7 7-7 7"/>',
     grafico: '<path d="M4 4v16h16"/><path d="M7 15l4-5 3 3 5-6"/>',
+    cadeado: '<rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/>',
     documento: '<path d="M7 3h7l5 5v13H7z"/><path d="M14 3v5h5"/><path d="M10 13h6M10 17h6"/>',
     lapis: '<path d="M4 20l4-1 11-11-3-3L5 16z"/><path d="M14 6l3 3"/>',
     casa: '<path d="M3 11l9-7 9 7"/><path d="M5 10v10h5v-6h4v6h5V10"/>',
@@ -610,7 +611,15 @@
     } finally { clearTimeout(t); }
   }
   async function buscar(caminho, opcoes = {}, ms = 4000) {
-    if (cfg.chave && caminho !== 'api/ping' && caminho !== 'api/parear') return pedirCifrado(baseCentral(), caminho, opcoes, ms);
+    if (cfg.chave && caminho !== 'api/ping' && caminho !== 'api/parear') {
+      const r = await pedirCifrado(baseCentral(), caminho, opcoes, ms);
+      // aparelho bloqueado pelo administrador (423): a tela trava
+      if (r.status === 423) {
+        const d = await r.clone().json().catch(() => ({}));
+        aplicarBloqueio(d.bloqueio);
+      }
+      return r;
+    }
     const ctrl = new AbortController();
     const t = setTimeout(() => ctrl.abort(), ms);
     try { return await fetch(baseCentral() + caminho, Object.assign({}, opcoes, { signal: ctrl.signal, cache: 'no-store' })); } finally { clearTimeout(t); }
@@ -635,16 +644,26 @@
       cfg.ultimoContato = Date.now(); salvarCfg();
       sync.modo = 'online'; sync.falhas = 0;
 
+      // liberado aqui com a senha de desbloqueio: a central fica sabendo (e confere a senha de novo)
+      if (cfg.liberacao) {
+        const rl = await postJson('api/liberar', { codigo: cfg.liberacao.codigo, em: cfg.liberacao.em }, 10000);
+        if (rl.ok) { cfg.liberacao = null; salvarCfg(); }
+        else if (rl.status === 403) { const d = await rl.json().catch(() => ({})); cfg.liberacao = null; salvarCfg(); aplicarBloqueio(d.bloqueio); return; }
+        else if (rl.status === 423) { cfg.liberacao = null; salvarCfg(); return; }
+      }
       // em lotes: um aparelho que ficou muito tempo sem Wi-Fi não manda tudo de uma vez
       const envio = Object.values(registros).filter((r) => !r.sincronizado).slice(0, LOTE_ENVIO);
       const erros = errosGuardados.slice();
       const antesDoEnvio = Date.now();
-      const r1 = await postJson('api/sync', { aparelho: cfg.deviceId, papel: cfg.papel, nome: nomeDesteAparelho(), operador: operadorAtual(), versao: VERSAO, geracao: cfg.geracao || '', novaConexao: !!cfg.novaConexao, registros: envio, erros }, 15000);
+      const r1 = await postJson('api/sync', { aparelho: cfg.deviceId, papel: cfg.papel, nome: nomeDesteAparelho(), info: infoAparelho, operador: operadorAtual(), versao: VERSAO, geracao: cfg.geracao || '', novaConexao: !!cfg.novaConexao, registros: envio, erros }, 15000);
       if (r1.status === 401) {
         // o servidor está neste aparelho: pega a chave nova com ele (o código de conexão foi trocado)
         if (centralNoTablet()) { try { const e = await pluginCentral.estado(); if (e && e.chave) { usarChaveDaRede(e.chave); salvarCfg(); } } catch (x) { /* tenta de novo */ } return; }
         return desconectar('O código de conexão mudou (ou a central foi trocada). Digite o código novo que aparece no tablet chefe.');
       }
+      if (r1.status === 423) return; // a tela já travou (buscar)
+      // a central aceitou: o administrador desbloqueou
+      if (r1.ok && cfg.bloqueio) liberarAparelho('O administrador liberou este aparelho.');
       const resp1 = r1.ok ? await r1.clone().json().catch(() => ({})) : {};
       // o escritório zerou as anotações de teste: limpa as deste aparelho e começa de novo
       if (resp1.zerar) { zerarLocal(resp1.geracao); toast('O escritório zerou as anotações. Este aparelho começou do zero.'); render(true); return; }
@@ -665,6 +684,8 @@
         const resp = await r1.json().catch(() => ({}));
         if (erros.length) { errosGuardados.splice(0, erros.length); LS.set('erros', errosGuardados); }
         if (resp.agora) conferirRelogio(resp.agora - (antesDoEnvio + Date.now()) / 2);
+        // longe da usina, o aparelho pergunta na nuvem se foi bloqueado
+        if (typeof resp.nuvem === 'string' && resp.nuvem !== (cfg.nuvemUrl || '')) { cfg.nuvemUrl = resp.nuvem; salvarCfg(); }
       }
       let mudou = false;
       // o aparelho passou a guardar mais dias (virou tablet chefe): busca de novo, desde o começo
@@ -689,7 +710,7 @@
           verificarBase44();
         }
       }
-      if (mudou && ['central', 'inicio', 'prancheta', 'config'].includes(view().tela)) {
+      if (mudou && ['central', 'inicio', 'prancheta', 'config', 'aparelhos'].includes(view().tela)) {
         if (podeRedesenhar()) render(); else redesenharDepois = true;
       }
       if (mudou && view().tela === 'avisos') atualizarTelaAvisos();
@@ -699,6 +720,7 @@
     } catch (e) {
       sync.modo = 'offline';
       sync.falhas = (sync.falhas || 0) + 1;
+      conferirNaNuvem();
       // no aplicativo: depois de umas falhas seguidas, procura o tablet chefe no Wi-Fi (no máximo a cada 3 minutos)
       if (NO_APK && sync.falhas >= 3 && Date.now() - (sync.ultimaBusca || 0) > 180000) { sync.ultimaBusca = Date.now(); setTimeout(reencontrarCentral, 0); }
     } finally {
@@ -1537,6 +1559,215 @@
   }
 
   /* =========================================================
+   * Aparelhos e bloqueio (versão 2.11)
+   * ========================================================= */
+  /** A mesma conta da central para as senhas: sha256(sal:senha) e 20 mil voltas de HMAC. Confere a senha de
+      desbloqueio aqui mesmo, para funcionar até longe da usina. */
+  function resumoDaSenha(pin, sal) {
+    let h = Cifra.sha256(Cifra.utf8(sal + ':' + pin));
+    const p = Cifra.utf8(String(pin));
+    for (let i = 0; i < 20000; i++) h = Cifra.hmac(h, p);
+    return Cifra.hex(h);
+  }
+
+  /* Nome, fabricante, modelo e Android deste aparelho: vão para a central, que mostra em Aparelhos.
+     No aplicativo vem do Android; no navegador, do que o navegador conta. */
+  let infoAparelho = null;
+  async function lerInfoDoAparelho() {
+    if (NO_APK && pluginCentral && pluginCentral.infoDoAparelho) {
+      try { infoAparelho = await pluginCentral.infoDoAparelho(); return; } catch (e) { /* segue com o do navegador */ }
+    }
+    const ua = navigator.userAgent || '';
+    const android = (ua.match(/Android ([\d.]+)/) || [])[1] || '';
+    const modelo = android ? ((ua.match(/Android [\d.]+; ([^;)]+)/) || [])[1] || '').replace(/ Build.*$/, '').trim() : '';
+    const navegador = /Edg\//.test(ua) ? 'Edge' : /Chrome\//.test(ua) ? 'Chrome' : /Firefox\//.test(ua) ? 'Firefox' : /Safari\//.test(ua) ? 'Safari' : 'Navegador';
+    const sistema = /Windows/.test(ua) ? 'Windows' : /Mac OS/.test(ua) ? 'Mac' : /Linux/.test(ua) ? 'Linux' : '';
+    infoAparelho = { modelo: android ? (modelo === 'K' ? '' : modelo) : sistema ? `Computador (${sistema})` : '', android, navegador };
+  }
+
+  /** A central (ou a nuvem) disse que este aparelho está bloqueado. */
+  function aplicarBloqueio(b) {
+    if (!b || !b.em || DEMO_IMG) return;
+    if (cfg.liberacao && cfg.liberacao.em === b.em) return; // já foi liberado com a senha aqui; a central fica sabendo na próxima conversa
+    const novo = !cfg.bloqueio || cfg.bloqueio.em !== b.em || cfg.bloqueio.modo !== b.modo;
+    cfg.bloqueio = { em: b.em, modo: b.modo === 'senha' ? 'senha' : 'trava', apagar: !!b.apagar, sal: b.sal || '', resumo: b.resumo || '' };
+    if (b.apagar && cfg.apagouNoBloqueio !== b.em) { apagarTudoDoAparelho(); cfg.apagouNoBloqueio = b.em; }
+    salvarCfg();
+    if (novo) { fecharModalAberto(); render(true); }
+  }
+  /** Bloqueio com "apagar": some tudo que o aparelho guarda (o que já chegou na central continua lá). */
+  function apagarTudoDoAparelho() {
+    Object.keys(registros).forEach((id) => delete registros[id]);
+    salvarRegistros();
+    errosGuardados.splice(0, errosGuardados.length); LS.set('erros', errosGuardados);
+    cfg.operadores = {}; cfg.op = null; cfg.ultimoSeq = 0; cfg.corteSync = 0;
+    rascunho = null; ed.alvoId = null;
+    Object.keys(lembrar).forEach((k) => delete lembrar[k]);
+  }
+  function liberarAparelho(msg) {
+    if (!cfg.bloqueio) return;
+    cfg.bloqueio = null;
+    salvarCfg();
+    pilha = [telaInicial()];
+    if (cfg.papel && !ehCentral() && !operadorAtual()) pilha.push({ tela: 'operador' });
+    render(true);
+    toast(msg);
+    sincronizarLogo();
+  }
+  function fecharModalAberto() { const f = document.querySelector('#modal-root .fundo-modal'); if (f) f.remove(); }
+
+  /* Longe da usina, sem a central, com internet: o aparelho pergunta na nuvem se foi bloqueado.
+     O endereço da nuvem vem da central (na sincronização). No máximo a cada 10 minutos. */
+  let ultimaConsultaNuvem = 0;
+  async function conferirNaNuvem(agora) {
+    if (cfg.demo || DEMO_IMG || !cfg.nuvemUrl || !cfg.chave) return;
+    if (!agora && Date.now() - ultimaConsultaNuvem < 10 * 60000) return;
+    ultimaConsultaNuvem = Date.now();
+    try {
+      const ctrl = new AbortController();
+      const t = setTimeout(() => ctrl.abort(), 8000);
+      const r = await fetch(`${cfg.nuvemUrl.replace(/\/+$/, '')}/aparelho/${encodeURIComponent(cfg.deviceId)}`, { cache: 'no-store', signal: ctrl.signal });
+      clearTimeout(t);
+      if (!r.ok) return;
+      const d = await r.json();
+      if (d.bloqueio) aplicarBloqueio(d.bloqueio);
+      else if (cfg.bloqueio && sync.modo !== 'online') liberarAparelho('O administrador liberou este aparelho.');
+    } catch (e) { /* sem internet: confere de novo depois */ }
+  }
+
+  /* ---------- Tela do aparelho bloqueado ---------- */
+  const dataHora = (ms) => new Date(ms).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+  function telaBloqueioAdm() {
+    const b = cfg.bloqueio || {};
+    return `${cabecalho('Pranchetas digitais', 'Aparelho bloqueado', false)}
+      <main><div class="tela-aviso"><div class="grande-ico">${ico('cadeado')}</div>
+        <h1>Aparelho bloqueado</h1>
+        <p>O administrador bloqueou este aparelho${b.em ? ` em ${dataHora(b.em)}` : ''}. ${b.apagar ? 'As anotações que estavam guardadas nele foram apagadas.' : 'As anotações guardadas nele continuam aqui e vão para a central quando ele for liberado.'}</p>
+        <p>${b.modo === 'senha' ? 'Para usar de novo, digite a senha de desbloqueio.' : 'Fale com o escritório para liberar.'}</p>
+        ${b.modo === 'senha' ? `<button class="btn primario largo" data-a="liberar-senha" style="margin-top:12px">${ico('teclado')} Digitar a senha de desbloqueio</button>` : ''}
+        <button class="btn largo" data-a="conferir-bloqueio" style="margin-top:12px">${ico('wifi')} Conferir de novo</button>
+        <p class="sub" style="margin-top:16px">Este aparelho: ${esc(cfg.deviceId)}</p>
+      </div></main>`;
+  }
+  /* ---------- Aparelhos: quem está usando, o nome no Android, o modelo e o endereço ---------- */
+  const tempoCurto = (min) => (min == null ? '' : min < 60 ? `${Math.max(1, min)} min` : min < 1440 ? `${Math.round(min / 60)} h` : contar(Math.round(min / 1440), 'dia', 'dias'));
+  const quemUsa = (a) => (a.papel === 'central' ? a.pessoa || 'Ninguém entrou' : a.operador || 'Ninguém no turno');
+  const funcaoDoAparelho = (a) => a.nome || (a.papel === 'central' ? nomeDoChefe() : (setorPorId(a.papel) || {}).nome || 'sem setor');
+  function modeloDoAparelho(a) {
+    const i = a.info || {};
+    const fab = i.fabricante ? i.fabricante.charAt(0).toUpperCase() + i.fabricante.slice(1) : '';
+    const modelo = i.modelo || '';
+    return [fab && !modelo.toLowerCase().startsWith(fab.toLowerCase()) ? fab : '', modelo].filter(Boolean).join(' ');
+  }
+  const situacaoDoAparelho = (a) => (a.bloqueio ? 'Bloqueado' : a.online ? 'Ligado' : a.minutos == null ? 'Sem sinal' : `Sem sinal há ${tempoCurto(a.minutos)}`);
+  function linhaDoAparelho(a) {
+    const nomeAndroid = (a.info && a.info.nome) || '';
+    const modelo = modeloDoAparelho(a);
+    return `<div class="aparelho-linha ${a.bloqueio ? 'bloqueado' : ''}">
+      <span class="conexao ${a.bloqueio ? 'bloq' : a.online ? 'ok' : 'off'}"><i></i>${esc(situacaoDoAparelho(a))}</span>
+      <div class="aparelho-texto"><b>${esc(quemUsa(a))}</b><small>${esc([nomeAndroid, funcaoDoAparelho(a)].filter(Boolean).join(' · '))}</small>${modelo && modelo !== nomeAndroid ? `<small>${esc(modelo)}</small>` : ''}</div>
+      <button class="btn pequeno mais-info" data-a="aparelho-info" data-id="${esc(a.id)}" aria-label="Mais sobre ${esc(funcaoDoAparelho(a))}">${ico('mais')}</button>
+    </div>`;
+  }
+  function telaAparelhos() {
+    const lista = (sync.status && sync.status.aparelhos) || [];
+    const ligados = lista.filter((a) => a.online).length;
+    return `${topo('Aparelhos', `${contar(ligados, 'ligado agora', 'ligados agora')}`, true)}
+      <main class="config tela-aparelhos">
+        <p class="sub">Em cima, quem está usando; embaixo, o nome do aparelho no Android e a função dele. Toque no + para ver o modelo, o endereço na rede e para bloquear.</p>
+        <div class="lista-aparelhos">${lista.map(linhaDoAparelho).join('') || '<p class="sub">Nenhum aparelho falou com a central ainda.</p>'}</div>
+      </main>`;
+  }
+  async function verAparelho(id) {
+    const a = ((sync.status && sync.status.aparelhos) || []).find((x) => x.id === id);
+    if (!a) return;
+    const i = a.info || {};
+    const linhas = [
+      ['Quem está usando', quemUsa(a)],
+      ['Nome no Android', i.nome || 'não informado (aparelho com versão antiga ou navegador)'],
+      ['Modelo', modeloDoAparelho(a) || 'não informado'],
+      ['Sistema', i.android ? `Android ${i.android}` : i.navegador ? `Navegador ${i.navegador}` : 'não informado'],
+      ['Função', funcaoDoAparelho(a)],
+      ['Aplicativo', a.versao ? `versão ${a.versao}${a.versao !== VERSAO ? ' (falta atualizar)' : ''}` : 'versão antiga'],
+      ['Endereço na rede (IP)', a.ip || 'não informado'],
+      ['Situação', a.bloqueio ? `Bloqueado em ${dataHora(a.bloqueio.em)}${a.bloqueio.por ? ` por ${a.bloqueio.por}` : ''} (${a.bloqueio.modo === 'senha' ? 'pede a senha de desbloqueio' : 'travado de vez'})` : a.online ? 'Ligado agora' : a.minutos == null ? 'Sem sinal' : `Sem sinal há ${tempoCurto(a.minutos)}`],
+      ['Conectou a primeira vez', a.desde ? dataHora(a.desde) : 'não informado'],
+      ['Identificador', a.id],
+    ];
+    const admin = pode('pessoas');
+    const esteAqui = a.id === cfg.deviceId;
+    const acoes = !admin ? '<p class="sub" style="margin:8px 0 0">Só o administrador bloqueia e desbloqueia aparelhos.</p>'
+      : esteAqui ? '<p class="sub" style="margin:8px 0 0">Este é o aparelho que você está usando.</p>'
+        : `<div class="linha-botoes" style="margin-top:10px">${a.bloqueio ? `<button class="btn" data-k="desbloquear">${ico('certo')} Desbloquear</button>` : `<button class="btn perigo" data-k="bloquear">${ico('cadeado')} Bloquear este aparelho</button>`}</div>`;
+    const resp = await abrirModal(`<h3>${esc(i.nome || funcaoDoAparelho(a))}</h3><p class="dica">${esc(funcaoDoAparelho(a))}</p>
+      <div class="form-pessoa"><dl class="ficha">${linhas.map(([k, v]) => `<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join('')}</dl>
+      <p class="sub" style="margin:0">O endereço MAC não aparece: o Android não mostra para os aplicativos.</p>
+      ${acoes}</div>
+      <div class="acoes-modal um"><button class="btn" data-k="x">Fechar</button></div>`, (k, b, fechar) => fechar(k), { classe: 'largo com-form' });
+    if (resp === 'bloquear') return bloquearAparelho(a);
+    if (resp === 'desbloquear') return desbloquearAparelho(a);
+  }
+  async function bloquearAparelho(a) {
+    const estado = { modo: 'senha', apagar: false };
+    const desenhar = (f) => {
+      f.querySelectorAll('[data-k^="m:"]').forEach((b) => b.classList.toggle('sel', b.dataset.k === 'm:' + estado.modo));
+      f.querySelector('#area-senha').hidden = estado.modo !== 'senha';
+      const ap = f.querySelector('[data-k="apagar"]');
+      ap.classList.toggle('sel', estado.apagar);
+      ap.innerHTML = `${ico(estado.apagar ? 'certo' : 'fechar')} Apagar as anotações guardadas nele`;
+    };
+    const resp = await abrirModal(`<h3>Bloquear ${esc(funcaoDoAparelho(a))}</h3>
+      <p class="dica">Na usina ele trava na hora. Longe da usina, trava quando abrir o aplicativo com internet (precisa da nuvem ligada).</p>
+      <div class="form-pessoa">
+        <div class="segmentos"><button data-k="m:senha">Pede senha para liberar</button><button data-k="m:trava">Trava de vez</button></div>
+        <label id="area-senha">Senha de desbloqueio (4 a 8 números) <small>quem souber esta senha libera o aparelho; pode ser diferente da sua</small><input id="b-senha" inputmode="numeric" maxlength="8" autocomplete="off"></label>
+        <div class="chips"><button class="chip-liga" data-k="apagar"></button></div>
+        <p class="sub" style="margin:0">Apagando, o que já chegou na central continua lá; o que ainda não tinha chegado se perde.</p>
+      </div>
+      <div class="acoes-modal"><button class="btn" data-k="x">Cancelar</button><button class="btn perigo" data-k="ok">${ico('cadeado')} Bloquear</button></div>`,
+    (k, b, fechar, f) => {
+      if (k === 'x') return fechar(undefined);
+      if (k.startsWith('m:')) { estado.modo = k.slice(2); return desenhar(f); }
+      if (k === 'apagar') { estado.apagar = !estado.apagar; return desenhar(f); }
+      if (k !== 'ok') return;
+      const codigo = f.querySelector('#b-senha').value.trim();
+      if (estado.modo === 'senha' && !/^\d{4,8}$/.test(codigo)) return toast('A senha de desbloqueio tem de 4 a 8 números', 'erro');
+      fechar({ modo: estado.modo, apagar: estado.apagar, codigo });
+    }, { classe: 'largo com-form', aoAbrir: desenhar });
+    if (!resp) return;
+    const r = await postJson('api/aparelhos', Object.assign({ acao: 'bloquear', id: a.id }, resp), 10000).catch(() => null);
+    if (!r) return toast('Não consegui falar com a central', 'erro');
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) return toast(d.erro || 'A central recusou', 'erro');
+    if (sync.status && d.aparelhos) sync.status.aparelhos = d.aparelhos;
+    toast(`${funcaoDoAparelho(a)} bloqueado`);
+    render();
+  }
+  async function desbloquearAparelho(a) {
+    if (!(await confirmar(`Desbloquear ${funcaoDoAparelho(a)}?`, 'Ele volta a funcionar na próxima vez que falar com a central (ou com a nuvem, se estiver longe).', 'Desbloquear'))) return;
+    const r = await postJson('api/aparelhos', { acao: 'desbloquear', id: a.id }, 10000).catch(() => null);
+    if (!r) return toast('Não consegui falar com a central', 'erro');
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) return toast(d.erro || 'A central recusou', 'erro');
+    if (sync.status && d.aparelhos) sync.status.aparelhos = d.aparelhos;
+    toast(`${funcaoDoAparelho(a)} desbloqueado`);
+    render();
+  }
+  /** Demonstração (imagens e auditoria das telas): aparelhos de exemplo. */
+  function statusDeExemplo() {
+    const agora = Date.now();
+    return {
+      seq: 0, total: 0, codigo: '504140', enderecos: [], apk: true,
+      aparelhos: [
+        { id: cfg.deviceId, papel: 'central', operador: '', pessoa: 'Guilherme', ip: '127.0.0.1', versao: VERSAO, nome: 'Tablet do escritório', online: true, minutos: 0, info: { nome: 'Galaxy Tab S6 de Guilherme', fabricante: 'samsung', modelo: 'SM-T865', android: '13' }, desde: agora - 40 * 86400000, bloqueio: null },
+        { id: 'ap-hid001', papel: 'hidrolise', operador: 'Felipe', pessoa: '', ip: '192.168.0.31', versao: VERSAO, nome: 'Tablet da Hidrólise', online: true, minutos: 0, info: { nome: 'Galaxy Tab A11+ da Hidrólise', fabricante: 'samsung', modelo: 'SM-X230', android: '15' }, desde: agora - 30 * 86400000, bloqueio: null },
+        { id: 'ap-cal002', papel: 'caldeira', operador: 'Alberto', pessoa: '', ip: '192.168.0.32', versao: '2.10.0', nome: 'Tablet da Caldeira', online: false, minutos: 12, info: { nome: 'moto g54 de Alberto', fabricante: 'motorola', modelo: 'moto g54 5G', android: '14' }, desde: agora - 20 * 86400000, bloqueio: null },
+        { id: 'ap-vel003', papel: 'ralo', operador: '', pessoa: '', ip: '192.168.0.40', versao: '2.8.0', nome: 'Tablet do Ralo / Pesagem', online: false, minutos: 3000, info: { nome: 'S23 de Diego', fabricante: 'samsung', modelo: 'SM-S911B', android: '14' }, desde: agora - 60 * 86400000, bloqueio: { em: agora - 2 * 3600000, modo: 'senha', apagar: true, por: 'Guilherme' } },
+      ],
+    };
+  }
+
+  /* =========================================================
    * Janelas por cima da tela (fundo escurecido)
    * ========================================================= */
   const raizModal = document.getElementById('modal-root');
@@ -2162,11 +2393,13 @@
     aoAtualizarEdicao = null;
     aplicarFolhas(); // mudança nas folhas que chegou do tablet chefe
     let v = view();
-    if (foraDaRede() && v.tela !== 'bloqueado') v = { tela: 'bloqueado' };
+    if (cfg.bloqueio && !DEMO_IMG) v = { tela: 'bloqueado-adm' };
+    else if (foraDaRede() && v.tela !== 'bloqueado') v = { tela: 'bloqueado' };
     const telas = {
       conectar: telaConectar, preparando: telaPreparando, bloqueado: telaBloqueado, configurar: telaConfigurar, operador: telaOperador,
       inicio: telaInicio, prancheta: telaPrancheta, central: telaCentral, relatorios: telaRelatorios, leitura: telaLeitura, config: telaConfig, admin: telaAdmin, avisos: telaAvisos,
       pessoas: telaPessoas, registro: telaRegistro, graficos: telaGraficos, folhas: telaFolhas,
+      aparelhos: telaAparelhos, 'bloqueado-adm': telaBloqueioAdm,
     };
     const chaveTela = JSON.stringify([v.tela, v.pid, v.data, v.monitor]);
     const outraTela = chaveTela !== ultimaChaveTela;
@@ -3209,7 +3442,7 @@
           <div class="numeros">
             <div><b>${todos.length}</b><span>anotações</span></div>
             <div class="${pend ? 'atencao' : ''}"><b>${pend}</b><span>pendências</span></div>
-            <div><b>${cfg.demo ? '-' : ligados}</b><span>aparelhos ligados</span></div>
+            <button class="numero-botao" data-a="aparelhos"><b>${cfg.demo && !st ? '-' : ligados}</b><span>aparelhos ligados</span></button>
           </div>
         </div>
 
@@ -3226,7 +3459,7 @@
               // o que falta vem primeiro; depois a dorna em andamento (o escritório vê as duas coisas)
               const agora = [pends[0], andando[0]].filter(Boolean).map((r) => r.texto.replace(/\.$/, '')).join('. ');
               const situacao = diasBuscando.has(data) ? 'Buscando as anotações na central...' : agora ? agora + '.' : regs.length ? `${contar(regs.length, 'anotação', 'anotações')}, a última às ${hora}` : 'Nada anotado neste dia';
-              const aparelho = cfg.demo ? '' : disp ? (disp.online ? `Ligado${disp.operador ? `, ${disp.operador}` : ''}` : `Sem sinal há ${disp.minutos} min`) : 'Tablet não conectado';
+              const aparelho = cfg.demo ? '' : disp ? (disp.bloqueio ? 'Bloqueado' : disp.online ? `Ligado${disp.operador ? `, ${disp.operador}` : ''}` : situacaoDoAparelho(disp)) : 'Tablet não conectado';
               const sinal = cfg.demo ? '' : disp && disp.online ? 'ok' : disp ? 'off' : '';
               return `<button class="setor-cartao ${pends.length ? 'pendente' : andando.length ? 'andamento' : regs.length ? 'feito' : ''}" data-a="abrir-setor" data-id="${s.id}">
                 <span class="desenho">${ico(s.icone)}</span>
@@ -3705,7 +3938,7 @@
           <section class="bloco">
             <h2>${ico('wifi')} Aparelhos conectados</h2>
             ${htmlAparelhos()}
-            <div class="linha-botoes"><button class="btn pequeno" data-a="ver-erros">${ico('alerta')} Ver erros dos aparelhos</button></div>
+            <div class="linha-botoes"><button class="btn pequeno" data-a="aparelhos">${ico('wifi')} Ver todos os aparelhos</button><button class="btn pequeno" data-a="ver-erros">${ico('alerta')} Ver erros dos aparelhos</button></div>
           </section>
           <section class="bloco">
             <h2>${ico('lixeira')} Apagar todos os dados do sistema</h2>
@@ -3745,15 +3978,9 @@
   function htmlAparelhos() {
     const st = sync.status;
     if (cfg.demo) return '<p class="sub" style="margin:0">Na demonstração não há outros aparelhos.</p>';
-    const lista = st && st.aparelhos ? st.aparelhos.slice().sort((a, b) => a.minutos - b.minutos) : [];
+    const lista = st && st.aparelhos ? st.aparelhos : [];
     if (!lista.length) return '<p class="sub" style="margin:0">Nenhum aparelho mandou nada desde que a central ligou.</p>';
-    return `<div class="aparelhos">${lista.map((a) => {
-      const nome = a.nome || (a.papel === 'central' ? nomeDoChefe() : (setorPorId(a.papel) || {}).nome || 'sem setor');
-      const velho = a.versao && a.versao !== VERSAO;
-      const responsavel = a.papel === 'central' ? (a.pessoa ? `Responsável: ${a.pessoa}` : 'Ninguém entrou') : a.operador || 'ninguém no turno';
-      return `<div class="aparelho"><span class="conexao ${a.online ? 'ok' : 'off'}"><i></i>${a.online ? 'Ligado' : `Sem sinal há ${a.minutos} min`}</span>
-        <b>${esc(nome)}</b><small>${esc(responsavel)} · ${esc(a.id)} · versão ${esc(a.versao || 'antiga')}${velho ? ' (atualizar)' : ''}</small></div>`;
-    }).join('')}</div>`;
+    return `<div class="lista-aparelhos">${lista.slice(0, 6).map(linhaDoAparelho).join('')}</div>${lista.length > 6 ? `<p class="sub" style="margin:6px 0 0">E mais ${lista.length - 6} em Ver todos os aparelhos.</p>` : ''}`;
   }
   async function verErros() {
     let lista = [];
@@ -4308,6 +4535,26 @@
       case 'pessoa-nova': return editarPessoa(v, '');
       case 'pessoa-editar': return editarPessoa(v, b.dataset.id);
       case 'aparelho-chefe': return editarAparelhoChefe(v, b.dataset.id);
+      case 'aparelhos': return ir({ tela: 'aparelhos' });
+      case 'aparelho-info': return verAparelho(b.dataset.id);
+      case 'conferir-bloqueio': sincronizar(); conferirNaNuvem(true); return toast('Conferindo...');
+      case 'liberar-senha': {
+        const blq = cfg.bloqueio;
+        if (!blq || blq.modo !== 'senha') return;
+        if (Date.now() < (cfg.esperaLiberar || 0)) return toast('Muitas senhas erradas. Espere um minuto.', 'erro');
+        const pin = await pedirSenhaModal('Senha de desbloqueio', 'A senha que o administrador escolheu ao bloquear este aparelho.');
+        if (pin === undefined) return;
+        if (!/^\d{4,8}$/.test(pin) || resumoDaSenha(pin, blq.sal) !== blq.resumo) {
+          cfg.errosLiberar = (cfg.errosLiberar || 0) + 1;
+          if (cfg.errosLiberar >= 5) { cfg.errosLiberar = 0; cfg.esperaLiberar = Date.now() + 60000; }
+          salvarCfg();
+          return toast('Senha errada', 'erro');
+        }
+        cfg.errosLiberar = 0;
+        cfg.liberacao = { em: blq.em, codigo: pin }; // a central fica sabendo na próxima conversa
+        salvarCfg();
+        return liberarAparelho('Aparelho liberado. Pode usar.');
+      }
       case 'graficos': return ir({ tela: 'graficos', data: v.data || dataProducao(), setor: b.dataset.setor || '' });
       case 'graficos-dia': { const d = somarDias(v.data, Number(b.dataset.n)); if (d > dataProducao()) return; pilha[pilha.length - 1] = Object.assign({}, v, { data: d }); return render(true); }
       case 'graficos-setor': v.setor = b.dataset.setor || ''; return render();
@@ -4995,7 +5242,7 @@
     const tt = document.getElementById('turno-topo');
     if (tt && tt.textContent !== turnoAtual().nome) tt.textContent = turnoAtual().nome;
     // chegou anotação nova enquanto a pessoa rolava: redesenha quando ela soltar
-    if (redesenharDepois && podeRedesenhar()) { redesenharDepois = false; if (['central', 'inicio', 'prancheta', 'config'].includes(view().tela)) render(); }
+    if (redesenharDepois && podeRedesenhar()) { redesenharDepois = false; if (['central', 'inicio', 'prancheta', 'config', 'aparelhos'].includes(view().tela)) render(); }
     // hora da linha nova acompanha o relógio até a pessoa mudar
     if (rascunho && rascunho.horaAuto && rascunho.horaAuto.length && view().tela === 'prancheta') {
       let mudou = false;
@@ -5060,6 +5307,7 @@
       if (tela === 'operador') { cfg.op = null; pilha.push({ tela: 'operador' }); }
       else if (tela === 'config' || tela === 'admin' || tela === 'relatorios' || tela === 'pessoas' || tela === 'registro' || tela === 'folhas') pilha.push({ tela });
       else if (tela === 'graficos') pilha.push({ tela, data: dataProducao(), setor: params.get('setor') || '' });
+      else if (tela === 'aparelhos') pilha.push({ tela });
       else if (tela === 'avisos') {
         // exemplos: um lido, um na tela e um esperando
         const a1 = enviarAviso('hidrolise', 'Guilherme', 'Passe no escritório antes de sair, por favor.');
@@ -5086,6 +5334,10 @@
     if (params.get('modal') === 'atualizacao') oferecerAtualizacao();
     if (params.get('modal') === 'novidades') mostrarNovidades('2.6.0');
     if (params.get('ninguem')) { demoSemPessoa = true; render(true); }
+    // aparelhos e bloqueio de exemplo (versão 2.11)
+    if (ehCentral()) { sync.status = statusDeExemplo(); render(true); }
+    if (params.get('bloqueio')) { cfg.bloqueio = { em: Date.now() - 3600000, modo: params.get('bloqueio'), apagar: params.get('apagar') === '1', sal: '', resumo: '' }; pilha = [{ tela: 'bloqueado-adm' }]; render(true); }
+    if (params.get('aparelho')) verAparelho(params.get('aparelho'));
     if (params.get('modal') === 'entrar') entrarNoChefe();
     if (params.get('aviso') && cfg.papel && !ehCentral() && operadorAtual()) {
       enviarAviso(cfg.papel, operadorAtual(), 'Passe no escritório antes de sair, por favor. O encarregado quer falar sobre a troca de turno de amanhã.');
@@ -5123,7 +5375,8 @@
     pilha = [telaInicial()];
     if (cfg.papel && (cfg.chave || cfg.demo) && !ehCentral() && !operadorAtual()) pilha.push({ tela: 'operador' });
     render(true);
-    sincronizar();
+    lerInfoDoAparelho().finally(sincronizar);
+    setTimeout(() => conferirNaNuvem(true), 4000);
     setTimeout(verificarAvisos, 800); // aviso que já estava guardado neste aparelho
     conferirNovidades();
     // versão nova na central (ou na nuvem): procura logo depois de abrir e a cada 30 minutos

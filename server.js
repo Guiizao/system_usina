@@ -321,23 +321,28 @@ async function enviarParaNuvem() {
     if (!n.conferida) {
       const e = await pedirNuvem('central/estado');
       if (e.status !== 200 || !e.json) throw new Error(erroDaNuvem(e));
-      if (e.json.geracao !== config.geracao || !e.json.registros) { n.seq = 0; n.arquivosEnviados = false; n.formsHash = ''; n.medidasHash = ''; }
+      if (e.json.geracao !== config.geracao || !e.json.registros) { n.seq = 0; n.arquivosEnviados = false; n.formsHash = ''; n.medidasHash = ''; n.bloqueiosHash = ''; }
       n.conferida = true;
     }
     const forms = carregarPranchetas();
+    delete forms.pinAdmin; // senha não vai para a nuvem
     const formsHash = resumoHash(forms);
+    // aparelhos bloqueados: longe da usina, o aparelho pergunta na nuvem (versão 2.11)
+    const bloqueios = Object.entries(config.bloqueios).map(([id, b]) => Object.assign({ id }, bloqueioPublico(b)));
+    const bloqueiosHash = resumoHash(bloqueios);
     const medidas = medidasDoEscritorio();
     const medidasHash = resumoHash(medidas);
     for (let vez = 0; vez < 40; vez++) {
       const pend = pendentesNuvem(n);
       const lote = pend.slice(0, NUVEM_LOTE);
-      if (!lote.length && n.formsHash === formsHash && n.medidasHash === medidasHash) { n.arquivosEnviados = true; n.faltam = 0; break; }
+      if (!lote.length && n.formsHash === formsHash && n.medidasHash === medidasHash && n.bloqueiosHash === bloqueiosHash) { n.arquivosEnviados = true; n.faltam = 0; break; }
       const corpo = { geracao: config.geracao, medidas, registros: lote };
       if (n.formsHash !== formsHash) corpo.forms = forms;
+      if (n.bloqueiosHash !== bloqueiosHash) corpo.bloqueios = bloqueios;
       const r = await pedirNuvem('central/enviar', corpo);
       if (r.status !== 200) throw new Error(erroDaNuvem(r));
       if (lote.length) n.seq = lote[lote.length - 1].seq;
-      n.formsHash = formsHash; n.medidasHash = medidasHash;
+      n.formsHash = formsHash; n.medidasHash = medidasHash; n.bloqueiosHash = bloqueiosHash;
       n.ultimoEnvio = Date.now(); n.erro = '';
       n.faltam = Math.max(0, pend.length - lote.length);
     }
@@ -419,7 +424,10 @@ function eventosDoAparelho(id, antes, corpo) {
   const visto = config.aparelhosVistos[id];
   const nome = nomeDoAparelho(id);
   if (!visto) {
-    config.aparelhosVistos[id] = { papel: corpo.papel || '', nome: String(corpo.nome || '').slice(0, 60), versao: corpo.versao || '', desde: Date.now() };
+    config.aparelhosVistos[id] = { papel: corpo.papel || '', nome: String(corpo.nome || '').slice(0, 60), versao: corpo.versao || '', desde: Date.now(), vistoEm: Date.now() };
+    const info = infoLimpa(corpo.info);
+    if (info) config.aparelhosVistos[id].info = info;
+    if (aparelhos[id] && aparelhos[id].ip) config.aparelhosVistos[id].ip = aparelhos[id].ip;
     salvarConfig();
     registrar('aparelho', `${nome} conectou na central pela primeira vez`, { aparelho: nome });
     return;
@@ -428,6 +436,15 @@ function eventosDoAparelho(id, antes, corpo) {
   if (corpo.versao && visto.versao && corpo.versao !== visto.versao) { registrar('aparelho', `${nome} atualizou da versão ${visto.versao} para a ${corpo.versao}`, { aparelho: nome, antes: visto.versao, depois: corpo.versao }); mudou = true; }
   if (corpo.papel && visto.papel && corpo.papel !== visto.papel) { registrar('aparelho', `${nome} mudou de função`, { aparelho: nome, antes: visto.papel, depois: corpo.papel }); mudou = true; }
   if (mudou || (corpo.versao && !visto.versao) || (corpo.papel && !visto.papel) || (corpo.nome && corpo.nome !== visto.nome)) { visto.versao = corpo.versao || visto.versao; visto.papel = corpo.papel || visto.papel; visto.nome = String(corpo.nome || visto.nome || '').slice(0, 60); salvarConfig(); }
+  // nome no Android, modelo e endereço: guardados quando mudam; a hora em que foi visto, de 10 em 10 minutos
+  const info = infoLimpa(corpo.info);
+  const ip = aparelhos[id] ? aparelhos[id].ip : '';
+  if ((info && JSON.stringify(info) !== JSON.stringify(visto.info || null)) || (ip && ip !== visto.ip) || Date.now() - (visto.vistoEm || 0) > 10 * 60000) {
+    if (info) visto.info = info;
+    if (ip) visto.ip = ip;
+    visto.vistoEm = Date.now();
+    salvarConfig();
+  }
   if (antes && antes.semSinal) registrar('aparelho', `${nome} voltou a falar com a central (ficou ${Math.max(1, Math.round((Date.now() - antes.vistoEm) / 60000))} min sem sinal)`, { aparelho: nome });
 }
 const SEM_SINAL_MS = Number(process.env.REGISTRO_SEM_SINAL_MS || 120000);
@@ -437,6 +454,41 @@ setInterval(() => {
     if (!a.semSinal && agora - a.vistoEm > SEM_SINAL_MS) { a.semSinal = true; registrar('aparelho', `${nomeDoAparelho(id)} ficou sem sinal`, { aparelho: nomeDoAparelho(id) }); }
   });
 }, Math.min(15000, SEM_SINAL_MS / 2)).unref();
+
+// ---------- Aparelhos bloqueados (versão 2.11) ----------
+// O administrador bloqueia um aparelho pelo tablet chefe. "Pede senha": ele só volta com a senha de desbloqueio que o
+// administrador escolheu (o próprio aparelho confere, para funcionar até longe da usina). "Trava de vez": só o
+// administrador desbloqueia. Com "apagar", o aparelho apaga as anotações que guarda. A lista também vai para a nuvem:
+// o aparelho que estiver longe da usina, com internet, pergunta lá se está bloqueado.
+if (!config.bloqueios) config.bloqueios = {};
+const bloqueioPublico = (b) => ({ em: b.em, modo: b.modo, apagar: !!b.apagar, sal: b.sal || '', resumo: b.resumo || '' });
+const avisouBloqueado = {};
+/** As informações que o aparelho manda dele (nome no Android, fabricante, modelo, versão do Android). */
+function infoLimpa(info) {
+  if (!info || typeof info !== 'object') return null;
+  const limpo = {};
+  ['nome', 'fabricante', 'modelo', 'android', 'navegador'].forEach((k) => { if (typeof info[k] === 'string' && info[k].trim()) limpo[k] = info[k].trim().slice(0, 60); });
+  return Object.keys(limpo).length ? limpo : null;
+}
+/** Todos os aparelhos que já falaram com esta central: os ligados primeiro. */
+function listaDeAparelhos() {
+  const agora = Date.now();
+  const ids = new Set([...Object.keys(aparelhos), ...Object.keys(config.aparelhosVistos)]);
+  return [...ids].map((id) => {
+    const a = aparelhos[id] || null;
+    const v = config.aparelhosVistos[id] || {};
+    const visto = a ? a.vistoEm : v.vistoEm || 0;
+    const papel = (a && a.papel) || v.papel || '';
+    const b = config.bloqueios[id];
+    const pessoa = papel === 'central' && pessoaDoAparelho(id) ? pessoaDoAparelho(id).nome : '';
+    return {
+      id, papel, operador: a ? a.operador || '' : '', ip: (a && a.ip) || v.ip || '', versao: (a && a.versao) || v.versao || '',
+      nome: nomeDoAparelho(id), pessoa, teto: tetoDoAparelho(id), info: (a && a.info) || v.info || null, desde: v.desde || null,
+      online: !!a && agora - a.vistoEm < 30000, minutos: visto ? Math.round((agora - visto) / 60000) : null,
+      bloqueio: b ? { em: b.em, modo: b.modo, apagar: !!b.apagar, por: b.por || '' } : null,
+    };
+  }).sort((x, y) => (y.online - x.online) || ((x.minutos == null ? 1e9 : x.minutos) - (y.minutos == null ? 1e9 : y.minutos)));
+}
 
 // ---------- totais do dia para o sistema do escritório (Base44) ----------
 // o endereço e o segredo ficam só aqui na central, não vão para os tablets
@@ -723,7 +775,15 @@ const servidor = http.createServer(async (req, res) => {
       const caminho = String(cab.c || '');
       if (!/^api\/[a-z0-9-]+(\?.*)?$/.test(caminho) || /^api\/(c|ping|parear)(\?|$)/.test(caminho)) return json(res, 400, { erro: 'caminho inválido' });
       const falso = { status: 200, corpo: '', setHeader() {}, writeHead(s) { this.status = s; }, end(b) { this.corpo = b == null ? '' : String(b); } };
-      await rotaProtegida({ method: cab.m === 'POST' ? 'POST' : 'GET', corpoPronto: texto.slice(nl + 1), aparelho }, falso, new URL('/' + caminho, 'http://localhost'), ip);
+      const bloqueio = config.bloqueios[aparelho];
+      if (bloqueio && !/^api\/liberar(\?|$)/.test(caminho)) {
+        // aparelho bloqueado pelo administrador: só consegue tentar se liberar com a senha
+        falso.status = 423;
+        falso.corpo = JSON.stringify({ erro: 'bloqueado', bloqueio: bloqueioPublico(bloqueio) });
+        if (Date.now() - (avisouBloqueado[aparelho] || 0) > 3600000) { avisouBloqueado[aparelho] = Date.now(); registrar('aparelho', `${nomeDoAparelho(aparelho)} está bloqueado e tentou falar com a central`, { aparelho: nomeDoAparelho(aparelho) }); }
+      } else {
+        await rotaProtegida({ method: cab.m === 'POST' ? 'POST' : 'GET', corpoPronto: texto.slice(nl + 1), aparelho }, falso, new URL('/' + caminho, 'http://localhost'), ip);
+      }
       res.writeHead(200, { 'Content-Type': 'application/octet-stream', 'Cache-Control': 'no-store' });
       return res.end(selar(chave, `${falso.status}\n${falso.corpo}`, Buffer.concat([Buffer.from('resposta|'), iv])));
     }
@@ -749,7 +809,7 @@ async function rotaProtegida(req, res, url, ip) {
         const corpo = JSON.parse(await lerCorpo(req));
         if (corpo.aparelho) {
           const antes = aparelhos[corpo.aparelho];
-          aparelhos[corpo.aparelho] = { papel: corpo.papel, nome: String(corpo.nome || '').slice(0, 60), operador: corpo.operador, versao: corpo.versao || '', vistoEm: Date.now(), ip };
+          aparelhos[corpo.aparelho] = { papel: corpo.papel, nome: String(corpo.nome || '').slice(0, 60), operador: corpo.operador, versao: corpo.versao || '', vistoEm: Date.now(), ip, info: infoLimpa(corpo.info) };
           eventosDoAparelho(corpo.aparelho, antes, corpo);
         }
         guardarErros(corpo.aparelho, corpo.erros, ip);
@@ -783,7 +843,8 @@ async function rotaProtegida(req, res, url, ip) {
         }
         Object.entries(antigos).forEach(([d, lista]) => { aceitos += juntarNoArquivo(d, lista); });
         if (aceitos) { gravarDisco(); dias.forEach(backupDoDia); agendarNuvem(); }
-        return json(res, 200, { ok: true, aceitos, seq: db.seq, agora: Date.now(), geracao: config.geracao });
+        // o endereço da nuvem vai junto: longe da usina, o aparelho pergunta lá se foi bloqueado
+        return json(res, 200, { ok: true, aceitos, seq: db.seq, agora: Date.now(), geracao: config.geracao, nuvem: config.nuvem.url || '' });
       }
 
       // pessoas do escritório: entrar com a senha, sair, e (só o administrador) cadastrar e dar permissões
@@ -860,6 +921,61 @@ async function rotaProtegida(req, res, url, ip) {
           salvarConfig();
           registrar('configuracao', `${quem.nome} mudou o que o ${nomeAntes} pode fazer${a.nome && a.nome !== nomeAntes ? ` (agora se chama ${a.nome})` : ''}`, { quem: quem.nome, aparelho: aqui });
           return lista();
+        }
+        return json(res, 400, { erro: 'ação desconhecida' });
+      }
+
+      // aparelho bloqueado que pede senha: a senha de desbloqueio libera (versão 2.11)
+      if (p === '/api/liberar' && req.method === 'POST') {
+        const corpo = JSON.parse(await lerCorpo(req, 10000));
+        const b = config.bloqueios[req.aparelho];
+        if (!b) return json(res, 200, { ok: true });
+        if (b.modo !== 'senha') return json(res, 423, { erro: 'bloqueado', bloqueio: bloqueioPublico(b) });
+        const agora = Date.now();
+        const t = (tentativasSenha['liberar|' + req.aparelho] = (tentativasSenha['liberar|' + req.aparelho] || []).filter((x) => agora - x < 60000));
+        if (t.length >= 5) return json(res, 429, { erro: 'Muitas senhas erradas. Espere um minuto.' });
+        const codigo = String(corpo.codigo || '');
+        if (!/^\d{4,8}$/.test(codigo) || !mesmoSegredo(resumoDaSenha(codigo, b.sal), b.resumo)) { t.push(agora); return json(res, 403, { erro: 'Senha errada', bloqueio: bloqueioPublico(b) }); }
+        delete config.bloqueios[req.aparelho];
+        salvarConfig();
+        registrar('aparelho', `${nomeDoAparelho(req.aparelho)} foi liberado com a senha de desbloqueio`, { aparelho: nomeDoAparelho(req.aparelho) });
+        agendarNuvem(500);
+        return json(res, 200, { ok: true });
+      }
+
+      // bloquear e desbloquear um aparelho: só o administrador (versão 2.11)
+      if (p === '/api/aparelhos' && req.method === 'POST') {
+        const corpo = JSON.parse(await lerCorpo(req, 10000));
+        const quem = pessoaDoAparelho(req.aparelho);
+        if (!quem || quem.nivel !== 'administrador') return json(res, 403, { erro: 'Só o administrador bloqueia e desbloqueia aparelhos' });
+        const id = String(corpo.id || '').slice(0, 80);
+        if (!id || !(aparelhos[id] || config.aparelhosVistos[id])) return json(res, 404, { erro: 'Aparelho não encontrado' });
+        const nome = nomeDoAparelho(id);
+        const aqui = nomeDoAparelho(req.aparelho);
+        if (corpo.acao === 'bloquear') {
+          if (id === req.aparelho) return json(res, 400, { erro: 'Não dá para bloquear o aparelho que você está usando' });
+          const modo = corpo.modo === 'senha' ? 'senha' : 'trava';
+          const b = { em: Date.now(), modo, apagar: !!corpo.apagar, por: quem.nome };
+          if (modo === 'senha') {
+            const codigo = String(corpo.codigo || '');
+            if (!/^\d{4,8}$/.test(codigo)) return json(res, 400, { erro: 'A senha de desbloqueio tem de 4 a 8 números' });
+            Object.assign(b, guardarSenha(codigo));
+          }
+          config.bloqueios[id] = b;
+          delete config.sessoes[id];
+          salvarConfig();
+          registrar('configuracao', `${quem.nome} bloqueou o ${nome} (${modo === 'senha' ? 'pede a senha de desbloqueio' : 'travado de vez'}${b.apagar ? ', apagando as anotações guardadas nele' : ''})`, { quem: quem.nome, aparelho: aqui });
+          agendarNuvem(500);
+          return json(res, 200, { ok: true, aparelhos: listaDeAparelhos() });
+        }
+        if (corpo.acao === 'desbloquear') {
+          if (config.bloqueios[id]) {
+            delete config.bloqueios[id];
+            salvarConfig();
+            registrar('configuracao', `${quem.nome} desbloqueou o ${nome}`, { quem: quem.nome, aparelho: aqui });
+            agendarNuvem(500);
+          }
+          return json(res, 200, { ok: true, aparelhos: listaDeAparelhos() });
         }
         return json(res, 400, { erro: 'ação desconhecida' });
       }
@@ -952,11 +1068,7 @@ async function rotaProtegida(req, res, url, ip) {
           seq: db.seq, total: Object.keys(db.registros).length,
           codigo: config.codigo, enderecos: enderecosLocais(), apk: fs.existsSync(APK), base44: estadoBase44(false), nuvem: estadoNuvem(),
           pastas: { servidor: PASTAS.servidor, relatorios: PASTAS.relatorios, backup: PASTAS.backup },
-          aparelhos: Object.entries(aparelhos).map(([id, a]) => ({
-            id, papel: a.papel, operador: a.operador, ip: a.ip, versao: a.versao || '',
-            nome: nomeDoAparelho(id), pessoa: a.papel === 'central' && pessoaDoAparelho(id) ? pessoaDoAparelho(id).nome : '', teto: tetoDoAparelho(id),
-            online: agora - a.vistoEm < 30000, minutos: Math.round((agora - a.vistoEm) / 60000),
-          })),
+          aparelhos: listaDeAparelhos(),
         });
       }
 

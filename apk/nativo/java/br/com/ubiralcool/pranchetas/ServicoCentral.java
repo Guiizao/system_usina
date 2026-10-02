@@ -32,6 +32,7 @@ public class ServicoCentral extends Service {
   @Override
   public int onStartCommand(Intent intent, int flags, int startId) {
     ServicoCompat.mostrarAviso(this);
+    if (!Protecao.assinaturaConfere(this)) { stopSelf(); return START_NOT_STICKY; } // cópia alterada: a central não liga
     try {
       ServidorCentral.pegar(this, 8080).iniciar(); // se o Android reiniciar o serviço, o servidor volta sozinho
     } catch (Exception ignorado) { /* a tela tenta de novo quando abrir */ }

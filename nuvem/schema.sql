@@ -20,6 +20,12 @@ CREATE TABLE IF NOT EXISTS dias (
   anotacoes INTEGER NOT NULL DEFAULT 0
 );
 
+-- aparelhos bloqueados pelo administrador (versão 2.11): o aparelho longe da usina pergunta aqui
+CREATE TABLE IF NOT EXISTS bloqueios (
+  id TEXT PRIMARY KEY,
+  json TEXT NOT NULL
+);
+
 -- o que a central mandou além das anotações: geracao, forms (as folhas), medidas das dornas, último envio
 CREATE TABLE IF NOT EXISTS info (
   chave TEXT PRIMARY KEY,

@@ -89,6 +89,21 @@ public class CentralPlugin extends Plugin {
     chamada.resolve(new JSObject().put("estado", ok ? "concedida" : podePerguntar ? "negada" : "bloqueada"));
   }
 
+  /**
+   * Nome do aparelho no Android (o que aparece em Sobre o aparelho, como "Galaxy S23 de Guilherme"), fabricante,
+   * modelo e versão do Android (versão 2.11). A central mostra em Aparelhos. O endereço MAC o Android não entrega.
+   */
+  @PluginMethod
+  public void infoDoAparelho(PluginCall chamada) {
+    Context ctx = getContext();
+    String nome = null;
+    try { if (Build.VERSION.SDK_INT >= 25) nome = Settings.Global.getString(ctx.getContentResolver(), Settings.Global.DEVICE_NAME); } catch (Exception ignorado) { }
+    if (nome == null || nome.trim().isEmpty()) try { nome = Settings.Secure.getString(ctx.getContentResolver(), "bluetooth_name"); } catch (Exception ignorado) { }
+    if (nome == null || nome.trim().isEmpty()) try { nome = Settings.System.getString(ctx.getContentResolver(), "device_name"); } catch (Exception ignorado) { }
+    chamada.resolve(new JSObject().put("nome", nome == null ? "" : nome.trim()).put("fabricante", Build.MANUFACTURER)
+        .put("modelo", Build.MODEL).put("android", Build.VERSION.RELEASE));
+  }
+
   /** Abre a tela do aplicativo nos ajustes do Android (para liberar uma permissão na mão). */
   @PluginMethod
   public void abrirAjustesDoApp(PluginCall chamada) {
@@ -117,6 +132,7 @@ public class CentralPlugin extends Plugin {
 
   @PluginMethod
   public void iniciar(PluginCall chamada) {
+    if (!Protecao.assinaturaConfere(getContext())) { chamada.reject("Esta cópia do aplicativo foi alterada: a central não liga."); return; }
     try {
       ServidorCentral s = servidor(chamada);
       s.iniciar();

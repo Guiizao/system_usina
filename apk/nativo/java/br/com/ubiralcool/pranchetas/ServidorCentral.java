@@ -632,6 +632,8 @@ public class ServidorCentral {
         if ("/api/base44".equals(caminho) && "POST".equals(metodo)) { apiBase44(corpo, saida); return; }
         if ("/api/nuvem".equals(caminho) && "POST".equals(metodo)) { apiNuvem(corpo, saida); return; }
         if ("/api/pessoas".equals(caminho) && "POST".equals(metodo)) { apiPessoas(corpo, aparelho, saida); return; }
+        if ("/api/liberar".equals(caminho) && "POST".equals(metodo)) { apiLiberar(corpo, aparelho, saida); return; }
+        if ("/api/aparelhos".equals(caminho) && "POST".equals(metodo)) { apiAparelhos(corpo, aparelho, saida); return; }
         if ("/api/registro".equals(caminho)) { apiRegistro(consulta, saida); return; }
         if ("/api/relatorio".equals(caminho) && "POST".equals(metodo)) { apiRelatorio(corpo, saida); return; }
         if ("/api/relatorio-apagar".equals(caminho) && "POST".equals(metodo)) { apiRelatorioApagar(corpo, saida); return; }
@@ -662,6 +664,8 @@ public class ServidorCentral {
           .put("versao", pedido.optString("versao"))
           .put("vistoEm", System.currentTimeMillis())
           .put("ip", ip));
+      JSONObject info = infoLimpa(pedido.optJSONObject("info"));
+      if (info != null) aparelhos.get(aparelho).put("info", info);
     }
     if (!aparelho.isEmpty()) eventosDoAparelho(aparelho, antesDoAparelho, pedido);
     guardarErros(aparelho, pedido.optJSONArray("erros"), ip);
@@ -712,7 +716,9 @@ public class ServidorCentral {
       for (String dia : dias) backupDoDia(dia);
       agendarNuvem();
     }
-    enviarJson(saida, 200, new JSONObject().put("ok", true).put("aceitos", aceitos).put("seq", seq).put("agora", System.currentTimeMillis()).put("geracao", getGeracao()));
+    // o endereço da nuvem vai junto: longe da usina, o aparelho pergunta lá se foi bloqueado
+    enviarJson(saida, 200, new JSONObject().put("ok", true).put("aceitos", aceitos).put("seq", seq).put("agora", System.currentTimeMillis()).put("geracao", getGeracao())
+        .put("nuvem", nuvem().optString("url")));
   }
 
   /* Dois aparelhos criaram a mesma linha sem um saber do outro (ex.: o tablet chefe corrigiu uma dorna nos segundos
@@ -824,23 +830,7 @@ public class ServidorCentral {
   }
 
   private synchronized void apiStatus(OutputStream saida) throws Exception {
-    JSONArray lista = new JSONArray();
-    long agora = System.currentTimeMillis();
-    for (Map.Entry<String, JSONObject> e : aparelhos.entrySet()) {
-      JSONObject a = e.getValue();
-      long visto = a.optLong("vistoEm");
-      lista.put(new JSONObject()
-          .put("id", e.getKey())
-          .put("papel", a.optString("papel"))
-          .put("operador", a.optString("operador"))
-          .put("versao", a.optString("versao"))
-          .put("ip", a.optString("ip"))
-          .put("nome", nomeDoAparelho(e.getKey()))
-          .put("pessoa", "central".equals(a.optString("papel")) && pessoaDoAparelho(e.getKey()) != null ? pessoaDoAparelho(e.getKey()).optString("nome") : "")
-          .put("teto", tetoDoAparelho(e.getKey()))
-          .put("online", agora - visto < 30000)
-          .put("minutos", Math.round((agora - visto) / 60000.0)));
-    }
+    JSONArray lista = listaDeAparelhos();
     JSONArray ends = new JSONArray();
     for (String e : enderecos()) ends.put(e);
     String docs = Build.VERSION.SDK_INT >= 29 ? "Documentos/Usina/" : "";
@@ -1142,7 +1132,15 @@ public class ServidorCentral {
     String c = cab.optString("c");
     if (!c.matches("api/[a-z0-9-]+(\\?.*)?") || c.matches("api/(c|ping|parear)(\\?.*)?")) { enviarJson(saida, 400, new JSONObject().put("erro", "caminho inválido")); return; }
     ByteArrayOutputStream captura = new ByteArrayOutputStream();
-    responder("POST".equals(cab.optString("m")) ? "POST" : "GET", "/" + c, new HashMap<>(), texto.substring(nl + 1).getBytes(StandardCharsets.UTF_8), ip, captura, false, true, quem);
+    JSONObject bloqueio;
+    synchronized (this) { bloqueio = bloqueios().optJSONObject(quem); }
+    if (bloqueio != null && !c.matches("api/liberar(\\?.*)?")) {
+      // aparelho bloqueado pelo administrador: só consegue tentar se liberar com a senha
+      avisarBloqueado(quem);
+      enviarJson(captura, 423, new JSONObject().put("erro", "bloqueado").put("bloqueio", bloqueioPublico(bloqueio)));
+    } else {
+      responder("POST".equals(cab.optString("m")) ? "POST" : "GET", "/" + c, new HashMap<>(), texto.substring(nl + 1).getBytes(StandardCharsets.UTF_8), ip, captura, false, true, quem);
+    }
     // a resposta gravada: situação na primeira linha, corpo depois da linha em branco
     byte[] bruto = captura.toByteArray();
     int fimLinha = 0, fimCab = 0;
@@ -1495,7 +1493,7 @@ public class ServidorCentral {
           JSONObject j = new JSONObject((String) e[1]);
           synchronized (this) {
             if (!getGeracao().equals(j.optString("geracao")) || j.optLong("registros") == 0) {
-              n.put("seq", 0L).put("arquivosEnviados", false).put("formsHash", "").put("medidasHash", "");
+              n.put("seq", 0L).put("arquivosEnviados", false).put("formsHash", "").put("medidasHash", "").put("bloqueiosHash", "");
             }
             n.put("conferida", true);
           }
@@ -1503,14 +1501,19 @@ public class ServidorCentral {
         // as folhas (forms.js) vêm do aplicativo do tablet chefe, que manda ao abrir
         JSONObject forms;
         synchronized (this) { forms = config.optJSONObject("nuvemForms"); }
+        if (forms != null) { forms = new JSONObject(forms.toString()); forms.remove("pinAdmin"); } // senha não vai para a nuvem
         String formsHash = forms == null ? "" : resumo(forms.toString());
+        // aparelhos bloqueados: longe da usina, o aparelho pergunta na nuvem (versão 2.11)
+        JSONArray bloqueados = bloqueiosParaNuvem();
+        String bloqueiosHash = resumo(bloqueados.toString());
         Object medidas = medidasDoEscritorio();
         String medidasHash = resumo(String.valueOf(medidas));
         for (int vez = 0; vez < 40; vez++) {
           List<JSONObject> pend = pendentesNuvem(n);
           List<JSONObject> lote = pend.subList(0, Math.min(NUVEM_LOTE, pend.size()));
           boolean formsMudou = forms != null && !formsHash.equals(n.optString("formsHash"));
-          if (lote.isEmpty() && !formsMudou && medidasHash.equals(n.optString("medidasHash"))) {
+          boolean bloqueiosMudaram = !bloqueiosHash.equals(n.optString("bloqueiosHash"));
+          if (lote.isEmpty() && !formsMudou && !bloqueiosMudaram && medidasHash.equals(n.optString("medidasHash"))) {
             synchronized (this) { n.put("arquivosEnviados", true).put("faltam", 0L); }
             break;
           }
@@ -1518,12 +1521,13 @@ public class ServidorCentral {
           for (JSONObject r : lote) regs.put(r);
           JSONObject corpo = new JSONObject().put("geracao", getGeracao()).put("medidas", medidas).put("registros", regs);
           if (formsMudou) corpo.put("forms", forms);
+          if (bloqueiosMudaram) corpo.put("bloqueios", bloqueados);
           Object[] r = pedirNuvem(url, segredo, "central/enviar", corpo);
           if ((Integer) r[0] != 200) throw new Exception(erroDaNuvem(r));
           synchronized (this) {
             if (!lote.isEmpty()) n.put("seq", lote.get(lote.size() - 1).optLong("seq"));
             if (forms != null) n.put("formsHash", formsHash);
-            n.put("medidasHash", medidasHash).put("ultimoEnvio", System.currentTimeMillis()).put("erro", "").put("faltam", (long) Math.max(0, pend.size() - lote.size()));
+            n.put("medidasHash", medidasHash).put("bloqueiosHash", bloqueiosHash).put("ultimoEnvio", System.currentTimeMillis()).put("erro", "").put("faltam", (long) Math.max(0, pend.size() - lote.size()));
           }
         }
       } catch (Exception e) {
@@ -1562,7 +1566,11 @@ public class ServidorCentral {
         }
         salvarConfig();
       }
-      try { if (relogioNuvem != null) relogioNuvem.schedule(this::enviarParaNuvem, 500, java.util.concurrent.TimeUnit.MILLISECONDS); } catch (Exception ignorado) { }
+      try {
+        if (relogioNuvem != null) {
+          relogioNuvem.schedule(this::enviarParaNuvem, 500, java.util.concurrent.TimeUnit.MILLISECONDS);
+        }
+      } catch (Exception ignorado) { }
       enviarJson(saida, 200, estadoNuvem());
       return;
     }
@@ -1718,7 +1726,13 @@ public class ServidorCentral {
       String nome = nomeDoAparelho(id);
       String versao = pedido.optString("versao"), papel = pedido.optString("papel");
       if (visto == null) {
-        vistos.put(id, new JSONObject().put("papel", papel).put("nome", pedido.optString("nome")).put("versao", versao).put("desde", System.currentTimeMillis()));
+        JSONObject novo = new JSONObject().put("papel", papel).put("nome", pedido.optString("nome")).put("versao", versao)
+            .put("desde", System.currentTimeMillis()).put("vistoEm", System.currentTimeMillis());
+        JSONObject info = infoLimpa(pedido.optJSONObject("info"));
+        if (info != null) novo.put("info", info);
+        JSONObject agoraAqui = aparelhos.get(id);
+        if (agoraAqui != null && !agoraAqui.optString("ip").isEmpty()) novo.put("ip", agoraAqui.optString("ip"));
+        vistos.put(id, novo);
         salvarConfig();
         registrar("aparelho", nome + " conectou na central pela primeira vez", "", nome, null);
         return;
@@ -1738,6 +1752,17 @@ public class ServidorCentral {
         if (!versao.isEmpty()) visto.put("versao", versao);
         if (!papel.isEmpty()) visto.put("papel", papel);
         if (!nomeDele.isEmpty()) visto.put("nome", nomeDele);
+        salvarConfig();
+      }
+      // nome no Android, modelo e endereço: guardados quando mudam; a hora em que foi visto, de 10 em 10 minutos
+      JSONObject info = infoLimpa(pedido.optJSONObject("info"));
+      JSONObject agoraAqui = aparelhos.get(id);
+      String ip = agoraAqui == null ? "" : agoraAqui.optString("ip");
+      if ((info != null && !mesmaInfo(info, visto.optJSONObject("info"))) || (!ip.isEmpty() && !ip.equals(visto.optString("ip")))
+          || System.currentTimeMillis() - visto.optLong("vistoEm") > 600000L) {
+        if (info != null) visto.put("info", info);
+        if (!ip.isEmpty()) visto.put("ip", ip);
+        visto.put("vistoEm", System.currentTimeMillis());
         salvarConfig();
       }
       if (antes != null && antes.optBoolean("semSinal")) {
@@ -1943,5 +1968,160 @@ public class ServidorCentral {
     JSONArray publicas = new JSONArray();
     for (int i = 0; i < l.length(); i++) { JSONObject p = l.optJSONObject(i); if (p != null) publicas.put(pessoaPublica(p)); }
     return new JSONObject().put("pessoas", publicas).put("aparelhos", objetoDaConfig("aparelhosChefe"));
+  }
+
+  /* ------------------------------------------------------------------ */
+  /* Aparelhos bloqueados (versão 2.11). O administrador bloqueia um     */
+  /* aparelho pelo tablet chefe. "Pede senha": ele só volta com a senha  */
+  /* de desbloqueio (o próprio aparelho confere, até longe da usina).    */
+  /* "Trava de vez": só o administrador desbloqueia. Com "apagar", o     */
+  /* aparelho apaga as anotações que guarda. A lista vai para a nuvem.   */
+  /* ------------------------------------------------------------------ */
+
+  private final Map<String, Long> avisouBloqueado = new HashMap<>();
+
+  private synchronized JSONObject bloqueios() throws Exception { return objetoDaConfig("bloqueios"); }
+
+  private static JSONObject bloqueioPublico(JSONObject b) throws Exception {
+    return new JSONObject().put("em", b.optLong("em")).put("modo", b.optString("modo")).put("apagar", b.optBoolean("apagar"))
+        .put("sal", b.optString("sal")).put("resumo", b.optString("resumo"));
+  }
+
+  /** Os bloqueios como vão para a nuvem (com o id do aparelho). */
+  private synchronized JSONArray bloqueiosParaNuvem() throws Exception {
+    JSONObject todos = bloqueios();
+    List<String> ids = new ArrayList<>();
+    for (Iterator<String> it = todos.keys(); it.hasNext(); ) ids.add(it.next());
+    Collections.sort(ids);
+    JSONArray lista = new JSONArray();
+    for (String id : ids) { JSONObject b = todos.optJSONObject(id); if (b != null) lista.put(bloqueioPublico(b).put("id", id)); }
+    return lista;
+  }
+
+  private synchronized void avisarBloqueado(String aparelho) {
+    Long antes = avisouBloqueado.get(aparelho);
+    if (antes != null && System.currentTimeMillis() - antes < 3600000L) return;
+    avisouBloqueado.put(aparelho, System.currentTimeMillis());
+    String nome = nomeDoAparelho(aparelho);
+    registrar("aparelho", nome + " está bloqueado e tentou falar com a central", "", nome, null);
+  }
+
+  /** As informações que o aparelho manda dele (nome no Android, fabricante, modelo, versão do Android). */
+  private static JSONObject infoLimpa(JSONObject info) throws Exception {
+    if (info == null) return null;
+    JSONObject limpo = new JSONObject();
+    for (String k : new String[] { "nome", "fabricante", "modelo", "android", "navegador" }) {
+      Object v = info.opt(k);
+      if (v instanceof String && !((String) v).trim().isEmpty()) { String s = ((String) v).trim(); limpo.put(k, s.length() > 60 ? s.substring(0, 60) : s); }
+    }
+    return limpo.length() == 0 ? null : limpo;
+  }
+
+  private static boolean mesmaInfo(JSONObject a, JSONObject b) {
+    if (a == null || b == null) return a == b;
+    for (String k : new String[] { "nome", "fabricante", "modelo", "android", "navegador" }) if (!a.optString(k).equals(b.optString(k))) return false;
+    return true;
+  }
+
+  /** Todos os aparelhos que já falaram com esta central: os ligados primeiro. */
+  private synchronized JSONArray listaDeAparelhos() throws Exception {
+    long agora = System.currentTimeMillis();
+    JSONObject vistos = objetoDaConfig("aparelhosVistos");
+    List<String> ids = new ArrayList<>(aparelhos.keySet());
+    for (Iterator<String> it = vistos.keys(); it.hasNext(); ) { String id = it.next(); if (!ids.contains(id)) ids.add(id); }
+    List<JSONObject> lista = new ArrayList<>();
+    for (String id : ids) {
+      JSONObject a = aparelhos.get(id);
+      JSONObject v = vistos.optJSONObject(id);
+      if (v == null) v = new JSONObject();
+      long visto = a != null ? a.optLong("vistoEm") : v.optLong("vistoEm");
+      String papel = a != null && !a.optString("papel").isEmpty() ? a.optString("papel") : v.optString("papel");
+      JSONObject b = bloqueios().optJSONObject(id);
+      JSONObject pessoa = "central".equals(papel) ? pessoaDoAparelho(id) : null;
+      JSONObject info = a != null && a.optJSONObject("info") != null ? a.optJSONObject("info") : v.optJSONObject("info");
+      String ip = a != null && !a.optString("ip").isEmpty() ? a.optString("ip") : v.optString("ip");
+      String versao = a != null && !a.optString("versao").isEmpty() ? a.optString("versao") : v.optString("versao");
+      lista.add(new JSONObject()
+          .put("id", id).put("papel", papel).put("operador", a != null ? a.optString("operador") : "").put("ip", ip).put("versao", versao)
+          .put("nome", nomeDoAparelho(id)).put("pessoa", pessoa != null ? pessoa.optString("nome") : "").put("teto", tetoDoAparelho(id))
+          .put("info", info != null ? info : JSONObject.NULL).put("desde", v.has("desde") ? (Object) v.optLong("desde") : JSONObject.NULL)
+          .put("online", a != null && agora - visto < 30000)
+          .put("minutos", visto > 0 ? (Object) Math.round((agora - visto) / 60000.0) : JSONObject.NULL)
+          .put("bloqueio", b == null ? JSONObject.NULL : new JSONObject().put("em", b.optLong("em")).put("modo", b.optString("modo")).put("apagar", b.optBoolean("apagar")).put("por", b.optString("por"))));
+    }
+    Collections.sort(lista, (x, y) -> {
+      if (x.optBoolean("online") != y.optBoolean("online")) return x.optBoolean("online") ? -1 : 1;
+      long mx = x.opt("minutos") instanceof Number ? x.optLong("minutos") : Long.MAX_VALUE, my = y.opt("minutos") instanceof Number ? y.optLong("minutos") : Long.MAX_VALUE;
+      return Long.compare(mx, my);
+    });
+    JSONArray saida = new JSONArray();
+    for (JSONObject o : lista) saida.put(o);
+    return saida;
+  }
+
+  /** Aparelho bloqueado que pede senha: a senha de desbloqueio libera. */
+  private void apiLiberar(byte[] corpo, String aparelho, OutputStream saida) throws Exception {
+    JSONObject pedido = new JSONObject(new String(corpo, StandardCharsets.UTF_8));
+    JSONObject b;
+    synchronized (this) { b = bloqueios().optJSONObject(aparelho); }
+    if (b == null) { enviarJson(saida, 200, new JSONObject().put("ok", true)); return; }
+    if (!"senha".equals(b.optString("modo"))) { enviarJson(saida, 423, new JSONObject().put("erro", "bloqueado").put("bloqueio", bloqueioPublico(b))); return; }
+    long agora = System.currentTimeMillis();
+    List<Long> t;
+    synchronized (tentativasSenha) {
+      t = tentativasSenha.get("liberar|" + aparelho);
+      if (t == null) { t = new ArrayList<>(); tentativasSenha.put("liberar|" + aparelho, t); }
+      Iterator<Long> it = t.iterator();
+      while (it.hasNext()) if (agora - it.next() >= 60000L) it.remove();
+      if (t.size() >= 5) { enviarJson(saida, 429, new JSONObject().put("erro", "Muitas senhas erradas. Espere um minuto.")); return; }
+    }
+    String codigo = pedido.optString("codigo");
+    boolean certa = codigo.matches("\\d{4,8}") && MessageDigest.isEqual(resumoDaSenha(codigo, b.optString("sal")).getBytes(StandardCharsets.UTF_8), b.optString("resumo").getBytes(StandardCharsets.UTF_8));
+    if (!certa) {
+      synchronized (tentativasSenha) { t.add(agora); }
+      enviarJson(saida, 403, new JSONObject().put("erro", "Senha errada").put("bloqueio", bloqueioPublico(b)));
+      return;
+    }
+    synchronized (this) { bloqueios().remove(aparelho); salvarConfig(); }
+    String nome = nomeDoAparelho(aparelho);
+    registrar("aparelho", nome + " foi liberado com a senha de desbloqueio", "", nome, null);
+    agendarNuvem();
+    enviarJson(saida, 200, new JSONObject().put("ok", true));
+  }
+
+  /** Bloquear e desbloquear um aparelho: só o administrador. */
+  private void apiAparelhos(byte[] corpo, String aparelho, OutputStream saida) throws Exception {
+    JSONObject pedido = new JSONObject(new String(corpo, StandardCharsets.UTF_8));
+    JSONObject quem = pessoaDoAparelho(aparelho);
+    if (quem == null || !"administrador".equals(quem.optString("nivel"))) { enviarJson(saida, 403, new JSONObject().put("erro", "Só o administrador bloqueia e desbloqueia aparelhos")); return; }
+    String id = pedido.optString("id");
+    if (id.length() > 80) id = id.substring(0, 80);
+    if (id.isEmpty() || (!aparelhos.containsKey(id) && !objetoDaConfig("aparelhosVistos").has(id))) { enviarJson(saida, 404, new JSONObject().put("erro", "Aparelho não encontrado")); return; }
+    String nome = nomeDoAparelho(id), aqui = nomeDoAparelho(aparelho), nomeQuem = quem.optString("nome");
+    String acao = pedido.optString("acao");
+    if ("bloquear".equals(acao)) {
+      if (id.equals(aparelho)) { enviarJson(saida, 400, new JSONObject().put("erro", "Não dá para bloquear o aparelho que você está usando")); return; }
+      String modo = "senha".equals(pedido.optString("modo")) ? "senha" : "trava";
+      JSONObject b = new JSONObject().put("em", System.currentTimeMillis()).put("modo", modo).put("apagar", pedido.optBoolean("apagar")).put("por", nomeQuem);
+      if ("senha".equals(modo)) {
+        String codigo = pedido.optString("codigo");
+        if (!codigo.matches("\\d{4,8}")) { enviarJson(saida, 400, new JSONObject().put("erro", "A senha de desbloqueio tem de 4 a 8 números")); return; }
+        guardarSenha(b, codigo);
+      }
+      synchronized (this) { bloqueios().put(id, b); objetoDaConfig("sessoes").remove(id); salvarConfig(); }
+      registrar("configuracao", nomeQuem + " bloqueou o " + nome + " (" + ("senha".equals(modo) ? "pede a senha de desbloqueio" : "travado de vez")
+          + (b.optBoolean("apagar") ? ", apagando as anotações guardadas nele" : "") + ")", nomeQuem, aqui, null);
+      agendarNuvem();
+      enviarJson(saida, 200, new JSONObject().put("ok", true).put("aparelhos", listaDeAparelhos()));
+      return;
+    }
+    if ("desbloquear".equals(acao)) {
+      boolean tinha;
+      synchronized (this) { tinha = bloqueios().has(id); if (tinha) { bloqueios().remove(id); salvarConfig(); } }
+      if (tinha) { registrar("configuracao", nomeQuem + " desbloqueou o " + nome, nomeQuem, aqui, null); agendarNuvem(); }
+      enviarJson(saida, 200, new JSONObject().put("ok", true).put("aparelhos", listaDeAparelhos()));
+      return;
+    }
+    enviarJson(saida, 400, new JSONObject().put("erro", "ação desconhecida"));
   }
 }

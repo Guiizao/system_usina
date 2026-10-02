@@ -14,10 +14,11 @@ import vm from 'node:vm';
 import crypto from 'node:crypto';
 import { spawn, execFileSync } from 'node:child_process';
 import { dormir } from './navegador.mjs';
-import { teste, certo, igual } from './teste.mjs';
+import { teste, certo, igual, SENHA_ENCARREGADO } from './teste.mjs';
 import { centralNode, centralJava, pastaTemporaria, APP } from './servidores.mjs';
 import { diaDeExemplo } from './api-leitura.mjs';
 import { chaveDeTeste, telasDeTeste, montarPacote } from './atualizacao.mjs';
+import { resumoDaSenha } from './seguranca.mjs';
 
 const NUVEM = path.join(APP, 'nuvem');
 const WRANGLER = path.join(NUVEM, 'node_modules', 'wrangler', 'bin', 'wrangler.js');
@@ -161,6 +162,19 @@ export async function testarNuvem(grupo) {
           const ok = await c.api('/api/nuvem', { acao: 'enviar' });
           igual(ok.erro, '');
         });
+
+        await teste(grupo, `${nome}: aparelho bloqueado aparece na nuvem (longe da usina ele pergunta lá) e sai quando desbloqueia`, async () => {
+          igual((await c.api('/api/pessoas', { acao: 'entrar', pin: SENHA_ENCARREGADO })).pessoa.nome, 'Guilherme');
+          igual((await c.api('/api/aparelhos', { acao: 'bloquear', id: 'teste-nuvem', modo: 'senha', apagar: true, codigo: '4321' })).ok, true);
+          const b = await esperar(async () => (await (await fetch(nuvem.url + '/aparelho/teste-nuvem')).json()).bloqueio, 'o bloqueio na nuvem');
+          certo(b.modo === 'senha' && b.apagar === true && b.sal && b.resumo === resumoDaSenha('4321', b.sal), JSON.stringify(b));
+          const outro = await fetch(nuvem.url + '/aparelho/outro-aparelho');
+          igual(outro.headers.get('access-control-allow-origin'), '*', 'o aplicativo pergunta direto');
+          igual((await outro.json()).bloqueio, null, 'aparelho que não foi bloqueado');
+          await c.api('/api/aparelhos', { acao: 'desbloquear', id: 'teste-nuvem' });
+          await esperar(async () => (await (await fetch(nuvem.url + '/aparelho/teste-nuvem')).json()).bloqueio === null, 'o desbloqueio na nuvem');
+        });
+
       } finally { await c.desligar(); }
     }
 
