@@ -11,6 +11,18 @@ function Log($m) { Write-Output ("[{0:HH:mm:ss}] {1}" -f (Get-Date), $m) }
 $env:WRANGLER_SEND_METRICS = 'false'
 $wjs = Join-Path $aqui 'node_modules\wrangler\bin\wrangler.js'
 
+# tudo que aparece fica em publicar-log.txt; com erro, a janela espera o Enter (antes ela fechava sem dar para ler)
+$arquivoLog = Join-Path $aqui 'publicar-log.txt'
+try { Start-Transcript -Path $arquivoLog -Force | Out-Null } catch { }
+trap {
+  Write-Output ''
+  Write-Output ('ERRO: ' + $_.Exception.Message)
+  Write-Output "As mensagens ficaram no arquivo $arquivoLog (mande esse arquivo se precisar de ajuda)."
+  try { Stop-Transcript | Out-Null } catch { }
+  Read-Host 'Aperte Enter para fechar'
+  exit 1
+}
+
 if (-not (Test-Path $wjs)) {
   Log 'Instalando o wrangler (o programa do Cloudflare). Demora uns minutos na primeira vez...'
   & cmd /c "npm install --no-audit --no-fund" | Select-Object -Last 3
@@ -62,11 +74,33 @@ if (Test-Path "$saidaApk\telas\pacote.json") {
 }
 
 Log 'Publicando a nuvem...'
-$ErrorActionPreference = 'Continue'
-& node $wjs deploy 2>&1 | Tee-Object -Variable publicou | Select-Object -Last 6
-$ErrorActionPreference = 'Stop'
-$url = [regex]::Match(($publicou | Out-String), 'https://[^\s]+\.workers\.dev').Value
-if (-not $url) { throw 'A publicacao nao deu certo. Veja as mensagens acima.' }
+function Publicar {
+  $ErrorActionPreference = 'Continue'
+  $saida = & node $wjs deploy 2>&1 | Out-String
+  $ErrorActionPreference = 'Stop'
+  return $saida
+}
+$publicou = Publicar
+$url = [regex]::Match($publicou, 'https://[^\s]+\.workers\.dev').Value
+if (-not $url) {
+  # conta nova: falta escolher o endereco workers.dev. O Cloudflare so pergunta com a janela livre, entao roda de novo assim.
+  Write-Output ''
+  Write-Output 'Sua conta ainda nao tem o endereco workers.dev. O Cloudflare vai perguntar agora, nesta janela:'
+  Write-Output '  - se perguntar se quer registrar (register), responda y e aperte Enter;'
+  Write-Output '  - no nome, digite um nome curto, sem espaco nem acento (exemplo: ubiralcool) e aperte Enter.'
+  Write-Output ''
+  $ErrorActionPreference = 'Continue'
+  & node $wjs deploy
+  $ErrorActionPreference = 'Stop'
+  Log 'Conferindo o endereco...'
+  $publicou = Publicar
+  $url = [regex]::Match($publicou, 'https://[^\s]+\.workers\.dev').Value
+}
+if (-not $url) {
+  Write-Output (($publicou -split "`n") | Select-Object -Last 15)
+  throw 'A publicacao nao deu certo. Veja as mensagens acima. Se falar de subdomain, abra dash.cloudflare.com > Workers & Pages e escolha o endereco workers.dev (Your subdomain), depois rode este arquivo de novo.'
+}
+Log "Publicado em $url"
 
 # senhas: na primeira vez cria as duas e guarda em segredos.txt (fica so neste computador, nao vai para o Git)
 function NovaSenha {
@@ -97,3 +131,6 @@ Write-Output '   Senha da central: esta no arquivo segredos.txt, nesta pasta'
 Write-Output ''
 Write-Output " API do escritorio: $url/api/v1/  (senha de leitura no segredos.txt)"
 Write-Output '=============================================================='
+Write-Output ''
+try { Stop-Transcript | Out-Null } catch { }
+Read-Host 'Aperte Enter para fechar'
