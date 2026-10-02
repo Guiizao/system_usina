@@ -59,7 +59,12 @@ async function receber(req, env) {
     consultas.push(env.DB.prepare('DELETE FROM registros'), env.DB.prepare('DELETE FROM dias'));
   }
   const novasInfo = { geracao, ultimoEnvio: String(Date.now()) };
-  if (corpo.forms && typeof corpo.forms === 'object') novasInfo.forms = JSON.stringify(corpo.forms);
+  if (corpo.forms && typeof corpo.forms === 'object') {
+    // senha não fica na nuvem (as centrais até a 2.10 mandavam o forms.js inteiro, com a pinAdmin)
+    const forms = Object.assign({}, corpo.forms);
+    delete forms.pinAdmin;
+    novasInfo.forms = JSON.stringify(forms);
+  }
   if ('medidas' in corpo) novasInfo.medidas = corpo.medidas ? JSON.stringify(corpo.medidas) : '';
   consultas.push(env.DB.prepare(`INSERT INTO info (chave, valor) SELECT key, value FROM json_each(?) WHERE true
     ON CONFLICT(chave) DO UPDATE SET valor = excluded.valor`).bind(JSON.stringify(novasInfo)));
@@ -87,7 +92,8 @@ async function receber(req, env) {
 
 async function estado(env) {
   const info = await lerInfo(env);
-  const linha = await env.DB.prepare('SELECT COUNT(*) AS n, MAX(seq) AS seq FROM registros').first();
+  // sem contar o banco inteiro (o plano grátis conta cada linha lida): a soma vem da tabela dos dias e o MAX usa o índice
+  const linha = await env.DB.prepare('SELECT (SELECT COALESCE(SUM(anotacoes), 0) FROM dias) AS n, (SELECT MAX(seq) FROM registros) AS seq').first();
   return responder(200, {
     geracao: info.geracao || '', ultimoEnvio: Number(info.ultimoEnvio) || 0, temForms: !!info.forms,
     registros: (linha && linha.n) || 0, seq: (linha && linha.seq) || 0,

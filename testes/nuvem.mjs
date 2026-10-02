@@ -46,6 +46,11 @@ async function ligarNuvem(porta) {
   }
   return {
     url, publico,
+    /** Uma consulta direto no banco local da nuvem (para conferir o que ficou guardado). */
+    consultar(sql) {
+      const saida = execFileSync(process.execPath, [WRANGLER, 'd1', 'execute', 'pranchetas', '--local', '--persist-to', banco, '--command', sql, '--json'], { cwd: NUVEM, env, stdio: ['ignore', 'pipe', 'pipe'] }).toString();
+      return JSON.parse(saida.slice(saida.indexOf('['))) [0].results;
+    },
     async pedir(rota, { senha = TOKEN, corpo } = {}) {
       const r = await fetch(url + rota, { method: corpo ? 'POST' : 'GET', headers: Object.assign({ Authorization: 'Bearer ' + senha }, corpo ? { 'Content-Type': 'application/json' } : {}), body: corpo ? JSON.stringify(corpo) : undefined });
       const texto = await r.text();
@@ -106,6 +111,10 @@ export async function testarNuvem(grupo) {
           igual(e.registros, publicas, 'a configuração da usina e os avisos não sobem');
           const st = await esperar(async () => { const x = await c.api('/api/nuvem', { acao: 'estado' }); return x && x.ultimoEnvio && !x.faltam ? x : null; }, 'estado da central');
           igual(st.erro, '');
+          // a senha do administrador (pinAdmin do forms.js) não fica guardada na nuvem
+          const forms = nuvem.consultar("SELECT valor FROM info WHERE chave = 'forms'");
+          certo(forms.length && forms[0].valor.includes('"setores"'), 'as folhas chegaram');
+          certo(!forms[0].valor.includes('pinAdmin'), 'a senha do administrador não pode ficar na nuvem');
         });
 
         await teste(grupo, `${nome}: a API da nuvem responde igual à da central (dia, esquema e o que mudou)`, async () => {
