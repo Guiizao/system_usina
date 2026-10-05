@@ -30,7 +30,7 @@
 <body>
 
 <h1>Guia do projeto</h1>
-<p class="sub">Pranchetas Digitais da Ubirálcool, versão 2.10 (01/10/2026). Tudo que o projeto tem, em que linguagem foi feito, como as peças conversam e onde mexer em cada coisa.</p>
+<p class="sub">Pranchetas Digitais da Ubirálcool, versão 2.11 (05/10/2026). Tudo que o projeto tem, em que linguagem foi feito, como as peças conversam e onde mexer em cada coisa.</p>
 
 <h2>1. O que é</h2>
 <p>As pranchetas de papel dos setores (Hidrólise, Caldeira, Ralo, Destilaria) viraram um aplicativo. Cada setor tem um tablet ou celular. O operador escolhe o nome dele, anota nos quadros e salva. A anotação vai pelo Wi-Fi da usina até a central, que guarda tudo e mostra para o escritório. No fim do dia sai o Excel e o XML no mesmo desenho do papel.</p>
@@ -127,6 +127,7 @@
 <p>O tablet chefe tem o painel do escritório: pendências de cada setor, avisos para quem está trabalhando, ler folha de papel, relatórios, aparelhos conectados, operadores, medidas das dornas e a configuração da usina.</p>
 <p>No tablet chefe cada pessoa entra com a sua senha (o nome fica no alto da tela). O administrador cadastra as pessoas, escolhe o nível de cada uma (Administrador, Encarregado ou Consulta), liga ou desliga funções por pessoa e limita o que cada tablet chefe faz. O <b>Registro do sistema</b> mostra o dia: quem anotou ou mudou o quê, com o antes e o depois, quem entrou e saiu, aparelho sem sinal ou atualizado e mudanças na configuração. O registro fica só na central.</p>
 <p>Desde a 2.10 o painel mostra os <b>gráficos do dia</b> (Brix, pH e temperaturas, hora a hora, com as linhas dos avisos), e a tela <b>Folhas e avisos</b> deixa mudar o nome dos quadros, a unidade, a faixa esperada e os avisos sem versão nova. A folha do dia também sai em <b>PDF</b>, uma página por folha, montado dentro do aparelho (<code>pdf.js</code>).</p>
+<p>Desde a 2.11 a tela <b>Aparelhos</b> mostra quem está usando cada aparelho, o nome dele no Android e o modelo; no + aparecem o endereço na rede, a versão e quando conectou. O administrador pode <b>bloquear</b> um aparelho: na hora escolhe se ele pede uma senha para liberar ou se trava de vez, e se apaga as anotações guardadas nele.</p>
 
 <h2>6. Ler folha de papel</h2>
 <p>O tablet chefe tira foto de uma folha preenchida à mão e passa para o aplicativo. Tudo acontece dentro do aparelho, sem internet: o <b>OpenCV.js</b> acha a tabela na foto e endireita cada célula, e uma rede neural pequena (<b>ONNX</b>, treinada em Python com letras de mão) lê cada célula. A coluna diz o que pode ser (hora, pH, número, nome do operador), e o que ficou com pouca confiança fica marcado para a pessoa conferir antes de salvar.</p>
@@ -150,6 +151,8 @@
   <li>Senha do operador (opcional, guardada embaralhada), senha de cada pessoa do tablet chefe e a senha do programador para apagar tudo. Das senhas das pessoas e da do programador a central só guarda o resumo, nunca a senha. Cinco senhas erradas em um minuto fazem esperar.</li>
   <li>Cada pessoa só faz o que o nível dela deixa, e cada tablet chefe pode ter um limite. Os ajustes dos tablets dos setores abrem com a senha de quem tem essa permissão.</li>
   <li>Código do APK embaralhado e licença em <code>LICENCA.txt</code>: uso só com autorização do autor.</li>
+  <li>O aplicativo confere a própria assinatura: um APK alterado ou assinado com outra chave não abre (<code>Protecao.java</code>).</li>
+  <li>Aparelho perdido ou que não deve mais usar o sistema: o administrador bloqueia na tela Aparelhos. A central recusa tudo que vem dele, e longe da usina, com internet, ele pergunta à nuvem e trava do mesmo jeito.</li>
 </ul>
 
 <h2>9. Testes</h2>
@@ -180,11 +183,11 @@
 
 <h2>12. O que falta</h2>
 <ul>
-  <li>Pôr a nuvem no ar: rodar o <code>nuvem/publicar.ps1</code> uma vez (ele pede para entrar na conta do Cloudflare pelo navegador) e cadastrar o endereço e a senha no tablet chefe.</li>
+  <li>Pôr a nuvem no ar: rodar o <code>nuvem/publicar.ps1</code> uma vez (ele pede para entrar na conta do Cloudflare pelo navegador), cadastrar o endereço (<code>https://pranchetas-nuvem.guiizao.workers.dev</code>) e a senha no tablet chefe e passar a API para o Evandro. O passo a passo, com onde clicar, está em <code>Nuvem-passo-a-passo.pdf</code>.</li>
   <li>Perguntar para o Lucas: quais são as outras dornas "da família" e a medida do Tanque Destilaria.</li>
-  <li>Testar nos aparelhos o roteiro da 2.10 (pessoas, registro, gráficos, Folhas e avisos e o PDF).</li>
+  <li>Instalar a 2.11 primeiro no tablet chefe e conferir se abre; depois testar nos aparelhos o roteiro da 2.10 (pessoas, registro, gráficos, Folhas e avisos e o PDF) e a tela Aparelhos com o bloqueio.</li>
 </ul>
 
-<p class="rodape">Pranchetas Digitais 2.10 · © 2026 Guilherme · Todos os direitos reservados</p>
+<p class="rodape">Pranchetas Digitais 2.11 · © 2026 Guilherme · Todos os direitos reservados</p>
 </body>
 </html>

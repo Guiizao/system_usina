@@ -351,7 +351,8 @@ window.USINA = {
         { id: 'inicio_aquec', label: 'Início Aquec.', papel: 'INÍCIO AQUEC', labelCurto: 'Aquecimento', type: 'check' },
         { id: 'parada', label: 'Parada', papel: 'PARADA', type: 'check' },
         { id: 'pressao', label: 'Pressão', papel: 'PRESSÃO', unidade: 'kgf', type: 'num', dec: 1, min: 0, max: 12 },
-        { id: 'temp_agua', label: 'Temperat. Água', papel: 'TEMPERAT AGUA', labelCurto: 'Água', unidade: '°C', type: 'num', dec: 0 },
+        // com vírgula desde a 2.11 (pedido de 05/10/2026: 95,5 / 100,5)
+        { id: 'temp_agua', label: 'Temperat. Água', papel: 'TEMPERAT AGUA', labelCurto: 'Água', unidade: '°C', type: 'num', dec: 1 },
         { id: 'descarga_fundo', label: 'Descarga de Fundo', papel: 'DESCARGA DE FUNDO', labelCurto: 'De fundo', type: 'choice', opcoes: ['01', '02', '03'] },
         { id: 'descarga_garrafa', label: 'Descarga Garrafa', papel: 'DESCARGA GARRAFA', labelCurto: 'Garrafa', type: 'check' },
         { id: 'retirada_cinza', label: 'Retirada Cinza', labelCurto: 'Retirada', papel: 'RETIRADA CINZA', type: 'check' },
@@ -373,8 +374,9 @@ window.USINA = {
       papel: { modelo: 'destilaria' },
       itens: [
         { id: 'temp_pe_a', label: 'Temp. pé da coluna A', labelCurto: 'Pé coluna A', unidade: '°C', type: 'num', dec: 1 },
-        { id: 'producao', label: 'Produção Álcool', labelCurto: 'Produção', papel: 'PRODUÇÃO ÁLCOOL', type: 'num', dec: 0 },
-        { id: 'carregamento', label: 'Carregamento', labelCurto: 'Carreg.', papel: 'CARREGAMENTO', type: 'num', dec: 0 },
+        // produção e carregamento com vírgula desde a 2.11 (pedido de 05/10/2026)
+        { id: 'producao', label: 'Produção Álcool', labelCurto: 'Produção', papel: 'PRODUÇÃO ÁLCOOL', type: 'num', dec: 1 },
+        { id: 'carregamento', label: 'Carregamento', labelCurto: 'Carreg.', papel: 'CARREGAMENTO', type: 'num', dec: 1 },
         { id: 'vapor', label: 'Vapor / Caldeira', labelCurto: 'Vapor', papel: 'Vapor/ Caldeira', unidade: 'kgf', type: 'num', dec: 1 },
         { id: 'inpm', label: 'INPM', unidade: '°', type: 'num', dec: 1, min: 80, max: 100 },
       ],

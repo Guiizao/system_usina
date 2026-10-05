@@ -235,9 +235,11 @@ export async function testarApi(central, grupo) {
     igual(new Set(depois.map((r) => r.seq)).size, depois.length, 'número repetido');
   });
   await teste(grupo, 'volume de um mês (7.500 anotações): tempo de envio e de busca', async () => {
+    // os 28 dias antes de hoje: a central só guarda na memória os últimos 60 (datas fixas de agosto saíam da conta em outubro)
+    const diaDoMes = (n) => { const d = new Date(); d.setDate(d.getDate() - n); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
     const t0 = Date.now();
     for (let lote = 0; lote < 15; lote++) {
-      const r = await pedir('/api/sync', { metodo: 'POST', chave, corpo: { aparelho: 'mes', registros: Array.from({ length: 500 }, (_, i) => registro(`m${lote}-${i}`, { phf: '5.0', brix: '17', enzi: '70', produto: 'MASSA' }, Date.now(), { id: `2026-08-${String((i % 28) + 1).padStart(2, '0')}|hid_anexo1|m${lote}-${i}`, data: `2026-08-${String((i % 28) + 1).padStart(2, '0')}` })) } });
+      const r = await pedir('/api/sync', { metodo: 'POST', chave, corpo: { aparelho: 'mes', registros: Array.from({ length: 500 }, (_, i) => registro(`m${lote}-${i}`, { phf: '5.0', brix: '17', enzi: '70', produto: 'MASSA' }, Date.now(), { id: `${diaDoMes((i % 28) + 1)}|hid_anexo1|m${lote}-${i}`, data: diaDoMes((i % 28) + 1) })) } });
       igual(r.status, 200, 'lote ' + lote);
     }
     const envio = Date.now() - t0;

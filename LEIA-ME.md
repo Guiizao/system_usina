@@ -162,6 +162,17 @@ Medido num tablet simulado 4 vezes mais lento que o computador, com a central gu
 - Dois aparelhos criando a mesma linha sem um saber do outro (o chefe corrigiu nos segundos antes de receber): os valores se juntam, nada se perde.
 - **Código embaralhado no APK**: quem abrir o APK não lê o código do jeito que foi escrito (o mapa para entender erros fica só em `apk/saida/mapas`).
 
+## Aparelhos, bloqueio e vírgula na caldeira e na destilaria (versão 2.11)
+
+A 2.11 mexe no APK (o código nativo mudou): instale primeiro no tablet chefe e confira se ele abre, depois os outros.
+
+- **Aparelhos** (painel do tablet chefe, toque em "aparelhos ligados"): em cima quem está usando, embaixo o nome do aparelho no Android e o modelo; no + o endereço na rede, a versão e quando conectou. O MAC não aparece: o Android 10 em diante não deixa o aplicativo ler.
+- **Bloquear aparelho** (só o administrador): na hora escolhe se pede uma senha para liberar (4 a 8 números) ou se trava de vez, e se apaga as anotações guardadas nele. A central responde 423 a tudo que vem do aparelho bloqueado. Longe da usina, com internet, o aplicativo pergunta à nuvem (`GET /aparelho/<id>`, no máximo a cada 10 minutos). Tudo vai para o registro do sistema.
+- **Assinatura do APK**: o aplicativo confere a própria assinatura (`Protecao.java`) e uma cópia alterada não abre. O `gerar-apk.ps1` grava a assinatura esperada (da chave deste computador) em `Assinatura.java` e confere o APK no fim. APK assinado com outra chave não abre: guarde o `%USERPROFILE%\.android\debug.keystore`.
+- **Vírgula** na Temperatura da água (Caldeira) e na Produção Álcool e no Carregamento (Destilaria): uma casa decimal, como o Pé da coluna A. Na API eles passam a vir com `"casasDecimais": 1`.
+- A nuvem não guarda mais a senha do administrador (`pinAdmin`) que ia junto com as folhas.
+- A licença da Ubirálcool (trava do sistema por contrato) ficou de fora, por decisão de 02/10/2026.
+
 ## PDF, gráficos e Folhas e avisos (versão 2.10)
 
 A 2.10 só mexeu nas telas: quem já tem a 2.10 instalada recebe as próximas pela atualização rápida.
@@ -189,7 +200,7 @@ No tablet chefe cada pessoa entra com a sua senha, e a senha já diz quem é. O 
 A central (o computador ou o tablet chefe) manda uma cópia das anotações para a internet, de minuto em minuto. Fica no Cloudflare, no plano grátis, sem cartão. De lá saem a API de leitura do escritório (a mesma da central, com os mesmos nomes) e as atualizações do aplicativo. Sem internet a usina continua igual: quando a internet volta, a central manda o que faltou.
 
 - O código fica em `nuvem/` (`src/index.js`, banco D1 em `schema.sql`). A API usa o mesmo `api-leitura.js` da central, por isso ele não usa mais `fs` nem `vm`.
-- Para pôr no ar: `nuvem/publicar.ps1` (o passo a passo está em `nuvem/LEIA-ME.txt`). O banco "pranchetas" já foi criado na conta. No fim aparece o endereço e as duas senhas ficam em `nuvem/segredos.txt` (não vai para o Git).
+- Para pôr no ar: `nuvem/publicar.ps1` (o passo a passo está em `nuvem/LEIA-ME.txt` e, com onde clicar no site do Cloudflare, em `Nuvem-passo-a-passo.pdf` na pasta `Usina`). A conta já tem o endereço `guiizao.workers.dev`, então a nuvem fica em `https://pranchetas-nuvem.guiizao.workers.dev`. O banco "pranchetas" já foi criado na conta. No fim aparece o endereço e as duas senhas ficam em `nuvem/segredos.txt` (não vai para o Git).
 - No tablet chefe: Usina > Nuvem (internet) > endereço e senha da central. A situação mostra o último envio, o que falta e o erro, se houver.
 - A configuração da usina (senhas, contatos) e os avisos internos não sobem.
 - O servidor do tablet chefe não lê o `forms.js`: o aplicativo manda as folhas para ele ao abrir, e ele leva para a nuvem.
@@ -328,6 +339,7 @@ Leva uns 20 minutos e grava o resultado em `testes/saida/resultado.txt`. Testa:
 5. longo prazo, nas duas centrais: 90 dias de uso da usina inteira (a memória do tablet não enche), dias antigos no BackupUsina, troca de turno e virada das 07:00 no meio da anotação, "Terminou a Nº X", tablet chefe trocado e 700 anotações guardadas sem Wi-Fi;
 6. velocidade: cada toque num tablet 4 vezes mais lento, com 90 dias de uso, tem que responder em menos de 100 ms;
 7. os pedidos do teste de 24/09 (aviso curto, senha do operador no tablet chefe, relatórios, WhatsApp, rolagem, trocar o código), nas duas centrais, e o aplicativo com o código embaralhado como vai no APK;
+7i. a versão 2.11, nas duas centrais: o aparelho manda nome, modelo e Android e a central guarda com o endereço; só o administrador bloqueia; bloqueio que pede senha (o aplicativo trava, confere a senha e avisa a central que liberou), trava de vez e apagar; a tela Aparelhos com o + e o aparelho bloqueado consultando a nuvem;
 7h. a versão 2.10, nas duas centrais: o setor anotando e o painel do chefe com os gráficos (pontos e a linha do aviso), a tela com todos os gráficos e o filtro, o PDF só da Hidrólise (uma página por folha, com o logo), o chefe mudando o aviso do pH e o nome do Brix e o tablet do setor usando o novo, o registro com o antes e o depois e o voltar ao original;
 7g. a versão 2.9, nas duas centrais: o administrador criado sozinho, cadastro só pelo administrador (senha repetida e último administrador recusados), pessoa desativada, cinco senhas erradas, Consulta barrado e Encarregado liberado, limite do tablet chefe, ajustes do setor com a senha de quem pode, o registro com o antes e o depois, aparelho sem sinal, a tela do registro com o filtro e o cadastro pela tela;
 7f. a nuvem (o Cloudflare rodando aqui no computador, com o próprio wrangler): as duas centrais mandando a cópia, a API da nuvem igual à da central, correção e apagado chegando, senha errada, e o APK e as telas saindo da nuvem (telas com outra assinatura recusadas);
@@ -340,7 +352,7 @@ Leva uns 20 minutos e grava o resultado em `testes/saida/resultado.txt`. Testa:
 
 Os testes usam pastas de dados temporárias: nunca mexem em `dados/`. Só as telas: `node testes/rodar-telas.mjs` (liga uma central de teste sozinho). Só o longo prazo: `node testes/rodar-robustez.mjs`.
 
-O teste para fazer à mão no celular e no tablet está em `Teste-nos-aparelhos-2.10.pdf`, na pasta `Usina`. Só a 2.10: `node testes/rodar-pedidos210.mjs`; só pessoas e registro: `node testes/rodar-pessoas.mjs`. Só a nuvem: `node testes/rodar-nuvem.mjs` (precisa do `npm install` em `nuvem`); só a atualização: `node testes/rodar-atualizacao.mjs`; só a 2.6: `node testes/rodar-pedidos26.mjs`; só a 2.5: `node testes/rodar-pedidos25.mjs`.
+O teste para fazer à mão no celular e no tablet está em `Teste-nos-aparelhos-2.10.pdf`, na pasta `Usina`; o que conferir depois de pôr a 2.11 no tablet chefe está na parte 3 do `Nuvem-passo-a-passo.pdf`. Só a 2.11: `node testes/rodar-seguranca.mjs` e `node testes/rodar-pedidos211.mjs`. Só a 2.10: `node testes/rodar-pedidos210.mjs`; só pessoas e registro: `node testes/rodar-pessoas.mjs`. Só a nuvem: `node testes/rodar-nuvem.mjs` (precisa do `npm install` em `nuvem`); só a atualização: `node testes/rodar-atualizacao.mjs`; só a 2.6: `node testes/rodar-pedidos26.mjs`; só a 2.5: `node testes/rodar-pedidos25.mjs`.
 
 ## Imagens das telas
 
@@ -357,6 +369,8 @@ Salva em `../telas`.
 43 verificações automáticas: conexão com código certo e errado, anotação, botões − e +, aviso de valor fora do normal, cópia da dorna anterior, marcar fim, monitoramento, valores padrão, insumos, senha do operador, trava por inatividade, virada de turno, exportação, relatórios e configurações. Mais: queda de rede com envio depois que volta, sincronização entre dois aparelhos e validação do Excel e do XML.
 
 Versão 2 (16/09/2026): avisos de pH e Brix, telas LPHERA / Cal e Saczyme / Alcolina com a soma das dornas da hora, casinha nas abas, rolagem do painel do chefe que não volta mais para o topo, pastas *Usina, tela de relatórios, janela de Excel ou XML, listas do ralo, cadastro protegido por senha e busca do tablet chefe no Wi-Fi. Testado no navegador contra o servidor: anotação, envio, queda de rede, relatórios e Excel/XML.
+
+Versão 2.11.0 (05/10/2026): tela Aparelhos (quem usa, nome no Android, modelo e o + com endereço, versão e quando conectou), bloqueio de aparelho pelo administrador (pede senha ou trava de vez, com opção de apagar, também longe da usina pela nuvem), o aplicativo conferindo a própria assinatura, vírgula na Temperatura da água da Caldeira e na Produção e no Carregamento da Destilaria, e a nuvem sem a senha do administrador.
 
 Versão 2.10.0 (01/10/2026): exportar em PDF escolhendo os setores (uma página por folha, igual ao papel), gráficos do dia no painel do tablet chefe e a tela Folhas e avisos para mudar nomes, unidades e avisos sem versão nova. Foi junto com a 2.9 no mesmo APK.
 
