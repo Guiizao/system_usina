@@ -26,6 +26,8 @@ const cabecalhos = {
   'Access-Control-Allow-Headers': 'Authorization, Content-Type',
   'Cache-Control': 'no-store',
 };
+// banco de uma nuvem da 2.10: as folhas guardadas podiam ter a senha do administrador
+const TIRAR_PIN_ANTIGO = "UPDATE info SET valor = json_remove(valor, '$.pinAdmin') WHERE chave = 'forms' AND json_valid(valor) AND json_extract(valor, '$.pinAdmin') IS NOT NULL";
 const responder = (status, corpo) => new Response(JSON.stringify(corpo), { status, headers: cabecalhos });
 
 /** Compara o segredo sem deixar escapar pelo tempo de resposta. */
@@ -52,6 +54,14 @@ async function receber(req, env) {
   if (!lista || lista.length > MAX_POR_ENVIO) return responder(400, { erro: `mande de 0 a ${MAX_POR_ENVIO} anotações por vez` });
   // só o que pode sair: dia de produção e nada de avisos internos (a central já filtra; aqui confere de novo)
   const regs = lista.filter((r) => r && typeof r.id === 'string' && leitura.publica(r) && Number.isFinite(Number(r.seq)));
+  // aparelhos bloqueados: a central manda a lista inteira quando ela muda (vazia = ninguém bloqueado).
+  // Lista grande demais é recusada (antes era cortada sem avisar). Só fica o que o aparelho precisa saber: nada da senha.
+  let bloqueios = null;
+  if (Array.isArray(corpo.bloqueios)) {
+    if (corpo.bloqueios.length > 500) return responder(400, { erro: 'mande no máximo 500 aparelhos bloqueados' });
+    bloqueios = corpo.bloqueios.filter((b) => b && typeof b.id === 'string' && /^[\w.-]{1,80}$/.test(b.id))
+      .map((b) => ({ id: b.id, em: Number(b.em) || 0, rev: Number(b.rev) || 0, modo: b.modo === 'senha' ? 'senha' : 'trava', apagar: !!b.apagar }));
+  }
   const info = await lerInfo(env);
   const consultas = [];
   const geracao = String(corpo.geracao || '');
@@ -67,6 +77,11 @@ async function receber(req, env) {
     novasInfo.forms = JSON.stringify(forms);
   }
   if ('medidas' in corpo) novasInfo.medidas = corpo.medidas ? JSON.stringify(corpo.medidas) : '';
+  // a revisão (da central) em que a lista de bloqueios foi montada: o aparelho só destrava pela nuvem se ela for mais nova que o bloqueio dele
+  // e de qual central é a lista (gravada junto com ela: as anotações de outra central não mudam isto)
+  if (bloqueios) { novasInfo.bloqueiosRev = String(Number(corpo.bloqueiosRev) || 0); novasInfo.bloqueiosGeracao = geracao; }
+  // banco de uma nuvem da 2.10: as folhas guardadas ainda podem ter a senha do administrador (só mexe se tiver)
+  consultas.push(env.DB.prepare(TIRAR_PIN_ANTIGO));
   consultas.push(env.DB.prepare(`INSERT INTO info (chave, valor) SELECT key, value FROM json_each(?) WHERE true
     ON CONFLICT(chave) DO UPDATE SET valor = excluded.valor`).bind(JSON.stringify(novasInfo)));
   if (regs.length) {
@@ -86,12 +101,9 @@ async function receber(req, env) {
       SELECT data, COUNT(*) FROM registros WHERE apagado = 0 AND data IN (SELECT value FROM json_each(?)) GROUP BY data
       ON CONFLICT(data) DO UPDATE SET anotacoes = excluded.anotacoes`).bind(dias));
   }
-  // aparelhos bloqueados: a central manda a lista inteira quando ela muda (vazia = ninguém bloqueado)
-  if (Array.isArray(corpo.bloqueios)) {
-    const lista = corpo.bloqueios.filter((b) => b && typeof b.id === 'string' && /^[\w.-]{1,80}$/.test(b.id)).slice(0, 500)
-      .map((b) => ({ id: b.id, em: Number(b.em) || 0, modo: b.modo === 'senha' ? 'senha' : 'trava', apagar: !!b.apagar, sal: String(b.sal || '').slice(0, 64), resumo: String(b.resumo || '').slice(0, 64) }));
+  if (bloqueios) {
     consultas.push(env.DB.prepare('DELETE FROM bloqueios'));
-    if (lista.length) consultas.push(env.DB.prepare("INSERT INTO bloqueios (id, json) SELECT json_extract(value, '$.id'), value FROM json_each(?) WHERE true").bind(JSON.stringify(lista)));
+    if (bloqueios.length) consultas.push(env.DB.prepare("INSERT INTO bloqueios (id, json) SELECT json_extract(value, '$.id'), value FROM json_each(?) WHERE true").bind(JSON.stringify(bloqueios)));
   }
   await env.DB.batch(consultas);
   const maior = regs.reduce((m, r) => Math.max(m, Number(r.seq)), 0);
@@ -99,6 +111,7 @@ async function receber(req, env) {
 }
 
 async function estado(env) {
+  await env.DB.prepare(TIRAR_PIN_ANTIGO).run();
   const info = await lerInfo(env);
   // sem contar o banco inteiro (o plano grátis conta cada linha lida): a soma vem da tabela dos dias e o MAX usa o índice
   const linha = await env.DB.prepare('SELECT (SELECT COALESCE(SUM(anotacoes), 0) FROM dias) AS n, (SELECT MAX(seq) FROM registros) AS seq').first();
@@ -154,12 +167,14 @@ export default {
         if (p === '/central/estado' && req.method === 'GET') return await estado(env);
         return responder(404, { erro: 'rota desconhecida' });
       }
-      // o aplicativo pergunta se foi bloqueado (versão 2.11): só responde sobre o aparelho pedido
+      // o aplicativo pergunta se foi bloqueado (versão 2.11): só responde sobre o aparelho pedido, sem nada da senha.
+      // revisao: até onde a lista está certa (número da central); o aparelho ignora resposta mais velha que o bloqueio que ele tem.
       const ap = p.match(/^\/aparelho\/([\w.-]{1,80})$/);
       if (ap && req.method === 'GET') {
-        const linha = await env.DB.prepare('SELECT json FROM bloqueios WHERE id = ?').bind(ap[1]).first();
-        const b = linha ? JSON.parse(linha.json) : null;
-        return responder(200, { bloqueio: b ? { em: b.em, modo: b.modo, apagar: b.apagar, sal: b.sal, resumo: b.resumo } : null });
+        // geracao: de qual central é a lista (a revisão recomeça numa central nova; o aparelho ignora lista de outra central)
+        const linha = await env.DB.prepare("SELECT (SELECT json FROM bloqueios WHERE id = ?) AS json, (SELECT valor FROM info WHERE chave = 'bloqueiosRev') AS rev, (SELECT valor FROM info WHERE chave = 'bloqueiosGeracao') AS geracao").bind(ap[1]).first();
+        const b = linha && linha.json ? JSON.parse(linha.json) : null;
+        return responder(200, { bloqueio: b ? { em: b.em, rev: Number(b.rev) || 0, modo: b.modo, apagar: !!b.apagar } : null, revisao: Number(linha && linha.rev) || 0, geracao: (linha && linha.geracao) || '' });
       }
       if (p.startsWith('/api/v1/')) {
         if (req.method !== 'GET') return responder(405, { erro: 'A API é só de leitura: use GET' });

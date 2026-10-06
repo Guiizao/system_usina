@@ -616,6 +616,7 @@
       // aparelho bloqueado pelo administrador (423): a tela trava
       if (r.status === 423) {
         const d = await r.clone().json().catch(() => ({}));
+        conhecerCentralDoBloqueio(d.geracao);
         aplicarBloqueio(d.bloqueio);
       }
       return r;
@@ -646,9 +647,9 @@
 
       // liberado aqui com a senha de desbloqueio: a central fica sabendo (e confere a senha de novo)
       if (cfg.liberacao) {
-        const rl = await postJson('api/liberar', { codigo: cfg.liberacao.codigo, em: cfg.liberacao.em }, 10000);
+        const rl = await postJson('api/liberar', { codigo: cfg.liberacao.codigo, em: cfg.liberacao.em, rev: cfg.liberacao.rev || 0, geracao: cfg.liberacao.geracao || '' }, 10000);
         if (rl.ok) { cfg.liberacao = null; salvarCfg(); }
-        else if (rl.status === 403) { const d = await rl.json().catch(() => ({})); cfg.liberacao = null; salvarCfg(); aplicarBloqueio(d.bloqueio); return; }
+        else if (rl.status === 403) { const d = await rl.json().catch(() => ({})); cfg.liberacao = null; conhecerCentralDoBloqueio(d.geracao); salvarCfg(); aplicarBloqueio(d.bloqueio); return; }
         else if (rl.status === 423) { cfg.liberacao = null; salvarCfg(); return; }
       }
       // em lotes: um aparelho que ficou muito tempo sem Wi-Fi não manda tudo de uma vez
@@ -662,9 +663,16 @@
         return desconectar('O código de conexão mudou (ou a central foi trocada). Digite o código novo que aparece no tablet chefe.');
       }
       if (r1.status === 423) return; // a tela já travou (buscar)
-      // a central aceitou: o administrador desbloqueou
-      if (r1.ok && cfg.bloqueio) liberarAparelho('O administrador liberou este aparelho.');
       const resp1 = r1.ok ? await r1.clone().json().catch(() => ({})) : {};
+      if (r1.ok && resp1.geracao && !resp1.zerar) {
+        // a central aceitou: "este aparelho está livre até a revisão X" (da central dela)
+        const revCentral = Number(resp1.bloqueiosRev) || 0;
+        const mesmaCentral = resp1.geracao === cfg.blqGeracao;
+        conhecerCentralDoBloqueio(resp1.geracao);
+        // um bloqueio daqui mais novo que X (veio da nuvem enquanto esta resposta vinha) continua
+        if (cfg.bloqueio && (!mesmaCentral || revCentral >= (cfg.bloqueio.rev || 0))) liberarAparelho('O administrador liberou este aparelho.', revCentral);
+        if (revCentral > (cfg.revLiberada || 0)) { cfg.revLiberada = revCentral; salvarCfg(); }
+      }
       // o escritório zerou as anotações de teste: limpa as deste aparelho e começa de novo
       if (resp1.zerar) { zerarLocal(resp1.geracao); toast('O escritório zerou as anotações. Este aparelho começou do zero.'); render(true); return; }
       if (r1.ok && resp1.geracao && resp1.geracao !== cfg.geracao) {
@@ -1585,13 +1593,25 @@
     infoAparelho = { modelo: android ? (modelo === 'K' ? '' : modelo) : sistema ? `Computador (${sistema})` : '', android, navegador };
   }
 
-  /** A central (ou a nuvem) disse que este aparelho está bloqueado. */
+  /** A central (ou a nuvem) disse que este aparelho está bloqueado. Quem chama já acertou de qual central é
+      (conhecerCentralDoBloqueio): a revisão só se compara dentro da mesma central. */
   function aplicarBloqueio(b) {
     if (!b || !b.em || DEMO_IMG) return;
-    if (cfg.liberacao && cfg.liberacao.em === b.em) return; // já foi liberado com a senha aqui; a central fica sabendo na próxima conversa
-    const novo = !cfg.bloqueio || cfg.bloqueio.em !== b.em || cfg.bloqueio.modo !== b.modo;
-    cfg.bloqueio = { em: b.em, modo: b.modo === 'senha' ? 'senha' : 'trava', apagar: !!b.apagar, sal: b.sal || '', resumo: b.resumo || '' };
-    if (b.apagar && cfg.apagouNoBloqueio !== b.em) { apagarTudoDoAparelho(); cfg.apagouNoBloqueio = b.em; }
+    // cada bloqueio tem a sua revisão (número da central que só sobe): é ela que diz se é o mesmo bloqueio
+    const rev = Number(b.rev) || 0;
+    const central = cfg.blqGeracao || '';
+    if (cfg.liberacao && (cfg.liberacao.rev || 0) === rev && cfg.liberacao.em === b.em && (cfg.liberacao.geracao || '') === central) return; // já foi liberado com a senha aqui; a central fica sabendo na próxima conversa
+    // resposta atrasada (da central ou da nuvem): bloqueio já coberto por uma liberação, ou mais velho que o daqui, não vale
+    if (rev <= (cfg.revLiberada || 0)) return;
+    const daqui = cfg.bloqueio && (cfg.bloqueio.geracao || '') === central;
+    if (daqui && rev < (cfg.bloqueio.rev || 0)) return;
+    const igual = daqui && (cfg.bloqueio.rev || 0) === rev && cfg.bloqueio.em === b.em;
+    const novo = !igual || cfg.bloqueio.modo !== b.modo;
+    // a nuvem não manda a senha de desbloqueio: se é o mesmo bloqueio, fica a que veio da central
+    const mesmo = igual ? cfg.bloqueio : {};
+    cfg.bloqueio = { em: b.em, rev, geracao: central, modo: b.modo === 'senha' ? 'senha' : 'trava', apagar: !!b.apagar, sal: b.sal || mesmo.sal || '', resumo: b.resumo || mesmo.resumo || '' };
+    // apaga uma vez por bloqueio (pela revisão: dois bloqueios podem ter a mesma hora)
+    if (b.apagar && cfg.apagouRev !== rev + ':' + b.em) { apagarTudoDoAparelho(); cfg.apagouRev = rev + ':' + b.em; }
     salvarCfg();
     if (novo) { fecharModalAberto(); render(true); }
   }
@@ -1604,8 +1624,11 @@
     rascunho = null; ed.alvoId = null;
     Object.keys(lembrar).forEach((k) => delete lembrar[k]);
   }
-  function liberarAparelho(msg) {
+  function liberarAparelho(msg, revLivre) {
     if (!cfg.bloqueio) return;
+    // lembra até onde está livre (na central de blqGeracao): uma resposta da nuvem que ainda estava no caminho, com
+    // bloqueio igual ou mais velho, não trava de novo
+    cfg.revLiberada = Math.max(cfg.revLiberada || 0, Number(revLivre) || 0);
     cfg.bloqueio = null;
     salvarCfg();
     pilha = [telaInicial()];
@@ -1613,6 +1636,12 @@
     render(true);
     toast(msg);
     sincronizarLogo();
+  }
+  /* De qual central (geração) é o que o aparelho sabe dos bloqueios: a revisão é um contador de cada central e recomeça
+     numa central nova. Mudou a central: o que sabia não vale mais. */
+  function conhecerCentralDoBloqueio(geracao) {
+    if (!geracao || geracao === cfg.blqGeracao) return;
+    cfg.blqGeracao = geracao; cfg.revLiberada = 0;
   }
   function fecharModalAberto() { const f = document.querySelector('#modal-root .fundo-modal'); if (f) f.remove(); }
 
@@ -1630,8 +1659,17 @@
       clearTimeout(t);
       if (!r.ok) return;
       const d = await r.json();
-      if (d.bloqueio) aplicarBloqueio(d.bloqueio);
-      else if (cfg.bloqueio && sync.modo !== 'online') liberarAparelho('O administrador liberou este aparelho.');
+      // a nuvem pode estar atrasada em relação à central: resposta mais velha que o bloqueio daqui não vale
+      // (a central bloqueou agora e ainda não mandou para a nuvem, ou a nuvem tem um bloqueio antigo).
+      // Compara pela revisão da central (só sobe), não pelo relógio.
+      // a lista é de outra central (ou de nenhuma que este aparelho conheça): não vale para ele
+      if (!d.geracao || d.geracao !== cfg.blqGeracao) return;
+      const revisao = Number(d.revisao) || 0;
+      const revAqui = cfg.bloqueio ? cfg.bloqueio.rev || 0 : 0;
+      const revNuvem = d.bloqueio ? Number(d.bloqueio.rev) || 0 : 0;
+      if (d.bloqueio) { if (revNuvem > (cfg.revLiberada || 0) && (!cfg.bloqueio || revNuvem >= revAqui)) aplicarBloqueio(d.bloqueio); }
+      else if (cfg.bloqueio) { if (sync.modo !== 'online' && revisao > revAqui) liberarAparelho('O administrador liberou este aparelho.', revisao); }
+      else if (revisao > (cfg.revLiberada || 0)) { cfg.revLiberada = revisao; salvarCfg(); } // livre: lembra até onde a lista confirma
     } catch (e) { /* sem internet: confere de novo depois */ }
   }
 
@@ -1643,7 +1681,7 @@
       <main><div class="tela-aviso"><div class="grande-ico">${ico('cadeado')}</div>
         <h1>Aparelho bloqueado</h1>
         <p>O administrador bloqueou este aparelho${b.em ? ` em ${dataHora(b.em)}` : ''}. ${b.apagar ? 'As anotações que estavam guardadas nele foram apagadas.' : 'As anotações guardadas nele continuam aqui e vão para a central quando ele for liberado.'}</p>
-        <p>${b.modo === 'senha' ? 'Para usar de novo, digite a senha de desbloqueio.' : 'Fale com o escritório para liberar.'}</p>
+        <p>${b.modo !== 'senha' ? 'Fale com o escritório para liberar.' : b.resumo ? 'Para usar de novo, digite a senha de desbloqueio.' : 'Para usar a senha de desbloqueio, conecte este aparelho no Wi-Fi da usina.'}</p>
         ${b.modo === 'senha' ? `<button class="btn primario largo" data-a="liberar-senha" style="margin-top:12px">${ico('teclado')} Digitar a senha de desbloqueio</button>` : ''}
         <button class="btn largo" data-a="conferir-bloqueio" style="margin-top:12px">${ico('wifi')} Conferir de novo</button>
         <p class="sub" style="margin-top:16px">Este aparelho: ${esc(cfg.deviceId)}</p>
@@ -4542,6 +4580,8 @@
         const blq = cfg.bloqueio;
         if (!blq || blq.modo !== 'senha') return;
         if (Date.now() < (cfg.esperaLiberar || 0)) return toast('Muitas senhas erradas. Espere um minuto.', 'erro');
+        // o bloqueio chegou só pela nuvem (sem a senha): quem confere é a central, no Wi-Fi da usina
+        if (!blq.resumo) return toast('Para usar a senha de desbloqueio, conecte este aparelho no Wi-Fi da usina.', 'erro');
         const pin = await pedirSenhaModal('Senha de desbloqueio', 'A senha que o administrador escolheu ao bloquear este aparelho.');
         if (pin === undefined) return;
         if (!/^\d{4,8}$/.test(pin) || resumoDaSenha(pin, blq.sal) !== blq.resumo) {
@@ -4551,9 +4591,9 @@
           return toast('Senha errada', 'erro');
         }
         cfg.errosLiberar = 0;
-        cfg.liberacao = { em: blq.em, codigo: pin }; // a central fica sabendo na próxima conversa
+        cfg.liberacao = { em: blq.em, rev: blq.rev || 0, geracao: cfg.blqGeracao || '', codigo: pin }; // a central fica sabendo na próxima conversa
         salvarCfg();
-        return liberarAparelho('Aparelho liberado. Pode usar.');
+        return liberarAparelho('Aparelho liberado. Pode usar.', blq.rev || 0);
       }
       case 'graficos': return ir({ tela: 'graficos', data: v.data || dataProducao(), setor: b.dataset.setor || '' });
       case 'graficos-dia': { const d = somarDias(v.data, Number(b.dataset.n)); if (d > dataProducao()) return; pilha[pilha.length - 1] = Object.assign({}, v, { data: d }); return render(true); }

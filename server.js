@@ -327,25 +327,32 @@ async function enviarParaNuvem() {
     const forms = carregarPranchetas();
     delete forms.pinAdmin; // senha não vai para a nuvem
     const formsHash = resumoHash(forms);
-    // aparelhos bloqueados: longe da usina, o aparelho pergunta na nuvem (versão 2.11)
-    const bloqueios = Object.entries(config.bloqueios).map(([id, b]) => Object.assign({ id }, bloqueioPublico(b)));
-    const bloqueiosHash = resumoHash(bloqueios);
+    // aparelhos bloqueados: longe da usina, o aparelho pergunta na nuvem (versão 2.11).
+    // A senha de desbloqueio (sal e resumo) não sobe: a rota da nuvem é aberta e daria para testar senhas fora do aparelho.
+    // A lista e a revisão saem juntas (sem esperar nada no meio): a revisão diz até onde a lista está certa.
+    const bloqueios = Object.entries(config.bloqueios).map(([id, b]) => ({ id, em: b.em, rev: b.rev || 0, modo: b.modo, apagar: !!b.apagar }));
+    const bloqueiosRev = config.bloqueiosRev;
+    const bloqueiosHash = resumoHash([bloqueios, bloqueiosRev]);
+    // a nuvem guarda até 500: mais que isso não vai (a lista cortada deixaria aparelho bloqueado de fora), e as anotações seguem
+    const bloqueiosDemais = bloqueios.length > 500;
     const medidas = medidasDoEscritorio();
     const medidasHash = resumoHash(medidas);
     for (let vez = 0; vez < 40; vez++) {
       const pend = pendentesNuvem(n);
       const lote = pend.slice(0, NUVEM_LOTE);
-      if (!lote.length && n.formsHash === formsHash && n.medidasHash === medidasHash && n.bloqueiosHash === bloqueiosHash) { n.arquivosEnviados = true; n.faltam = 0; break; }
+      if (!lote.length && n.formsHash === formsHash && n.medidasHash === medidasHash && (bloqueiosDemais || n.bloqueiosHash === bloqueiosHash)) { n.arquivosEnviados = true; n.faltam = 0; break; }
       const corpo = { geracao: config.geracao, medidas, registros: lote };
       if (n.formsHash !== formsHash) corpo.forms = forms;
-      if (n.bloqueiosHash !== bloqueiosHash) corpo.bloqueios = bloqueios;
+      // com a revisão: o aparelho só aceita a resposta da nuvem se ela for mais nova que o bloqueio que ele já tem
+      if (!bloqueiosDemais && n.bloqueiosHash !== bloqueiosHash) { corpo.bloqueios = bloqueios; corpo.bloqueiosRev = bloqueiosRev; }
       const r = await pedirNuvem('central/enviar', corpo);
       if (r.status !== 200) throw new Error(erroDaNuvem(r));
       if (lote.length) n.seq = lote[lote.length - 1].seq;
-      n.formsHash = formsHash; n.medidasHash = medidasHash; n.bloqueiosHash = bloqueiosHash;
-      n.ultimoEnvio = Date.now(); n.erro = '';
+      n.formsHash = formsHash; n.medidasHash = medidasHash; if (!bloqueiosDemais) n.bloqueiosHash = bloqueiosHash;
+      n.ultimoEnvio = Date.now(); n.erro = bloqueiosDemais ? 'Mais de 500 aparelhos bloqueados: a lista não vai para a nuvem' : '';
       n.faltam = Math.max(0, pend.length - lote.length);
     }
+    if (bloqueiosDemais) n.erro = 'Mais de 500 aparelhos bloqueados: a lista não vai para a nuvem';
   } catch (e) {
     n.erro = e.message; n.conferida = false;
   } finally {
@@ -461,7 +468,13 @@ setInterval(() => {
 // administrador desbloqueia. Com "apagar", o aparelho apaga as anotações que guarda. A lista também vai para a nuvem:
 // o aparelho que estiver longe da usina, com internet, pergunta lá se está bloqueado.
 if (!config.bloqueios) config.bloqueios = {};
-const bloqueioPublico = (b) => ({ em: b.em, modo: b.modo, apagar: !!b.apagar, sal: b.sal || '', resumo: b.resumo || '' });
+// número de revisão dos bloqueios: sobe a cada bloquear, desbloquear ou liberar e fica gravado. Cada bloqueio leva o seu.
+// O aparelho compara por ele (e não pelo relógio, que pode voltar para trás, nem pela hora, que pode repetir).
+if (!Number.isFinite(config.bloqueiosRev)) config.bloqueiosRev = 0;
+const novaRevisaoDeBloqueio = () => ++config.bloqueiosRev;
+// bloqueio guardado antes da revisão existir: ganha uma agora (a nuvem e o aparelho ignoram revisão zero)
+if (Object.values(config.bloqueios).some((b) => !(b.rev > 0))) { Object.values(config.bloqueios).forEach((b) => { if (!(b.rev > 0)) b.rev = novaRevisaoDeBloqueio(); }); salvarConfig(); }
+const bloqueioPublico = (b) => ({ em: b.em, rev: b.rev || 0, modo: b.modo, apagar: !!b.apagar, sal: b.sal || '', resumo: b.resumo || '' });
 const avisouBloqueado = {};
 /** As informações que o aparelho manda dele (nome no Android, fabricante, modelo, versão do Android). */
 function infoLimpa(info) {
@@ -779,7 +792,8 @@ const servidor = http.createServer(async (req, res) => {
       if (bloqueio && !/^api\/liberar(\?|$)/.test(caminho)) {
         // aparelho bloqueado pelo administrador: só consegue tentar se liberar com a senha
         falso.status = 423;
-        falso.corpo = JSON.stringify({ erro: 'bloqueado', bloqueio: bloqueioPublico(bloqueio) });
+        // com a geração: se o aparelho acabou de trocar de central, ele sabe que a revisão dos bloqueios recomeçou
+        falso.corpo = JSON.stringify({ erro: 'bloqueado', bloqueio: bloqueioPublico(bloqueio), geracao: config.geracao });
         if (Date.now() - (avisouBloqueado[aparelho] || 0) > 3600000) { avisouBloqueado[aparelho] = Date.now(); registrar('aparelho', `${nomeDoAparelho(aparelho)} está bloqueado e tentou falar com a central`, { aparelho: nomeDoAparelho(aparelho) }); }
       } else {
         await rotaProtegida({ method: cab.m === 'POST' ? 'POST' : 'GET', corpoPronto: texto.slice(nl + 1), aparelho }, falso, new URL('/' + caminho, 'http://localhost'), ip);
@@ -843,8 +857,12 @@ async function rotaProtegida(req, res, url, ip) {
         }
         Object.entries(antigos).forEach(([d, lista]) => { aceitos += juntarNoArquivo(d, lista); });
         if (aceitos) { gravarDisco(); dias.forEach(backupDoDia); agendarNuvem(); }
+        // bloqueado enquanto esta sincronização acontecia: responde como bloqueado (o 200 abaixo diz "livre até a revisão")
+        const blq = config.bloqueios[req.aparelho];
+        if (blq) return json(res, 423, { erro: 'bloqueado', bloqueio: bloqueioPublico(blq), geracao: config.geracao });
         // o endereço da nuvem vai junto: longe da usina, o aparelho pergunta lá se foi bloqueado
-        return json(res, 200, { ok: true, aceitos, seq: db.seq, agora: Date.now(), geracao: config.geracao, nuvem: config.nuvem.url || '' });
+        // bloqueiosRev: "não está bloqueado até esta revisão" (resposta atrasada da nuvem com bloqueio mais velho não trava)
+        return json(res, 200, { ok: true, aceitos, seq: db.seq, agora: Date.now(), geracao: config.geracao, nuvem: config.nuvem.url || '', bloqueiosRev: config.bloqueiosRev });
       }
 
       // pessoas do escritório: entrar com a senha, sair, e (só o administrador) cadastrar e dar permissões
@@ -930,13 +948,17 @@ async function rotaProtegida(req, res, url, ip) {
         const corpo = JSON.parse(await lerCorpo(req, 10000));
         const b = config.bloqueios[req.aparelho];
         if (!b) return json(res, 200, { ok: true });
-        if (b.modo !== 'senha') return json(res, 423, { erro: 'bloqueado', bloqueio: bloqueioPublico(b) });
+        // a liberação vale só para o bloqueio em que a senha foi digitada (a revisão dele): um bloqueio mais novo, mesmo com a
+        // mesma senha, continua
+        // e só desta central (geração): a revisão é um contador de cada central
+        if (b.modo !== 'senha' || Number(corpo.rev) !== (b.rev || 0) || corpo.geracao !== config.geracao) return json(res, 423, { erro: 'bloqueado', bloqueio: bloqueioPublico(b), geracao: config.geracao });
         const agora = Date.now();
         const t = (tentativasSenha['liberar|' + req.aparelho] = (tentativasSenha['liberar|' + req.aparelho] || []).filter((x) => agora - x < 60000));
         if (t.length >= 5) return json(res, 429, { erro: 'Muitas senhas erradas. Espere um minuto.' });
         const codigo = String(corpo.codigo || '');
-        if (!/^\d{4,8}$/.test(codigo) || !mesmoSegredo(resumoDaSenha(codigo, b.sal), b.resumo)) { t.push(agora); return json(res, 403, { erro: 'Senha errada', bloqueio: bloqueioPublico(b) }); }
+        if (!/^\d{4,8}$/.test(codigo) || !mesmoSegredo(resumoDaSenha(codigo, b.sal), b.resumo)) { t.push(agora); return json(res, 403, { erro: 'Senha errada', bloqueio: bloqueioPublico(b), geracao: config.geracao }); }
         delete config.bloqueios[req.aparelho];
+        novaRevisaoDeBloqueio();
         salvarConfig();
         registrar('aparelho', `${nomeDoAparelho(req.aparelho)} foi liberado com a senha de desbloqueio`, { aparelho: nomeDoAparelho(req.aparelho) });
         agendarNuvem(500);
@@ -961,6 +983,7 @@ async function rotaProtegida(req, res, url, ip) {
             if (!/^\d{4,8}$/.test(codigo)) return json(res, 400, { erro: 'A senha de desbloqueio tem de 4 a 8 números' });
             Object.assign(b, guardarSenha(codigo));
           }
+          b.rev = novaRevisaoDeBloqueio();
           config.bloqueios[id] = b;
           delete config.sessoes[id];
           salvarConfig();
@@ -971,6 +994,7 @@ async function rotaProtegida(req, res, url, ip) {
         if (corpo.acao === 'desbloquear') {
           if (config.bloqueios[id]) {
             delete config.bloqueios[id];
+            novaRevisaoDeBloqueio();
             salvarConfig();
             registrar('configuracao', `${quem.nome} desbloqueou o ${nome}`, { quem: quem.nome, aparelho: aqui });
             agendarNuvem(500);

@@ -49,13 +49,14 @@ export async function testarSeguranca(ligar, porta, grupo) {
       igual((await sync(setor)).status, 200, 'nada bloqueado ainda');
     });
 
-    let bloqueio;
+    let bloqueio, geracao;
     await teste(grupo, 'bloqueado com senha: tudo que ele pede volta 423, e ele consegue conferir a senha sozinho', async () => {
       const r = await p(adm, '/api/aparelhos', { acao: 'bloquear', id: setor.aparelho, modo: 'senha', apagar: true, codigo: '4321' });
       igual(r.status, 200);
       const s = await sync(setor);
       igual(s.status, 423);
-      bloqueio = s.bloqueio;
+      bloqueio = s.bloqueio; geracao = s.geracao;
+      certo(geracao && geracao.length > 3, 'o 423 diz de qual central é o bloqueio (geração)');
       certo(bloqueio && bloqueio.modo === 'senha' && bloqueio.apagar === true && bloqueio.em > 0, JSON.stringify(bloqueio));
       igual(resumoDaSenha('4321', bloqueio.sal), bloqueio.resumo, 'a conta da senha bate com a do aplicativo');
       igual((await p(setor, '/api/registros?desde=0')).status, 423, 'nem as anotações ele recebe');
@@ -65,8 +66,9 @@ export async function testarSeguranca(ligar, porta, grupo) {
     });
 
     await teste(grupo, 'a senha errada não libera; a certa libera e fica no registro', async () => {
-      igual((await p(setor, '/api/liberar', { codigo: '0000' })).status, 403);
-      igual((await p(setor, '/api/liberar', { codigo: '4321' })).status, 200);
+      igual((await p(setor, '/api/liberar', { codigo: '0000', em: bloqueio.em, rev: bloqueio.rev, geracao })).status, 403);
+      igual((await p(setor, '/api/liberar', { codigo: '4321', em: bloqueio.em, rev: bloqueio.rev, geracao: 'outra-central' })).status, 423, 'liberação de outra central (geração) não vale');
+      igual((await p(setor, '/api/liberar', { codigo: '4321', em: bloqueio.em, rev: bloqueio.rev, geracao })).status, 200);
       igual((await sync(setor)).status, 200);
       certo((await registro(adm)).some((t) => /Tablet da Hidrólise foi liberado com a senha de desbloqueio/.test(t)), 'no registro');
     });
@@ -82,6 +84,22 @@ export async function testarSeguranca(ligar, porta, grupo) {
       certo(r.aparelhos.every((x) => !x.bloqueio), 'ninguém bloqueado');
       igual((await sync(setor)).status, 200);
       certo((await registro(adm)).some((t) => /Guilherme desbloqueou o Tablet da Hidrólise/.test(t)), 'no registro');
+    });
+
+    // revisão do Codex (06/10/2026): a liberação feita longe da usina vale só para aquele bloqueio
+    await teste(grupo, 'liberação de um bloqueio antigo não tira o bloqueio novo, mesmo com a mesma senha', async () => {
+      igual((await p(adm, '/api/aparelhos', { acao: 'bloquear', id: setor.aparelho, modo: 'senha', codigo: '5555' })).status, 200);
+      const antigo = (await sync(setor)).bloqueio;
+      igual((await p(adm, '/api/aparelhos', { acao: 'desbloquear', id: setor.aparelho })).status, 200);
+      // sem esperar: os dois bloqueios podem ter a mesma hora, mas a revisão (número da central que só sobe) é diferente
+      igual((await p(adm, '/api/aparelhos', { acao: 'bloquear', id: setor.aparelho, modo: 'senha', apagar: true, codigo: '5555' })).status, 200);
+      const velha = await p(setor, '/api/liberar', { codigo: '5555', em: antigo.em, rev: antigo.rev, geracao });
+      igual(velha.status, 423, 'a senha do bloqueio antigo');
+      certo(velha.bloqueio && velha.bloqueio.rev > antigo.rev && velha.bloqueio.apagar === true, 'volta o bloqueio novo: ' + JSON.stringify(velha.bloqueio));
+      igual((await sync(setor)).status, 423, 'continua bloqueado');
+      igual(velha.geracao, geracao, 'o 423 da liberação também diz a geração');
+      igual((await p(setor, '/api/liberar', { codigo: '5555', em: velha.bloqueio.em, rev: velha.bloqueio.rev, geracao })).status, 200, 'a senha do bloqueio novo libera');
+      igual((await sync(setor)).status, 200);
     });
 
   } finally {

@@ -18,7 +18,6 @@ import { teste, certo, igual, SENHA_ENCARREGADO } from './teste.mjs';
 import { centralNode, centralJava, pastaTemporaria, APP } from './servidores.mjs';
 import { diaDeExemplo } from './api-leitura.mjs';
 import { chaveDeTeste, telasDeTeste, montarPacote } from './atualizacao.mjs';
-import { resumoDaSenha } from './seguranca.mjs';
 
 const NUVEM = path.join(APP, 'nuvem');
 const WRANGLER = path.join(NUVEM, 'node_modules', 'wrangler', 'bin', 'wrangler.js');
@@ -166,17 +165,30 @@ export async function testarNuvem(grupo) {
         await teste(grupo, `${nome}: aparelho bloqueado aparece na nuvem (longe da usina ele pergunta lá) e sai quando desbloqueia`, async () => {
           igual((await c.api('/api/pessoas', { acao: 'entrar', pin: SENHA_ENCARREGADO })).pessoa.nome, 'Guilherme');
           igual((await c.api('/api/aparelhos', { acao: 'bloquear', id: 'teste-nuvem', modo: 'senha', apagar: true, codigo: '4321' })).ok, true);
-          const b = await esperar(async () => (await (await fetch(nuvem.url + '/aparelho/teste-nuvem')).json()).bloqueio, 'o bloqueio na nuvem');
-          certo(b.modo === 'senha' && b.apagar === true && b.sal && b.resumo === resumoDaSenha('4321', b.sal), JSON.stringify(b));
+          const resp = await esperar(async () => { const d = await (await fetch(nuvem.url + '/aparelho/teste-nuvem')).json(); return d.bloqueio ? d : null; }, 'o bloqueio na nuvem');
+          const b = resp.bloqueio;
+          certo(b.modo === 'senha' && b.apagar === true && b.em > 0 && b.rev > 0, JSON.stringify(b));
+          // revisão do Codex (06/10/2026): a rota é aberta, então nada da senha de desbloqueio sai por ela
+          certo(!('sal' in b) && !('resumo' in b), 'sem a senha: ' + JSON.stringify(b));
+          certo(resp.revisao >= b.rev, 'a revisão da lista (número da central) vem junto: ' + JSON.stringify(resp));
+          certo(typeof resp.geracao === 'string' && resp.geracao.length > 3, 'e de qual central é a lista (geração): ' + JSON.stringify(resp));
           const outro = await fetch(nuvem.url + '/aparelho/outro-aparelho');
           igual(outro.headers.get('access-control-allow-origin'), '*', 'o aplicativo pergunta direto');
           igual((await outro.json()).bloqueio, null, 'aparelho que não foi bloqueado');
           await c.api('/api/aparelhos', { acao: 'desbloquear', id: 'teste-nuvem' });
-          await esperar(async () => (await (await fetch(nuvem.url + '/aparelho/teste-nuvem')).json()).bloqueio === null, 'o desbloqueio na nuvem');
+          const solto = await esperar(async () => { const d = await (await fetch(nuvem.url + '/aparelho/teste-nuvem')).json(); return d.bloqueio === null ? d : null; }, 'o desbloqueio na nuvem');
+          certo(solto.revisao > b.rev, 'o desbloqueio é mais novo que o bloqueio (o aparelho só destrava assim): ' + JSON.stringify(solto));
         });
 
       } finally { await c.desligar(); }
     }
+
+    // revisão do Codex (06/10/2026): antes a nuvem cortava no 500º sem avisar e o aparelho cortado podia destravar
+    await teste(grupo, 'a nuvem recusa (em vez de cortar) uma lista com mais de 500 aparelhos bloqueados', async () => {
+      const bloqueios = Array.from({ length: 501 }, (_, i) => ({ id: 'ap-' + i, em: 1, modo: 'trava' }));
+      const r = await nuvem.pedir('/central/enviar', { senha: SEGREDO, corpo: { registros: [], bloqueios } });
+      igual(r.status, 400, r.texto);
+    });
 
     await teste(grupo, 'atualização: o APK e o pacote das telas saem da nuvem e a central do computador baixa (conferindo a assinatura)', async () => {
       const chave = chaveDeTeste();

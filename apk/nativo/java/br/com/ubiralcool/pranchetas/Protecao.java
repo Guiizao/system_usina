@@ -15,6 +15,9 @@ import java.security.MessageDigest;
  * dele). Aí o aplicativo não abre e a central não liga. O valor certo (Assinatura.ESPERADA) é escrito pelo
  * gerar-apk.ps1, que também confere o APK pronto antes de entregar.
  * Se o Android não deixar ler a assinatura (não deveria acontecer), o aplicativo abre: é melhor do que travar a usina.
+ * Valor esperado vazio não abre: o gerar-apk.ps1 sempre grava (e para com erro se não conseguir), então vazio é cópia mexida.
+ * Isto atrapalha quem altera o APK, mas quem sabe mexer no código consegue tirar a conferência: o que protege os
+ * dados é a central (código de conexão e bloqueio de aparelho).
  */
 final class Protecao {
 
@@ -25,7 +28,7 @@ final class Protecao {
   static synchronized boolean assinaturaConfere(Context contexto) {
     if (resultado != null) return resultado;
     String esperada = Assinatura.ESPERADA;
-    if (esperada == null || esperada.isEmpty()) { resultado = true; return true; } // APK de teste, sem a assinatura gravada
+    if (esperada == null || esperada.isEmpty()) { resultado = false; return false; } // o gerar-apk.ps1 sempre grava: vazio é cópia mexida
     try {
       Signature[] assinaturas = assinaturasDoApk(contexto);
       if (assinaturas == null || assinaturas.length == 0) { resultado = true; return true; }
