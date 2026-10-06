@@ -1320,7 +1320,7 @@ button { transition: background-color .15s, border-color .15s, color .15s, box-s
 :root[data-tema="escuro"] .btn.primario { color: #06170c; }
 /* Celular do tablet chefe: os botões da barra mostram o nome embaixo do ícone */
 :root[data-dispositivo="celular"] .topo:has(.atalhos > :nth-child(4)) .atalho { position: relative; flex-direction: column; gap: 2px; height: auto; min-height: 52px; padding: 4px 2px; }
-:root[data-dispositivo="celular"] .topo:has(.atalhos > :nth-child(4)) .atalho span { display: block; font-size: 13px; line-height: 1.1; }
+:root[data-dispositivo="celular"] .topo:has(.atalhos > :nth-child(4)) .atalho span { display: block; font-size: 13px; line-height: 1.1; max-width: 100%; }
 :root[data-dispositivo="celular"] .topo:has(.atalhos > :nth-child(4)) .atalho .contador { position: absolute; top: 2px; right: 6px; }
 
 /* ---------- Pedidos do teste de 24/09 (versão 2.4) ---------- */

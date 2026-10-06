@@ -5168,8 +5168,12 @@
     raiz.querySelectorAll('.campo.apertado').forEach((q) => q.classList.remove('apertado'));
     // primeiro só mede (sem mexer), para a tela não recalcular a cada elemento
     const apertados = lista.filter((el) => el.clientWidth > 0 && !cabe(el)).map((el) => ({ el, base: parseFloat(getComputedStyle(el).fontSize) }));
+    // nome embaixo do ícone na barra do alto (celular com letra Maior: "Guilherme", "Relatórios"): pode ir até 11,6 px na tela, já com o zoom
+    const zoom = parseFloat(document.body.style.zoom) || 1;
     apertados.forEach(({ el, base }) => {
-      const minimo = el.matches('.campo .val:not(.vazio), .campo .rot') ? Math.min(base, Math.max(13, base * 0.45)) : Math.min(base, Math.max(13, base * 0.6));
+      const minimo = el.matches('.campo .val:not(.vazio), .campo .rot') ? Math.min(base, Math.max(13, base * 0.45))
+        : el.matches('.topo .atalho span') ? Math.min(base, 11.6 / zoom)
+          : Math.min(base, Math.max(13, base * 0.6));
       let t = base;
       while (t > minimo && !cabe(el)) { t = Math.max(minimo, t * 0.92); el.style.fontSize = t.toFixed(1) + 'px'; }
       // nem assim coube: vai para a linha de baixo, sempre entre uma palavra e outra
