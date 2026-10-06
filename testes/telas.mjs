@@ -106,6 +106,11 @@ const TELAS = [
   ['chefe-folhas', '&papel=central&tela=folhas'],
   ['chefe-folha-ph', '&papel=central&tela=folhas', async (a) => { await a.tocar('[data-a="folha-campo"][data-pid="hid_anexo1"][data-id="phf"]'); await dormir(200); }],
   ['chefe-folha-unidades', '&papel=central&tela=folhas', async (a) => { await a.tocar('[data-a="folha-unidades"][data-pid="ins_lphera"]'); await dormir(200); }],
+  // versão 2.12: liberar o tablet chefe, as opções do dono no quadro, a estrutura da folha e o campo novo
+  ['chefe-liberar', '&papel=central&modal=liberar'],
+  ['chefe-folha-dono', '&papel=central&tela=folhas', async (a) => { await a.tocar('[data-a="folha-campo"][data-pid="caldeira"][data-id="pressao"]'); await dormir(200); }],
+  ['chefe-estrutura', '&papel=central&tela=folhas', async (a) => { await a.tocar('[data-a="folha-estrutura"][data-pid="ins_materia_prima"]'); await dormir(200); }],
+  ['chefe-campo-novo', '&papel=central&tela=folhas', async (a) => { await a.tocar('[data-a="folha-estrutura"][data-pid="caldeira"]'); await dormir(200); await a.tocar('.modal [data-k="novo"]'); await dormir(250); }],
   ['chefe-enviar-pdf', '&papel=central', async (a) => { await a.tocar('[data-a="compartilhar"][data-destino="whatsapp"]'); await dormir(200); }],
   // versão 2.11: aparelhos (quem usa, nome no Android, modelo, endereço) e bloqueio
   ['chefe-aparelhos', '&papel=central&tela=aparelhos'],

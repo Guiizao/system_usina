@@ -3,7 +3,7 @@
 (function () {
   'use strict';
   const C = window.USINA;
-  const VERSAO = '2.11.0'; // aparece nos ajustes e vai junto com cada envio para a central
+  const VERSAO = '2.12.0'; // aparece nos ajustes e vai junto com cada envio para a central
   const AUTORIA = '© 2026 Guilherme. Todos os direitos reservados. Uso somente com autorização do autor.';
   const params = new URLSearchParams(location.search);
   const DEMO_IMG = params.has('demo'); // usado só para gerar imagens de apresentação
@@ -653,7 +653,7 @@
         else if (rl.status === 423) { cfg.liberacao = null; salvarCfg(); return; }
       }
       // em lotes: um aparelho que ficou muito tempo sem Wi-Fi não manda tudo de uma vez
-      const envio = Object.values(registros).filter((r) => !r.sincronizado).slice(0, LOTE_ENVIO)
+      const envio = Object.values(registros).filter((r) => !r.sincronizado && !r.esperaEntrar).slice(0, LOTE_ENVIO)
         // a configuração vai com a revisão que este aparelho conhece (a central recusa se outro tablet mudou antes)
         .map((r) => (r.data === 'config' ? Object.assign({}, r, { base: r.rev || 0 }) : r));
       const erros = errosGuardados.slice();
@@ -690,12 +690,19 @@
         // o que a central recusou (versão 2.12) volta a ser como está na central, e a pessoa fica sabendo
         const recusados = Array.isArray(resp1.recusados) ? resp1.recusados : [];
         const ids = new Set(recusados.map((x) => x.id));
+        let semSessao = false;
         recusados.forEach((x) => {
+          // anotação recusada no tablet chefe (ninguém dentro, ou quem está não pode): não se perde. Fica guardada aqui
+          // e vai de novo quando alguém entrar neste aparelho
+          const local = registros[x.id];
+          if (local && local.data !== 'config' && x.motivo !== 'invalido') { local.esperaEntrar = true; semSessao = semSessao || x.motivo === 'sem_sessao'; return; }
           if (x.atual) registros[x.id] = Object.assign({}, x.atual, { sincronizado: true });
           else delete registros[x.id];
         });
         if (recusados.length) avisarRecusa(recusados);
-        envio.forEach((e) => { const atual = registros[e.id]; if (!ids.has(e.id) && atual && atual.atualizadoEm === e.atualizadoEm) atual.sincronizado = true; });
+        // a central não tem mais ninguém dentro deste aparelho (o nível mudou, a pessoa saiu de outro jeito): entra de novo
+        if (semSessao && cfg.pessoa) { cfg.pessoa = null; salvarCfg(); render(); }
+        envio.forEach((e) => { const atual = registros[e.id]; if (!ids.has(e.id) && atual && atual.atualizadoEm === e.atualizadoEm) { atual.sincronizado = true; delete atual.esperaEntrar; } });
         // a revisão nova da configuração aceita (a próxima mudança vai com ela)
         Object.entries(resp1.revs || {}).forEach(([id, rev]) => { if (registros[id]) registros[id].rev = rev; });
         salvarRegistros();
@@ -707,6 +714,8 @@
         if (resp.agora) conferirRelogio(resp.agora - (antesDoEnvio + Date.now()) / 2);
         // longe da usina, o aparelho pergunta na nuvem se foi bloqueado
         if (typeof resp.nuvem === 'string' && resp.nuvem !== (cfg.nuvemUrl || '')) { cfg.nuvemUrl = resp.nuvem; salvarCfg(); }
+        // tablet chefe (versão 2.12): de minuto em minuto confere com a central quem está aqui e o que pode
+        if (ehCentral() && cfg.pessoa && Date.now() - (sync.quemEm || 0) > 60000) { sync.quemEm = Date.now(); conferirSessao(); }
       }
       let mudou = false;
       // o aparelho passou a guardar mais dias (virou tablet chefe): busca de novo, desde o começo
@@ -717,7 +726,8 @@
         const dados = await r2.json();
         for (const rec of dados.registros) {
           const local = registros[rec.id];
-          if (!local || rec.atualizadoEm > local.atualizadoEm) { registros[rec.id] = Object.assign({}, rec, { sincronizado: true }); mudou = true; }
+          // anotação guardada esperando alguém entrar não é trocada pela da central (ela ainda vai subir)
+          if (!local || (!local.esperaEntrar && rec.atualizadoEm > local.atualizadoEm)) { registros[rec.id] = Object.assign({}, rec, { sincronizado: true }); mudou = true; }
         }
         cfg.ultimoSeq = dados.seq; cfg.corteSync = corte; salvarCfg();
         if (mudou) { podar(); salvarRegistros(); }
@@ -792,7 +802,7 @@
         const dados = await r.json();
         (dados.registros || []).forEach((rec) => {
           const local = registros[rec.id];
-          if (!local || rec.atualizadoEm > local.atualizadoEm) registros[rec.id] = Object.assign({}, rec, { sincronizado: true });
+          if (!local || (!local.esperaEntrar && rec.atualizadoEm > local.atualizadoEm)) registros[rec.id] = Object.assign({}, rec, { sincronizado: true });
         });
         salvarRegistros();
       } catch (e) {
@@ -1006,7 +1016,7 @@
   const limitePessoa = () => (C.minutosSemMexer || 30) * 60000;
   let demoSemPessoa = false; // demonstração do tablet chefe sem ninguém (para conferir a tela)
   const pessoaAtual = () => {
-    if (cfg.demo && ehCentral()) return demoSemPessoa ? null : { nome: 'Guilherme', nivel: 'administrador', extras: {}, teto: null };
+    if (cfg.demo && ehCentral()) return demoSemPessoa ? null : { nome: 'Guilherme', nivel: 'administrador', extras: {}, teto: null, dono: true };
     if (!ehCentral() || !cfg.pessoa) return null;
     return Date.now() - pessoaAtivaEm < limitePessoa() ? cfg.pessoa : null;
   };
@@ -1017,6 +1027,7 @@
     // versão 2.12: a central diz o que vale neste aparelho (a pessoa, o nível do tablet chefe e o limite dele)
     if (Array.isArray(p.funcoes)) return new Set(p.funcoes);
     const todas = C.funcoes.map((f) => f.id);
+    if (p.dono) return new Set([...todas, 'pessoas', 'chefes', 'sistema']); // sem a central (demonstração): o dono pode tudo
     if (p.nivel === 'administrador') return new Set([...todas, 'pessoas']);
     const nivel = C.niveis[p.nivel] || { funcoes: [] };
     const s = new Set(nivel.funcoes === 'todas' ? todas : nivel.funcoes);
@@ -1052,7 +1063,12 @@
     pessoaAtivaEm = Date.now();
     if (d.nivel) cfg.nivelChefe = d.nivel;
     cfg.pessoa = Object.assign({}, d.pessoa, { teto: d.teto || null }, Array.isArray(d.funcoes) ? { funcoes: d.funcoes, dono: !!d.dono } : {}); cfg.pessoaAtivaEm = pessoaAtivaEm; salvarCfg();
+    // o que a central não aceitou por falta de alguém dentro (ou de permissão) vai de novo, agora com esta pessoa
+    let guardadas = 0;
+    Object.values(registros).forEach((r) => { if (r.esperaEntrar) { delete r.esperaEntrar; guardadas += 1; } });
+    if (guardadas) { salvarRegistros(); sincronizarLogo(); }
     toast(`Olá, ${d.pessoa.nome}`);
+    mandarFolhasParaCentral();
     render();
     return true;
   }
@@ -1074,7 +1090,7 @@
       if (k === 'recuperar') return fechar('recuperar');
       if (k.startsWith('n:')) { escolhido = Number(k.slice(2)); f.querySelectorAll('[data-k^="n:"]').forEach((x) => x.classList.toggle('sel', x.dataset.k === k)); return; }
       if (k === 'ok') fechar(escolhido);
-    }, { classe: 'largo', aoAbrir: (f) => f.querySelector('[data-k="n:2"]').classList.add('sel') });
+    }, { classe: 'largo com-niveis', aoAbrir: (f) => f.querySelector('[data-k="n:2"]').classList.add('sel') });
     if (resp === undefined) return undefined;
     if (resp === 'recuperar') return recuperarDono();
     const pin = await pedirSenhaModal(`Senha para liberar o ${nomeDoNivelChefe(resp)}`, resp === 3 ? 'Só a senha do dono do sistema libera o nível 3.' : 'A senha de quem libera tablets chefe (o administrador).');
@@ -1110,6 +1126,23 @@
     if (d.nivel) { cfg.nivelChefe = d.nivel; return true; }
     return (await liberarEsteAparelho()) !== undefined;
   }
+  /** A central diz quem está neste tablet chefe e o que pode. Se a sessão caiu (o nível mudou, a pessoa foi
+      desativada, outra pessoa entrou), sai daqui também; se as funções mudaram, passa a valer na hora. */
+  async function conferirSessao() {
+    const r = await postJson('api/pessoas', { acao: 'quem' }, 8000).catch(() => null);
+    if (!r || !r.ok || !cfg.pessoa) return;
+    const d = await r.json().catch(() => ({}));
+    if (d.nivel) cfg.nivelChefe = d.nivel;
+    if (!d.pessoa || d.pessoa.id !== cfg.pessoa.id) {
+      cfg.pessoa = null; salvarCfg();
+      toast('Você saiu deste tablet chefe (o nível dele mudou ou a sessão acabou). Entre de novo.');
+      return render();
+    }
+    if (Array.isArray(d.funcoes) && JSON.stringify(d.funcoes) !== JSON.stringify(cfg.pessoa.funcoes || null)) {
+      cfg.pessoa = Object.assign({}, cfg.pessoa, { funcoes: d.funcoes, dono: !!d.dono }); salvarCfg();
+      if (!modalAberto()) render();
+    }
+  }
   function sairDoChefe(motivo) {
     if (!cfg.pessoa) return;
     postJson('api/pessoas', { acao: 'sair', motivo: motivo || '' }, 5000).catch(() => {});
@@ -1137,7 +1170,8 @@
   function avisarRecusa(recusados) {
     const m = recusados.map((x) => x.motivo);
     if (m.includes('conflito')) return toast('A configuração mudou em outro tablet. Confira e faça a mudança de novo.', 'erro');
-    if (m.includes('nivel1_nao_cria')) return toast('Este tablet chefe é nível 1: ele vê, corrige e envia, mas não cria anotação nova.', 'erro');
+    if (m.includes('sem_sessao')) return toast('Ninguém entrou neste tablet chefe. O que foi anotado ficou guardado aqui e sobe quando alguém entrar.', 'erro');
+    if (recusados.some((x) => registros[x.id] && registros[x.id].esperaEntrar)) return toast('Quem está neste aparelho não pode fazer essa anotação. Ela ficou guardada aqui e sobe quando entrar alguém que pode.', 'erro');
     return toast('Quem está neste aparelho não pode fazer essa mudança. Ela foi desfeita.', 'erro');
   }
   const nomeDesteAparelho = () => (ehCentral() ? nomeDoChefe() : setorPorId(cfg.papel) ? `Tablet da ${setorPorId(cfg.papel).nome}` : 'aparelho');
@@ -1225,7 +1259,7 @@
             ${[...chefes.values()].map((a) => {
               const teto = (l.aparelhos[a.id] || {}).teto;
               return `<div class="linha-config"><span class="escolha-ico">${ico('escritorio')}</span>
-                <div><b>${esc(a.nome || 'Tablet chefe')}</b><small>${(l.aparelhos[a.id] || {}).nivel ? `${esc(nomeDoNivelChefe(l.aparelhos[a.id].nivel))} · ` : 'Não liberado · '}${a.online ? `Ligado${a.pessoa ? `, ${esc(a.pessoa)}` : ', ninguém entrou'}` : 'Sem sinal'} · ${Array.isArray(teto) ? `${teto.length} de ${C.funcoes.length} funções` : 'tudo liberado'}${a.id === cfg.deviceId ? ' · este aparelho' : ''}</small></div>
+                <div><b>${esc(a.nome || 'Tablet chefe')}${a.id === cfg.deviceId ? ' (este aparelho)' : ''}</b><small>${(l.aparelhos[a.id] || {}).nivel ? `${esc(nomeDoNivelChefe(l.aparelhos[a.id].nivel))} · ` : 'Não liberado · '}${a.online ? `Ligado${a.pessoa ? `, ${esc(a.pessoa)}` : ', ninguém entrou'}` : 'Sem sinal'} · ${Array.isArray(teto) ? `${teto.length} de ${C.funcoes.length} funções` : 'tudo liberado'}${a.id === cfg.deviceId ? ' · este aparelho' : ''}</small></div>
                 <button class="btn pequeno" data-a="aparelho-chefe" data-id="${esc(a.id)}">Mudar</button></div>`;
             }).join('') || '<p class="sub">Nenhum tablet chefe falou com a central ainda.</p>'}
           </section>
@@ -1266,7 +1300,7 @@
       <div class="form-pessoa">
         <label>Nome <input id="p-nome" maxlength="40" autocomplete="off" value="${esc(atual ? atual.nome : '')}"></label>
         <label>Senha (4 a 8 números)${atual ? ' <small>deixe em branco para não trocar</small>' : ''} <input id="p-pin" inputmode="numeric" maxlength="8" autocomplete="off" value=""></label>
-        <div class="segmentos">${Object.entries(C.niveis).map(([k, n]) => `<button data-k="n:${k}">${esc(n.nome)}</button>`).join('')}</div>
+        <div class="segmentos quebra">${Object.entries(C.niveis).map(([k, n]) => `<button data-k="n:${k}">${esc(n.nome)}</button>`).join('')}</div>
         <div id="funcoes-pessoa"></div>
         <div class="chips"><button class="chip-liga" data-k="ativo">${ico('certo')} Pode entrar</button></div>
       </div>
@@ -1314,7 +1348,7 @@
       <div class="form-pessoa">
         <label>Nome do aparelho <input id="a-nome" maxlength="40" autocomplete="off" value="${esc(atual.nome || info.nome || '')}" placeholder="Ex.: Tablet do escritório"></label>
         ${pode('chefes') ? `<p class="sub" style="margin:4px 0">Nível deste tablet chefe:</p>
-        <div class="segmentos">${[1, 2, 3].map((n) => `<button data-k="nv:${n}" ${n === 3 && !souDono ? 'disabled' : ''}>${esc(nomeDoNivelChefe(n))}</button>`).join('')}</div>
+        <div class="segmentos quebra">${[1, 2, 3].map((n) => `<button data-k="nv:${n}" ${n === 3 && !souDono ? 'disabled' : ''}>${esc(nomeDoNivelChefe(n))}</button>`).join('')}</div>
         <p class="sub" style="margin:2px 0 8px">${esc(((C.niveisDoAparelho || {})[1] || {}).texto || '')}; 2: tudo; 3: só o dono. Quem estiver dentro sai quando o nível muda.</p>` : ''}
         <p class="sub" style="margin:4px 0">O que pode ser feito neste aparelho:</p>
         <div id="funcoes-aparelho"></div>
@@ -1336,6 +1370,12 @@
     }, { classe: 'largo com-form', aoAbrir: (f) => desenhar(f) });
     if (!resp) return;
     v.lista = resp;
+    // o nível deste próprio aparelho mudou: a central tirou quem estava dentro, então entra de novo
+    if (id === cfg.deviceId && nivel !== (Number(atual.nivel) || 0)) {
+      cfg.nivelChefe = nivel; cfg.pessoa = null; salvarCfg();
+      toast(`Este aparelho agora é o ${nomeDoNivelChefe(nivel)}. Entre de novo com a sua senha.`);
+      return render();
+    }
     toast('Tablet chefe salvo');
     render();
   }
@@ -1495,37 +1535,38 @@
    * (configSistema().folhas) e chega em todos os tablets pela sincronização.
    * O que vem do forms.js é o original: "Voltar ao original" apaga só a mudança.
    * ========================================================= */
-  const EDITAVEIS = ['label', 'labelCurto', 'unidade', 'min', 'max', 'dica', 'avisos'];
-  const ORIGINAL_DOS_CAMPOS = new Map();
-  const ORIGINAL_DAS_UNIDADES = new Map();
+  // versão 2.12: a folha em vigor é montada pelo folhas.js (o mesmo código que a central do computador usa na API)
+  const ORIGINAIS_FOLHAS = new Map();
   let folhasAplicadas = '';
-  const camposDaFolha = (p) => (p.tipo === 'grade' ? p.itens : p.tipo === 'medicao' ? p.parametros : p.tipo === 'dornas' || p.tipo === 'fermentacao' ? p.campos : null) || [];
+  const camposDaFolha = (p) => p[window.Folhas.listaDe(p)] || [];
   const copia = (x) => (x === undefined ? undefined : JSON.parse(JSON.stringify(x)));
+  /** Como o quadro é no forms.js. Campo novo ou do escritório liberado ao operador: a definição dele (assim dá para apagar a unidade). */
+  const originalDoCampo = (pid, id) => {
+    const o = ORIGINAIS_FOLHAS.get(pid); const x = o && o.lista.find((e) => e.c.id === id);
+    if (x) return x.o;
+    const p = prancheta(pid);
+    const novo = ((((configSistema().folhas || {})[pid] || {})._novos) || []).map(window.Folhas.campoNovo).find((c) => c && c.id === id);
+    const base = novo || ((p && p.camposEscritorio) || []).find((c) => c.id === id) || {};
+    const r = {}; window.Folhas.EDITAVEIS.forEach((k) => { if (base[k] !== undefined) r[k] = copia(base[k]); }); return r;
+  };
   /** Põe as mudanças das folhas por cima do forms.js. Devolve true se mudou algo. */
   function aplicarFolhas() {
     const f = configSistema().folhas || {};
     const json = JSON.stringify(f);
     if (json === folhasAplicadas) return false;
+    const primeira = !folhasAplicadas;
     folhasAplicadas = json;
-    Object.entries(C.pranchetas).forEach(([pid, p]) => {
-      camposDaFolha(p).forEach((c) => {
-        if (!ORIGINAL_DOS_CAMPOS.has(c)) { const o = {}; EDITAVEIS.forEach((k) => { o[k] = copia(c[k]); }); ORIGINAL_DOS_CAMPOS.set(c, o); }
-        const o = ORIGINAL_DOS_CAMPOS.get(c);
-        const m = (f[pid] || {})[c.id] || {};
-        EDITAVEIS.forEach((k) => {
-          const v = m[k] !== undefined ? m[k] : o[k];
-          if (v === undefined || v === null || v === '') delete c[k]; else c[k] = copia(v);
-        });
-        if (!c.label) c.label = o.label; // o nome nunca fica vazio
-      });
-      if (p.tipo === 'insumo') {
-        if (!ORIGINAL_DAS_UNIDADES.has(pid)) ORIGINAL_DAS_UNIDADES.set(pid, p.unidades.slice());
-        const u = ((f[pid] || {})._unidades || []).filter(Boolean);
-        p.unidades = u.length ? u.slice() : ORIGINAL_DAS_UNIDADES.get(pid).slice();
-        p.unidade = p.unidades[0];
-      }
-    });
+    window.Folhas.aplicar(C, f, ORIGINAIS_FOLHAS);
+    if (!primeira) mandarFolhasParaCentral();
     return true;
+  }
+  /* A central do tablet monta as permissões, os campos do escritório e a API da nuvem com as folhas que o aplicativo
+     do tablet chefe manda: ao abrir, depois de entrar e quando elas mudam. */
+  let folhasMandando = null;
+  function mandarFolhasParaCentral() {
+    if (!centralNoTablet() || cfg.demo) return;
+    clearTimeout(folhasMandando);
+    folhasMandando = setTimeout(() => postJson('api/nuvem', { acao: 'forms', forms: C }, 8000).catch(() => {}), 800);
   }
   const normalizarAvisos = (lista) => (lista || []).map((a) => ({ quando: a.quando, valor: a.valor, nivel: a.nivel || 'alerta', texto: a.texto, curto: a.curto || String(a.texto).split(':')[0].slice(0, 24) }));
   const QUANDO = [['<', 'abaixo de'], ['<=', 'até'], ['>=', 'a partir de'], ['>', 'acima de']];
@@ -1544,12 +1585,13 @@
           const pids = s.pranchetas.flatMap(folhasDe).filter((pid) => !vistas.has(pid) && vistas.add(pid));
           const blocos = pids.map((pid) => {
             const p = prancheta(pid);
-            const campos = camposDaFolha(p).filter((c) => c.type === 'num' || c.type === 'time' || c.type === 'choice' || c.type === 'check' || c.type === 'text');
-            const linhas = campos.map((c) => `<div class="linha-config"><div><b>${esc(c.label)}${(mud[pid] || {})[c.id] ? ' <span class="selo-mudado">mudado</span>' : ''}</b><small>${esc(resumoDoCampo(c) || 'sem aviso')}</small></div>
+            const campos = camposDaFolha(p).filter((c) => !c.arquivado && (c.type === 'num' || c.type === 'time' || c.type === 'choice' || c.type === 'check' || c.type === 'text'));
+            const linhas = campos.map((c) => `<div class="linha-config"><div><b>${esc(c.label)}${c.novo ? ' <span class="selo-mudado">novo</span>' : (mud[pid] || {})[c.id] ? ' <span class="selo-mudado">mudado</span>' : ''}</b><small>${esc([resumoDoCampo(c) || 'sem aviso', c.oculto ? 'o operador não vê' : '', c.doEscritorio ? 'do escritório, o operador também preenche' : ''].filter(Boolean).join(' · '))}</small></div>
               <button class="btn pequeno" data-a="folha-campo" data-pid="${pid}" data-id="${esc(c.id)}">Mudar</button></div>`).join('');
             const unidades = p.tipo === 'insumo' ? `<div class="linha-config"><div><b>Unidades${(mud[pid] || {})._unidades ? ' <span class="selo-mudado">mudado</span>' : ''}</b><small>${esc(p.unidades.join(', '))}</small></div>
               <button class="btn pequeno" data-a="folha-unidades" data-pid="${pid}">Mudar</button></div>` : '';
-            return linhas || unidades ? `<h3 class="folha-titulo">${esc(p.nome)}</h3>${linhas}${unidades}` : '';
+            const estrutura = pode('sistema') && window.Folhas.aceitaNovo(p) ? `<div class="linha-botoes"><button class="btn pequeno" data-a="folha-estrutura" data-pid="${pid}">${ico('mais')} Estrutura da folha (campos novos${p.tipo === 'insumo' ? ', campos do escritório' : ''})</button></div>` : '';
+            return linhas || unidades || estrutura ? `<h3 class="folha-titulo">${esc(p.nome)}</h3>${linhas}${unidades}${estrutura}` : '';
           }).join('');
           return blocos ? `<section class="bloco"><h2>${ico(s.icone)} ${esc(s.nome)}</h2>${blocos}</section>` : '';
         }).join('')}</div>
@@ -1566,8 +1608,16 @@
     const p = prancheta(pid);
     const c = camposDaFolha(p).find((x) => x.id === id);
     if (!c) return;
-    const o = ORIGINAL_DOS_CAMPOS.get(c) || {};
+    const o = originalDoCampo(pid, c.id);
     const num = c.type === 'num';
+    // versão 2.12: só o dono, num tablet chefe nível 3, muda a vírgula e se o operador vê o quadro
+    const sistema = pode('sistema');
+    const est = { dec: Number(c.dec) || 0, oculto: !!c.oculto };
+    const desenharSistema = (f) => {
+      f.querySelectorAll('[data-k^="dec:"]').forEach((x) => x.classList.toggle('sel', x.dataset.k === 'dec:' + est.dec));
+      const v = f.querySelector('[data-k="oculto"]');
+      if (v) { v.classList.toggle('sel', !est.oculto); v.innerHTML = `${est.oculto ? ico('fechar') : ico('certo')} ${est.oculto ? 'O operador não vê este quadro' : 'O operador vê e anota este quadro'}`; }
+    };
     const avisos = copia(c.avisos || []);
     const linhaAviso = (a, i) => `<div class="aviso-editar" data-texto="${esc(a.texto || '')}" data-curto="${esc(a.curto || '')}">
         <select class="av-quando">${QUANDO.map(([q, t]) => `<option value="${q}" ${a.quando === q ? 'selected' : ''}>${t}</option>`).join('')}</select>
@@ -1588,11 +1638,17 @@
         <label>Nome do quadro <input id="f-label" maxlength="40" value="${esc(c.label || '')}"></label>
         <label>Nome curto <small>quando o nome não cabe</small><input id="f-curto" maxlength="20" value="${esc(c.labelCurto || '')}"></label>
         ${num ? `<label>Unidade <small>ex.: °C, kgf, copos</small><input id="f-unidade" maxlength="12" value="${esc(c.unidade || '')}"></label>
+        ${chipsDeUnidades('u')}
+        <p class="sub">Trocar a unidade vale a partir de hoje: os dias antes continuam com a de antes. Nenhum número é convertido.</p>
         <label>Dica <small>aparece embaixo do teclado</small><input id="f-dica" maxlength="160" value="${esc(c.dica || '')}"></label>
         <label>Menor valor esperado <input id="f-min" inputmode="decimal" value="${esc(c.min == null ? '' : fmtNum(String(c.min)))}"></label>
         <label>Maior valor esperado <input id="f-max" inputmode="decimal" value="${esc(c.max == null ? '' : fmtNum(String(c.max)))}"></label>
         <div class="avisos-bloco"><b>Avisos</b><div id="avisos-campo"></div><button class="btn pequeno" data-k="av-mais">${ico('mais')} Pôr aviso</button></div>`
         : `<label>Dica <small>aparece embaixo do teclado</small><input id="f-dica" maxlength="160" value="${esc(c.dica || '')}"></label>`}
+        ${sistema ? `<div class="avisos-bloco"><b>Só você (dono)</b>
+          ${num ? `<div class="segmentos quebra">${[[0, 'Sem vírgula'], [1, '1 casa'], [2, '2 casas']].map(([d, n]) => `<button data-k="dec:${d}">${n}</button>`).join('')}</div>
+          <p class="sub">A vírgula vale para o que for anotado daqui para frente; o que já foi anotado continua como está.</p>` : ''}
+          <div class="chips"><button class="chip-liga" data-k="oculto"></button></div></div>` : ''}
         ${mudado ? '<div class="linha-botoes"><button class="btn pequeno" data-k="original">Voltar ao original</button></div>' : ''}
       </div>
       <div class="acoes-modal"><button class="btn" data-k="x">Cancelar</button><button class="btn primario" data-k="ok">Salvar</button></div>`,
@@ -1601,6 +1657,9 @@
       if (k === 'original') return fechar('original');
       if (k === 'av-mais') { avisos.splice(0, avisos.length, ...lerAvisos(f)); avisos.push({ quando: '<', valor: null, nivel: 'alerta', texto: '' }); return desenharAvisos(f); }
       if (k.startsWith('av-x:')) { avisos.splice(0, avisos.length, ...lerAvisos(f)); avisos.splice(Number(k.slice(5)), 1); return desenharAvisos(f); }
+      if (k.startsWith('u:')) { f.querySelector('#f-unidade').value = k.slice(2); return; }
+      if (k.startsWith('dec:')) { est.dec = Number(k.slice(4)); return desenharSistema(f); }
+      if (k === 'oculto') { est.oculto = !est.oculto; return desenharSistema(f); }
       if (k !== 'ok') return;
       const label = f.querySelector('#f-label').value.trim();
       if (!label) return toast('O quadro precisa de um nome', 'erro');
@@ -1616,14 +1675,26 @@
         if (av.some((a) => !a.texto)) return toast('Escreva o que o aviso diz', 'erro');
         m.avisos = normalizarAvisos(av);
       }
+      if (sistema) { if (num) m.dec = est.dec; if (est.oculto) m.oculto = true; }
       fechar(m);
-    }, { classe: 'largo com-form', aoAbrir: (f) => { if (num) desenharAvisos(f); } });
+    }, { classe: 'largo com-form', aoAbrir: (f) => { if (num) desenharAvisos(f); if (sistema) desenharSistema(f); } });
     if (resp === undefined) return;
     const todas = copia(configSistema().folhas || {});
     todas[pid] = todas[pid] || {};
     const antes = { label: c.label, unidade: c.unidade, min: c.min, max: c.max, avisos: resumoDoCampo(c) };
+    const guardado = todas[pid][id] || {};
+    // a unidade trocada vale a partir de hoje: guarda a de antes até ontem (nada é convertido)
+    const comHistorico = (unidadeNova) => {
+      const h = copia(guardado.historico || c.historico || []);
+      const ontem = somarDias(dataProducao(), -1);
+      if ((unidadeNova || '') !== (c.unidade || '') && !h.some((x) => x.ate === ontem)) h.push({ ate: ontem, unidade: c.unidade || '' });
+      return h.length ? h : undefined;
+    };
+    // quem não é o dono não mexe (nem apaga) o que só o dono muda
+    const doDono = () => { const x = {}; if (!pode('sistema')) ['dec', 'oculto'].forEach((k) => { if (guardado[k] !== undefined) x[k] = guardado[k]; }); return x; };
     if (resp === 'original') {
-      delete todas[pid][id];
+      const fica = Object.assign(doDono(), num && comHistorico(o.unidade) ? { historico: comHistorico(o.unidade) } : {});
+      if (Object.keys(fica).length) todas[pid][id] = fica; else delete todas[pid][id];
       salvarFolhas(todas, `voltou ${c.label} (${p.nome}) para o original`);
       toast('Voltou ao original');
       return render();
@@ -1634,7 +1705,8 @@
       const orig = k === 'avisos' ? normalizarAvisos(o.avisos) : o[k] === undefined ? (k === 'min' || k === 'max' ? null : '') : o[k];
       if (JSON.stringify(resp[k] == null || resp[k] === '' ? (k === 'avisos' ? [] : k === 'min' || k === 'max' ? null : '') : resp[k]) !== JSON.stringify(orig)) dif[k] = resp[k] === '' ? null : resp[k];
     });
-    todas[pid][id] = dif;
+    if (num) { const h = comHistorico(resp.unidade); if (h) dif.historico = h; }
+    todas[pid][id] = Object.assign(dif, doDono());
     const partes = [];
     if (dif.label !== undefined && resp.label !== antes.label) partes.push(`nome ${antes.label} -> ${resp.label}`);
     if (num && (resp.unidade || '') !== (antes.unidade || '')) partes.push(`unidade ${antes.unidade || '(sem)'} -> ${resp.unidade || '(sem)'}`);
@@ -1644,6 +1716,96 @@
     toast('Folha salva. Os tablets recebem na próxima sincronização.');
     render();
   }
+  /** As unidades sugeridas (o dono também pode digitar outra). */
+  const chipsDeUnidades = (pre) => `<div class="chips unidades">${window.Folhas.UNIDADES.map(([g, us]) => us.map((u) => `<button class="chip-liga" data-k="${pre}:${esc(u)}" title="${esc(g)}">${esc(u)}</button>`).join('')).join('')}</div>`;
+  const TIPOS_DE_CAMPO = [['num', 'Número'], ['text', 'Texto'], ['choice', 'Opções'], ['time', 'Hora'], ['check', 'Marcar OK']];
+  function nomeDoTipo(c) {
+    const t = (TIPOS_DE_CAMPO.find((x) => x[0] === c.type) || [0, c.type])[1];
+    if (c.type === 'num') return `${t}${c.unidade ? ` em ${c.unidade}` : ''}, ${c.dec ? `${c.dec} casa${c.dec > 1 ? 's' : ''} depois da vírgula` : 'sem vírgula'}`;
+    return c.type === 'choice' ? `${t}: ${(c.opcoes || []).join(', ')}` : t;
+  }
+  /* Estrutura da folha (versão 2.12, só o dono num tablet chefe nível 3): campos novos e, nos insumos, os campos do
+     escritório que o operador também preenche. O desenho do papel não muda: o que for novo aparece no aplicativo,
+     no Monitorar, no XML e na API. Campo novo não se apaga: arquiva (os valores antigos continuam guardados). */
+  async function editarEstruturaDaFolha(pid) {
+    if (!pode('sistema')) return toast('Só o dono do sistema, no tablet chefe nível 3', 'erro');
+    const p = prancheta(pid);
+    const todas = copia(configSistema().folhas || {});
+    const m = todas[pid] = todas[pid] || {};
+    const novos = copia(m._novos || []);
+    const operador = new Set(m._operador || []);
+    const doOperadorNoForms = ((ORIGINAIS_FOLHAS.get(pid) || {}).ordem || []).map((c) => c.id);
+    const escritorio = p.tipo === 'insumo' ? (p.camposEscritorio || []).filter((c) => !doOperadorNoForms.includes(c.id)) : [];
+    const desenhar = (f) => {
+      f.querySelector('#est-novos').innerHTML = novos.length ? novos.map((c, i) => `<div class="linha-config ${c.arquivado ? 'desligado' : ''}"><div><b>${esc(c.label)}</b><small>${esc(nomeDoTipo(c))}${c.arquivado ? ' · arquivado (os valores antigos continuam guardados)' : ''}</small></div>
+        <button class="btn pequeno" data-k="arq:${i}">${c.arquivado ? 'Voltar a usar' : 'Arquivar'}</button></div>`).join('') : '<p class="sub">Nenhum campo novo nesta folha.</p>';
+      const op = f.querySelector('#est-operador');
+      if (op) op.innerHTML = `<div class="chips">${escritorio.map((c) => `<button class="chip-liga ${operador.has(c.id) ? 'sel' : ''}" data-k="op:${c.id}">${operador.has(c.id) ? ico('certo') : ico('fechar')} ${esc(c.label)}</button>`).join('')}</div>`;
+    };
+    for (;;) {
+      const resp = await abrirModal(`<h3>Estrutura da folha: ${esc(p.nome).replace(/-/g, '\u2011')}</h3>
+        <p class="dica">Só você (dono, no tablet chefe nível 3) mexe aqui. O desenho do papel não muda: o que for novo aparece no aplicativo, no Monitorar, no XML e na API.</p>
+        <div class="form-pessoa form-folha">
+          ${escritorio.length ? '<b>Campos do escritório que o operador também preenche</b><div id="est-operador"></div>' : ''}
+          <b>Campos novos</b><div id="est-novos"></div>
+          <div class="linha-botoes"><button class="btn pequeno" data-k="novo">${ico('mais')} Criar campo novo</button></div>
+        </div>
+        <div class="acoes-modal"><button class="btn" data-k="x">Cancelar</button><button class="btn primario" data-k="ok">Salvar</button></div>`,
+      (k, b, fechar, f) => {
+        if (k === 'x') return fechar(undefined);
+        if (k === 'novo') return fechar('novo');
+        if (k.startsWith('op:')) { const id = k.slice(3); if (operador.has(id)) operador.delete(id); else operador.add(id); return desenhar(f); }
+        if (k.startsWith('arq:')) { const c = novos[Number(k.slice(4))]; if (c.arquivado) delete c.arquivado; else c.arquivado = true; return desenhar(f); }
+        if (k === 'ok') fechar(true);
+      }, { classe: 'largo com-form', aoAbrir: (f) => desenhar(f) });
+      if (resp === 'novo') { const c = await criarCampoNovo(p, novos); if (c) novos.push(c); continue; }
+      if (!resp) return;
+      break;
+    }
+    if (operador.size) m._operador = [...operador]; else delete m._operador;
+    if (novos.length) m._novos = novos; else delete m._novos;
+    salvarFolhas(todas, `mudou a estrutura de ${p.nome}`);
+    toast('Estrutura salva. Os tablets recebem na próxima sincronização.');
+    render();
+  }
+  /** Um campo novo: nome, tipo, unidade e vírgula (número) ou as opções. O id nunca é reaproveitado. */
+  async function criarCampoNovo(p, novos) {
+    const est = { type: 'num', dec: 0 };
+    const desenhar = (f) => {
+      f.querySelectorAll('[data-k^="t:"]').forEach((x) => x.classList.toggle('sel', x.dataset.k === 't:' + est.type));
+      f.querySelectorAll('[data-k^="d:"]').forEach((x) => x.classList.toggle('sel', x.dataset.k === 'd:' + est.dec));
+      f.querySelector('#cn-num').style.display = est.type === 'num' ? '' : 'none';
+      f.querySelector('#cn-opcoes').style.display = est.type === 'choice' ? '' : 'none';
+    };
+    return abrirModal(`<h3>Campo novo em ${esc(p.nome)}</h3>
+      <div class="form-pessoa form-folha">
+        <label>Nome do campo <input id="cn-nome" maxlength="40" autocomplete="off" placeholder="Ex.: Temperatura da saída"></label>
+        <b>Tipo</b><div class="segmentos quebra">${TIPOS_DE_CAMPO.map(([t, n]) => `<button data-k="t:${t}">${n}</button>`).join('')}</div>
+        <div id="cn-num"><label>Unidade <input id="cn-unidade" maxlength="12" autocomplete="off"></label>${chipsDeUnidades('cu')}
+          <b>Vírgula</b><div class="segmentos quebra">${[[0, 'Sem vírgula'], [1, '1 casa'], [2, '2 casas']].map(([d, n]) => `<button data-k="d:${d}">${n}</button>`).join('')}</div></div>
+        <label id="cn-opcoes">Opções <small>separe por vírgula</small><input id="cn-op" maxlength="200" autocomplete="off" placeholder="Ex.: Sim, Não"></label>
+      </div>
+      <div class="acoes-modal"><button class="btn" data-k="x">Cancelar</button><button class="btn primario" data-k="ok">Criar</button></div>`,
+    (k, b, fechar, f) => {
+      if (k === 'x') return fechar(null);
+      if (k.startsWith('t:')) { est.type = k.slice(2); return desenhar(f); }
+      if (k.startsWith('d:')) { est.dec = Number(k.slice(2)); return desenhar(f); }
+      if (k.startsWith('cu:')) { f.querySelector('#cn-unidade').value = k.slice(3); return; }
+      if (k !== 'ok') return;
+      const label = f.querySelector('#cn-nome').value.trim();
+      if (!label) return toast('O campo precisa de um nome', 'erro');
+      if ([...camposDaFolha(p), ...novos].some((c) => (c.label || '').toLowerCase() === label.toLowerCase())) return toast('Já tem um campo com esse nome nesta folha', 'erro');
+      let id;
+      do { id = 'x_' + Math.random().toString(36).slice(2, 10); } while (!/^x_[a-z0-9]{3,20}$/.test(id) || novos.some((c) => c.id === id));
+      const c = { id, label, type: est.type };
+      if (est.type === 'num') { c.dec = est.dec; const u = f.querySelector('#cn-unidade').value.trim(); if (u) c.unidade = u; }
+      if (est.type === 'choice') {
+        c.opcoes = [...new Set(f.querySelector('#cn-op').value.split(',').map((x) => x.trim()).filter(Boolean))];
+        if (!c.opcoes.length) return toast('Escreva as opções, separadas por vírgula', 'erro');
+      }
+      fechar(c);
+    }, { classe: 'largo com-form', aoAbrir: (f) => desenhar(f) });
+  }
   async function editarUnidadesDaFolha(pid) {
     const p = prancheta(pid);
     const txt = await textoLivre({ titulo: `Unidades de ${p.nome}`, dica: 'Separe por vírgula. A primeira é a que já vem marcada.', valor: p.unidades.join(', '), max: 60 });
@@ -1651,7 +1813,7 @@
     const lista = [...new Set(txt.split(',').map((x) => x.trim()).filter(Boolean))].slice(0, 6);
     const todas = copia(configSistema().folhas || {});
     todas[pid] = todas[pid] || {};
-    const orig = (ORIGINAL_DAS_UNIDADES.get(pid) || p.unidades).join(', ');
+    const orig = ((ORIGINAIS_FOLHAS.get(pid) || {}).unidades || p.unidades).join(', ');
     if (!lista.length || lista.join(', ') === orig) delete todas[pid]._unidades; else todas[pid]._unidades = lista;
     const antes = p.unidades.join(', ');
     salvarFolhas(todas, `mudou as unidades de ${p.nome}: ${antes} -> ${(lista.length ? lista : [orig]).join(', ')}`);
@@ -3043,10 +3205,14 @@
 
   function montarAlvos(p, chave) {
     const val = rascunho.valores;
-    const campo = (c) => Object.assign({}, c, { opcoes: c.type === 'choice' ? opcoesDe(c) : c.opcoes, get: () => val[c.id], set: (x) => { val[c.id] = x; } });
-    if (p.tipo === 'fermentacao') return p.campos.map(campo);
+    const dia = rascunho.data || dataProducao();
+    // versão 2.12: a unidade é a do dia da folha (a troca vale a partir do dia em que foi feita)
+    const campo = (c) => Object.assign({}, c, { unidade: window.Folhas.unidadeNoDia(c, dia) || undefined, opcoes: c.type === 'choice' ? opcoesDe(c) : c.opcoes, get: () => val[c.id], set: (x) => { val[c.id] = x; } });
+    // o quadro que o dono escondeu do operador não aparece no tablet do setor (o tablet chefe vê)
+    const visivel = (c) => !c.arquivado && (ehCentral() || !c.oculto);
+    if (p.tipo === 'fermentacao') return p.campos.filter(visivel).map(campo);
     if (p.tipo === 'medicao') {
-      if (chave === 'param') return p.parametros.map(campo);
+      if (chave === 'param') return p.parametros.filter(visivel).map(campo);
       const g = grupoDaMedicao(chave);
       if (!g) return [];
       const lista = [{ id: 'hora', label: 'Hora da medição', labelCurto: 'Hora', type: 'time', get: () => val.hora, set: (x) => { val.hora = x; } }];
@@ -3071,11 +3237,11 @@
     }
     if (p.tipo === 'dornas') {
       const ordem = p.grupos ? p.grupos.flatMap((g) => g.campos) : p.campos.map((c) => c.id);
-      return ordem.map((id) => p.campos.find((c) => c.id === id)).filter(Boolean).map(campo);
+      return ordem.map((id) => p.campos.find((c) => c.id === id)).filter(Boolean).filter(visivel).map(campo);
     }
     if (p.tipo === 'grade') {
       const t = turnoDaHora(chave);
-      return [...p.itens.map(campo), { id: 'obs', label: `Observação do ${t.nome}`, type: 'text', largo: true, get: () => rascunho.extras.obs, set: (x) => { rascunho.extras.obs = x; } }];
+      return [...p.itens.filter(visivel).map(campo), { id: 'obs', label: `Observação do ${t.nome}`, type: 'text', largo: true, get: () => rascunho.extras.obs, set: (x) => { rascunho.extras.obs = x; } }];
     }
     if (p.tipo === 'juntas') {
       return p.partes.map((pt) => {
@@ -3089,7 +3255,7 @@
       });
     }
     const lista = [{ id: 'qtd', label: p.rotuloQtd || 'Quantidade adicionada', type: 'num', dec: 2, unidades: p.unidades, get: () => val.qtd, set: (x) => { val.qtd = x; }, getUnidade: () => val.unidade || p.unidade, setUnidade: (u) => { val.unidade = u; } }];
-    (p.camposOperador || []).forEach((c) => {
+    (p.camposOperador || []).filter(visivel).forEach((c) => {
       if (c.opcional && !opcoesDe(c).length) return;
       lista.push(campo(c));
     });
@@ -4694,6 +4860,7 @@
       case 'folhas': return ir({ tela: 'folhas' });
       case 'folha-campo': return editarCampoDaFolha(b.dataset.pid, b.dataset.id);
       case 'folha-unidades': return editarUnidadesDaFolha(b.dataset.pid);
+      case 'folha-estrutura': return editarEstruturaDaFolha(b.dataset.pid);
       case 'voltar': return voltar();
       case 'tema':
         cfg.tema = cfg.tema === 'escuro' ? 'claro' : 'escuro'; salvarCfg(); aplicarTema();
@@ -5477,6 +5644,7 @@
     if (params.get('bloqueio')) { cfg.bloqueio = { em: Date.now() - 3600000, modo: params.get('bloqueio'), apagar: params.get('apagar') === '1', sal: '', resumo: '' }; pilha = [{ tela: 'bloqueado-adm' }]; render(true); }
     if (params.get('aparelho')) verAparelho(params.get('aparelho'));
     if (params.get('modal') === 'entrar') entrarNoChefe();
+    if (params.get('modal') === 'liberar') liberarEsteAparelho();
     if (params.get('aviso') && cfg.papel && !ehCentral() && operadorAtual()) {
       enviarAviso(cfg.papel, operadorAtual(), 'Passe no escritório antes de sair, por favor. O encarregado quer falar sobre a troca de turno de amanhã.');
       verificarAvisos();

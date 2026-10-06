@@ -157,7 +157,17 @@ function carregarPranchetas() {
   require('vm').runInNewContext(fs.readFileSync(path.join(PUBLICO, 'forms.js'), 'utf8'), contexto);
   return contexto.window.USINA;
 }
-const apiDeLeitura = () => apiLeituraPronta || (apiLeituraPronta = leitura.criar(carregarPranchetas(), medidasDoEscritorio));
+// versão 2.12: a API (e a cópia da nuvem) usa a folha em vigor: o forms.js com o que o tablet chefe mudou (folhas.js)
+let Folhas = null;
+try { Folhas = require(path.join(PUBLICO, 'folhas.js')); } catch (e) { Folhas = require(path.join(__dirname, 'public', 'folhas.js')); }
+const folhasDaConfig = () => { const cs = db.registros['config|sistema|geral']; return cs && !cs.apagado && cs.valores ? cs.valores.folhas || {} : {}; };
+const formsEmVigor = () => Folhas.aplicar(carregarPranchetas(), folhasDaConfig(), new Map());
+let folhasDaApi = '';
+const apiDeLeitura = () => {
+  const chave = JSON.stringify(folhasDaConfig());
+  if (!apiLeituraPronta || chave !== folhasDaApi) { folhasDaApi = chave; apiLeituraPronta = leitura.criar(formsEmVigor(), medidasDoEscritorio); }
+  return apiLeituraPronta;
+};
 
 /* ---------- Atualização do aplicativo (versão 2.7) ----------
    Os tablets perguntam em /api/versao qual APK a central tem. Se for mais novo que o deles, aparece o botão Atualizar.
@@ -340,7 +350,7 @@ async function enviarParaNuvem() {
       if (e.json.geracao !== config.geracao || !e.json.registros) { n.seq = 0; n.arquivosEnviados = false; n.formsHash = ''; n.medidasHash = ''; n.bloqueiosHash = ''; }
       n.conferida = true;
     }
-    const forms = carregarPranchetas();
+    const forms = formsEmVigor();
     delete forms.pinAdmin; // senha não vai para a nuvem
     const formsHash = resumoHash(forms);
     // aparelhos bloqueados: longe da usina, o aparelho pergunta na nuvem (versão 2.11).
@@ -474,10 +484,13 @@ const negar = (res, f) => json(res, 403, { erro: 'Quem está neste aparelho não
 // tablet de setor: quem digitou a senha nos ajustes fica liberado por 10 minutos (para a central aceitar o que ele mudar)
 const liberadosNoSetor = {};
 const LIBERADO_NO_SETOR_MS = 10 * 60000;
+// no tablet de setor a senha só abre os ajustes dele (os operadores), seja de quem for: o resto é do tablet chefe
+const FUNCOES_NO_SETOR = ['ajustes', 'usina'];
 function funcoesNoSetor(aparelho) {
   const l = liberadosNoSetor[aparelho];
   if (!l || Date.now() > l.ate) return new Set();
-  return funcoesDaPessoa(config.pessoas.find((p) => p.id === l.pessoaId && p.ativo !== false));
+  const s = funcoesDaPessoa(config.pessoas.find((p) => p.id === l.pessoaId && p.ativo !== false));
+  return new Set([...s].filter((f) => FUNCOES_NO_SETOR.includes(f)));
 }
 const nomeDoNivel = (n) => ({ 1: 'nível 1 (vê, corrige e envia)', 2: 'nível 2', 3: 'nível 3 (do dono)' }[n] || 'sem nível');
 /** O que vai para o aplicativo mostrar só o que pode: o nível do aparelho, se é o dono e as funções que valem aqui. */
@@ -529,31 +542,59 @@ function conferirFolhas(antes, depois, podeSistema) {
   });
   return { folhas: b, mexeuSistema, mexeuComum };
 }
-/** Decide uma anotação de configuração que chegou. Devolve { aceita, entrada, motivo }. */
+/**
+ * Decide uma anotação de configuração que chegou. Devolve { aceita, entrada, motivo }.
+ * Aplicativo de antes da 2.12 (manda sem "base"): ele não conhece a recusa e marcaria como enviado. Então vale o que
+ * ele podia mudar, o resto fica como está, e a configuração volta para ele na próxima sincronização (sai com um
+ * horário mais novo que o dele, e o aparelho troca a cópia).
+ */
 function decidirConfig(atual, r, aparelho) {
   const chefe = nivelDoAparelho(aparelho) > 0;
   const funcoes = chefe ? funcoesNoAparelho(aparelho) : funcoesNoSetor(aparelho);
   const vivo = atual && !atual.apagado ? atual : null;
+  const antigo = !('base' in r);
   // conflito: alguém mudou a configuração depois da cópia que este aparelho editou
-  if (vivo && Number(r.base || 0) !== Number(vivo.rev || 0)) return { aceita: false, motivo: 'conflito' };
+  if (!antigo && vivo && Number(r.base || 0) !== Number(vivo.rev || 0)) return { aceita: false, motivo: 'conflito' };
+  const antes = (vivo && vivo.valores) || {};
+  // a configuração da usina não se apaga pela sincronização (o aplicativo nunca apaga): o aparelho antigo recebe ela de volta
+  if (r.apagado) return antigo && vivo ? { aceita: true, entrada: Object.assign({}, vivo, { atualizadoEm: Math.max(r.atualizadoEm, vivo.atualizadoEm || 0) + 1, rev: Number(vivo.rev || 0) + 1 }) } : { aceita: false, motivo: 'sem_permissao' };
   const entrada = JSON.parse(JSON.stringify(r));
   delete entrada.base;
-  if ((entrada.valores && 'folhas' in entrada.valores) || (vivo && vivo.valores && 'folhas' in vivo.valores)) {
-    const f = conferirFolhas(vivo && vivo.valores ? vivo.valores.folhas : null, entrada.valores ? entrada.valores.folhas : null, funcoes.has('sistema'));
-    entrada.valores = Object.assign({}, entrada.valores, { folhas: f.folhas });
-    if (!f.folhas || !Object.keys(f.folhas).length) delete entrada.valores.folhas;
-    if (f.mexeuSistema && !funcoes.has('sistema')) return { aceita: false, motivo: 'sem_permissao' };
-    if (f.mexeuComum && !funcoes.has('folhas') && !funcoes.has('sistema')) return { aceita: false, motivo: 'sem_permissao' };
+  const valores = Object.assign({}, entrada.valores);
+  // o que não pode: o aplicativo novo recebe a recusa; do antigo, fica como estava
+  const naoPode = (k) => { if (!antigo) return true; if (k in antes) valores[k] = antes[k]; else delete valores[k]; return false; };
+  if ('folhas' in valores || 'folhas' in antes) {
+    const f = conferirFolhas(antes.folhas, valores.folhas, funcoes.has('sistema'));
+    // folhas só no tablet chefe: as do sistema com 'sistema' (o dono no nível 3), as outras com 'folhas'
+    const pode = chefe && (!f.mexeuSistema || funcoes.has('sistema')) && (!f.mexeuComum || funcoes.has('folhas') || funcoes.has('sistema'));
+    if ((f.mexeuSistema || f.mexeuComum) && !pode) { if (naoPode('folhas')) return { aceita: false, motivo: 'sem_permissao' }; }
+    else if (f.folhas && Object.keys(f.folhas).length) valores.folhas = f.folhas;
+    else delete valores.folhas;
   }
-  for (const k of mudancasDaConfig(vivo, entrada)) {
+  for (const k of mudancasDaConfig({ valores: antes }, { valores })) {
     if (k === 'folhas') continue;
     // no tablet de setor só os operadores (ajustes); no tablet chefe, o resto da usina
     const precisa = !chefe ? (k === 'operadores' ? ['ajustes', 'usina'] : null) : ['usina'];
-    if (!precisa || !precisa.some((f) => funcoes.has(f))) return { aceita: false, motivo: 'sem_permissao' };
+    if ((!precisa || !precisa.some((f) => funcoes.has(f))) && naoPode(k)) return { aceita: false, motivo: 'sem_permissao' };
   }
-  if (entrada.apagado && !(chefe && funcoes.has('usina'))) return { aceita: false, motivo: 'sem_permissao' };
+  entrada.valores = valores;
   entrada.rev = Number(vivo ? vivo.rev || 0 : 0) + 1;
+  // a central guardou diferente do que veio (do antigo, ou as do sistema que voltaram): vai de volta para o aparelho
+  if (!mesmoJson(valores, r.valores || {})) entrada.atualizadoEm = Math.max(r.atualizadoEm, vivo ? vivo.atualizadoEm || 0 : 0) + 1;
   return { aceita: true, entrada };
+}
+/** Folhas que só o tablet chefe anota (Vinho e Fermentação): pedem 'anotar'. As dos setores, 'corrigir' ou 'ler_folha'. */
+const pranchetasSoDoChefe = () => { try { return formsLidas().setores.filter((s) => s.soChefe).flatMap((s) => s.pranchetas); } catch (e) { return ['med_dornas', 'fermentacao']; } };
+/**
+ * Anotação que chegou de um tablet chefe: a mesma função que a tela pede, de quem está dentro dele.
+ * Sem ninguém dentro: 'sem_sessao' (o aparelho guarda a anotação e manda de novo quando alguém entrar).
+ */
+function motivoNoChefe(aparelho, r) {
+  if (!pessoaDoAparelho(aparelho)) return 'sem_sessao';
+  const f = funcoesNoAparelho(aparelho);
+  if (r.prancheta === 'avisos') return f.has('avisos') ? '' : 'sem_permissao';
+  if (pranchetasSoDoChefe().includes(r.prancheta)) return f.has('anotar') ? '' : 'sem_permissao';
+  return f.has('corrigir') || f.has('ler_folha') ? '' : 'sem_permissao';
 }
 /** Campos do escritório de cada folha de insumo que o operador não preenche (o tablet do setor não muda). */
 function camposSoDoEscritorio(pid) {
@@ -1001,27 +1042,33 @@ async function rotaProtegida(req, res, url, ip) {
         const recusados = [];
         const revs = {};
         const nivelAqui = nivelDoAparelho(req.aparelho);
+        // a anotação guardada: na memória ou, de dia antigo, no BackupUsina (cada dia lido uma vez só)
+        const doArquivo = {};
+        const guardadaDe = (r) => db.registros[r.id] || (arquivado(r.data) ? (doArquivo[r.data] = doArquivo[r.data] || new Map(lerDiaArquivado(r.data).map((x) => [x.id, x]))).get(r.id) || null : null);
         for (const r0 of Array.isArray(corpo.registros) ? corpo.registros : []) {
           let r = r0;
           if (!r || typeof r.id !== 'string' || typeof r.atualizadoEm !== 'number') continue;
+          // o id diz o que a anotação é (dia|folha|linha): com outro id, uma anotação poderia passar por configuração
+          if (r.id !== `${r.data}|${r.prancheta}|${r.chave}` || !(r.data === 'config' || ehDia(r.data))) { recusados.push({ id: r.id, motivo: 'invalido' }); continue; }
           // configuração da usina: confere quem pode mudar cada parte, e o conflito
           if (r.data === 'config') {
             const d = decidirConfig(db.registros[r.id], r, req.aparelho);
             if (!d.aceita) { recusados.push({ id: r.id, motivo: d.motivo, atual: db.registros[r.id] || null }); continue; }
             r = d.entrada;
             revs[r.id] = r.rev;
-          } else if (nivelAqui === 1 && !['registro', 'avisos-recibo'].includes(r.prancheta)) {
-            // tablet chefe nível 1: só corrige o que já existe, e com a função corrigir
-            if (!db.registros[r.id]) { recusados.push({ id: r.id, motivo: 'nivel1_nao_cria' }); continue; }
-            if (!podeNoAparelho(req.aparelho, 'corrigir')) { recusados.push({ id: r.id, motivo: 'sem_permissao' }); continue; }
-          } else if (r.prancheta === 'avisos' && !podeNoAparelho(req.aparelho, 'avisos')) {
+          } else if (nivelAqui && !['registro', 'avisos-recibo'].includes(r.prancheta)) {
+            // tablet chefe: a função de quem está dentro (a mesma que a tela pede)
+            const motivo = motivoNoChefe(req.aparelho, r);
+            if (motivo) { recusados.push({ id: r.id, motivo }); continue; }
+          } else if (r.prancheta === 'avisos') {
+            // aviso só sai do tablet chefe
             recusados.push({ id: r.id, motivo: 'sem_permissao' }); continue;
           }
-          // tablet de setor não muda os campos que são só do escritório (NF, lote, validade...)
+          // tablet de setor não muda os campos que são só do escritório (NF, lote, validade...), nem de dia antigo
           if (!nivelAqui && r.valores) {
             const soEscritorio = camposSoDoEscritorio(r.prancheta);
             if (soEscritorio.length) {
-              const guardado = db.registros[r.id];
+              const guardado = guardadaDe(r);
               const valores = Object.assign({}, r.valores);
               soEscritorio.forEach((c) => { if (guardado && guardado.valores && c in guardado.valores) valores[c] = guardado.valores[c]; else delete valores[c]; });
               r = Object.assign({}, r, { valores });
@@ -1313,6 +1360,8 @@ async function rotaProtegida(req, res, url, ip) {
           return json(res, 200, estadoBase44(true));
         }
         if (corpo.acao === 'enviar') {
+          // os totais do dia saem só do tablet chefe liberado (ele manda sozinho, mesmo sem ninguém dentro)
+          if (!nivelDoAparelho(req.aparelho)) return negar(res, 'relatorios');
           if (!b.url) return json(res, 400, { erro: 'O endereço do Base44 não foi cadastrado' });
           if (!ehDia(corpo.data) || !corpo.dados || typeof corpo.dados !== 'object') return json(res, 400, { erro: 'dados inválidos' });
           const antes = (b.enviados || {})[corpo.data];
@@ -1361,6 +1410,8 @@ async function rotaProtegida(req, res, url, ip) {
 
       // O tablet chefe manda o Excel e o XML do dia para ficarem guardados aqui
       if (p === '/api/relatorio' && req.method === 'POST') {
+        // só o tablet chefe liberado guarda a folha do dia (sozinho às 07:05, mesmo sem ninguém dentro, ou pela tela)
+        if (!nivelDoAparelho(req.aparelho)) return negar(res, 'relatorios');
         const corpo = JSON.parse(await lerCorpo(req, 30 * 1024 * 1024));
         if (!/^\d{4}-\d{2}-\d{2}$/.test(corpo.data || '')) return json(res, 400, { erro: 'data inválida' });
         const nome = path.basename(String(corpo.nome || '')).replace(/[^\w.\-]/g, '_');

@@ -159,14 +159,18 @@ export async function testarApi(central, grupo) {
     certo(a, 'aparelho não apareceu'); igual(a.online, true); igual(a.versao, '9.9.9'); igual(a.papel, 'hidrolise');
     certo(/^\d{6}$/.test(r.json.codigo), 'código');
   });
+  // relatório só sai de tablet chefe liberado (versão 2.12): um aparelho só para isso
+  let chefeRel = null;
   await teste(grupo, 'relatório: recusa data e tipo de arquivo errados', async () => {
+    chefeRel = await conectarTeste(U, central.codigo(), 'teste-relatorio');
+    await chefeRel.pedir('/api/chefes', { corpo: { acao: 'liberar', pin: SENHA_ENCARREGADO, nivel: 2 } });
     const b64 = Buffer.from('conteudo').toString('base64');
-    igual((await pedir('/api/relatorio', { metodo: 'POST', chave, corpo: { data: '21/09/2026', nome: 'a.xlsx', base64: b64 } })).status, 400, 'data');
-    igual((await pedir('/api/relatorio', { metodo: 'POST', chave, corpo: { data: hoje(), nome: 'virus.exe', base64: b64 } })).status, 400, 'exe');
+    igual((await pedir('/api/relatorio', { metodo: 'POST', chave: chefeRel, corpo: { data: '21/09/2026', nome: 'a.xlsx', base64: b64 } })).status, 400, 'data');
+    igual((await pedir('/api/relatorio', { metodo: 'POST', chave: chefeRel, corpo: { data: hoje(), nome: 'virus.exe', base64: b64 } })).status, 400, 'exe');
   });
   await teste(grupo, 'relatório: nome com ../ fica preso na pasta do dia', async () => {
     const conteudo = Buffer.from('PK teste ' + Date.now());
-    const r = await pedir('/api/relatorio', { metodo: 'POST', chave, corpo: { data: hoje(), nome: '../../../fora.xlsx', base64: conteudo.toString('base64') } });
+    const r = await pedir('/api/relatorio', { metodo: 'POST', chave: chefeRel, corpo: { data: hoje(), nome: '../../../fora.xlsx', base64: conteudo.toString('base64') } });
     igual(r.status, 200);
     certo(!fs.existsSync(path.join(central.pasta, 'fora.xlsx')) && !fs.existsSync(path.join(path.dirname(central.pasta), 'fora.xlsx')), 'saiu da pasta');
     const arq = path.join(central.pastaRelatorios, hoje(), 'fora.xlsx');
@@ -175,8 +179,8 @@ export async function testarApi(central, grupo) {
   });
   await teste(grupo, 'relatório guardado aparece na lista, na página e baixa igual', async () => {
     const conteudo = 'PK' + 'x'.repeat(5000);
-    await pedir('/api/relatorio', { metodo: 'POST', chave, corpo: { data: hoje(), nome: 'Pranchetas_teste.xlsx', base64: Buffer.from(conteudo).toString('base64') } });
-    const l = await pedir('/api/relatorios', { chave });
+    await pedir('/api/relatorio', { metodo: 'POST', chave: chefeRel, corpo: { data: hoje(), nome: 'Pranchetas_teste.xlsx', base64: Buffer.from(conteudo).toString('base64') } });
+    const l = await pedir('/api/relatorios', { chave: chefeRel });
     const dia = l.json.dias.find((d) => d.data === hoje());
     certo(dia && dia.arquivos.some((a) => a.nome === 'Pranchetas_teste.xlsx' && a.tamanho === conteudo.length), 'não está na lista');
     const pagina = await pedir('/relatorios');

@@ -67,6 +67,7 @@ Tudo em `public/forms.js`:
 | Senha do encarregado | `pinAdmin` |
 | Minutos parado até pedir a senha de novo | `minutosSemMexer` |
 | Horas fora da rede até travar | `horasForaDaRede` |
+| O que cada nível de tablet chefe faz | `niveisDoAparelho` |
 
 Operadores, senhas dos operadores, WhatsApp e e-mail do escritório, tipos de produto e fornecedores do ralo e quais pranchetas aparecem em cada setor são configurados no tablet chefe, em **Usina** (só quem entrou com permissão para isso). Pessoas e senhas do tablet chefe ficam em **Pessoas e permissões** (só o administrador).
 
@@ -161,6 +162,29 @@ Medido num tablet simulado 4 vezes mais lento que o computador, com a central gu
 - **Trocar o código de conexão** desconecta todos os outros aparelhos (aparelho perdido ou roubado): eles só voltam com o código novo.
 - Dois aparelhos criando a mesma linha sem um saber do outro (o chefe corrigiu nos segundos antes de receber): os valores se juntam, nada se perde.
 - **Código embaralhado no APK**: quem abrir o APK não lê o código do jeito que foi escrito (o mapa para entender erros fica só em `apk/saida/mapas`).
+
+## Níveis do tablet chefe e configurações do sistema (versão 2.12)
+
+A 2.12 mexe no APK (a central do tablet chefe mudou): instale por cima da 2.11, sem desinstalar, primeiro no tablet chefe. Depois atualize os outros tablets: até atualizar, eles continuam anotando, e de uma mudança de configuração feita num tablet velho a central aceita só o que ele podia mudar (o resto volta para ele como está na central).
+
+- **Níveis do tablet chefe** (guardados só na central, em `config.json`, `aparelhosChefe`):
+  - Nível 1: vê, corrige e envia (as funções Corrigir e Relatórios). Corrigir inclui pôr a linha que faltou numa folha de setor; Vinho e Fermentação, avisos, Usina e pessoas não.
+  - Nível 2: tudo, e libera outros tablets chefe (função nova "Liberar tablets chefe e escolher o nível").
+  - Nível 3: tudo, mais as configurações do sistema. Só o dono do sistema: o administrador mais antigo quando a 2.12 entrou (`donoId`). O dono continua administrador e ativo, ninguém tira.
+  - O que uma pessoa faz num tablet é o que ela pode e o que o nível do tablet deixa, ao mesmo tempo (mais o limite do tablet, que não vale para o administrador).
+- **Tablets chefe que já existiam viram nível 2 sozinhos.** Para usar as configurações do sistema, o dono põe o próprio tablet no nível 3: Pessoas e permissões > Tablets chefe > este aparelho > Nível 3, e entra de novo com a senha dele.
+- **Tablet chefe novo**: ao escolher "Tablet chefe", o aplicativo pede o nível e a senha de quem libera (nível 2 ou 3). O nível 3 só sai com a senha do dono. Mudar o nível de um tablet derruba quem estava nele, e tudo vai para o registro do sistema.
+- **Dono sem a senha ou sem o tablet**: na tela de liberar, "Sou o dono e perdi a senha ou o tablet" pede a senha do programador; o aparelho vira o tablet do dono (nível 3) e dá para escolher uma senha nova. A senha do programador agora é conferida com PBKDF2 (600 mil voltas, com sal), no máximo 5 tentativas por minuto em cada aparelho.
+- **Configurações do sistema** (em Folhas e avisos, só no nível 3):
+  - a vírgula de cada quadro (sem vírgula, 1 ou 2 casas). Valor antigo com mais casas continua aparecendo como foi anotado;
+  - esconder um quadro do operador (o tablet chefe continua vendo e corrigindo);
+  - nos insumos, campos do escritório que o operador também preenche (o Nº NF, por exemplo);
+  - campos novos em cada folha (número, texto, opções, hora ou marcar OK), com unidade e vírgula. Campo novo não entra no desenho do papel (Excel, PDF e impressão): aparece no aplicativo, no Monitorar, no XML (`camposNovos`) e na API (`"novo": true`). Campo tirado da folha fica arquivado e as anotações antigas continuam.
+- **Unidades**: escolhidas numa lista (°C, °F, g, kg, t, mL, L, m³...) ou escritas. Trocar a unidade só troca o nome, nada é convertido. A troca vale a partir do dia em que foi feita: os dias antes continuam com a unidade antiga (`historico`), no aplicativo, no papel e na API.
+- **A central confere tudo**: cada rota e cada coisa que chega pela sincronização passa pelo que a pessoa e o tablet podem. A configuração tem número de revisão (`rev`): se dois tablets mudaram ao mesmo tempo, a segunda mudança é recusada, o tablet recebe a configuração de agora e avisa. As duas centrais (computador e tablet chefe) fazem igual.
+- Anotação feita num tablet chefe precisa de alguém dentro e da função que a tela pede (Corrigir ou Ler folha nas folhas dos setores, Anotar no Vinho e Fermentação, Avisos nos avisos). Se a central recusar, a anotação não se perde: fica guardada no aparelho e sobe quando entrar alguém que pode.
+- Revisado pelo Codex em 06/10/2026: na primeira rodada ele achou 11 pontos (configuração disfarçada de anotação, permissões vindas das folhas, função de quem anota, senha do dono no setor, apagar a configuração, dia arquivado, Base44 e relatório só do tablet chefe, tablet ainda na 2.11, campo arquivado, unidade nova e campo do escritório liberado ao operador). Tudo corrigido; na segunda rodada sobraram dois, também corrigidos (testes em `testes/niveis212.mjs`, `testes/pedidos212.mjs` e `testes/papel212.mjs`).
+- A folha em vigor (o `forms.js` com as mudanças do tablet chefe) é montada por `public/folhas.js`, o mesmo arquivo no aplicativo e na API do computador. A central do tablet chefe recebe a folha em vigor do tablet chefe liberado e manda para a nuvem.
 
 ## Aparelhos, bloqueio e vírgula na caldeira e na destilaria (versão 2.11)
 
@@ -345,6 +369,7 @@ Leva uns 20 minutos e grava o resultado em `testes/saida/resultado.txt`. Testa:
 5. longo prazo, nas duas centrais: 90 dias de uso da usina inteira (a memória do tablet não enche), dias antigos no BackupUsina, troca de turno e virada das 07:00 no meio da anotação, "Terminou a Nº X", tablet chefe trocado e 700 anotações guardadas sem Wi-Fi;
 6. velocidade: cada toque num tablet 4 vezes mais lento, com 90 dias de uso, tem que responder em menos de 100 ms;
 7. os pedidos do teste de 24/09 (aviso curto, senha do operador no tablet chefe, relatórios, WhatsApp, rolagem, trocar o código), nas duas centrais, e o aplicativo com o código embaralhado como vai no APK;
+7j. a versão 2.12, nas duas centrais: tablet chefe que não foi liberado não entra, liberar no nível 1, 2 e 3 (o 3 só com a senha do dono), nível 1 só vê, corrige e envia, o dono que não sai de administrador, a recuperação com a senha do programador, o que chega pela sincronização sem permissão (folhas do sistema, outras partes da Usina, configuração apagada, aviso) e o conflito de revisão; no aplicativo, a vírgula de um quadro, a troca de °C para °F com os dias antigos na unidade antiga (também na API), quadro escondido do operador, campo novo anotado no setor e o Nº NF liberado para o operador; e as folhas de papel e o XML com campo novo, casas decimais e a unidade de cada dia;
 7i. a versão 2.11, nas duas centrais: o aparelho manda nome, modelo e Android e a central guarda com o endereço; só o administrador bloqueia; bloqueio que pede senha (o aplicativo trava, confere a senha e avisa a central que liberou), trava de vez e apagar; a tela Aparelhos com o + e o aparelho bloqueado consultando a nuvem;
 7h. a versão 2.10, nas duas centrais: o setor anotando e o painel do chefe com os gráficos (pontos e a linha do aviso), a tela com todos os gráficos e o filtro, o PDF só da Hidrólise (uma página por folha, com o logo), o chefe mudando o aviso do pH e o nome do Brix e o tablet do setor usando o novo, o registro com o antes e o depois e o voltar ao original;
 7g. a versão 2.9, nas duas centrais: o administrador criado sozinho, cadastro só pelo administrador (senha repetida e último administrador recusados), pessoa desativada, cinco senhas erradas, Consulta barrado e Encarregado liberado, limite do tablet chefe, ajustes do setor com a senha de quem pode, o registro com o antes e o depois, aparelho sem sinal, a tela do registro com o filtro e o cadastro pela tela;
@@ -358,7 +383,7 @@ Leva uns 20 minutos e grava o resultado em `testes/saida/resultado.txt`. Testa:
 
 Os testes usam pastas de dados temporárias: nunca mexem em `dados/`. Só as telas: `node testes/rodar-telas.mjs` (liga uma central de teste sozinho). Só o longo prazo: `node testes/rodar-robustez.mjs`.
 
-O teste para fazer à mão no celular e no tablet está em `Teste-nos-aparelhos-2.10.pdf`, na pasta `Usina`; o que conferir depois de pôr a 2.11 no tablet chefe está na parte 3 do `Nuvem-passo-a-passo.pdf`. Só a 2.11: `node testes/rodar-seguranca.mjs` e `node testes/rodar-pedidos211.mjs`. Só a 2.10: `node testes/rodar-pedidos210.mjs`; só pessoas e registro: `node testes/rodar-pessoas.mjs`. Só a nuvem: `node testes/rodar-nuvem.mjs` (precisa do `npm install` em `nuvem`); só a atualização: `node testes/rodar-atualizacao.mjs`; só a 2.6: `node testes/rodar-pedidos26.mjs`; só a 2.5: `node testes/rodar-pedidos25.mjs`.
+O teste para fazer à mão no celular e no tablet está em `Teste-nos-aparelhos-2.10.pdf`, na pasta `Usina`; o que conferir depois de pôr a 2.11 no tablet chefe está na parte 3 do `Nuvem-passo-a-passo.pdf`. Só a 2.12: `node testes/rodar-niveis212.mjs`, `node testes/rodar-pedidos212.mjs` e `node testes/rodar-papel212.mjs`. Só a 2.11: `node testes/rodar-seguranca.mjs` e `node testes/rodar-pedidos211.mjs`. Só a 2.10: `node testes/rodar-pedidos210.mjs`; só pessoas e registro: `node testes/rodar-pessoas.mjs`. Só a nuvem: `node testes/rodar-nuvem.mjs` (precisa do `npm install` em `nuvem`); só a atualização: `node testes/rodar-atualizacao.mjs`; só a 2.6: `node testes/rodar-pedidos26.mjs`; só a 2.5: `node testes/rodar-pedidos25.mjs`.
 
 ## Imagens das telas
 
@@ -375,6 +400,8 @@ Salva em `../telas`.
 43 verificações automáticas: conexão com código certo e errado, anotação, botões − e +, aviso de valor fora do normal, cópia da dorna anterior, marcar fim, monitoramento, valores padrão, insumos, senha do operador, trava por inatividade, virada de turno, exportação, relatórios e configurações. Mais: queda de rede com envio depois que volta, sincronização entre dois aparelhos e validação do Excel e do XML.
 
 Versão 2 (16/09/2026): avisos de pH e Brix, telas LPHERA / Cal e Saczyme / Alcolina com a soma das dornas da hora, casinha nas abas, rolagem do painel do chefe que não volta mais para o topo, pastas *Usina, tela de relatórios, janela de Excel ou XML, listas do ralo, cadastro protegido por senha e busca do tablet chefe no Wi-Fi. Testado no navegador contra o servidor: anotação, envio, queda de rede, relatórios e Excel/XML.
+
+Versão 2.12.0 (06/10/2026): três níveis de tablet chefe (vê, corrige e envia; tudo e libera outros; tudo mais as configurações do sistema, só o dono), liberação de tablet chefe com senha, recuperação do dono com a senha do programador, configurações do sistema (vírgula, quadro escondido do operador, campos do escritório para o operador e campos novos fora do papel), unidades com os dias antigos na unidade antiga, e a central conferindo a permissão em cada rota e na sincronização.
 
 Versão 2.11.0 (05/10/2026): tela Aparelhos (quem usa, nome no Android, modelo e o + com endereço, versão e quando conectou), bloqueio de aparelho pelo administrador (pede senha ou trava de vez, com opção de apagar, também longe da usina pela nuvem), o aplicativo conferindo a própria assinatura, vírgula na Temperatura da água da Caldeira e na Produção e no Carregamento da Destilaria, e a nuvem sem a senha do administrador.
 

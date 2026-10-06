@@ -10,6 +10,7 @@
  *  4e. pedidos do teste de 24/09 (aviso curto, senha do operador no tablet chefe, relatórios, WhatsApp...), nas duas
  *  4f. o aplicativo com o código embaralhado, como vai no APK
  *  4i. pessoas, permissões e registro do sistema no tablet chefe (versão 2.9), nas duas
+ *  4l. níveis do tablet chefe, o dono e as configurações do sistema (versão 2.12), nas duas
  * Resultado em testes/saida/resultado.json e testes/saida/resultado.txt
  */
 import fs from 'node:fs';
@@ -34,6 +35,9 @@ import { testarPessoas } from './pessoas.mjs';
 import { testarPedidos210 } from './pedidos210.mjs';
 import { testarSeguranca } from './seguranca.mjs';
 import { testarPedidos211 } from './pedidos211.mjs';
+import { testarNiveis } from './niveis212.mjs';
+import { testarPedidos212 } from './pedidos212.mjs';
+import { testarPapel212 } from './papel212.mjs';
 import { testarApkWeb } from './rodar-apk-web.mjs';
 import { centralNode, centralJava, APP } from './servidores.mjs';
 
@@ -84,6 +88,12 @@ for (const [nome, ligar, porta] of [['computador', centralNode, 8265], ['tablet 
   const g = novoGrupo('API só de leitura para o sistema do escritório (JSON)');
   const c = await centralNode(8261);
   try { await testarApiLeitura(c, g); } finally { await c.desligar(); }
+  grupos.push(g);
+}
+// 3e. versão 2.12: folhas de papel e API com campos novos, vírgula e unidade de cada dia (só Node, sem central)
+{
+  const g = novoGrupo('Folhas de papel e API de leitura da versão 2.12');
+  await testarPapel212(g);
   grupos.push(g);
 }
 // 3b. longo prazo direto na central: dias guardados, dias antigos no BackupUsina, central nova, 90 dias de uso
@@ -148,6 +158,17 @@ try {
   for (const [nome, ligar, porta] of [['computador', (p, d) => centralNode(p, d), 8251], ['tablet chefe', centralJava, 8252]]) {
     const g = novoGrupo('Versão 2.11 (aparelhos e bloqueio) no aplicativo, na central do ' + nome);
     await testarPedidos211(nav, ligar, porta, g);
+    grupos.push(g);
+  }
+  // 4l. versão 2.12: níveis do tablet chefe, o dono e o que a central aceita; configurações do sistema no aplicativo
+  for (const [nome, ligar, porta] of [['computador', (p, d, x) => centralNode(p, d, undefined, x), 8249], ['tablet chefe', centralJava, 8250]]) {
+    const g = novoGrupo('Níveis do tablet chefe e permissões, direto na central do ' + nome);
+    await testarNiveis(ligar, porta, g);
+    grupos.push(g);
+  }
+  for (const [nome, ligar, porta] of [['computador', (p, d) => centralNode(p, d), 8247], ['tablet chefe', centralJava, 8248]]) {
+    const g = novoGrupo('Versão 2.12 (configurações do sistema) no aplicativo, na central do ' + nome);
+    await testarPedidos212(nav, ligar, porta, g, nome === 'computador');
     grupos.push(g);
   }
   // 4f. o aplicativo embaralhado (como vai no APK) continua funcionando igual

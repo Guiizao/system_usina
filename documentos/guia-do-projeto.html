@@ -30,7 +30,7 @@
 <body>
 
 <h1>Guia do projeto</h1>
-<p class="sub">Pranchetas Digitais da Ubirálcool, versão 2.11 (05/10/2026). Tudo que o projeto tem, em que linguagem foi feito, como as peças conversam e onde mexer em cada coisa.</p>
+<p class="sub">Pranchetas Digitais da Ubirálcool, versão 2.12 (06/10/2026). Tudo que o projeto tem, em que linguagem foi feito, como as peças conversam e onde mexer em cada coisa.</p>
 
 <h2>1. O que é</h2>
 <p>As pranchetas de papel dos setores (Hidrólise, Caldeira, Ralo, Destilaria) viraram um aplicativo. Cada setor tem um tablet ou celular. O operador escolhe o nome dele, anota nos quadros e salva. A anotação vai pelo Wi-Fi da usina até a central, que guarda tudo e mostra para o escritório. No fim do dia sai o Excel e o XML no mesmo desenho do papel.</p>
@@ -43,8 +43,9 @@
 <table>
   <tr><th>Arquivo</th><th>O que faz</th></tr>
   <tr><td>index.html</td><td>A página que abre. Só carrega os outros arquivos.</td></tr>
-  <tr><td>app.js</td><td>Tudo da tela: conectar, escolher o operador, os quadros e o teclado, salvar, sincronizar com a central, avisos, relatórios, ajustes e a atualização do aplicativo. É o maior arquivo (cerca de 4.300 linhas).</td></tr>
+  <tr><td>app.js</td><td>Tudo da tela: conectar, escolher o operador, os quadros e o teclado, salvar, sincronizar com a central, avisos, relatórios, ajustes e a atualização do aplicativo. É o maior arquivo (cerca de 5.700 linhas).</td></tr>
   <tr><td>forms.js</td><td>A configuração: setores, folhas, campos, limites de pH e Brix, turnos, senha do administrador, níveis e funções das pessoas, medidas das dornas. Quase tudo que muda na usina muda aqui.</td></tr>
+  <tr><td>folhas.js</td><td>Monta a folha em vigor: o <code>forms.js</code> com as mudanças feitas no tablet chefe (nomes, unidades, avisos, vírgula, quadro escondido e campos novos). O mesmo arquivo serve o aplicativo e a API da central do computador.</td></tr>
   <tr><td>styles.css</td><td>O visual: cores, tamanhos, tela clara e escura, celular e tablet.</td></tr>
   <tr><td>modelos.js</td><td>O desenho de cada folha de papel (células, mesclas, logo), usado no Excel, na impressão e no XML.</td></tr>
   <tr><td>xlsx.js</td><td>Monta o arquivo Excel na mão, sem biblioteca. Funciona sem internet.</td></tr>
@@ -129,6 +130,8 @@
 <p>Desde a 2.10 o painel mostra os <b>gráficos do dia</b> (Brix, pH e temperaturas, hora a hora, com as linhas dos avisos), e a tela <b>Folhas e avisos</b> deixa mudar o nome dos quadros, a unidade, a faixa esperada e os avisos sem versão nova. A folha do dia também sai em <b>PDF</b>, uma página por folha, montado dentro do aparelho (<code>pdf.js</code>).</p>
 <p>Desde a 2.11 a tela <b>Aparelhos</b> mostra quem está usando cada aparelho, o nome dele no Android e o modelo; no + aparecem o endereço na rede, a versão e quando conectou. O administrador pode <b>bloquear</b> um aparelho: na hora escolhe se ele pede uma senha para liberar ou se trava de vez, e se apaga as anotações guardadas nele.</p>
 
+<p>Desde a 2.12 o tablet chefe tem <b>três níveis</b>, guardados na central: o 1 vê, corrige e envia; o 2 faz tudo e libera outros tablets chefe; o 3 faz tudo e tem as <b>configurações do sistema</b>, só para o dono. Tablet chefe novo só entra depois de liberado com a senha de quem pode. Nas configurações do sistema o dono muda a vírgula de cada quadro, esconde um quadro do operador, deixa o operador preencher um campo do escritório e cria campos novos em cada folha. Campo novo não entra no desenho do papel: aparece no aplicativo, no Monitorar, no XML e na API. Trocar a unidade de um quadro vale a partir daquele dia; os dias antes ficam com a unidade antiga.</p>
+
 <h2>6. Ler folha de papel</h2>
 <p>O tablet chefe tira foto de uma folha preenchida à mão e passa para o aplicativo. Tudo acontece dentro do aparelho, sem internet: o <b>OpenCV.js</b> acha a tabela na foto e endireita cada célula, e uma rede neural pequena (<b>ONNX</b>, treinada em Python com letras de mão) lê cada célula. A coluna diz o que pode ser (hora, pH, número, nome do operador), e o que ficou com pouca confiança fica marcado para a pessoa conferir antes de salvar.</p>
 
@@ -149,7 +152,9 @@
   <li>Só aparelhos da rede da usina e com o código de conexão.</li>
   <li>Tudo embaralhado no Wi-Fi (seção 4). No APK usa a criptografia do Android; no navegador do computador usa a versão escrita em <code>cifra.js</code>, que dá o mesmo resultado.</li>
   <li>Senha do operador (opcional, guardada embaralhada), senha de cada pessoa do tablet chefe e a senha do programador para apagar tudo. Das senhas das pessoas e da do programador a central só guarda o resumo, nunca a senha. Cinco senhas erradas em um minuto fazem esperar.</li>
-  <li>Cada pessoa só faz o que o nível dela deixa, e cada tablet chefe pode ter um limite. Os ajustes dos tablets dos setores abrem com a senha de quem tem essa permissão.</li>
+  <li>Cada pessoa só faz o que o nível dela e o nível do tablet chefe deixam, e cada tablet chefe pode ter um limite. Os ajustes dos tablets dos setores abrem com a senha de quem tem essa permissão.</li>
+  <li>A central confere a permissão em cada pedido e em tudo que chega pela sincronização, não só na tela. Mudança de configuração leva o número da revisão que o tablet viu: se outro tablet mudou antes, ela é recusada e o tablet recebe a de agora.</li>
+  <li>A senha do programador é conferida com PBKDF2 (600 mil voltas, com sal), no máximo 5 tentativas por minuto em cada aparelho. Ela apaga tudo e recupera o tablet do dono.</li>
   <li>Código do APK embaralhado e licença em <code>LICENCA.txt</code>: uso só com autorização do autor.</li>
   <li>O aplicativo confere a própria assinatura: um APK alterado ou assinado com outra chave não abre (<code>Protecao.java</code>).</li>
   <li>Aparelho perdido ou que não deve mais usar o sistema: o administrador bloqueia na tela Aparelhos. A central recusa tudo que vem dele, e longe da usina, com internet, ele pergunta à nuvem e trava do mesmo jeito. A senha de desbloqueio nunca vai para a nuvem, e cada bloqueio tem um número de revisão: resposta atrasada não destrava nem volta um bloqueio antigo. Essa parte foi revisada pelo Codex (OpenAI) em 06/10/2026, até ele aprovar.</li>
@@ -165,6 +170,8 @@
   <tr><td>Campos, limites, folhas, setores</td><td><code>public/forms.js</code></td></tr>
   <tr><td>Operadores, produtos, medidas das dornas</td><td>No tablet chefe, em Usina (sem mexer no código).</td></tr>
   <tr><td>Pessoas, senhas e permissões</td><td>No tablet chefe, tocando no nome no alto > Pessoas e permissões (só o administrador).</td></tr>
+  <tr><td>Vírgula, unidade, quadro escondido e campos novos</td><td>No tablet chefe nível 3 (só o dono), em Folhas e avisos.</td></tr>
+  <tr><td>O que cada nível de tablet chefe faz</td><td><code>niveisDoAparelho</code> no <code>public/forms.js</code></td></tr>
   <tr><td>Desenho do papel e do Excel</td><td><code>public/modelos.js</code></td></tr>
   <tr><td>Cores e tamanhos</td><td><code>public/styles.css</code></td></tr>
   <tr><td>O que acontece na tela</td><td><code>public/app.js</code></td></tr>
@@ -185,9 +192,9 @@
 <ul>
   <li>Pôr a nuvem no ar: rodar o <code>nuvem/publicar.ps1</code> uma vez (ele pede para entrar na conta do Cloudflare pelo navegador), cadastrar o endereço (<code>https://pranchetas-nuvem.guiizao.workers.dev</code>) e a senha no tablet chefe e passar a API para o Evandro. O passo a passo, com onde clicar, está em <code>Nuvem-passo-a-passo.pdf</code>.</li>
   <li>Perguntar para o Lucas: quais são as outras dornas "da família" e a medida do Tanque Destilaria.</li>
-  <li>Instalar a 2.11 primeiro no tablet chefe e conferir se abre; depois testar nos aparelhos o roteiro da 2.10 (pessoas, registro, gráficos, Folhas e avisos e o PDF) e a tela Aparelhos com o bloqueio.</li>
+  <li>Instalar a 2.12 por cima, primeiro no tablet chefe, e conferir se abre. Pôr o tablet do dono no nível 3 (Pessoas e permissões > Tablets chefe > este aparelho) e testar as configurações do sistema; depois atualizar os outros tablets.</li>
 </ul>
 
-<p class="rodape">Pranchetas Digitais 2.11 · © 2026 Guilherme · Todos os direitos reservados</p>
+<p class="rodape">Pranchetas Digitais 2.12 · © 2026 Guilherme · Todos os direitos reservados</p>
 </body>
 </html>

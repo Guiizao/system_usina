@@ -4,6 +4,17 @@
    Depois do sinal de igual vem JSON puro, porque o servidor do tablet chefe (Java) também lê este arquivo. */
 window.NOVIDADES = [
   {
+    "versao": "2.12.0",
+    "data": "2026-10-06",
+    "itens": [
+      "Níveis do tablet chefe: 1 vê, corrige e envia; 2 faz tudo e libera outros tablets chefe; 3 é só do dono, com as configurações do sistema. Tablet chefe novo é liberado com a senha de quem pode (o nível 3, só com a do dono).",
+      "O dono esqueceu a senha ou perdeu o tablet nível 3: na tela de liberar, a senha do programador transforma o aparelho no tablet do dono.",
+      "Configurações do sistema (só o dono, no tablet nível 3), em Folhas e avisos: a vírgula de cada quadro, mostrar ou esconder um quadro do operador, campos do escritório que o operador também preenche e campos novos em cada folha. O desenho do papel continua igual.",
+      "Unidades dos quadros: escolha numa lista (°C, °F, kg, t, L...). A troca vale a partir do dia em que foi feita; os dias antes continuam com a unidade antiga.",
+      "Segurança: a central confere o que cada tablet e cada pessoa pode fazer, inclusive o que chega pela sincronização. A senha do programador ficou mais protegida e o bloqueio de aparelho foi revisado."
+    ]
+  },
+  {
     "versao": "2.11.0",
     "data": "2026-10-05",
     "itens": [

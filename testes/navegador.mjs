@@ -172,6 +172,11 @@ export const auditarLayout = (minLetra = 11.5) => `(() => {
   const visivel = (e) => { const s = getComputedStyle(e); if (s.visibility === 'hidden' || s.display === 'none' || +s.opacity === 0) return false; const b = e.getBoundingClientRect(); return b.width > 0 && b.height > 0; };
   const nomeDe = (e) => (e.tagName.toLowerCase() + (e.id ? '#' + e.id : '') + (typeof e.className === 'string' && e.className ? '.' + e.className.trim().split(/\\s+/).join('.') : ''));
   const recorte = (e) => { let p = e.parentElement; while (p && p !== document.body) { const s = getComputedStyle(p); if (/(auto|scroll|hidden|clip)/.test(s.overflowX + s.overflowY)) return p; p = p.parentElement; } return null; };
+  // janela cujo formulário rola para baixo e passou a rolar para o lado: algo largo demais lá dentro corta a borda direita
+  document.querySelectorAll('.modal, .modal *').forEach((e) => {
+    if (!/(auto|scroll)/.test(getComputedStyle(e).overflowX) || !visivel(e)) return;
+    if (e.scrollWidth > e.clientWidth + 2) probs.push({ tipo: 'rolagem-lateral', onde: nomeDe(e), texto: 'mais largo que a janela: ' + e.scrollWidth + ' > ' + e.clientWidth });
+  });
   const caixas = document.querySelectorAll('button, .quadro, .chip, .item, .setor-cartao, .papel-cartao, .atalho, .modal, #toast, th, td, label, .aviso, .bloco, .conexao, .faixa > *, .titulo, .relogio, .numeros > div, .escolhas > button, .aviso-chefe, .aviso-item');
   const vistos = new Set();
   caixas.forEach((cx) => {

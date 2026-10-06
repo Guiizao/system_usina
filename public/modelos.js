@@ -47,6 +47,17 @@
   /* ---------- Ajudas de texto ---------- */
   function montar(ctx) {
     const { C, fmtData, fmtNum } = ctx;
+    const pranchetaCompleta = ctx.prancheta;
+    const listas = ['itens', 'campos', 'camposOperador', 'parametros'];
+    // O papel conserva seus quadros; os novos saem separados no XML.
+    ctx = Object.assign({}, ctx, { prancheta(pid) {
+      const p = pranchetaCompleta(pid);
+      const novos = new Set(listas.flatMap((k) => (p[k] || []).filter((c) => c.novo === true).map((c) => c.id)));
+      const copia = Object.assign({}, p);
+      listas.forEach((k) => { if (p[k]) copia[k] = p[k].filter((c) => c.novo !== true); });
+      if (p.grupos) copia.grupos = p.grupos.map((g) => Object.assign({}, g, { campos: g.campos.filter((id) => !novos.has(id)) }));
+      return copia;
+    } });
     const vazio = (v) => v === '' || v == null;
     const numero = (v) => (typeof v === 'string' && /^-?\d+(\.\d+)?$/.test(v) ? Number(v) : v);
     const valorCampo = (c, v) => {
@@ -57,7 +68,12 @@
     };
     const textoNum = (v) => (typeof v === 'number' ? fmtNum(String(v)) : v);
     const operadoresDoTurno = (regs, t) => [...new Set(regs.filter((r) => /^\d+$/.test(r.chave)).filter((r) => { const h = Number(r.chave); return h >= t.inicio && h < t.fim; }).map((r) => r.operador).filter(Boolean))].join(', ');
-    const casas = (c) => (c && c.type === 'num' && c.dec > 0 ? { dec: c.dec } : {});
+    const casas = (c, v) => {
+      if (!c || c.type !== 'num') return {};
+      const [mantissa, expoente] = String(v).toLowerCase().split('e');
+      const dec = Math.max(c.dec || 0, (mantissa.split('.')[1] || '').length - Number(expoente || 0));
+      return dec > 0 ? { dec } : {};
+    };
     const horarioDoTurno = (t) => `${String(t.inicio).padStart(2, '0')}:00 às ${String(t.fim).padStart(2, '0')}:00`;
     const D = C.documentos || {};
 
@@ -98,7 +114,7 @@
       colunas.forEach((c, i) => g.set(t0, i, c, { b: true, sz: 8, al: 'c', borda: true, quebra: true }));
       g.altura(t0, 26);
       linhas.forEach((l, j) => {
-        l.valores.forEach((v, i) => g.set(t0 + 1 + j, i, v, Object.assign({ sz: 9, al: i === n - 1 || i === n - 2 ? 'l' : 'c', borda: true, b: i === 0 }, casas(p.campos[i - 1]))));
+        l.valores.forEach((v, i) => g.set(t0 + 1 + j, i, v, Object.assign({ sz: 9, al: i === n - 1 || i === n - 2 ? 'l' : 'c', borda: true, b: i === 0 }, casas(p.campos[i - 1], v))));
         g.altura(t0 + 1 + j, 22);
       });
       // aprovação
@@ -199,7 +215,7 @@
       g.bloco(4, 0, 4, n - 1, `DATA: ${fmtData(data)}`, { b: true, sz: 10, al: 'l', borda: true });
       colunas.forEach((c, i) => g.set(5, i, i === 0 ? c : Number(c), { b: true, sz: 9, al: i === 0 ? 'l' : 'c', borda: true }));
       linhas.forEach((l, j) => {
-        l.valores.forEach((v, i) => g.set(6 + j, i, v, i === 0 ? { b: true, sz: 7, al: 'l', borda: true, quebra: true } : Object.assign({ sz: 9, al: 'c', borda: true }, casas(p.itens[j]))));
+        l.valores.forEach((v, i) => g.set(6 + j, i, v, i === 0 ? { b: true, sz: 7, al: 'l', borda: true, quebra: true } : Object.assign({ sz: 9, al: 'c', borda: true }, casas(p.itens[j], v))));
         g.altura(6 + j, 34);
       });
       // blocos de turno embaixo (1º: 7 a 16 | 2º: 17 a 23 | 3º: 0 a 7)
@@ -244,7 +260,7 @@
         horas.forEach((h, i) => g.set(r, i + 1, h, { b: true, sz: 10, al: 'c', borda: true }));
         r++;
         p.itens.forEach((c) => {
-          linhaItem(c, horas).forEach((v, i) => g.set(r, i, v, i === 0 ? { b: true, sz: 8, al: 'l', borda: true } : Object.assign({ sz: 10, al: 'c', borda: true }, casas(c))));
+          linhaItem(c, horas).forEach((v, i) => g.set(r, i, v, i === 0 ? { b: true, sz: 8, al: 'l', borda: true } : Object.assign({ sz: 10, al: 'c', borda: true }, casas(c, v))));
           g.altura(r, 26);
           r++;
         });
@@ -281,7 +297,7 @@
       g.altura(0, 22); g.altura(1, 22); g.altura(2, 12);
       g.bloco(3, 0, 3, n - 1, `DATA: ${fmtData(data)}`, { sz: 10, al: 'l', borda: true });
       colunas.forEach((c, i) => g.set(4, i, i === 0 ? c : Number(c), { sz: 10, al: i === 0 ? 'l' : 'c', borda: true }));
-      linhas.forEach((l, j) => { l.valores.forEach((v, i) => g.set(5 + j, i, v, Object.assign({ sz: i === 0 ? 10 : 9, al: i === 0 ? 'l' : 'c', borda: true }, i ? casas(p.itens[j]) : {}))); g.altura(5 + j, 24); });
+      linhas.forEach((l, j) => { l.valores.forEach((v, i) => g.set(5 + j, i, v, Object.assign({ sz: i === 0 ? 10 : 9, al: i === 0 ? 'l' : 'c', borda: true }, i ? casas(p.itens[j], v) : {}))); g.altura(5 + j, 24); });
       const t = 5 + linhas.length;
       g.set(t, 0, '', BORDA);
       const blocos = [[1, 10], [11, 17], [18, n - 1]];
@@ -378,9 +394,16 @@
     return {
       /** Monta a folha de papel de uma prancheta num dia. */
       folha(pid, data) {
-        const p = ctx.prancheta(pid);
+        const p = pranchetaCompleta(pid);
         const nomeModelo = p.papel && p.papel.modelo ? p.papel.modelo : p.tipo === 'insumo' ? 'pop03' : p.tipo === 'dornas' ? 'pop011' : 'caldeira';
         const f = MODELOS[nomeModelo](pid, data);
+        const regs = ctx.listar(data, pid).filter((r) => /^\d+$/.test(r.chave));
+        const novos = listas.flatMap((k) => (p[k] || []).filter((c) => c.novo === true));
+        f.dados.camposNovos = novos.map((c) => ({
+          id: c.id, rotulo: c.label,
+          unidade: window.Folhas && window.Folhas.unidadeNoDia ? window.Folhas.unidadeNoDia(c, data) : c.unidade,
+          valores: regs.filter((r) => !vazio(r.valores[c.id])).map((r) => ({ linha: p.tipo === 'insumo' ? ctx.rotuloHoraPapel(r.chave) : r.chave, valor: valorCampo(c, r.valores[c.id]) })),
+        })).filter((c) => c.valores.length);
         const s = ctx.setorDaPrancheta(pid);
         f.pid = pid; f.setor = s ? s.nome : ''; f.codigo = p.codigo; f.titulo = (p.papel && p.papel.titulo) || p.titulo;
         // nome da aba do Excel (até 31 letras)
@@ -457,6 +480,15 @@
       linhas.push('      </linha>');
     });
     linhas.push('    </tabela>');
+    if (d.camposNovos && d.camposNovos.length) {
+      linhas.push('    <camposNovos>');
+      d.camposNovos.forEach((c) => {
+        linhas.push(`      <campo ${at('nome', c.rotulo)} ${at('unidade', c.unidade)}>`);
+        c.valores.forEach((v) => linhas.push(`        <valor ${at('linha', v.linha)}>${esc(String(v.valor))}</valor>`));
+        linhas.push('      </campo>');
+      });
+      linhas.push('    </camposNovos>');
+    }
     linhas.push('    <rodape>');
     d.rodape.forEach(([k, v]) => linhas.push(`      <item ${at('nome', k)}>${esc(v || '')}</item>`));
     linhas.push('    </rodape>');

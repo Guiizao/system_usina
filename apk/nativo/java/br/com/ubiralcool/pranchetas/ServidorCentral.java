@@ -644,7 +644,10 @@ public class ServidorCentral {
           return;
         }
         if ("/api/base44".equals(caminho) && "POST".equals(metodo)) {
-          if ("configurar".equals(acaoDoPedido(corpo)) && !podeNoAparelho(aparelho, "integracoes")) { negar(saida, "integracoes"); return; }
+          String acaoBase44 = acaoDoPedido(corpo);
+          if ("configurar".equals(acaoBase44) && !podeNoAparelho(aparelho, "integracoes")) { negar(saida, "integracoes"); return; }
+          // os totais do dia saem só do tablet chefe liberado (ele manda sozinho, mesmo sem ninguém dentro)
+          if ("enviar".equals(acaoBase44) && nivelDoAparelho(aparelho) == 0) { negar(saida, "relatorios"); return; }
           apiBase44(corpo, saida);
           return;
         }
@@ -663,7 +666,12 @@ public class ServidorCentral {
           apiRegistro(consulta, saida);
           return;
         }
-        if ("/api/relatorio".equals(caminho) && "POST".equals(metodo)) { apiRelatorio(corpo, saida); return; }
+        if ("/api/relatorio".equals(caminho) && "POST".equals(metodo)) {
+          // só o tablet chefe liberado guarda a folha do dia (sozinho às 07:05, mesmo sem ninguém dentro, ou pela tela)
+          if (nivelDoAparelho(aparelho) == 0) { negar(saida, "relatorios"); return; }
+          apiRelatorio(corpo, saida);
+          return;
+        }
         if ("/api/relatorio-apagar".equals(caminho) && "POST".equals(metodo)) {
           // apagar relatório: quem tem relatórios, num tablet chefe nível 2 ou 3 (o nível 1 vê, corrige e envia)
           if (!podeNoAparelho(aparelho, "relatorios") || nivelDoAparelho(aparelho) < 2) { negar(saida, "relatorios"); return; }
@@ -720,35 +728,38 @@ public class ServidorCentral {
     int nivelAqui = nivelDoAparelho(idCifrado);
     List<String> dias = new ArrayList<>();
     Map<String, List<JSONObject>> antigos = new HashMap<>();
+    Map<String, Map<String, JSONObject>> lidosDoArquivo = new HashMap<>();
     if (chegaram != null) {
       for (int i = 0; i < chegaram.length(); i++) {
         JSONObject r = chegaram.optJSONObject(i);
         if (r == null || r.optString("id").isEmpty() || !r.has("atualizadoEm")) continue;
-        if (arquivado(r.optString("data"))) {
-          r.remove("sincronizado");
-          r.put("recebidoEm", System.currentTimeMillis());
-          List<JSONObject> lista = antigos.get(r.optString("data"));
-          if (lista == null) { lista = new ArrayList<>(); antigos.put(r.optString("data"), lista); }
-          lista.add(r);
+        String data = r.optString("data");
+        String prancheta = r.optString("prancheta");
+        // o id diz o que a anotação é (dia|folha|linha): com outro id, uma anotação poderia passar por configuração
+        if (!r.optString("id").equals(data + "|" + prancheta + "|" + r.optString("chave")) || !("config".equals(data) || ehDia(data))) {
+          recusados.put(new JSONObject().put("id", r.optString("id")).put("motivo", "invalido"));
           continue;
         }
+        boolean doArquivo = arquivado(data);
+        // a anotação guardada: na memória ou, de dia antigo, no BackupUsina
         JSONObject atual = registros.optJSONObject(r.getString("id"));
-        String prancheta = r.optString("prancheta");
-        if ("config".equals(r.optString("data"))) {
+        if (atual == null && doArquivo) atual = guardadaNoArquivo(lidosDoArquivo, data, r.getString("id"));
+        if ("config".equals(data)) {
           // configuração da usina: confere quem pode mudar cada parte, e o conflito
           Object[] d = decidirConfig(atual, r, idCifrado);
           if (!(Boolean) d[0]) { recusados.put(new JSONObject().put("id", r.optString("id")).put("motivo", d[2]).put("atual", atual == null ? JSONObject.NULL : atual)); continue; }
           r = (JSONObject) d[1];
           revs.put(r.optString("id"), r.optLong("rev"));
-        } else if (nivelAqui == 1 && !"registro".equals(prancheta) && !"avisos-recibo".equals(prancheta)) {
-          // tablet chefe nível 1: só corrige o que já existe, e com a função corrigir
-          if (atual == null) { recusados.put(new JSONObject().put("id", r.optString("id")).put("motivo", "nivel1_nao_cria")); continue; }
-          if (!podeNoAparelho(idCifrado, "corrigir")) { recusados.put(new JSONObject().put("id", r.optString("id")).put("motivo", "sem_permissao")); continue; }
-        } else if ("avisos".equals(prancheta) && !podeNoAparelho(idCifrado, "avisos")) {
+        } else if (nivelAqui > 0 && !"registro".equals(prancheta) && !"avisos-recibo".equals(prancheta)) {
+          // tablet chefe: a função de quem está dentro (a mesma que a tela pede)
+          String motivo = motivoNoChefe(idCifrado, prancheta);
+          if (!motivo.isEmpty()) { recusados.put(new JSONObject().put("id", r.optString("id")).put("motivo", motivo)); continue; }
+        } else if ("avisos".equals(prancheta)) {
+          // aviso só sai do tablet chefe
           recusados.put(new JSONObject().put("id", r.optString("id")).put("motivo", "sem_permissao"));
           continue;
         }
-        // tablet de setor não muda os campos que são só do escritório (NF, lote, validade...)
+        // tablet de setor não muda os campos que são só do escritório (NF, lote, validade...), nem de dia antigo
         if (nivelAqui == 0 && r.optJSONObject("valores") != null) {
           List<String> soEscritorio = camposSoDoEscritorio(prancheta);
           if (!soEscritorio.isEmpty()) {
@@ -756,6 +767,15 @@ public class ServidorCentral {
             JSONObject guardados = atual == null ? null : atual.optJSONObject("valores");
             for (String c : soEscritorio) { if (guardados != null && guardados.has(c)) valores.put(c, guardados.opt(c)); else valores.remove(c); }
           }
+        }
+        // dia que só está no BackupUsina: junta lá (depois de conferido como os outros)
+        if (doArquivo) {
+          r.remove("sincronizado");
+          r.put("recebidoEm", System.currentTimeMillis());
+          List<JSONObject> lista = antigos.get(data);
+          if (lista == null) { lista = new ArrayList<>(); antigos.put(data, lista); }
+          lista.add(r);
+          continue;
         }
         JSONObject entrada = criadasSemSaber(atual, r) ? juntarLinhas(atual, r) : r;
         // a configuração já foi conferida pela revisão (o relógio do aparelho não decide)
@@ -2118,34 +2138,20 @@ public class ServidorCentral {
 
   private static final List<String> FUNCOES_PADRAO = Arrays.asList("anotar", "corrigir", "avisos", "relatorios", "ler_folha", "usina", "folhas", "conexao", "integracoes", "ajustes", "registro", "chefes");
   private static final List<String> FUNCOES_DO_NIVEL_1 = Arrays.asList("corrigir", "relatorios");
+  private static final List<String> FUNCOES_NO_SETOR = Arrays.asList("ajustes", "usina");
+  /** Folhas que só o tablet chefe anota (Vinho e Fermentação, iguais ao forms.js; os testes conferem). */
+  private static final List<String> PRANCHETAS_SO_DO_CHEFE = Arrays.asList("med_dornas", "fermentacao");
   private static final List<String> FOLHAS_SISTEMA = Arrays.asList("dec", "oculto", "_operador", "_novos");
   private static final long LIBERADO_NO_SETOR_MS = 10 * 60000L;
   /** Tablet de setor: quem digitou a senha nos ajustes fica liberado por 10 minutos (aparelho -> {pessoaId, até}). */
   private final Map<String, Object[]> liberadosNoSetor = new HashMap<>();
 
-  /** As funções que existem: as que o aplicativo do tablet chefe mandou (forms.js) ou a lista de sempre. */
-  private synchronized List<String> funcoesDoForms() {
-    List<String> l = new ArrayList<>();
-    JSONObject forms = config.optJSONObject("nuvemForms");
-    JSONArray fs = forms == null ? null : forms.optJSONArray("funcoes");
-    if (fs != null) for (int i = 0; i < fs.length(); i++) { JSONObject f = fs.optJSONObject(i); if (f != null && !f.optString("id").isEmpty()) l.add(f.optString("id")); }
-    if (l.isEmpty()) l.addAll(FUNCOES_PADRAO);
-    if (!l.contains("chefes")) l.add("chefes"); // folhas mandadas por um aplicativo de antes da 2.12
-    return l;
-  }
+  /** As funções que existem, iguais às do forms.js (os testes conferem). Não saem das folhas que o aplicativo manda:
+      o que cada um pode fazer não pode depender do que chega de um aparelho. */
+  private List<String> funcoesDoForms() { return new ArrayList<>(FUNCOES_PADRAO); }
 
-  /** As funções de um nível de pessoa (Encarregado, Consulta) que vieram no forms.js, ou as de sempre. */
-  private synchronized List<String> funcoesDoNivelDePessoa(String nivel) {
-    JSONObject forms = config.optJSONObject("nuvemForms");
-    JSONObject niveis = forms == null ? null : forms.optJSONObject("niveis");
-    JSONObject n = niveis == null ? null : niveis.optJSONObject(nivel);
-    if (n != null) {
-      if ("todas".equals(n.opt("funcoes"))) return funcoesDoForms();
-      JSONArray f = n.optJSONArray("funcoes");
-      List<String> l = new ArrayList<>();
-      if (f != null) for (int i = 0; i < f.length(); i++) l.add(f.optString(i));
-      return l;
-    }
+  /** As funções de um nível de pessoa (Encarregado, Consulta), iguais às do forms.js (os testes conferem). */
+  private static List<String> funcoesDoNivelDePessoa(String nivel) {
     if ("encarregado".equals(nivel)) return Arrays.asList("anotar", "corrigir", "avisos", "relatorios", "ler_folha", "usina", "conexao", "ajustes");
     if ("consulta".equals(nivel)) return Arrays.asList("relatorios");
     return new ArrayList<>();
@@ -2247,7 +2253,10 @@ public class ServidorCentral {
     Object[] l = liberadosNoSetor.get(aparelho);
     if (l == null || System.currentTimeMillis() > (Long) l[1]) return new HashSet<>();
     JSONObject p = pessoaPorId((String) l[0]);
-    return p != null && ativa(p) ? funcoesDaPessoa(p) : new HashSet<>();
+    // no tablet de setor a senha só abre os ajustes dele (os operadores), seja de quem for: o resto é do tablet chefe
+    Set<String> s = p != null && ativa(p) ? funcoesDaPessoa(p) : new HashSet<>();
+    s.retainAll(FUNCOES_NO_SETOR);
+    return s;
   }
 
   private static String nomeDoNivel(int n) {
@@ -2335,12 +2344,25 @@ public class ServidorCentral {
     return new Object[] { b, mexeuSistema, mexeuComum };
   }
 
-  /** Decide uma anotação de configuração que chegou: devolve {aceita (Boolean), entrada, motivo}. */
+  /** Decide uma anotação de configuração que chegou: devolve {aceita (Boolean), entrada, motivo}.
+      Aplicativo de antes da 2.12 (manda sem "base"): ele não conhece a recusa e marcaria como enviado. Então vale o que
+      ele podia mudar, o resto fica como está, e a configuração volta para ele na próxima sincronização (sai com um
+      horário mais novo que o dele, e o aparelho troca a cópia). */
   private synchronized Object[] decidirConfig(JSONObject atual, JSONObject r, String aparelho) throws Exception {
     boolean chefe = nivelDoAparelho(aparelho) > 0;
     Set<String> funcoes = chefe ? funcoesNoAparelho(aparelho) : funcoesNoSetor(aparelho);
     JSONObject vivo = atual != null && !atual.optBoolean("apagado") ? atual : null;
-    if (vivo != null && r.optLong("base", 0L) != vivo.optLong("rev", 0L)) return new Object[] { false, null, "conflito" };
+    boolean antigo = !r.has("base");
+    // conflito: alguém mudou a configuração depois da cópia que este aparelho editou
+    if (!antigo && vivo != null && r.optLong("base", 0L) != vivo.optLong("rev", 0L)) return new Object[] { false, null, "conflito" };
+    long horaDele = r.optLong("atualizadoEm");
+    long horaGuardada = vivo == null ? 0L : vivo.optLong("atualizadoEm");
+    // a configuração da usina não se apaga pela sincronização (o aplicativo nunca apaga): o aparelho antigo recebe ela de volta
+    if (r.optBoolean("apagado")) {
+      if (!antigo || vivo == null) return new Object[] { false, null, "sem_permissao" };
+      JSONObject deVolta = new JSONObject(vivo.toString()).put("atualizadoEm", Math.max(horaDele, horaGuardada) + 1).put("rev", vivo.optLong("rev", 0L) + 1);
+      return new Object[] { true, deVolta, "" };
+    }
     JSONObject entrada = new JSONObject(r.toString());
     entrada.remove("base");
     JSONObject vn = entrada.optJSONObject("valores");
@@ -2348,21 +2370,59 @@ public class ServidorCentral {
     JSONObject va = vivo == null ? null : vivo.optJSONObject("valores");
     if (vn.has("folhas") || (va != null && va.has("folhas"))) {
       Object[] f = conferirFolhas(va == null ? null : va.optJSONObject("folhas"), vn.optJSONObject("folhas"), funcoes.contains("sistema"));
-      JSONObject folhas = (JSONObject) f[0];
-      if (folhas.length() == 0) vn.remove("folhas"); else vn.put("folhas", folhas);
-      if ((Boolean) f[1] && !funcoes.contains("sistema")) return new Object[] { false, null, "sem_permissao" };
-      if ((Boolean) f[2] && !funcoes.contains("folhas") && !funcoes.contains("sistema")) return new Object[] { false, null, "sem_permissao" };
+      boolean mexeuSistema = (Boolean) f[1], mexeuComum = (Boolean) f[2];
+      // folhas só no tablet chefe: as do sistema com "sistema" (o dono no nível 3), as outras com "folhas"
+      boolean pode = chefe && (!mexeuSistema || funcoes.contains("sistema")) && (!mexeuComum || funcoes.contains("folhas") || funcoes.contains("sistema"));
+      if ((mexeuSistema || mexeuComum) && !pode) {
+        if (!antigo) return new Object[] { false, null, "sem_permissao" };
+        comoEstava(vn, va, "folhas");
+      } else {
+        JSONObject folhas = (JSONObject) f[0];
+        if (folhas.length() == 0) vn.remove("folhas"); else vn.put("folhas", folhas);
+      }
     }
     for (String k : chaves(va, vn)) {
       if ("folhas".equals(k)) continue;
       if (mesmoJson(va == null ? null : va.opt(k), vn.opt(k))) continue;
       // no tablet de setor só os operadores (ajustes); no tablet chefe, o resto da usina
       boolean pode = chefe ? funcoes.contains("usina") : "operadores".equals(k) && (funcoes.contains("ajustes") || funcoes.contains("usina"));
-      if (!pode) return new Object[] { false, null, "sem_permissao" };
+      if (pode) continue;
+      if (!antigo) return new Object[] { false, null, "sem_permissao" };
+      comoEstava(vn, va, k);
     }
-    if (entrada.optBoolean("apagado") && !(chefe && funcoes.contains("usina"))) return new Object[] { false, null, "sem_permissao" };
     entrada.put("rev", (vivo == null ? 0L : vivo.optLong("rev", 0L)) + 1);
+    // a central guardou diferente do que veio (do antigo, ou as do sistema que voltaram): vai de volta para o aparelho
+    JSONObject veio = r.optJSONObject("valores");
+    if (!mesmoJson(vn, veio == null ? new JSONObject() : veio)) entrada.put("atualizadoEm", Math.max(horaDele, horaGuardada) + 1);
     return new Object[] { true, entrada, "" };
+  }
+
+  /** Do aplicativo antigo, a parte que ele não podia mudar fica como estava. */
+  private static void comoEstava(JSONObject vn, JSONObject va, String k) throws Exception {
+    if (va != null && va.has(k)) vn.put(k, va.opt(k)); else vn.remove(k);
+  }
+
+  /** Anotação que chegou de um tablet chefe: a mesma função que a tela pede, de quem está dentro dele (aviso: avisos;
+      Vinho e Fermentação: anotar; folhas dos setores: corrigir ou ler folha). Sem ninguém dentro: "sem_sessao" (o
+      aparelho guarda a anotação e manda de novo quando alguém entrar). */
+  private synchronized String motivoNoChefe(String aparelho, String prancheta) throws Exception {
+    if (pessoaDoAparelho(aparelho) == null) return "sem_sessao";
+    Set<String> f = funcoesNoAparelho(aparelho);
+    if ("avisos".equals(prancheta)) return f.contains("avisos") ? "" : "sem_permissao";
+    if (PRANCHETAS_SO_DO_CHEFE.contains(prancheta)) return f.contains("anotar") ? "" : "sem_permissao";
+    return f.contains("corrigir") || f.contains("ler_folha") ? "" : "sem_permissao";
+  }
+
+  /** A anotação guardada de um dia antigo, no BackupUsina (cada dia lido uma vez por sincronização). */
+  private JSONObject guardadaNoArquivo(Map<String, Map<String, JSONObject>> lidos, String data, String id) {
+    Map<String, JSONObject> dia = lidos.get(data);
+    if (dia == null) {
+      dia = new HashMap<>();
+      JSONArray a = lerDiaArquivado(data);
+      for (int i = 0; i < a.length(); i++) { JSONObject x = a.optJSONObject(i); if (x != null) dia.put(x.optString("id"), x); }
+      lidos.put(data, dia);
+    }
+    return dia.get(id);
   }
 
   /** Campos do escritório de cada folha de insumo que o operador não preenche (o tablet do setor não muda). */

@@ -52,37 +52,44 @@ function criar(C, medidasAtuais, opcoes = {}) {
     if (c && c.type === 'check') return true;
     return String(v);
   }
-  const campo = (c, v) => Object.assign({ rotulo: c.label, valor: valorDe(c, v) }, c.unidade ? { unidade: c.unidade } : {});
-  const camposDe = (lista, valores) => { const o = {}; lista.forEach((c) => { o[c.id] = campo(c, valores[c.id]); }); return o; };
+  function unidadeNoDia(c, data) {
+    const h = Array.isArray(c.historico) ? c.historico.filter((x) => data && data <= x.ate).sort((a, b) => a.ate.localeCompare(b.ate)) : [];
+    return h.length ? h[0].unidade : c.unidade;
+  }
+  const campo = (c, v, data) => {
+    const unidade = unidadeNoDia(c, data);
+    return Object.assign({ rotulo: c.label, valor: valorDe(c, v) }, unidade ? { unidade } : {});
+  };
+  const camposDe = (lista, valores, data) => { const o = {}; lista.forEach((c) => { o[c.id] = campo(c, valores[c.id], data); }); return o; };
   const base = (r) => ({ id: r.id, operador: r.operador || null, atualizadoEm: iso(r.atualizadoEm), ...(r.alteradoPeloEscritorio ? { alteradoPeloEscritorio: { em: iso(r.alteradoPeloEscritorio.em), autorizadoPor: r.alteradoPeloEscritorio.autorizadoPor } } : {}) });
   const horaDaChave = (k) => `${pad2(Number(k))}:00`;
   const ordemNoDia = (h) => (Number(h) - C.inicioDoDia + 24) % 24;
   const turnoDaHora = (h) => C.turnos.find((t) => h >= t.inicio && h < t.fim) || C.turnos[0];
 
   /* ---------- cada tipo de prancheta ---------- */
-  function folhaDornas(p, regs) {
+  function folhaDornas(p, regs, data) {
     const etapa = (v) => (!p.envio ? null : !vazio(v[p.envio.fim]) ? 'anotada' : !vazio(v[p.envio.inicio]) ? 'enviando' : 'enchendo');
     return {
-      linhas: regs.filter((r) => /^\d+$/.test(r.chave)).sort((a, b) => a.chave - b.chave).map((r) => Object.assign({ dorna: Number(r.chave) }, p.envio ? { etapa: etapa(r.valores) } : {}, base(r), { campos: camposDe(p.campos, r.valores) })),
+      linhas: regs.filter((r) => /^\d+$/.test(r.chave)).sort((a, b) => a.chave - b.chave).map((r) => Object.assign({ dorna: Number(r.chave) }, p.envio ? { etapa: etapa(r.valores) } : {}, base(r), { campos: camposDe(p.campos, r.valores, data) })),
     };
   }
-  function folhaInsumo(p, regs) {
+  function folhaInsumo(p, regs, data) {
     const extras = [...(p.camposOperador || []), ...(p.camposEscritorio || []).filter((c) => !(p.camposOperador || []).some((o) => o.id === c.id))];
     const linhas = regs.filter((r) => /^\d+$/.test(r.chave) && !vazio(r.valores.qtd)).sort((a, b) => ordemNoDia(a.chave) - ordemNoDia(b.chave)).map((r) => Object.assign(
       { hora: horaDaChave(r.chave), quantidade: valorDe({ type: 'num' }, r.valores.qtd), unidade: r.valores.unidade || p.unidade || null },
-      r.conferir ? { conferir: true } : {}, base(r), { campos: camposDe(extras, r.valores) }));
+      r.conferir ? { conferir: true } : {}, base(r), { campos: camposDe(extras, r.valores, data) }));
     const soma = {};
     linhas.forEach((l) => { if (typeof l.quantidade === 'number') soma[l.unidade || ''] = (soma[l.unidade || ''] || 0) + l.quantidade; });
     const meta = (regs.find((r) => r.chave === 'meta') || { valores: {} }).valores;
     return { insumo: p.nome, total: Object.entries(soma).map(([u, q]) => ({ quantidade: Math.round(q * 100) / 100, unidade: u || null })), lote: meta.lote || null, verificadoPor: meta.verificado || null, linhas };
   }
-  function folhaGrade(p, regs) {
+  function folhaGrade(p, regs, data) {
     return {
-      linhas: regs.filter((r) => /^\d+$/.test(r.chave)).sort((a, b) => ordemNoDia(a.chave) - ordemNoDia(b.chave)).map((r) => Object.assign({ hora: horaDaChave(r.chave), turno: turnoDaHora(Number(r.chave)).nome }, base(r), { campos: camposDe(p.itens, r.valores) })),
+      linhas: regs.filter((r) => /^\d+$/.test(r.chave)).sort((a, b) => ordemNoDia(a.chave) - ordemNoDia(b.chave)).map((r) => Object.assign({ hora: horaDaChave(r.chave), turno: turnoDaHora(Number(r.chave)).nome }, base(r), { campos: camposDe(p.itens, r.valores, data) })),
       observacoes: C.turnos.map((t) => ({ turno: t.nome, texto: ((regs.find((r) => r.chave === 'obs' + t.id) || { valores: {} }).valores.texto) || null })).filter((o) => o.texto),
     };
   }
-  function folhaMedicao(p, regs) {
+  function folhaMedicao(p, regs, data) {
     const vol = (d, v) => (vazio(v[d.id + '_vol']) ? (vazio(v[d.id + '_folga']) || !(d.altura > 0 && d.area > 0) ? null : Math.round((d.altura - Number(v[d.id + '_folga'])) * d.area * (d.unidade === 'm³' ? 1 : 1000) * 100) / 100) : Number(v[d.id + '_vol']));
     const grupos = medidas().grupos.map((g) => {
       const r = regs.find((x) => x.chave === g.id);
@@ -97,15 +104,15 @@ function criar(C, medidasAtuais, opcoes = {}) {
     const producao = grupos.filter((g) => g.entraNaProducao && g.unidade === 'L').reduce((s, g) => s + g.subtotal, 0);
     return {
       grupos, totalDeVinhoDaProducaoLitros: Math.round(producao * 100) / 100,
-      parametros: camposDe(p.parametros, par),
+      parametros: camposDe(p.parametros, par, data),
     };
   }
-  function folhaFermentacao(p, regs) {
+  function folhaFermentacao(p, regs, data) {
     return {
       enchimentos: regs.filter((r) => r.valores && r.valores.dorna != null).sort((a, b) => (a.valores.inicioEm || 0) - (b.valores.inicioEm || 0)).map((r) => {
         const v = r.valores;
         return Object.assign({ dorna: Number(v.dorna) }, base(r), {
-          campos: camposDe(p.campos, v),
+          campos: camposDe(p.campos, v, data),
           volante: (v.volante || []).map((s) => ({ data: s.data, inicio: s.inicio || null, fim: s.fim || null, operador: s.operador || null })),
           esvaziada: v.esvaziada ? { data: v.esvaziada.data, hora: v.esvaziada.hora, operador: v.esvaziada.operador || null } : null,
         });
@@ -122,7 +129,7 @@ function criar(C, medidasAtuais, opcoes = {}) {
       id: s.id, nome: s.nome,
       pranchetas: folhasDoSetor(s).map((pid) => {
         const p = pranchetas[pid];
-        return Object.assign({ id: pid, nome: p.nome, codigo: p.codigo || null, titulo: (p.papel && p.papel.titulo) || p.titulo || p.nome, tipo: p.tipo }, MONTAR[p.tipo] ? MONTAR[p.tipo](p, porFolha[pid] || []) : {});
+        return Object.assign({ id: pid, nome: p.nome, codigo: p.codigo || null, titulo: (p.papel && p.papel.titulo) || p.titulo || p.nome, tipo: p.tipo }, MONTAR[p.tipo] ? MONTAR[p.tipo](p, porFolha[pid] || [], data) : {});
       }),
     }));
     const insumos = setores.flatMap((s) => s.pranchetas.filter((p) => p.tipo === 'insumo').flatMap((p) => (p.total.length ? p.total : [{ quantidade: 0, unidade: pranchetas[p.id].unidade || null }]).map((t) => ({ setor: s.nome, prancheta: p.id, insumo: p.nome, quantidade: t.quantidade, unidade: t.unidade }))));
@@ -143,14 +150,14 @@ function criar(C, medidasAtuais, opcoes = {}) {
       : p.tipo === 'grade' ? p.itens : p.tipo === 'medicao' ? [] : p.campos || [];
     const vistos = new Set();
     const campos = {};
-    lista.forEach((c) => { if (!vistos.has(c.id)) { vistos.add(c.id); campos[c.id] = campo(c, r.valores[c.id]); } });
+    lista.forEach((c) => { if (!vistos.has(c.id)) { vistos.add(c.id); campos[c.id] = campo(c, r.valores[c.id], r.data); } });
     return Object.assign({ id: r.id, seq: r.seq, data: r.data, setor: s ? s.id : r.setor || null, prancheta: r.prancheta, chave: r.chave, apagado: !!r.apagado }, base(r),
       { campos: p && (p.tipo === 'medicao' || p.tipo === 'fermentacao') ? r.valores : campos });
   }
 
   /** O esquema: o que é cada setor, prancheta e campo. */
   function esquema() {
-    const desc = (c) => Object.assign({ id: c.id, rotulo: c.label, tipo: { num: 'numero', time: 'hora', choice: 'opcao', check: 'marca', text: 'texto' }[c.type] || c.type }, c.unidade ? { unidade: c.unidade } : {}, c.dec ? { casasDecimais: c.dec } : {});
+    const desc = (c) => Object.assign({ id: c.id, rotulo: c.label, tipo: { num: 'numero', time: 'hora', choice: 'opcao', check: 'marca', text: 'texto' }[c.type] || c.type }, c.unidade ? { unidade: c.unidade } : {}, c.dec ? { casasDecimais: c.dec } : {}, c.novo === true ? { novo: true } : {}, c.arquivado === true ? { arquivado: true } : {});
     return {
       empresa: C.empresa, diaDeProducao: `das ${pad2(C.inicioDoDia)}:00 às ${pad2((C.inicioDoDia + 23) % 24)}:59 do dia seguinte`,
       turnos: C.turnos.map((t) => ({ nome: t.nome, inicio: `${pad2(t.inicio)}:00`, fim: `${pad2(t.fim % 24)}:00` })),
