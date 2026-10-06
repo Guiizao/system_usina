@@ -21,7 +21,7 @@ async function esperarNoAr(url, ms = 20000) {
 
 /** Senha do programador nas centrais de teste (a de verdade não fica nos testes). */
 export const SENHA_PROGRAMADOR_TESTE = '24682468';
-const HASH_TESTE = '26fa3ebe21340e4e62f4a260877095092eff5f4a619ce7a60ee57a355aa4adfb';
+const HASH_TESTE = 'pbkdf2$600000$eca09b6f4e096eed6a6b4bc6d7ad3de4$c236989776ddd876e1035cc4d8696150908b24fff8e70ea34b476475092e374f'; // PBKDF2 (versão 2.12), como o da senha de verdade
 
 export function pastaTemporaria(nome) { return fs.mkdtempSync(path.join(os.tmpdir(), `pranchetas-${nome}-`)); }
 

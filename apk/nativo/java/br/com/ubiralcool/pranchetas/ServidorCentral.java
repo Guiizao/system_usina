@@ -622,7 +622,7 @@ public class ServidorCentral {
         if ("/api/erros".equals(caminho)) { apiErros(saida); return; }
         if ("/api/zerar".equals(caminho) && "POST".equals(metodo)) {
           String geracaoAntes = getGeracao();
-          apiZerar(corpo, saida);
+          apiZerar(corpo, aparelho, saida);
           if (!geracaoAntes.equals(getGeracao())) {
             JSONObject quemZerou = pessoaDoAparelho(aparelho);
             String nomeQuem = quemZerou == null ? "" : quemZerou.optString("nome");
@@ -954,11 +954,17 @@ public class ServidorCentral {
     enviarJson(saida, 200, new JSONObject().put("ok", true).put("caminho", onde));
   }
 
-  /** Zera as anotações de teste: guarda uma cópia em BackupUsina e apaga tudo, menos a configuração da usina. */
-  private synchronized void apiZerar(byte[] corpo, OutputStream saida) throws Exception {
+  /** Zera as anotações de teste: guarda uma cópia em BackupUsina e apaga tudo, menos a configuração da usina.
+      A senha (conta demorada de propósito) é conferida antes de travar a central. */
+  private void apiZerar(byte[] corpo, String aparelho, OutputStream saida) throws Exception {
     JSONObject pedido = new JSONObject(new String(corpo, StandardCharsets.UTF_8));
     if (!"ZERAR".equals(pedido.optString("confirmar"))) { enviarJson(saida, 400, new JSONObject().put("erro", "faltou confirmar")); return; }
-    if (!senhaDoProgramador(pedido.optString("senha"))) { enviarJson(saida, 403, new JSONObject().put("erro", "senha do programador errada")); return; }
+    if (!podeTentarProgramador(aparelho)) { enviarJson(saida, 429, new JSONObject().put("erro", "Muitas senhas erradas. Espere um minuto.")); return; }
+    if (!senhaDoProgramador(pedido.optString("senha"))) { errouProgramador(aparelho); enviarJson(saida, 403, new JSONObject().put("erro", "senha do programador errada")); return; }
+    zerarAgora(saida);
+  }
+
+  private synchronized void zerarAgora(OutputStream saida) throws Exception {
     String carimbo = new java.text.SimpleDateFormat("yyyyMMddHHmm", Locale.US).format(new java.util.Date());
     String nome = "antes-de-zerar-" + carimbo + ".json";
     JSONArray tudo = new JSONArray();
@@ -991,17 +997,54 @@ public class ServidorCentral {
     enviarJson(saida, 200, new JSONObject().put("ok", true).put("apagados", apagar.size()).put("geracao", getGeracao()).put("copia", "BackupUsina/" + nome));
   }
 
-  /** Só a senha do programador apaga todos os dados do sistema. Fica guardado só o resumo (hash) dela. */
-  private static final String HASH_PROGRAMADOR = System.getProperty("pranchetas.senhaProgramadorHash", "f3a1f608cc2b347ff635467ec7440a8e1f8171a889e3feb02137a7d642debbc1");
+  /** Só a senha do programador apaga todos os dados do sistema. Fica guardado só o resumo dela, com PBKDF2 (600 mil
+      voltas e sal, versão 2.12): quem abre o APK não descobre a senha testando todas as combinações. */
+  private static final String HASH_PROGRAMADOR = System.getProperty("pranchetas.senhaProgramadorHash", "pbkdf2$600000$d31d016c4915ed1a459748361e6a081e$0041ccba04c2a9ff6534039b939944d9c111263af11791b1a2fab519ed3f6e2c");
 
   private static boolean senhaDoProgramador(String senha) {
     try {
-      byte[] h = java.security.MessageDigest.getInstance("SHA-256").digest(String.valueOf(senha).getBytes(StandardCharsets.UTF_8));
-      StringBuilder sb = new StringBuilder();
-      for (byte b : h) sb.append(String.format(Locale.US, "%02x", b));
-      return sb.toString().equals(HASH_PROGRAMADOR);
+      String[] p = HASH_PROGRAMADOR.split("\\$");
+      if (p.length != 4 || !"pbkdf2".equals(p[0]) || senha == null || senha.isEmpty()) return false;
+      return MessageDigest.isEqual(pbkdf2Sha256(senha, deHex(p[2]), Integer.parseInt(p[1])), deHex(p[3]));
     } catch (Exception e) {
       return false;
+    }
+  }
+
+  /** PBKDF2-HMAC-SHA256 com 32 bytes de saída (um bloco), feito com Mac: funciona em qualquer Android. */
+  private static byte[] pbkdf2Sha256(String senha, byte[] sal, int voltas) throws Exception {
+    Mac mac = Mac.getInstance("HmacSHA256");
+    mac.init(new SecretKeySpec(senha.getBytes(StandardCharsets.UTF_8), "HmacSHA256"));
+    mac.update(sal);
+    mac.update(new byte[] { 0, 0, 0, 1 });
+    byte[] u = mac.doFinal();
+    byte[] t = u.clone();
+    for (int i = 1; i < voltas; i++) {
+      u = mac.doFinal(u);
+      for (int j = 0; j < t.length; j++) t[j] ^= u[j];
+    }
+    return t;
+  }
+
+  /** Cinco senhas do programador erradas em um minuto, por aparelho: espera um minuto. */
+  private final Map<String, List<Long>> tentativasProgramador = new HashMap<>();
+
+  private boolean podeTentarProgramador(String aparelho) {
+    synchronized (tentativasProgramador) {
+      List<Long> t = tentativasProgramador.get(aparelho);
+      if (t == null) return true;
+      long agora = System.currentTimeMillis();
+      Iterator<Long> it = t.iterator();
+      while (it.hasNext()) if (agora - it.next() >= 60000L) it.remove();
+      return t.size() < 5;
+    }
+  }
+
+  private void errouProgramador(String aparelho) {
+    synchronized (tentativasProgramador) {
+      List<Long> t = tentativasProgramador.get(aparelho);
+      if (t == null) { t = new ArrayList<>(); tentativasProgramador.put(aparelho, t); }
+      t.add(System.currentTimeMillis());
     }
   }
 

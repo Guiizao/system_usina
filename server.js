@@ -79,8 +79,24 @@ function ultimosErros(n) {
 
 // ---------- senha do programador: só ela apaga todos os dados do sistema ----------
 // fica só o resumo (hash) da senha; os testes usam uma senha própria (SENHA_PROGRAMADOR_HASH)
-const HASH_PROGRAMADOR = process.env.SENHA_PROGRAMADOR_HASH || 'f3a1f608cc2b347ff635467ec7440a8e1f8171a889e3feb02137a7d642debbc1';
-const senhaDoProgramador = (s) => crypto.createHash('sha256').update(String(s || '')).digest('hex') === HASH_PROGRAMADOR;
+// (versão 2.12) PBKDF2 com 600 mil voltas e sal: quem abre o código não descobre a senha testando todas as combinações
+const HASH_PROGRAMADOR = process.env.SENHA_PROGRAMADOR_HASH || 'pbkdf2$600000$d31d016c4915ed1a459748361e6a081e$0041ccba04c2a9ff6534039b939944d9c111263af11791b1a2fab519ed3f6e2c';
+const pbkdf2 = require('util').promisify(crypto.pbkdf2);
+async function senhaDoProgramador(s) {
+  const [tipo, voltas, sal, resumo] = String(HASH_PROGRAMADOR).split('$');
+  if (tipo !== 'pbkdf2' || !resumo || !s) return false;
+  const r = await pbkdf2(String(s), Buffer.from(sal, 'hex'), Number(voltas), 32, 'sha256');
+  const certo = Buffer.from(resumo, 'hex');
+  return r.length === certo.length && crypto.timingSafeEqual(r, certo);
+}
+/** Cinco senhas do programador erradas em um minuto, por aparelho: espera um minuto. Devolve true se pode tentar. */
+const tentativasProgramador = {};
+function podeTentarProgramador(aparelho) {
+  const agora = Date.now();
+  const t = (tentativasProgramador[aparelho] = (tentativasProgramador[aparelho] || []).filter((x) => agora - x < 60000));
+  return t.length < 5;
+}
+const errouProgramador = (aparelho) => { (tentativasProgramador[aparelho] = tentativasProgramador[aparelho] || []).push(Date.now()); };
 
 // ---------- configuração: chave da rede e código de conexão ----------
 const novoCodigo = () => String(crypto.randomInt(0, 1000000)).padStart(6, '0');
@@ -1127,7 +1143,8 @@ async function rotaProtegida(req, res, url, ip) {
       if (p === '/api/zerar' && req.method === 'POST') {
         const corpo = JSON.parse(await lerCorpo(req, 10000));
         if (corpo.confirmar !== 'ZERAR') return json(res, 400, { erro: 'faltou confirmar' });
-        if (!senhaDoProgramador(corpo.senha)) return json(res, 403, { erro: 'senha do programador errada' });
+        if (!podeTentarProgramador(req.aparelho)) return json(res, 429, { erro: 'Muitas senhas erradas. Espere um minuto.' });
+        if (!(await senhaDoProgramador(corpo.senha))) { errouProgramador(req.aparelho); return json(res, 403, { erro: 'senha do programador errada' }); }
         const agora = new Date();
         const carimbo = agora.toISOString().slice(0, 16).replace(/[-:T]/g, '');
         fs.writeFileSync(path.join(PASTAS.backup, `antes-de-zerar-${carimbo}.json`), JSON.stringify(Object.values(db.registros), null, 1));
