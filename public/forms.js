@@ -94,7 +94,16 @@ window.USINA = {
     { id: 'integracoes', nome: 'Nuvem e Base44' },
     { id: 'ajustes', nome: 'Ajustes dos tablets (função do aparelho, operadores, apagar dados)' },
     { id: 'registro', nome: 'Ver o registro do sistema' },
+    // versão 2.12: liberar um aparelho como tablet chefe (nível 1 ou 2) e mudar o nível dos outros
+    { id: 'chefes', nome: 'Liberar tablets chefe e escolher o nível' },
   ],
+  // Níveis do tablet chefe (versão 2.12), do aparelho: a central guarda e confere.
+  // O que a pessoa faz no aparelho = funções dela ∩ funções do nível ∩ limite do aparelho.
+  niveisDoAparelho: {
+    1: { nome: 'Nível 1', texto: 'Vê, corrige e envia', funcoes: ['corrigir', 'relatorios'] },
+    2: { nome: 'Nível 2', texto: 'Tudo, e libera outros tablets chefe', funcoes: 'todas' },
+    3: { nome: 'Nível 3', texto: 'Tudo, mais as configurações do sistema (só o dono)', funcoes: 'todas' },
+  },
   niveis: {
     administrador: { nome: 'Administrador', funcoes: 'todas' },
     encarregado: { nome: 'Encarregado', funcoes: ['anotar', 'corrigir', 'avisos', 'relatorios', 'ler_folha', 'usina', 'conexao', 'ajustes'] },

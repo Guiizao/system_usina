@@ -421,6 +421,151 @@ function nomeDoAparelho(id) {
 }
 const tentativasSenha = {};
 
+/* ---------- Níveis do tablet chefe e o dono (versão 2.12) ----------
+   Cada tablet chefe tem um nível (config.aparelhosChefe[id].nivel), que só a central guarda e confere:
+     1 = vê, corrige e envia (corrigir e relatórios, sem apagar relatório);
+     2 = tudo o que existe, e libera outros tablets chefe;
+     3 = tudo, mais as configurações do sistema (só o dono entra nele).
+   O que a pessoa faz num aparelho = funções dela ∩ funções do nível ∩ limite do aparelho (o administrador ignora só o limite).
+   O dono (config.donoId) é a pessoa criada pela migração da 2.9 (o Guilherme). A identidade do aparelho é a da conexão
+   cifrada (req.aparelho), nunca o que vem no pedido. Aparelho tablet chefe novo precisa ser liberado com uma senha. */
+const FUNCOES_PADRAO = ['anotar', 'corrigir', 'avisos', 'relatorios', 'ler_folha', 'usina', 'folhas', 'conexao', 'integracoes', 'ajustes', 'registro', 'chefes'];
+const FUNCOES_DO_NIVEL_1 = ['corrigir', 'relatorios'];
+const funcoesDoForms = () => { try { return formsLidas().funcoes.map((f) => f.id); } catch (e) { return FUNCOES_PADRAO; } };
+const niveisDoForms = () => { try { return formsLidas().niveis || {}; } catch (e) { return {}; } };
+if (!config.donoId) {
+  const dono = config.pessoas.find((p) => p.nivel === 'administrador' && p.ativo !== false) || config.pessoas.find((p) => p.nivel === 'administrador');
+  if (dono) { config.donoId = dono.id; salvarConfig(); }
+}
+// migração única: o que a central já conhecia como tablet chefe antes da 2.12 vira nível 2 (nada muda para quem já usa)
+if (!config.niveisMigrados) {
+  const ids = new Set([...Object.keys(config.aparelhosChefe), ...Object.keys(config.aparelhosVistos).filter((id) => config.aparelhosVistos[id].papel === 'central')]);
+  ids.forEach((id) => { const a = config.aparelhosChefe[id] || (config.aparelhosChefe[id] = {}); if (![1, 2, 3].includes(a.nivel)) a.nivel = 2; });
+  config.niveisMigrados = Date.now();
+  salvarConfig();
+}
+const nivelDoAparelho = (id) => { const a = config.aparelhosChefe[id]; return a && [1, 2, 3].includes(a.nivel) ? a.nivel : 0; };
+const ehDono = (p) => !!p && !!config.donoId && p.id === config.donoId;
+/** As funções da pessoa, sem olhar o aparelho. 'sistema' e 'pessoas' não se dão por ajuste. */
+function funcoesDaPessoa(p) {
+  if (!p) return new Set();
+  const todas = funcoesDoForms();
+  if (ehDono(p)) return new Set([...todas, 'pessoas', 'chefes', 'sistema']);
+  if (p.nivel === 'administrador') return new Set([...todas, 'pessoas']);
+  const nv = niveisDoForms()[p.nivel] || { funcoes: [] };
+  const s = new Set(nv.funcoes === 'todas' ? todas : nv.funcoes || []);
+  Object.entries(p.extras || {}).forEach(([f, sim]) => { if (f === 'sistema' || f === 'pessoas') return; if (sim) s.add(f); else s.delete(f); });
+  return s;
+}
+/** O que quem está no aparelho pode fazer nele: a pessoa, o nível do aparelho e o limite dele. */
+function funcoesNoAparelho(aparelho) {
+  const p = pessoaDoAparelho(aparelho);
+  const nivel = nivelDoAparelho(aparelho);
+  if (!p || !nivel || (nivel === 3 && !ehDono(p))) return new Set();
+  const s = funcoesDaPessoa(p);
+  if (nivel === 1) [...s].forEach((f) => { if (!FUNCOES_DO_NIVEL_1.includes(f)) s.delete(f); });
+  if (nivel !== 3) s.delete('sistema');
+  const teto = tetoDoAparelho(aparelho);
+  if (teto && p.nivel !== 'administrador' && !ehDono(p)) [...s].forEach((f) => { if (!teto.includes(f)) s.delete(f); });
+  return s;
+}
+const podeNoAparelho = (aparelho, f) => funcoesNoAparelho(aparelho).has(f);
+const negar = (res, f) => json(res, 403, { erro: 'Quem está neste aparelho não pode fazer isso', semPermissao: f });
+// tablet de setor: quem digitou a senha nos ajustes fica liberado por 10 minutos (para a central aceitar o que ele mudar)
+const liberadosNoSetor = {};
+const LIBERADO_NO_SETOR_MS = 10 * 60000;
+function funcoesNoSetor(aparelho) {
+  const l = liberadosNoSetor[aparelho];
+  if (!l || Date.now() > l.ate) return new Set();
+  return funcoesDaPessoa(config.pessoas.find((p) => p.id === l.pessoaId && p.ativo !== false));
+}
+const nomeDoNivel = (n) => ({ 1: 'nível 1 (vê, corrige e envia)', 2: 'nível 2', 3: 'nível 3 (do dono)' }[n] || 'sem nível');
+/** O que vai para o aplicativo mostrar só o que pode: o nível do aparelho, se é o dono e as funções que valem aqui. */
+function permissoesDoAparelho(aparelho, pessoaVerificada) {
+  const nivel = nivelDoAparelho(aparelho);
+  const p = pessoaVerificada || pessoaDoAparelho(aparelho);
+  const funcoes = pessoaVerificada && !nivel ? funcoesDaPessoa(pessoaVerificada) : funcoesNoAparelho(aparelho);
+  return { nivel, dono: ehDono(p), funcoes: [...funcoes] };
+}
+
+/* ---------- O que a central aceita pela sincronização (versão 2.12) ----------
+   Configuração da usina ('config|...'): cada parte mudada precisa da função de quem está no aparelho; nas folhas, as
+   propriedades novas (vírgula, mostrar ao operador, campos do escritório para o operador, campos novos) só o dono num
+   tablet nível 3. Quem não pode mexer nelas não as apaga: a central põe de volta as que vieram faltando.
+   Conflito: a configuração leva "base" (a revisão que o aparelho editou); se outro tablet mudou antes, é recusada. */
+const FOLHAS_SISTEMA = ['dec', 'oculto', '_operador', '_novos'];
+/** Compara dois valores sem depender da ordem das chaves (o mesmo objeto pode chegar com as chaves em outra ordem). */
+const ordenado = (x) => (Array.isArray(x) ? x.map(ordenado) : x && typeof x === 'object' ? Object.keys(x).sort().reduce((o, k) => { o[k] = ordenado(x[k]); return o; }, {}) : x);
+const mesmoJson = (a, b) => JSON.stringify(ordenado(a === undefined ? null : a)) === JSON.stringify(ordenado(b === undefined ? null : b));
+function mudancasDaConfig(atual, nova) {
+  const a = (atual && atual.valores) || {};
+  const b = nova.valores || {};
+  return [...new Set([...Object.keys(a), ...Object.keys(b)])].filter((k) => !mesmoJson(a[k], b[k]));
+}
+/** Folhas: põe de volta as propriedades do sistema que vieram faltando e diz se alguma do sistema mudou. */
+function conferirFolhas(antes, depois, podeSistema) {
+  const a = antes || {};
+  const b = JSON.parse(JSON.stringify(depois || {}));
+  let mexeuSistema = false, mexeuComum = false;
+  [...new Set([...Object.keys(a), ...Object.keys(b)])].forEach((pid) => {
+    const fa = a[pid] || {}, fb = b[pid] || (b[pid] = {});
+    [...new Set([...Object.keys(fa), ...Object.keys(fb)])].forEach((k) => {
+      if (FOLHAS_SISTEMA.includes(k)) {
+        if (!podeSistema) { if (k in fa) fb[k] = fa[k]; else delete fb[k]; }
+        else if (!mesmoJson(fa[k], fb[k])) mexeuSistema = true;
+        return;
+      }
+      if (k.startsWith('_')) { if (!mesmoJson(fa[k], fb[k])) mexeuComum = true; return; }
+      const ca = fa[k] || {}, cb = fb[k] || (fb[k] = {});
+      [...new Set([...Object.keys(ca), ...Object.keys(cb)])].forEach((prop) => {
+        if (FOLHAS_SISTEMA.includes(prop)) {
+          if (!podeSistema) { if (prop in ca) cb[prop] = ca[prop]; else delete cb[prop]; }
+          else if (!mesmoJson(ca[prop], cb[prop])) mexeuSistema = true;
+        } else if (!mesmoJson(ca[prop], cb[prop])) mexeuComum = true;
+      });
+      if (!Object.keys(cb).length) delete fb[k];
+    });
+    if (!Object.keys(fb).length) delete b[pid];
+  });
+  return { folhas: b, mexeuSistema, mexeuComum };
+}
+/** Decide uma anotação de configuração que chegou. Devolve { aceita, entrada, motivo }. */
+function decidirConfig(atual, r, aparelho) {
+  const chefe = nivelDoAparelho(aparelho) > 0;
+  const funcoes = chefe ? funcoesNoAparelho(aparelho) : funcoesNoSetor(aparelho);
+  const vivo = atual && !atual.apagado ? atual : null;
+  // conflito: alguém mudou a configuração depois da cópia que este aparelho editou
+  if (vivo && Number(r.base || 0) !== Number(vivo.rev || 0)) return { aceita: false, motivo: 'conflito' };
+  const entrada = JSON.parse(JSON.stringify(r));
+  delete entrada.base;
+  if ((entrada.valores && 'folhas' in entrada.valores) || (vivo && vivo.valores && 'folhas' in vivo.valores)) {
+    const f = conferirFolhas(vivo && vivo.valores ? vivo.valores.folhas : null, entrada.valores ? entrada.valores.folhas : null, funcoes.has('sistema'));
+    entrada.valores = Object.assign({}, entrada.valores, { folhas: f.folhas });
+    if (!f.folhas || !Object.keys(f.folhas).length) delete entrada.valores.folhas;
+    if (f.mexeuSistema && !funcoes.has('sistema')) return { aceita: false, motivo: 'sem_permissao' };
+    if (f.mexeuComum && !funcoes.has('folhas') && !funcoes.has('sistema')) return { aceita: false, motivo: 'sem_permissao' };
+  }
+  for (const k of mudancasDaConfig(vivo, entrada)) {
+    if (k === 'folhas') continue;
+    // no tablet de setor só os operadores (ajustes); no tablet chefe, o resto da usina
+    const precisa = !chefe ? (k === 'operadores' ? ['ajustes', 'usina'] : null) : ['usina'];
+    if (!precisa || !precisa.some((f) => funcoes.has(f))) return { aceita: false, motivo: 'sem_permissao' };
+  }
+  if (entrada.apagado && !(chefe && funcoes.has('usina'))) return { aceita: false, motivo: 'sem_permissao' };
+  entrada.rev = Number(vivo ? vivo.rev || 0 : 0) + 1;
+  return { aceita: true, entrada };
+}
+/** Campos do escritório de cada folha de insumo que o operador não preenche (o tablet do setor não muda). */
+function camposSoDoEscritorio(pid) {
+  let p = null;
+  try { p = formsLidas().pranchetas[pid]; } catch (e) { return []; }
+  if (!p || p.tipo !== 'insumo') return [];
+  const cs = db.registros['config|sistema|geral'];
+  const folhas = cs && !cs.apagado && cs.valores ? cs.valores.folhas || {} : {};
+  const liberados = new Set([...(p.camposOperador || []).map((c) => c.id), ...((folhas[pid] || {})._operador || [])]);
+  return (p.camposEscritorio || []).map((c) => c.id).filter((id) => !liberados.has(id));
+}
+
 /* ---------- Registro do sistema (versão 2.9) ----------
    Cada linha é uma anotação da folha "registro" (hora, tipo, quem, aparelho, texto e o antes e depois).
    O aplicativo escreve o que a pessoa fez (ele sabe o antes e o depois); a central escreve o que só ela vê:
@@ -852,8 +997,36 @@ async function rotaProtegida(req, res, url, ip) {
         const dias = new Set();
         const antigos = {};
         let aceitos = 0;
-        for (const r of Array.isArray(corpo.registros) ? corpo.registros : []) {
+        // o que a central não aceitou (versão 2.12): o aparelho não marca como enviado e mostra o motivo
+        const recusados = [];
+        const revs = {};
+        const nivelAqui = nivelDoAparelho(req.aparelho);
+        for (const r0 of Array.isArray(corpo.registros) ? corpo.registros : []) {
+          let r = r0;
           if (!r || typeof r.id !== 'string' || typeof r.atualizadoEm !== 'number') continue;
+          // configuração da usina: confere quem pode mudar cada parte, e o conflito
+          if (r.data === 'config') {
+            const d = decidirConfig(db.registros[r.id], r, req.aparelho);
+            if (!d.aceita) { recusados.push({ id: r.id, motivo: d.motivo, atual: db.registros[r.id] || null }); continue; }
+            r = d.entrada;
+            revs[r.id] = r.rev;
+          } else if (nivelAqui === 1 && !['registro', 'avisos-recibo'].includes(r.prancheta)) {
+            // tablet chefe nível 1: só corrige o que já existe, e com a função corrigir
+            if (!db.registros[r.id]) { recusados.push({ id: r.id, motivo: 'nivel1_nao_cria' }); continue; }
+            if (!podeNoAparelho(req.aparelho, 'corrigir')) { recusados.push({ id: r.id, motivo: 'sem_permissao' }); continue; }
+          } else if (r.prancheta === 'avisos' && !podeNoAparelho(req.aparelho, 'avisos')) {
+            recusados.push({ id: r.id, motivo: 'sem_permissao' }); continue;
+          }
+          // tablet de setor não muda os campos que são só do escritório (NF, lote, validade...)
+          if (!nivelAqui && r.valores) {
+            const soEscritorio = camposSoDoEscritorio(r.prancheta);
+            if (soEscritorio.length) {
+              const guardado = db.registros[r.id];
+              const valores = Object.assign({}, r.valores);
+              soEscritorio.forEach((c) => { if (guardado && guardado.valores && c in guardado.valores) valores[c] = guardado.valores[c]; else delete valores[c]; });
+              r = Object.assign({}, r, { valores });
+            }
+          }
           if (arquivado(r.data)) {
             const limpo = Object.assign({}, r, { recebidoEm: Date.now() });
             delete limpo.sincronizado;
@@ -862,7 +1035,8 @@ async function rotaProtegida(req, res, url, ip) {
           }
           const atual = db.registros[r.id];
           const entrada = criadasSemSaber(atual, r) ? juntarLinhas(atual, r) : r;
-          if (!atual || entrada !== r || r.atualizadoEm >= atual.atualizadoEm) {
+          // a configuração já foi conferida pela revisão (o relógio do aparelho não decide)
+          if (!atual || entrada !== r || r.atualizadoEm >= atual.atualizadoEm || r.data === 'config') {
             db.seq += 1;
             const limpo = Object.assign({}, entrada, { seq: db.seq, recebidoEm: Date.now() });
             delete limpo.sincronizado;
@@ -878,7 +1052,7 @@ async function rotaProtegida(req, res, url, ip) {
         if (blq) return json(res, 423, { erro: 'bloqueado', bloqueio: bloqueioPublico(blq), geracao: config.geracao });
         // o endereço da nuvem vai junto: longe da usina, o aparelho pergunta lá se foi bloqueado
         // bloqueiosRev: "não está bloqueado até esta revisão" (resposta atrasada da nuvem com bloqueio mais velho não trava)
-        return json(res, 200, { ok: true, aceitos, seq: db.seq, agora: Date.now(), geracao: config.geracao, nuvem: config.nuvem.url || '', bloqueiosRev: config.bloqueiosRev });
+        return json(res, 200, { ok: true, aceitos, recusados, revs, seq: db.seq, agora: Date.now(), geracao: config.geracao, nuvem: config.nuvem.url || '', bloqueiosRev: config.bloqueiosRev });
       }
 
       // pessoas do escritório: entrar com a senha, sair, e (só o administrador) cadastrar e dar permissões
@@ -893,21 +1067,27 @@ async function rotaProtegida(req, res, url, ip) {
           const pessoa = /^\d{4,8}$/.test(String(corpo.pin || '')) ? pessoaDaSenha(corpo.pin) : null;
           if (!pessoa) { t.push(agora); registrar('entrada', `Senha errada no ${aqui}`, { aparelho: aqui }); return json(res, 403, { erro: 'Senha errada' }); }
           if (corpo.acao === 'entrar') {
+            // só entra pessoa em tablet chefe liberado; no nível 3, só o dono (versão 2.12)
+            const nivel = nivelDoAparelho(req.aparelho);
+            if (!nivel) return json(res, 403, { erro: 'Este aparelho ainda não foi liberado como tablet chefe', naoLiberado: true });
+            if (nivel === 3 && !ehDono(pessoa)) return json(res, 403, { erro: 'Este tablet é só do dono do sistema' });
             const antes = pessoaDoAparelho(req.aparelho);
             config.sessoes[req.aparelho] = { pessoaId: pessoa.id, em: agora };
             salvarConfig();
             if (!antes || antes.id !== pessoa.id) registrar('entrada', `${pessoa.nome} entrou no ${aqui}`, { quem: pessoa.nome, aparelho: aqui });
           }
-          return json(res, 200, { pessoa: pessoaPublica(pessoa), teto: tetoDoAparelho(req.aparelho) });
+          // tablet de setor: quem conferiu a senha fica liberado por 10 minutos para mudar os ajustes (operadores)
+          if (corpo.acao === 'verificar' && !nivelDoAparelho(req.aparelho)) liberadosNoSetor[req.aparelho] = { pessoaId: pessoa.id, ate: agora + LIBERADO_NO_SETOR_MS };
+          return json(res, 200, Object.assign({ pessoa: pessoaPublica(pessoa), teto: tetoDoAparelho(req.aparelho) }, permissoesDoAparelho(req.aparelho, corpo.acao === 'entrar' ? null : pessoa)));
         }
         if (corpo.acao === 'sair') {
           if (quem) { delete config.sessoes[req.aparelho]; salvarConfig(); registrar('entrada', `${quem.nome} saiu do ${aqui}${corpo.motivo ? ` (${String(corpo.motivo).slice(0, 60)})` : ''}`, { quem: quem.nome, aparelho: aqui }); }
           return json(res, 200, { ok: true });
         }
-        if (corpo.acao === 'quem') return json(res, 200, { pessoa: quem ? pessoaPublica(quem) : null, teto: tetoDoAparelho(req.aparelho) });
-        // daqui para baixo, só o administrador
-        if (!quem || quem.nivel !== 'administrador') return json(res, 403, { erro: 'Só o administrador mexe nas pessoas e permissões' });
-        const lista = () => json(res, 200, { pessoas: config.pessoas.map(pessoaPublica), aparelhos: config.aparelhosChefe });
+        if (corpo.acao === 'quem') return json(res, 200, Object.assign({ pessoa: quem ? pessoaPublica(quem) : null, teto: tetoDoAparelho(req.aparelho) }, permissoesDoAparelho(req.aparelho)));
+        // daqui para baixo, só o administrador (ou o dono), num tablet chefe nível 2 ou 3
+        if (!quem || !podeNoAparelho(req.aparelho, 'pessoas')) return json(res, 403, { erro: 'Só o administrador mexe nas pessoas e permissões' });
+        const lista = () => json(res, 200, { pessoas: config.pessoas.map(pessoaPublica), aparelhos: config.aparelhosChefe, donoId: config.donoId || '' });
         if (corpo.acao === 'lista') return lista();
         if (corpo.acao === 'salvar') {
           const d = corpo.pessoa || {};
@@ -916,6 +1096,9 @@ async function rotaProtegida(req, res, url, ip) {
           if (!NIVEIS_VALIDOS.includes(d.nivel)) return json(res, 400, { erro: 'Nível inválido' });
           const existente = d.id ? config.pessoas.find((x) => x.id === d.id) : null;
           if (d.id && !existente) return json(res, 404, { erro: 'Pessoa não encontrada' });
+          // o dono só o próprio dono muda; e ele continua administrador e ativo (versão 2.12)
+          if (ehDono(existente) && !ehDono(quem)) return json(res, 403, { erro: 'Só o dono do sistema muda os dados dele' });
+          if (ehDono(existente) && (d.nivel !== 'administrador' || d.ativo === false)) return json(res, 400, { erro: 'O dono do sistema continua administrador e ativo' });
           if (config.pessoas.some((x) => x !== existente && x.nome.toLowerCase() === nome.toLowerCase())) return json(res, 400, { erro: 'Já tem uma pessoa com esse nome' });
           const pin = d.pin == null || d.pin === '' ? null : String(d.pin);
           if (pin !== null && !/^\d{4,8}$/.test(pin)) return json(res, 400, { erro: 'A senha tem de 4 a 8 números' });
@@ -952,9 +1135,70 @@ async function rotaProtegida(req, res, url, ip) {
           const nomeAntes = nomeDoAparelho(id);
           if (typeof corpo.nome === 'string') a.nome = corpo.nome.trim().slice(0, 40);
           if ('teto' in corpo) a.teto = Array.isArray(corpo.teto) ? corpo.teto.filter((x) => /^[a-z_]{2,30}$/.test(x)) : null;
+          // nível (versão 2.12): quem libera tablets chefe muda entre 1 e 2; o nível 3 (e tirar do 3) só o dono;
+          // o próprio aparelho só o dono muda. Quem estava dentro sai (a regra nova vale na hora).
+          if ('nivel' in corpo) {
+            const novoNivel = Number(corpo.nivel) || 0;
+            const nivelAntes = nivelDoAparelho(id);
+            if (![0, 1, 2, 3].includes(novoNivel)) return json(res, 400, { erro: 'Nível inválido' });
+            if (!podeNoAparelho(req.aparelho, 'chefes')) return json(res, 403, { erro: 'Quem está neste aparelho não libera tablets chefe', semPermissao: 'chefes' });
+            if ((novoNivel === 3 || nivelAntes === 3 || id === req.aparelho) && !ehDono(quem)) return json(res, 403, { erro: 'Só o dono do sistema muda este nível' });
+            if (novoNivel !== nivelAntes) {
+              if (novoNivel) a.nivel = novoNivel; else delete a.nivel;
+              delete config.sessoes[id];
+              registrar('configuracao', `${quem.nome} mudou o ${nomeAntes} de ${nomeDoNivel(nivelAntes)} para ${nomeDoNivel(novoNivel)}`, { quem: quem.nome, aparelho: aqui });
+            }
+          }
           salvarConfig();
           registrar('configuracao', `${quem.nome} mudou o que o ${nomeAntes} pode fazer${a.nome && a.nome !== nomeAntes ? ` (agora se chama ${a.nome})` : ''}`, { quem: quem.nome, aparelho: aqui });
           return lista();
+        }
+        return json(res, 400, { erro: 'ação desconhecida' });
+      }
+
+      // liberar este aparelho como tablet chefe, e recuperar o dono com a senha do programador (versão 2.12)
+      if (p === '/api/chefes' && req.method === 'POST') {
+        const corpo = JSON.parse(await lerCorpo(req, 10000));
+        const aqui = nomeDoAparelho(req.aparelho);
+        if (corpo.acao === 'estado') return json(res, 200, { nivel: nivelDoAparelho(req.aparelho) });
+        if (corpo.acao === 'liberar') {
+          const agora = Date.now();
+          const t = (tentativasSenha[req.aparelho] = (tentativasSenha[req.aparelho] || []).filter((x) => agora - x < 60000));
+          if (t.length >= 5) return json(res, 429, { erro: 'Muitas senhas erradas. Espere um minuto.' });
+          const pessoa = /^\d{4,8}$/.test(String(corpo.pin || '')) ? pessoaDaSenha(corpo.pin) : null;
+          if (!pessoa) { t.push(agora); registrar('entrada', `Senha errada ao liberar o ${aqui} como tablet chefe`, { aparelho: aqui }); return json(res, 403, { erro: 'Senha errada' }); }
+          const nivel = Number(corpo.nivel);
+          if (![1, 2, 3].includes(nivel)) return json(res, 400, { erro: 'Nível inválido' });
+          // nível 3 só o dono; 1 ou 2, quem libera tablets chefe (administrador, ou quem ganhou a função) ou o dono
+          if (nivel === 3 ? !ehDono(pessoa) : !funcoesDaPessoa(pessoa).has('chefes')) return json(res, 403, { erro: nivel === 3 ? 'Só o dono do sistema libera o nível 3' : `${pessoa.nome} não pode liberar tablet chefe` });
+          const a = config.aparelhosChefe[req.aparelho] || (config.aparelhosChefe[req.aparelho] = {});
+          const antes = nivelDoAparelho(req.aparelho);
+          Object.assign(a, { nivel, liberadoPor: pessoa.nome, liberadoEm: agora });
+          delete config.sessoes[req.aparelho];
+          salvarConfig();
+          registrar('configuracao', `${pessoa.nome} liberou o ${aqui} como tablet chefe ${nomeDoNivel(nivel)}${antes ? ` (antes: ${nomeDoNivel(antes)})` : ''}`, { quem: pessoa.nome, aparelho: aqui });
+          return json(res, 200, { ok: true, nivel });
+        }
+        if (corpo.acao === 'recuperar') {
+          // o dono esqueceu a senha ou perdeu o tablet nível 3: com a senha do programador, este aparelho vira o do dono
+          if (!podeTentarProgramador(req.aparelho)) return json(res, 429, { erro: 'Muitas senhas erradas. Espere um minuto.' });
+          if (!(await senhaDoProgramador(corpo.senha))) { errouProgramador(req.aparelho); registrar('entrada', `Senha do programador errada no ${aqui}`, { aparelho: aqui }); return json(res, 403, { erro: 'Senha do programador errada' }); }
+          const dono = config.pessoas.find((x) => x.id === config.donoId);
+          if (!dono) return json(res, 409, { erro: 'O sistema não tem dono cadastrado' });
+          const nova = corpo.novaSenha == null || corpo.novaSenha === '' ? null : String(corpo.novaSenha);
+          if (nova !== null) {
+            if (!/^\d{4,8}$/.test(nova)) return json(res, 400, { erro: 'A senha tem de 4 a 8 números' });
+            if (config.pessoas.some((x) => x !== dono && x.resumo && mesmoSegredo(resumoDaSenha(nova, x.sal), x.resumo))) return json(res, 400, { erro: 'Essa senha já é de outra pessoa. Escolha outra.' });
+            Object.assign(dono, guardarSenha(nova));
+          }
+          Object.assign(dono, { nivel: 'administrador', ativo: true });
+          Object.keys(config.sessoes).forEach((k) => { if (config.sessoes[k].pessoaId === dono.id) delete config.sessoes[k]; });
+          const a = config.aparelhosChefe[req.aparelho] || (config.aparelhosChefe[req.aparelho] = {});
+          Object.assign(a, { nivel: 3, liberadoPor: 'senha do programador', liberadoEm: Date.now() });
+          delete config.sessoes[req.aparelho];
+          salvarConfig();
+          registrar('configuracao', `Com a senha do programador, o ${aqui} virou o tablet do dono (nível 3)${nova ? ' e a senha do dono foi trocada' : ''}`, { aparelho: aqui });
+          return json(res, 200, { ok: true, nivel: 3 });
         }
         return json(res, 400, { erro: 'ação desconhecida' });
       }
@@ -985,7 +1229,7 @@ async function rotaProtegida(req, res, url, ip) {
       if (p === '/api/aparelhos' && req.method === 'POST') {
         const corpo = JSON.parse(await lerCorpo(req, 10000));
         const quem = pessoaDoAparelho(req.aparelho);
-        if (!quem || quem.nivel !== 'administrador') return json(res, 403, { erro: 'Só o administrador bloqueia e desbloqueia aparelhos' });
+        if (!quem || !podeNoAparelho(req.aparelho, 'pessoas')) return json(res, 403, { erro: 'Só o administrador bloqueia e desbloqueia aparelhos' });
         const id = String(corpo.id || '').slice(0, 80);
         if (!id || !(aparelhos[id] || config.aparelhosVistos[id])) return json(res, 404, { erro: 'Aparelho não encontrado' });
         const nome = nomeDoAparelho(id);
@@ -1022,6 +1266,7 @@ async function rotaProtegida(req, res, url, ip) {
 
       // registro do sistema de um dia (o tablet chefe pede quando abre o registro)
       if (p === '/api/registro') {
+        if (!podeNoAparelho(req.aparelho, 'registro')) return negar(res, 'registro');
         const dia = url.searchParams.get('dia');
         if (!ehDia(dia)) return json(res, 400, { erro: 'dia inválido' });
         const todos = arquivado(dia) ? lerDiaArquivado(dia) : Object.values(db.registros).filter((r) => r.data === dia);
@@ -1033,6 +1278,7 @@ async function rotaProtegida(req, res, url, ip) {
         const corpo = JSON.parse(await lerCorpo(req, 100000));
         const n = config.nuvem;
         if (corpo.acao === 'estado' || corpo.acao === 'forms') return json(res, 200, estadoNuvem()); // o computador lê o forms.js sozinho
+        if ((corpo.acao === 'configurar' || corpo.acao === 'enviar') && !podeNoAparelho(req.aparelho, 'integracoes')) return negar(res, 'integracoes');
         if (corpo.acao === 'configurar') {
           const endereco = String(corpo.url || '').trim().replace(/\/+$/, '');
           if (endereco && !/^https:\/\/[^\s/]+\.[^\s]+$/i.test(endereco) && !/^http:\/\/127\.0\.0\.1:\d+$/.test(endereco)) return json(res, 400, { erro: 'Endereço inválido. Ele começa com https://' });
@@ -1055,6 +1301,7 @@ async function rotaProtegida(req, res, url, ip) {
         const corpo = JSON.parse(await lerCorpo(req, 2 * 1024 * 1024));
         const b = config.base44;
         if (corpo.acao === 'estado') return json(res, 200, estadoBase44(true));
+        if (corpo.acao === 'configurar' && !podeNoAparelho(req.aparelho, 'integracoes')) return negar(res, 'integracoes');
         if (corpo.acao === 'configurar') {
           const endereco = String(corpo.url || '').trim();
           if (endereco && !/^https?:\/\/[^\s/]+\.[^\s]+$/i.test(endereco) && !/^http:\/\/127\.0\.0\.1:\d+\//.test(endereco)) return json(res, 400, { erro: 'Endereço inválido. Ele começa com https://' });
@@ -1131,6 +1378,8 @@ async function rotaProtegida(req, res, url, ip) {
         return json(res, 200, { pasta: 'RelatoriosUsina', dias: listaDeRelatorios(), diasComDados: [...comDados].sort().reverse() });
       }
       if (p === '/api/relatorio-apagar' && req.method === 'POST') {
+        // apagar relatório: quem tem relatórios, num tablet chefe nível 2 ou 3 (o nível 1 vê, corrige e envia)
+        if (!podeNoAparelho(req.aparelho, 'relatorios') || nivelDoAparelho(req.aparelho) < 2) return negar(res, 'relatorios');
         const corpo = JSON.parse(await lerCorpo(req, 10000));
         if (!ehDia(corpo.data)) return json(res, 400, { erro: 'data inválida' });
         fs.rmSync(path.join(PASTAS.relatorios, corpo.data), { recursive: true, force: true });
@@ -1143,6 +1392,7 @@ async function rotaProtegida(req, res, url, ip) {
       if (p === '/api/zerar' && req.method === 'POST') {
         const corpo = JSON.parse(await lerCorpo(req, 10000));
         if (corpo.confirmar !== 'ZERAR') return json(res, 400, { erro: 'faltou confirmar' });
+        if (!podeNoAparelho(req.aparelho, 'ajustes')) return negar(res, 'ajustes');
         if (!podeTentarProgramador(req.aparelho)) return json(res, 429, { erro: 'Muitas senhas erradas. Espere um minuto.' });
         if (!(await senhaDoProgramador(corpo.senha))) { errouProgramador(req.aparelho); return json(res, 403, { erro: 'senha do programador errada' }); }
         const agora = new Date();
@@ -1166,6 +1416,7 @@ async function rotaProtegida(req, res, url, ip) {
 
       // trocar o código também troca a chave: todos os outros aparelhos são desconectados (aparelho perdido ou roubado)
       if (p === '/api/novo-codigo' && req.method === 'POST') {
+        if (!podeNoAparelho(req.aparelho, 'conexao')) return negar(res, 'conexao');
         config.codigo = novoCodigo(); config.chave = crypto.randomBytes(18).toString('hex'); salvarConfig();
         const quemTrocou = pessoaDoAparelho(req.aparelho);
         registrar('configuracao', `${quemTrocou ? quemTrocou.nome : 'Alguém'} trocou o código de conexão. Os outros aparelhos precisam conectar de novo.`, { quem: quemTrocou ? quemTrocou.nome : '', aparelho: nomeDoAparelho(req.aparelho) });

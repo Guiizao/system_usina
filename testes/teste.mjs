@@ -8,12 +8,27 @@ export const SENHA_ENCARREGADO = (fs.readFileSync(new URL('../public/forms.js', 
 export const teclasDaSenha = () => [...SENHA_ENCARREGADO.split(''), 'ok'];
 /** Tablet chefe (versão 2.9): entra com a senha do administrador (a central nova cadastra o Guilherme com ela). */
 export async function entrarComoChefe(a) {
+  // tablet chefe novo (versão 2.12): a central pede para liberar; fica o nível 2 (já marcado) com a senha do dono
+  await liberarSePedir(a);
   // a notificação ("Aparelho conectado") fica em cima do botão no alto: fecha antes de tocar
   await a.avaliar('(() => { const t = document.getElementById("toast"); if (t && !t.hidden) t.click(); })()');
   await new Promise((r) => setTimeout(r, 400));
   await a.tocar('[data-a="pessoa"]');
   await a.teclar(teclasDaSenha());
+  await liberarSePedir(a);
   await a.esperar('!!(JSON.parse(localStorage.getItem("usina.cfg") || "{}").pessoa)', 10000, 'entrar no tablet chefe');
+}
+/** Se a tela "Liberar este aparelho como tablet chefe" abriu: continua com o nível marcado e digita a senha. */
+export async function liberarSePedir(a, nivel) {
+  try { await a.esperar('!!document.querySelector(".modal .opcoes-nivel")', 2500); } catch { return false; }
+  if (nivel) await a.tocar(`.modal [data-k="n:${nivel}"]`);
+  await a.tocar('.modal [data-k="ok"]');
+  await a.teclar(teclasDaSenha());
+  // espera a central responder (o nível fica guardado) e a janela fechar, para nada cair em cima do próximo toque
+  await a.esperar('(() => { const c = JSON.parse(localStorage.getItem("usina.cfg") || "{}"); return !!c.nivelChefe && !document.querySelector(".modal"); })()', 10000, 'liberar o tablet chefe');
+  await a.avaliar('(() => { const t = document.getElementById("toast"); if (t && !t.hidden) t.click(); })()');
+  await new Promise((r) => setTimeout(r, 400));
+  return true;
 }
 /** Digita a senha só se ela for pedida (quem já entrou no tablet chefe com permissão não precisa de novo). */
 export async function senhaSeAparecer(a) {

@@ -26,6 +26,8 @@ export async function testarSeguranca(ligar, porta, grupo) {
   try {
     const adm = await conectarTeste(c.url, c.codigo());
     const setor = await conectarTeste(c.url, c.codigo());
+    // versão 2.12: tablet chefe novo é liberado com a senha antes de alguém entrar
+    igual((await p(adm, '/api/chefes', { acao: 'liberar', pin: SENHA_ENCARREGADO, nivel: 2 })).status, 200, 'libera o tablet chefe');
     igual((await p(adm, '/api/pessoas', { acao: 'entrar', pin: SENHA_ENCARREGADO })).status, 200, 'o administrador entra');
     await sync(adm, { papel: 'central', nome: 'Tablet chefe' });
 

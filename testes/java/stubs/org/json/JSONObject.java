@@ -49,6 +49,7 @@ public class JSONObject {
     return padrao;
   }
   public int optInt(String k) { return (int) optLong(k, 0L); }
+  public int optInt(String k, int padrao) { return (int) optLong(k, padrao); }
   public boolean optBoolean(String k) { Object v = m.get(k); return v instanceof Boolean ? (Boolean) v : "true".equalsIgnoreCase(String.valueOf(v)); }
   public JSONObject optJSONObject(String k) { Object v = m.get(k); return v instanceof JSONObject ? (JSONObject) v : null; }
   public JSONArray optJSONArray(String k) { Object v = m.get(k); return v instanceof JSONArray ? (JSONArray) v : null; }

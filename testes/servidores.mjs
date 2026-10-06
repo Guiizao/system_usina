@@ -6,6 +6,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { dormir } from './navegador.mjs';
 import { conectarTeste } from './cifra.mjs';
+import { SENHA_ENCARREGADO } from './teste.mjs';
 
 export const APP = path.resolve(path.dirname(new URL(import.meta.url).pathname.replace(/^\/([A-Z]:)/, '$1')), '..');
 const JDK = path.join(os.homedir(), 'android-build', 'jdk', 'bin');
@@ -29,7 +30,16 @@ export function pastaTemporaria(nome) { return fs.mkdtempSync(path.join(os.tmpdi
     api(rota, corpo) devolve o JSON; se o código for trocado, conecta de novo. */
 function comCliente(central) {
   let cli = null;
-  central.cliente = async () => { if (!cli) { cli = await conectarTeste(central.url, central.codigo()); if (!cli.pedir) throw new Error('a central recusou o aparelho de teste: ' + cli.erro); } return cli; };
+  central.cliente = async () => {
+    if (!cli) {
+      cli = await conectarTeste(central.url, central.codigo());
+      if (!cli.pedir) throw new Error('a central recusou o aparelho de teste: ' + cli.erro);
+      // versão 2.12: o aparelho de teste é um tablet chefe liberado (nível 2) com o dono dentro, como no escritório
+      await cli.pedir('/api/chefes', { corpo: { acao: 'liberar', pin: SENHA_ENCARREGADO, nivel: 2 } });
+      await cli.pedir('/api/pessoas', { corpo: { acao: 'entrar', pin: SENHA_ENCARREGADO } });
+    }
+    return cli;
+  };
   central.api = async (rota, corpo) => {
     let r = await (await central.cliente()).pedir(rota, { corpo });
     if (r.status === 401 && r.fora) { cli = null; r = await (await central.cliente()).pedir(rota, { corpo }); }

@@ -1396,3 +1396,11 @@ button { transition: background-color .15s, border-color .15s, color .15s, box-s
 .ficha dd { margin: 0; font-weight: 700; overflow-wrap: anywhere; }
 :root[data-dispositivo="celular"] .ficha { grid-template-columns: 1fr; gap: 0; }
 :root[data-dispositivo="celular"] .ficha dd { margin-bottom: 6px; }
+
+/* ---------- Liberar tablet chefe e níveis (versão 2.12) ---------- */
+.opcoes-nivel { display: grid; gap: 10px; margin: 6px 0 10px; }
+.nivel-op { display: grid; gap: 2px; text-align: left; padding: 12px 14px; min-height: 64px; border-radius: 12px; background: var(--papel); border: 2px solid var(--linha); }
+.nivel-op b { font-size: 19px; }
+.nivel-op span { font-size: 15px; color: var(--tinta-2); line-height: 1.25; }
+.nivel-op.sel { border-color: var(--verde); background: var(--verde-fundo); }
+.segmentos button:disabled { opacity: .45; }

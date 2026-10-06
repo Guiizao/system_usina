@@ -7,7 +7,7 @@ import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
-import { teste, certo, igual } from './teste.mjs';
+import { teste, certo, igual, SENHA_ENCARREGADO } from './teste.mjs';
 import { dormir } from './navegador.mjs';
 import { Cifra, conectarTeste, clienteCifrado } from './cifra.mjs';
 
@@ -263,6 +263,10 @@ export async function testarApi(central, grupo) {
   await teste(grupo, 'trocar o código: o antigo para de funcionar e o novo funciona', async () => {
     const antigo = central.codigo();
     const outro = await conectarTeste(U, antigo, 'teste-outro2');
+    // versão 2.12: trocar o código é de quem tem a função conexão, num tablet chefe liberado
+    igual((await pedir('/api/novo-codigo', { metodo: 'POST', chave, corpo: {} })).status, 403, 'aparelho que não é tablet chefe não troca');
+    await pedir('/api/chefes', { metodo: 'POST', chave, corpo: { acao: 'liberar', pin: SENHA_ENCARREGADO, nivel: 2 } });
+    await pedir('/api/pessoas', { metodo: 'POST', chave, corpo: { acao: 'entrar', pin: SENHA_ENCARREGADO } });
     const r = await pedir('/api/novo-codigo', { metodo: 'POST', chave, corpo: {} });
     igual(r.status, 200); certo(r.json.codigo !== antigo && /^\d{6}$/.test(r.json.codigo), 'código novo');
     // a chave também muda: todos os outros aparelhos são desconectados

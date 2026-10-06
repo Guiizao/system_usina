@@ -653,7 +653,9 @@
         else if (rl.status === 423) { cfg.liberacao = null; salvarCfg(); return; }
       }
       // em lotes: um aparelho que ficou muito tempo sem Wi-Fi não manda tudo de uma vez
-      const envio = Object.values(registros).filter((r) => !r.sincronizado).slice(0, LOTE_ENVIO);
+      const envio = Object.values(registros).filter((r) => !r.sincronizado).slice(0, LOTE_ENVIO)
+        // a configuração vai com a revisão que este aparelho conhece (a central recusa se outro tablet mudou antes)
+        .map((r) => (r.data === 'config' ? Object.assign({}, r, { base: r.rev || 0 }) : r));
       const erros = errosGuardados.slice();
       const antesDoEnvio = Date.now();
       const r1 = await postJson('api/sync', { aparelho: cfg.deviceId, papel: cfg.papel, nome: nomeDesteAparelho(), info: infoAparelho, operador: operadorAtual(), versao: VERSAO, geracao: cfg.geracao || '', novaConexao: !!cfg.novaConexao, registros: envio, erros }, 15000);
@@ -685,8 +687,19 @@
       }
       if (r1.ok && cfg.novaConexao) { cfg.novaConexao = false; salvarCfg(); }
       if (r1.ok && envio.length) {
-        envio.forEach((e) => { const atual = registros[e.id]; if (atual && atual.atualizadoEm === e.atualizadoEm) atual.sincronizado = true; });
+        // o que a central recusou (versão 2.12) volta a ser como está na central, e a pessoa fica sabendo
+        const recusados = Array.isArray(resp1.recusados) ? resp1.recusados : [];
+        const ids = new Set(recusados.map((x) => x.id));
+        recusados.forEach((x) => {
+          if (x.atual) registros[x.id] = Object.assign({}, x.atual, { sincronizado: true });
+          else delete registros[x.id];
+        });
+        if (recusados.length) avisarRecusa(recusados);
+        envio.forEach((e) => { const atual = registros[e.id]; if (!ids.has(e.id) && atual && atual.atualizadoEm === e.atualizadoEm) atual.sincronizado = true; });
+        // a revisão nova da configuração aceita (a próxima mudança vai com ela)
+        Object.entries(resp1.revs || {}).forEach(([id, rev]) => { if (registros[id]) registros[id].rev = rev; });
         salvarRegistros();
+        if (recusados.length) render(true);
       }
       if (r1.ok) {
         const resp = await r1.json().catch(() => ({}));
@@ -1001,6 +1014,8 @@
   /** O que a pessoa pode fazer: o nível, o ajuste do administrador e o que este tablet chefe deixa. */
   function funcoesDe(p) {
     if (!p) return new Set();
+    // versão 2.12: a central diz o que vale neste aparelho (a pessoa, o nível do tablet chefe e o limite dele)
+    if (Array.isArray(p.funcoes)) return new Set(p.funcoes);
     const todas = C.funcoes.map((f) => f.id);
     if (p.nivel === 'administrador') return new Set([...todas, 'pessoas']);
     const nivel = C.niveis[p.nivel] || { funcoes: [] };
@@ -1022,18 +1037,78 @@
     toast(`${pessoaAtual().nome} não pode ${nomeDaFuncao(f)}. Peça ao administrador.`, 'erro');
     return false;
   }
-  async function entrarNoChefe() {
-    const pin = await pedirSenhaModal('Quem está usando?', 'Digite a sua senha. Ela diz quem você é.');
+  async function entrarNoChefe(pinPronto) {
+    const pin = pinPronto || await pedirSenhaModal('Quem está usando?', 'Digite a sua senha. Ela diz quem você é.');
     if (pin === undefined) return false;
     const r = await postJson('api/pessoas', { acao: 'entrar', pin }, 10000).catch(() => null);
     if (!r) { toast('Não consegui falar com a central', 'erro'); return false; }
     const d = await r.json().catch(() => ({}));
-    if (!r.ok) { toast(d.erro || 'Senha errada', 'erro'); return false; }
+    if (!r.ok) {
+      // tablet chefe que a central ainda não conhece (versão 2.12): libera e entra
+      if (d.naoLiberado) { const outra = await liberarEsteAparelho(); return outra === undefined ? false : entrarNoChefe(outra || undefined); }
+      toast(d.erro || 'Senha errada', 'erro');
+      return false;
+    }
     pessoaAtivaEm = Date.now();
-    cfg.pessoa = Object.assign({}, d.pessoa, { teto: d.teto || null }); cfg.pessoaAtivaEm = pessoaAtivaEm; salvarCfg();
+    if (d.nivel) cfg.nivelChefe = d.nivel;
+    cfg.pessoa = Object.assign({}, d.pessoa, { teto: d.teto || null }, Array.isArray(d.funcoes) ? { funcoes: d.funcoes, dono: !!d.dono } : {}); cfg.pessoaAtivaEm = pessoaAtivaEm; salvarCfg();
     toast(`Olá, ${d.pessoa.nome}`);
     render();
     return true;
+  }
+  /* ---------- Liberar este aparelho como tablet chefe (versão 2.12) ----------
+     A central só deixa entrar pessoa num tablet chefe liberado, com uma senha: o nível 3 (configurações do sistema)
+     só o dono; o 1 ou o 2, quem libera tablets chefe (o administrador). Devolve a senha usada, para já entrar com ela
+     (null: entrar pedindo a senha; undefined: não liberou). */
+  const nomeDoNivelChefe = (n) => ((C.niveisDoAparelho || {})[n] || {}).nome || `Nível ${n}`;
+  async function liberarEsteAparelho() {
+    const niveis = C.niveisDoAparelho || {};
+    let escolhido = 2;
+    const resp = await abrirModal(`<h3>Liberar este aparelho como tablet chefe</h3>
+      <p class="dica">Escolha o que este tablet chefe vai poder fazer. Depois, quem libera tablets chefe (o administrador) digita a senha. O nível 3 só o dono do sistema libera.</p>
+      <div class="opcoes-nivel">${[1, 2, 3].map((n) => `<button class="nivel-op" data-k="n:${n}"><b>${esc(nomeDoNivelChefe(n))}</b><span>${esc((niveis[n] || {}).texto || '')}</span></button>`).join('')}</div>
+      <div class="linha-botoes"><button class="btn pequeno" data-k="recuperar">Sou o dono e perdi a senha ou o tablet</button></div>
+      <div class="acoes-modal"><button class="btn" data-k="x">Cancelar</button><button class="btn primario" data-k="ok">Continuar</button></div>`,
+    (k, b, fechar, f) => {
+      if (k === 'x') return fechar(undefined);
+      if (k === 'recuperar') return fechar('recuperar');
+      if (k.startsWith('n:')) { escolhido = Number(k.slice(2)); f.querySelectorAll('[data-k^="n:"]').forEach((x) => x.classList.toggle('sel', x.dataset.k === k)); return; }
+      if (k === 'ok') fechar(escolhido);
+    }, { classe: 'largo', aoAbrir: (f) => f.querySelector('[data-k="n:2"]').classList.add('sel') });
+    if (resp === undefined) return undefined;
+    if (resp === 'recuperar') return recuperarDono();
+    const pin = await pedirSenhaModal(`Senha para liberar o ${nomeDoNivelChefe(resp)}`, resp === 3 ? 'Só a senha do dono do sistema libera o nível 3.' : 'A senha de quem libera tablets chefe (o administrador).');
+    if (pin === undefined) return undefined;
+    const r = await postJson('api/chefes', { acao: 'liberar', pin, nivel: resp }, 10000).catch(() => null);
+    if (!r) { toast('Não consegui falar com a central', 'erro'); return undefined; }
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) { toast(d.erro || 'A central recusou', 'erro'); return undefined; }
+    cfg.nivelChefe = d.nivel; salvarCfg();
+    toast(`Aparelho liberado: tablet chefe ${nomeDoNivelChefe(d.nivel)}`);
+    return pin;
+  }
+  /** O dono esqueceu a senha ou perdeu o tablet nível 3: com a senha do programador, este aparelho vira o dele. */
+  async function recuperarDono() {
+    const senha = await pedirSenhaModal('Senha do programador', 'Com ela, este aparelho vira o tablet do dono (nível 3).');
+    if (senha === undefined) return undefined;
+    const trocar = await confirmar('Trocar a senha do dono?', 'Se você esqueceu a sua senha, escolha uma nova agora. Se só perdeu o tablet, pode manter a de hoje.', 'Escolher senha nova');
+    let novaSenha = '';
+    if (trocar) { novaSenha = await pedirSenhaModal('Nova senha do dono', 'De 4 a 8 números.'); if (novaSenha === undefined) return undefined; }
+    const r = await postJson('api/chefes', { acao: 'recuperar', senha, novaSenha }, 30000).catch(() => null);
+    if (!r) { toast('Não consegui falar com a central', 'erro'); return undefined; }
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) { toast(d.erro || 'A central recusou', 'erro'); return undefined; }
+    cfg.nivelChefe = 3; salvarCfg();
+    toast('Este aparelho agora é o tablet do dono (nível 3)');
+    return trocar ? novaSenha : null;
+  }
+  /** Ao escolher "Tablet chefe": se a central ainda não liberou este aparelho, libera agora. */
+  async function garantirLiberacaoDeChefe() {
+    const r = await postJson('api/chefes', { acao: 'estado' }, 8000).catch(() => null);
+    if (!r || !r.ok) return true; // central de antes da 2.12 (sem a rota) ou sem resposta: ela confere de novo quando a pessoa entrar
+    const d = await r.json().catch(() => ({}));
+    if (d.nivel) { cfg.nivelChefe = d.nivel; return true; }
+    return (await liberarEsteAparelho()) !== undefined;
   }
   function sairDoChefe(motivo) {
     if (!cfg.pessoa) return;
@@ -1058,6 +1133,13 @@
     return true;
   }
 
+  /** A central não aceitou algo deste aparelho: uma notificação só, com o motivo. */
+  function avisarRecusa(recusados) {
+    const m = recusados.map((x) => x.motivo);
+    if (m.includes('conflito')) return toast('A configuração mudou em outro tablet. Confira e faça a mudança de novo.', 'erro');
+    if (m.includes('nivel1_nao_cria')) return toast('Este tablet chefe é nível 1: ele vê, corrige e envia, mas não cria anotação nova.', 'erro');
+    return toast('Quem está neste aparelho não pode fazer essa mudança. Ela foi desfeita.', 'erro');
+  }
   const nomeDesteAparelho = () => (ehCentral() ? nomeDoChefe() : setorPorId(cfg.papel) ? `Tablet da ${setorPorId(cfg.papel).nome}` : 'aparelho');
   const quemEstaAqui = () => operadorAtual() || (pessoaAtual() && pessoaAtual().nome) || (ehCentral() ? nomeDoChefe() : 'Sem operador');
   /** Uma linha no registro do sistema. tipo: anotacao, entrada, aparelho ou configuracao. */
@@ -1121,7 +1203,7 @@
     if (!v.lista && !v.carregando) carregarPessoas(v);
     const l = v.lista || { pessoas: [], aparelhos: {} };
     const nivel = (n) => (C.niveis[n] || {}).nome || n;
-    const resumoFuncoes = (p) => { const f = funcoesDe(Object.assign({}, p, { teto: null })); return p.nivel === 'administrador' ? 'tudo' : `${f.size} de ${C.funcoes.length} funções`; };
+    const resumoFuncoes = (p) => { const f = funcoesDe(Object.assign({}, p, { teto: null })); return p.id && p.id === l.donoId ? 'dono do sistema, pode tudo' : p.nivel === 'administrador' ? 'tudo' : `${f.size} de ${C.funcoes.length} funções`; };
     const st = sync.status;
     const chefes = new Map();
     ((st && st.aparelhos) || []).filter((a) => a.papel === 'central').forEach((a) => chefes.set(a.id, a));
@@ -1139,11 +1221,11 @@
           </section>
           <section class="bloco">
             <h2>${ico('escritorio')} Tablets chefe</h2>
-            <p class="sub" style="margin:0 0 8px">O que cada tablet chefe deixa fazer, seja quem for (o administrador pode tudo em qualquer um).</p>
+            <p class="sub" style="margin:0 0 8px">O nível de cada tablet chefe (1: vê, corrige e envia; 2: tudo; 3: só o dono, com as configurações do sistema) e o que ele deixa fazer, seja quem for.</p>
             ${[...chefes.values()].map((a) => {
               const teto = (l.aparelhos[a.id] || {}).teto;
               return `<div class="linha-config"><span class="escolha-ico">${ico('escritorio')}</span>
-                <div><b>${esc(a.nome || 'Tablet chefe')}</b><small>${a.online ? `Ligado${a.pessoa ? `, ${esc(a.pessoa)}` : ', ninguém entrou'}` : 'Sem sinal'} · ${Array.isArray(teto) ? `${teto.length} de ${C.funcoes.length} funções` : 'tudo liberado'}${a.id === cfg.deviceId ? ' · este aparelho' : ''}</small></div>
+                <div><b>${esc(a.nome || 'Tablet chefe')}</b><small>${(l.aparelhos[a.id] || {}).nivel ? `${esc(nomeDoNivelChefe(l.aparelhos[a.id].nivel))} · ` : 'Não liberado · '}${a.online ? `Ligado${a.pessoa ? `, ${esc(a.pessoa)}` : ', ninguém entrou'}` : 'Sem sinal'} · ${Array.isArray(teto) ? `${teto.length} de ${C.funcoes.length} funções` : 'tudo liberado'}${a.id === cfg.deviceId ? ' · este aparelho' : ''}</small></div>
                 <button class="btn pequeno" data-a="aparelho-chefe" data-id="${esc(a.id)}">Mudar</button></div>`;
             }).join('') || '<p class="sub">Nenhum tablet chefe falou com a central ainda.</p>'}
           </section>
@@ -1222,10 +1304,18 @@
     const st = sync.status;
     const info = ((st && st.aparelhos) || []).find((a) => a.id === id) || {};
     let teto = Array.isArray(atual.teto) ? new Set(atual.teto) : new Set(C.funcoes.map((f) => f.id));
-    const desenhar = (f) => { f.querySelector('#funcoes-aparelho').innerHTML = chipsDeFuncoes(teto, 'f'); };
+    let nivel = Number(atual.nivel) || 0;
+    const souDono = !!(pessoaAtual() || {}).dono;
+    const desenhar = (f) => {
+      f.querySelector('#funcoes-aparelho').innerHTML = chipsDeFuncoes(teto, 'f');
+      f.querySelectorAll('[data-k^="nv:"]').forEach((x) => x.classList.toggle('sel', x.dataset.k === 'nv:' + nivel));
+    };
     const resp = await abrirModal(`<h3>Tablet chefe</h3><p class="dica">${esc(id)}</p>
       <div class="form-pessoa">
         <label>Nome do aparelho <input id="a-nome" maxlength="40" autocomplete="off" value="${esc(atual.nome || info.nome || '')}" placeholder="Ex.: Tablet do escritório"></label>
+        ${pode('chefes') ? `<p class="sub" style="margin:4px 0">Nível deste tablet chefe:</p>
+        <div class="segmentos">${[1, 2, 3].map((n) => `<button data-k="nv:${n}" ${n === 3 && !souDono ? 'disabled' : ''}>${esc(nomeDoNivelChefe(n))}</button>`).join('')}</div>
+        <p class="sub" style="margin:2px 0 8px">${esc(((C.niveisDoAparelho || {})[1] || {}).texto || '')}; 2: tudo; 3: só o dono. Quem estiver dentro sai quando o nível muda.</p>` : ''}
         <p class="sub" style="margin:4px 0">O que pode ser feito neste aparelho:</p>
         <div id="funcoes-aparelho"></div>
       </div>
@@ -1233,9 +1323,12 @@
     async (k, b, fechar, f) => {
       if (k === 'x') return fechar(undefined);
       if (k.startsWith('f:')) { const fn = k.slice(2); if (teto.has(fn)) teto.delete(fn); else teto.add(fn); return desenhar(f); }
+      if (k.startsWith('nv:')) { nivel = Number(k.slice(3)); return desenhar(f); }
       if (k !== 'ok') return;
       const tudo = C.funcoes.every((x) => teto.has(x.id));
-      const r = await postJson('api/pessoas', { acao: 'aparelho', id, nome: f.querySelector('#a-nome').value.trim(), teto: tudo ? null : [...teto] }, 10000).catch(() => null);
+      const pedido = { acao: 'aparelho', id, nome: f.querySelector('#a-nome').value.trim(), teto: tudo ? null : [...teto] };
+      if (pode('chefes') && nivel !== (Number(atual.nivel) || 0)) pedido.nivel = nivel;
+      const r = await postJson('api/pessoas', pedido, 10000).catch(() => null);
       if (!r) return toast('Não consegui falar com a central', 'erro');
       const d = await r.json().catch(() => ({}));
       if (!r.ok) return toast(d.erro || 'A central recusou', 'erro');
@@ -4625,6 +4718,7 @@
       }
       case 'tentar': await sincronizar(); if (foraDaRede()) toast('Ainda sem a central. Confira o Wi-Fi.', 'erro'); return render();
       case 'papel': {
+        if (b.dataset.id === 'central' && !cfg.demo && cfg.chave && !centralNoTablet() && !(await garantirLiberacaoDeChefe())) return;
         cfg.papel = b.dataset.id; salvarCfg();
         pilha = [telaInicial()];
         if (!ehCentral() && !operadorAtual()) pilha.push({ tela: 'operador' });

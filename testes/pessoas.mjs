@@ -40,8 +40,11 @@ export async function testarPessoas(nav, ligar, porta, grupo) {
   };
 
   try {
+    // versão 2.12: tablet chefe novo é liberado com a senha (nível 2) antes de alguém entrar nele
+    const liberar = (cli) => cli.pedir('/api/chefes', { corpo: { acao: 'liberar', pin: teclasDaSenha().slice(0, -1).join(''), nivel: 2 } });
     const adm = await conectarTeste(c.url, c.codigo());
     const outro = await conectarTeste(c.url, c.codigo());
+    await liberar(adm); await liberar(outro);
     const p = async (cli, corpo) => { const r = await cli.pedir('/api/pessoas', { corpo }); return { status: r.status, ...r.json }; };
 
     await teste(grupo, 'a central nova já tem o administrador: Guilherme, com a senha de sempre', async () => {
@@ -58,12 +61,14 @@ export async function testarPessoas(nav, ligar, porta, grupo) {
       const lista = (await p(adm, { acao: 'lista' })).pessoas;
       const gui = lista.find((x) => x.nome === 'Guilherme');
       certo(lista.every((x) => !('resumo' in x) && !('sal' in x)), 'a senha (nem o resumo dela) não pode sair da central');
-      igual((await p(adm, { acao: 'salvar', pessoa: { id: gui.id, nome: 'Guilherme', nivel: 'consulta' } })).erro, 'Precisa ficar pelo menos um administrador');
+      // versão 2.12: o Guilherme é o dono do sistema e continua administrador (a regra do último administrador continua para os outros)
+      igual((await p(adm, { acao: 'salvar', pessoa: { id: gui.id, nome: 'Guilherme', nivel: 'consulta' } })).erro, 'O dono do sistema continua administrador e ativo');
     });
     await teste(grupo, 'pessoa desativada não entra; senha errada 5 vezes faz esperar um minuto', async () => {
       const lucas = (await p(adm, { acao: 'lista' })).pessoas.find((x) => x.nome === 'Lucas');
       await p(adm, { acao: 'salvar', pessoa: { id: lucas.id, nome: 'Lucas', nivel: 'consulta', ativo: false } });
       const terceiro = await conectarTeste(c.url, c.codigo());
+      await liberar(terceiro);
       igual((await p(terceiro, { acao: 'entrar', pin: LUCAS })).status, 403, 'desativado');
       for (let i = 0; i < 4; i++) await p(terceiro, { acao: 'entrar', pin: '000000' });
       igual((await p(terceiro, { acao: 'entrar', pin: FERNANDO })).status, 429, 'depois de 5 erradas, espera');
