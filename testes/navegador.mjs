@@ -8,8 +8,12 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
-const CHROME = ['C:/Program Files/Google/Chrome/Application/chrome.exe', 'C:/Program Files (x86)/Google/Chrome/Application/chrome.exe']
-  .find((c) => fs.existsSync(c));
+// Chrome do Windows; fora dele (sessão na nuvem, Linux) vale CHROME_PATH ou o Chromium do Playwright, se houver
+const pw = process.env.PLAYWRIGHT_BROWSERS_PATH || '/opt/pw-browsers';
+const CHROME = [process.env.CHROME_PATH, 'C:/Program Files/Google/Chrome/Application/chrome.exe', 'C:/Program Files (x86)/Google/Chrome/Application/chrome.exe',
+  ...(fs.existsSync(pw) ? fs.readdirSync(pw).filter((d) => /^chromium-\d+$/.test(d)).map((d) => path.join(pw, d, 'chrome-linux', 'chrome')) : []),
+  '/usr/bin/google-chrome', '/usr/bin/chromium']
+  .find((c) => c && fs.existsSync(c));
 export const dormir = (ms) => new Promise((r) => setTimeout(r, ms));
 
 // Troca o Date da página por um que pode ser adiantado; o quanto adiantou fica guardado na aba
@@ -34,12 +38,18 @@ export const TAMANHOS = {
   tablet10: { largura: 1000, altura: 600, dpr: 2, celular: true },
   motorola: { largura: 393, altura: 852, dpr: 2.75, celular: true },
   computador: { largura: 1440, altura: 900, dpr: 1, celular: false },
+  // completam os 6 tamanhos de referência dos projetos (ver .agents/skills/verificar-interface)
+  tabletMedio: { largura: 768, altura: 1024, dpr: 2, celular: true },
+  monitor: { largura: 1920, altura: 1080, dpr: 1, celular: false },
 };
+// 6 tamanhos de referência: 2 pequenos, 2 médios, 2 grandes (+ celular e tablet deitados)
+export const REF6 = ['celular', 'motorola', 'tabletMedio', 'tablet', 'computador', 'monitor', 'celularDeitado', 'tablet10'];
 
 export async function abrirNavegador({ porta = 9340 + Math.floor(Math.random() * 400) } = {}) {
   const perfil = fs.mkdtempSync(path.join(os.tmpdir(), 'pranchetas-teste-'));
   const proc = spawn(CHROME, ['--headless=new', '--disable-gpu', '--hide-scrollbars', '--no-first-run', '--no-default-browser-check',
-    '--disable-features=Translate', `--remote-debugging-port=${porta}`, `--user-data-dir=${perfil}`, 'about:blank'], { stdio: 'ignore' });
+    '--disable-features=Translate', `--remote-debugging-port=${porta}`, `--user-data-dir=${perfil}`,
+    ...(process.getuid?.() === 0 ? ['--no-sandbox'] : []), 'about:blank'], { stdio: 'ignore' });
   let versao;
   for (let i = 0; i < 80 && !versao; i++) {
     try { versao = await (await fetch(`http://127.0.0.1:${porta}/json/version`)).json(); } catch { await dormir(250); }

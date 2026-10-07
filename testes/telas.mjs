@@ -2,15 +2,15 @@
 /*
  * Confere todas as telas em vários tamanhos (celular, celular deitado, tablet pequeno, tablet, tablet em pé):
  * texto saindo da caixa, palavra quebrada no meio, rolagem para o lado, letra e botão pequenos, erros de JavaScript.
- * Uso: node testes/telas.mjs [http://localhost:8080] [tamanho1,tamanho2] [tela1,tela2]
+ * Uso: node testes/telas.mjs [http://localhost:8080] [tamanho1,tamanho2 | ref6] [tela1,tela2]
  * Tira uma foto de cada tela em testes/saida/telas/<tamanho>/<tela>.png e grava o relatório em testes/saida/telas.json
  */
 import fs from 'node:fs';
 import path from 'node:path';
-import { abrirNavegador, TAMANHOS, auditarLayout, dormir } from './navegador.mjs';
+import { abrirNavegador, TAMANHOS, REF6, auditarLayout, dormir } from './navegador.mjs';
 
 const BASE = (process.argv[2] || 'http://localhost:8080').replace(/\/$/, '');
-const SO_TAMANHOS = process.argv[3] ? process.argv[3].split(',') : ['celular', 'motorola', 'celularDeitado', 'tablet8', 'tablet10', 'tablet', 'tabletEmPe'];
+const SO_TAMANHOS = process.argv[3] === 'ref6' ? REF6 : process.argv[3] ? process.argv[3].split(',') : ['celular', 'motorola', 'celularDeitado', 'tablet8', 'tablet10', 'tablet', 'tabletEmPe'];
 const SO_TELAS = process.argv[4] ? process.argv[4].split(',') : null;
 const SAIDA = path.join(path.dirname(new URL(import.meta.url).pathname.replace(/^\/([A-Z]:)/, '$1')), 'saida');
 
