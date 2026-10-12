@@ -4,6 +4,17 @@
    Depois do sinal de igual vem JSON puro, porque o servidor do tablet chefe (Java) também lê este arquivo. */
 window.NOVIDADES = [
   {
+    "versao": "2.13.0",
+    "data": "2026-10-12",
+    "itens": [
+      "Escritório: um aparelho novo (escolha Escritório na primeira tela) com os cálculos da produção (matéria-prima, hidrolisado, vinho, álcool e vinhaça), a folha de rastreamento de lotes POP 03 - FOR 011 e a etiqueta das bombonas. Entra quem tem a função Escritório, com a senha.",
+      "Lote do dia: UB + ano + letra do mês + dia + 0700 (08/10/2026 = UB26I080700). Validade do álcool de 36 meses e da vinhaça de 5 dias, contadas do fechamento.",
+      "Lembrete de anotar a cada hora (liga por setor em Configurações da usina): apito tranquilo na virada da hora; às :30, se a linha ainda estiver vazia, apito chato até anotar.",
+      "Enviar e imprimir: escolha as áreas, os turnos e um dia ou um período (de... até...). O Resumo soma tudo, e o Excel de um período ganha a aba com os totais. A janela sobe de baixo e fecha puxando para baixo.",
+      "Monitorar: setas para ver os dias anteriores. Aparelho longe da central, com internet, manda as anotações pela nuvem e a central pega depois. O botão voltar do Android não fecha mais o aplicativo, e os quadros crescem até ocupar a tela."
+    ]
+  },
+  {
     "versao": "2.12.0",
     "data": "2026-10-06",
     "itens": [

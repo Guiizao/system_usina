@@ -3,7 +3,7 @@
 (function () {
   'use strict';
   const C = window.USINA;
-  const VERSAO = '2.12.0'; // aparece nos ajustes e vai junto com cada envio para a central
+  const VERSAO = '2.13.0'; // aparece nos ajustes e vai junto com cada envio para a central
   const AUTORIA = '© 2026 Guilherme. Todos os direitos reservados. Uso somente com autorização do autor.';
   const params = new URLSearchParams(location.search);
   const DEMO_IMG = params.has('demo'); // usado só para gerar imagens de apresentação
@@ -716,6 +716,9 @@
         if (resp.agora) conferirRelogio(resp.agora - (antesDoEnvio + Date.now()) / 2);
         // longe da usina, o aparelho pergunta na nuvem se foi bloqueado
         if (typeof resp.nuvem === 'string' && resp.nuvem !== (cfg.nuvemUrl || '')) { cfg.nuvemUrl = resp.nuvem; salvarCfg(); }
+        // a chave deste aparelho para a fila da nuvem (versão 2.13), para quando estiver longe da central
+        if (typeof resp.nuvemToken === 'string' && resp.nuvemToken !== (cfg.nuvemToken || '')) { cfg.nuvemToken = resp.nuvemToken; salvarCfg(); }
+        sync.avisouNuvem = false;
         // tablet chefe (versão 2.12): de minuto em minuto confere com a central quem está aqui e o que pode
         if (ehCentral() && cfg.pessoa && Date.now() - (sync.quemEm || 0) > 60000) { sync.quemEm = Date.now(); conferirSessao(); }
       }
@@ -754,12 +757,35 @@
       sync.modo = 'offline';
       sync.falhas = (sync.falhas || 0) + 1;
       conferirNaNuvem();
+      mandarParaNuvem();
       // no aplicativo: depois de umas falhas seguidas, procura o tablet chefe no Wi-Fi (no máximo a cada 3 minutos)
       if (NO_APK && sync.falhas >= 3 && Date.now() - (sync.ultimaBusca || 0) > 180000) { sync.ultimaBusca = Date.now(); setTimeout(reencontrarCentral, 0); }
     } finally {
       sync.ocupado = false;
       if (bloqueadoAntes !== foraDaRede()) render(); else atualizarConexao();
     }
+  }
+  /* Longe da central (outra rede, 4G), versão 2.13: depois de 2 minutos sem achar a central, o que ainda não subiu vai
+     para a fila da nuvem. A central puxa a fila e confere tudo como se o aparelho tivesse sincronizado (a mais nova vale).
+     A anotação continua esperando a central: quando ela voltar, sobe direto também (repetida não muda nada). */
+  async function mandarParaNuvem() {
+    if (cfg.demo || !cfg.nuvemUrl || !cfg.nuvemToken || sync.enviandoNuvem) return;
+    if (Date.now() - (cfg.ultimoContato || 0) < 2 * 60000 || Date.now() - (sync.nuvemEm || 0) < 60000) return;
+    const lista = Object.values(registros).filter((r) => !r.sincronizado && !r.esperaEntrar && r.naNuvem !== r.atualizadoEm).slice(0, 200);
+    if (!lista.length) return;
+    sync.enviandoNuvem = true; sync.nuvemEm = Date.now();
+    try {
+      const corpo = lista.map(({ sincronizado, naNuvem, esperaEntrar, ...r }) => (r.data === 'config' ? Object.assign(r, { base: r.rev || 0 }) : r));
+      const r = await fetch(`${cfg.nuvemUrl.replace(/\/+$/, '')}/fila`, {
+        method: 'POST', cache: 'no-store',
+        headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + cfg.nuvemToken, 'X-Aparelho': cfg.deviceId },
+        body: JSON.stringify({ registros: corpo, geracao: cfg.geracao || '' }),
+      });
+      if (!r.ok) return;
+      lista.forEach((x) => { const local = registros[x.id]; if (local && local.atualizadoEm === x.atualizadoEm) local.naNuvem = x.atualizadoEm; });
+      salvarRegistros();
+      if (!sync.avisouNuvem) { sync.avisouNuvem = true; toast('Sem a central: as anotações foram pela internet. A central pega quando puder.', 'ok'); }
+    } catch (e) { /* sem internet também: tenta de novo daqui a um minuto */ } finally { sync.enviandoNuvem = false; }
   }
   /* A hora de cada anotação vem do relógio do aparelho. Se ele estiver muito diferente da central,
      avisa (a folha do dia e o turno dependem da hora certa). */
@@ -2132,44 +2158,143 @@
       <div class="acoes-modal"><button class="btn" data-k="nao">Não</button><button class="btn ${perigo ? 'perigo' : 'primario'}" data-k="sim">${esc(textoSim)}</button></div>`,
     (k, b, fechar) => fechar(k === 'sim')).then((v) => !!v);
   }
-  /** Pergunta qual arquivo mandar. Resolve 'xlsx', 'xml', 'texto' ou undefined. */
-  /** Escolhe de quais setores (todos vêm marcados) e, para enviar, qual arquivo. Resolve { formato, setores } ou undefined.
-      soSetores: para imprimir, só escolhe os setores. */
-  function escolherEnvio(titulo, comTexto, soSetores) {
+  /* Enviar, guardar ou imprimir (versão 2.13): uma folha que sobe de baixo (puxa para baixo para fechar, ou tela inteira),
+     com as áreas, os turnos, um dia ou um período e o formato. Resolve { formato, setores, turnos, dias, somar } ou undefined.
+     soSetores: para imprimir (sem formato). */
+  function escolherEnvio(titulo, data, soSetores) {
     const todos = setores();
     const marcados = new Set(todos.map((s) => s.id));
-    const chips = () => todos.map((s) => `<button data-k="s:${s.id}" class="${marcados.has(s.id) ? 'sel' : ''}">${ico(marcados.has(s.id) ? 'certo' : s.icone)}<span>${esc(s.nome)}</span></button>`).join('');
-    const opcoes = soSetores
+    const turnos = new Set(C.turnos.map((t) => t.id));
+    const hoje = dataProducao();
+    let modo = 'dia', dia = data || hoje, de = somarDias(dia, -6), ate = dia, somar = true;
+    const chip = (k, sel, icone, nome) => `<button data-k="${k}" class="${sel ? 'sel' : ''}">${ico(sel ? 'certo' : icone)}<span>${esc(nome)}</span></button>`;
+    const desenhar = (f) => {
+      f.querySelector('.setores-envio').innerHTML = todos.map((s) => chip(`s:${s.id}`, marcados.has(s.id), s.icone, s.nome)).join('');
+      f.querySelector('.turnos-envio').innerHTML = C.turnos.map((t) => chip(`t:${t.id}`, turnos.has(t.id), 'relogio', `${t.nome}, ${faixaTurno(t)}`)).join('');
+      f.querySelectorAll('[data-k^="m:"]').forEach((b) => b.classList.toggle('sel', b.dataset.k === 'm:' + modo));
+      f.querySelector('.dia-envio').innerHTML = modo === 'dia'
+        ? `<div class="nav-data"><button class="btn" data-k="d:-1" aria-label="Dia anterior">${ico('voltar')}</button><div class="data-grande"><b>${fmtData(dia)}</b><span>${dia === hoje ? 'hoje' : diaSemana(dia)}</span></div><button class="btn" data-k="d:1" aria-label="Próximo dia" ${dia >= hoje ? 'disabled' : ''}>${ico('seta')}</button></div>`
+        : `<div class="periodo-envio"><label>De <input type="date" id="env-de" value="${de}" max="${hoje}"></label><label>Até <input type="date" id="env-ate" value="${ate}" max="${hoje}"></label></div>
+           <button class="chip-liga ${somar ? 'sel' : ''}" data-k="somar">${ico(somar ? 'certo' : 'fechar')} Somar as folhas do período (vai no Excel e no Resumo)</button>`;
+    };
+    const lerPeriodo = (f) => {
+      if (modo === 'dia') return [dia];
+      const a = (f.querySelector('#env-de') || {}).value || de, b = (f.querySelector('#env-ate') || {}).value || ate;
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(a) || !/^\d{4}-\d{2}-\d{2}$/.test(b) || a > b) { toast('Confira o período: a primeira data vem antes da segunda', 'erro'); return null; }
+      const lista = [];
+      for (let d = a; d <= b && lista.length <= 62; d = somarDias(d, 1)) lista.push(d);
+      if (lista.length > 62) { toast('Escolha no máximo 62 dias', 'erro'); return null; }
+      return lista;
+    };
+    const formatos = soSetores
       ? `<div class="acoes-modal"><button class="btn" data-k="x">Cancelar</button><button class="btn primario" data-k="f:imprimir">${ico('imprimir')} Imprimir</button></div>`
-      : `<div class="escolhas">
-        <button data-k="f:xlsx"><span class="escolha-ico">${ico('planilha')}</span><b>Excel</b><small>Planilha com as folhas do dia, igual ao papel</small></button>
-        <button data-k="f:xml"><span class="escolha-ico">${ico('codigo')}</span><b>XML</b><small>Arquivo para o sistema do escritório</small></button>
+      : `<h4>Formato</h4><div class="escolhas formatos-envio">
         <button data-k="f:pdf"><span class="escolha-ico">${ico('documento')}</span><b>PDF</b><small>Uma página para cada folha, igual ao papel</small></button>
-        ${comTexto ? `<button data-k="f:texto"><span class="escolha-ico">${ico('nota')}</span><b>Resumo em texto</b><small>Mensagem organizada por setor, com os totais de cada insumo</small></button>` : ''}
-      </div>
-      <div class="acoes-modal um"><button class="btn" data-k="x">Cancelar</button></div>`;
-    return abrirModal(`<h3>${esc(titulo)}</h3><p class="dica">Toque num setor para tirar ou pôr de volta.</p>
-      <div class="chips-escolha setores-envio">${chips()}</div>${opcoes}`,
-    (k, b, fechar, fundo) => {
+        <button data-k="f:xlsx"><span class="escolha-ico">${ico('planilha')}</span><b>Excel</b><small>Uma aba para cada folha, igual ao papel</small></button>
+        <button data-k="f:xml"><span class="escolha-ico">${ico('codigo')}</span><b>XML</b><small>Para o sistema do escritório</small></button>
+        <button data-k="f:texto"><span class="escolha-ico">${ico('nota')}</span><b>Resumo</b><small>Mensagem com os totais de cada insumo, somados</small></button>
+      </div>`;
+    const acoes = soSetores ? '' : '<div class="acoes-modal um"><button class="btn" data-k="x">Cancelar</button></div>';
+    // o meio rola dentro da folha; o puxador, o título e os botões de baixo ficam sempre à vista
+    return abrirModal(`<div class="puxador" aria-hidden="true"><i></i></div>
+      <div class="folha-baixo-cab"><h3>${esc(titulo)}</h3><button class="btn pequeno" data-k="tamanho">${ico('telaCheia')} <span>Tela inteira</span></button></div>
+      <div class="folha-baixo-corpo">
+        <h4>Áreas</h4><div class="chips-escolha setores-envio"></div>
+        <h4>Turnos</h4><div class="chips-escolha turnos-envio"></div>
+        <h4>Dia</h4><div class="segmentos quebra"><button data-k="m:dia">Um dia</button><button data-k="m:periodo">Período</button></div>
+        <div class="dia-envio"></div>
+        ${soSetores ? '' : formatos}
+      </div>${soSetores ? formatos : acoes}`,
+    (k, b, fechar, f) => {
       if (k === 'x') return fechar(undefined);
-      if (k.startsWith('s:')) {
-        const id = k.slice(2);
-        if (marcados.has(id)) marcados.delete(id); else marcados.add(id);
-        fundo.querySelector('.setores-envio').innerHTML = chips();
-        return;
+      if (k === 'tamanho') { const m = f.querySelector('.modal'); m.classList.toggle('cheia'); b.querySelector('span').textContent = m.classList.contains('cheia') ? 'Metade' : 'Tela inteira'; return; }
+      if (k.startsWith('s:')) { const id = k.slice(2); if (marcados.has(id)) marcados.delete(id); else marcados.add(id); }
+      if (k.startsWith('t:')) { const id = Number(k.slice(2)); if (turnos.has(id)) turnos.delete(id); else turnos.add(id); }
+      if (k.startsWith('m:')) {
+        if (modo === 'periodo') { de = (f.querySelector('#env-de') || {}).value || de; ate = (f.querySelector('#env-ate') || {}).value || ate; }
+        modo = k.slice(2);
       }
+      if (k.startsWith('d:')) { const d = somarDias(dia, Number(k.slice(2))); if (d <= hoje) dia = d; }
+      if (k === 'somar') { de = (f.querySelector('#env-de') || {}).value || de; ate = (f.querySelector('#env-ate') || {}).value || ate; somar = !somar; }
       if (k.startsWith('f:')) {
-        if (!marcados.size) return toast('Escolha pelo menos um setor', 'erro');
-        return fechar({ formato: k.slice(2), setores: todos.filter((s) => marcados.has(s.id)).map((s) => s.id) });
+        if (!marcados.size) return toast('Escolha pelo menos uma área', 'erro');
+        if (!turnos.size) return toast('Escolha pelo menos um turno', 'erro');
+        const dias = lerPeriodo(f);
+        if (!dias) return;
+        return fechar({ formato: k.slice(2), setores: todos.filter((s) => marcados.has(s.id)).map((s) => s.id), turnos: [...turnos], dias, somar: modo === 'periodo' && somar });
       }
-    }, { classe: 'largo' });
+      desenhar(f);
+    }, { classe: 'largo folha-baixo', fundo: 'de-baixo', aoAbrir: (f) => { desenhar(f); puxarParaFechar(f); } });
+  }
+  /** Folha que sobe de baixo: puxando o puxador (ou o título) para baixo, ela fecha. */
+  function puxarParaFechar(f) {
+    const m = f.querySelector('.modal');
+    const alca = f.querySelectorAll('.puxador, .folha-baixo-cab h3');
+    let y0 = null;
+    alca.forEach((el) => el.addEventListener('pointerdown', (e) => { y0 = e.clientY; m.style.transition = 'none'; el.setPointerCapture(e.pointerId); }));
+    alca.forEach((el) => el.addEventListener('pointermove', (e) => { if (y0 === null) return; m.style.transform = `translateY(${Math.max(0, e.clientY - y0)}px)`; }));
+    alca.forEach((el) => el.addEventListener('pointerup', (e) => {
+      if (y0 === null) return;
+      const dy = e.clientY - y0; y0 = null; m.style.transition = ''; m.style.transform = '';
+      if (dy > 110) { const x = f.querySelector('[data-k="x"]'); if (x) x.click(); }
+    }));
+  }
+  /* Turnos escolhidos no envio (versão 2.13): só para montar o arquivo. Linha de hora (folhas hora a hora e insumos) e
+     dorna (pela hora de início) entram se a hora for de um turno marcado; o que não tem hora vai sempre. */
+  let turnosDoEnvio = null;
+  function noTurnoDoEnvio(r) {
+    if (!turnosDoEnvio) return true;
+    const p = prancheta(r.prancheta) || {};
+    let h = null;
+    if ((p.tipo === 'grade' || p.tipo === 'insumo') && /^\d+$/.test(r.chave)) h = Number(r.chave) % 24;
+    else if (p.tipo === 'grade' && /^obs\d+$/.test(r.chave)) return turnosDoEnvio.has(Number(r.chave.slice(3)));
+    else if (p.tipo === 'dornas') { const hora = (r.valores || {})[(p.envio || {}).inicio] || (r.valores || {}).inicio || (r.valores || {}).horario; if (/^\d{1,2}:\d{2}$/.test(hora || '')) h = Number(hora.split(':')[0]); }
+    if (h === null) return true;
+    const t = C.turnos.find((x) => h >= x.inicio && h < x.fim) || C.turnos[0];
+    return turnosDoEnvio.has(t.id);
+  }
+  const listarPapel = (data, pid) => listar(data, pid).filter(noTurnoDoEnvio);
+  /** Monta o arquivo (ou o resumo) do que foi escolhido. Vários dias: uma folha de cada dia, na ordem. */
+  async function montarEnvio(escolha) {
+    for (const d of escolha.dias) await buscarDia(d); // dia antigo: as anotações vêm da central antes
+    turnosDoEnvio = escolha.turnos.length < C.turnos.length ? new Set(escolha.turnos) : null;
+    try {
+      if (escolha.formato === 'texto') return { texto: resumoDoEnvio(escolha) };
+      if (escolha.formato === 'pdf') return { arquivo: await gerarPdf(escolha.dias, escolha.setores) };
+      return { arquivo: gerarArquivo(escolha.formato, escolha.dias, escolha.setores, escolha.somar) };
+    } finally { turnosDoEnvio = null; }
+  }
+  /** Os totais de cada insumo, somados nos dias (e turnos) escolhidos. */
+  function totaisDoEnvio(dias, setorIds) {
+    const soma = new Map();
+    dias.forEach((d) => totaisDoDia(d, listarPapel).forEach((x) => {
+      if (setorIds && !setorIds.includes((setores().find((s) => s.nome === x.setor) || {}).id)) return;
+      const k = `${x.setor}|${x.insumo}|${x.unidade}`;
+      const a = soma.get(k) || { setor: x.setor, insumo: x.insumo, unidade: x.unidade, quantidade: 0 };
+      a.quantidade = Math.round((a.quantidade + x.quantidade) * 100) / 100;
+      soma.set(k, a);
+    }));
+    return [...soma.values()];
+  }
+  function resumoDoEnvio(escolha) {
+    const nomesTurnos = escolha.turnos.length < C.turnos.length ? ` · turnos: ${C.turnos.filter((t) => escolha.turnos.includes(t.id)).map((t) => t.nome).join(', ')}` : '';
+    if (escolha.dias.length === 1) return resumoDoDia(escolha.dias[0], escolha.setores) + (nomesTurnos ? `\n\n(${nomesTurnos.slice(3)})` : '');
+    const de = escolha.dias[0], ate = escolha.dias[escolha.dias.length - 1];
+    const linhas = ['*PRANCHETAS UBIRÁLCOOL*', `Período de ${fmtData(de)} a ${fmtData(ate)} (${escolha.dias.length} dias)${nomesTurnos}`, '', '*TOTAIS DO PERÍODO (insumos)*'];
+    let setorAtual = '';
+    totaisDoEnvio(escolha.dias, escolha.setores).forEach((x) => {
+      if (x.setor !== setorAtual) { setorAtual = x.setor; linhas.push('', `*${x.setor.toUpperCase()}*`); }
+      linhas.push(`• ${x.insumo}: ${x.quantidade ? `${fmtNum(x.quantidade)} ${x.unidade}` : 'nada adicionado'}`);
+    });
+    return linhas.join('\n');
   }
   /** Imprimir: escolhe os setores e abre a impressão (dia antigo é buscado na central antes). */
   async function imprimirEscolhendo(data) {
-    const escolha = await escolherEnvio(`Imprimir as folhas de ${fmtData(data)}`, false, true);
+    const escolha = await escolherEnvio('Imprimir as folhas', data, true);
     if (!escolha) return;
-    await buscarDia(data);
-    return imprimirFolhas(data, escolha.setores);
+    for (const d of escolha.dias) await buscarDia(d);
+    turnosDoEnvio = escolha.turnos.length < C.turnos.length ? new Set(escolha.turnos) : null;
+    try { return await imprimirFolhas(escolha.dias, escolha.setores); } finally { turnosDoEnvio = null; }
   }
   let toastTimer, toastSaindo;
   function esconderToast() {
@@ -4688,23 +4813,27 @@
   fetch('icons/logo.png').then((r) => r.arrayBuffer()).then((b) => { LOGO_PNG = new Uint8Array(b); }).catch(() => {});
   let modelosPapel = null;
   const papel = () => modelosPapel || (modelosPapel = window.ModelosPapel.montar({
-    C, prancheta, setorDaPrancheta, listar, pegar, fmtData, fmtNum, rotuloHoraPapel, HORAS, linhasDeHora, totalInsumo, extrasOperador, somarDias,
+    C, prancheta, setorDaPrancheta, listar: listarPapel, pegar, fmtData, fmtNum, rotuloHoraPapel, HORAS, linhasDeHora, totalInsumo, extrasOperador, somarDias,
     medicaoDoDia: (data) => medicaoDoDia(data), fermentacaoDoDia,
   }));
   function planilhaDaPrancheta(pid, data) {
     return window.ModelosPapel.paraPlanilha(papel().folha(pid, data));
   }
-  function gerarXml(data, pids) {
+  const listaDeDias = (dias) => (Array.isArray(dias) ? dias : [dias]);
+  const nomeDosDias = (dias) => { const l = listaDeDias(dias); return l.length > 1 ? `${l[0]}_a_${l[l.length - 1]}` : l[0]; };
+  function gerarXml(dias, pids) {
     const X = window.xmlEscape;
-    const partes = ['<?xml version="1.0" encoding="UTF-8"?>', `<pranchetas empresa="${X(C.empresa)}" data="${data}" gerado="${new Date().toISOString()}">`];
-    pids.forEach((pid) => partes.push(window.ModelosPapel.paraXml(papel().folha(pid, data), data, X)));
+    const l = listaDeDias(dias);
+    const partes = ['<?xml version="1.0" encoding="UTF-8"?>', `<pranchetas empresa="${X(C.empresa)}" data="${l[0]}"${l.length > 1 ? ` ate="${l[l.length - 1]}"` : ''} gerado="${new Date().toISOString()}">`];
+    l.forEach((data) => pids.forEach((pid) => partes.push(window.ModelosPapel.paraXml(papel().folha(pid, data), data, X))));
     partes.push('</pranchetas>');
     return new Blob([partes.join('\n')], { type: 'application/xml' });
   }
   /** Imprime as folhas do dia iguais ao papel (no Android abre a impressão do sistema, que também salva em PDF). */
-  async function imprimirFolhas(data, setorIds) {
+  async function imprimirFolhas(dias, setorIds) {
     const pids = folhasDosSetores(setorIds);
-    return imprimirHtml(pids.map((pid) => window.ModelosPapel.paraHtml(papel().folha(pid, data), 'icons/logo.png', fmtNum)).join(''), `Pranchetas ${fmtData(data)}`);
+    const l = listaDeDias(dias);
+    return imprimirHtml(l.flatMap((data) => pids.map((pid) => window.ModelosPapel.paraHtml(papel().folha(pid, data), 'icons/logo.png', fmtNum))).join(''), `Pranchetas ${fmtData(l[0])}`);
   }
   /** Imprime um pedaço de HTML (folhas, etiquetas). No Android abre a impressão do sistema, que também salva em PDF. */
   async function imprimirHtml(html, nome) {
@@ -4726,13 +4855,22 @@
   }
   const folhasDosSetores = (setorIds) => setores().filter((s) => setorIds.includes(s.id)).flatMap((s) => s.pranchetas.flatMap(folhasDe));
   const MIME = { xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', xml: 'application/xml', pdf: 'application/pdf' };
-  function gerarArquivo(formato, data, setorIds) {
+  function gerarArquivo(formato, dias, setorIds, somar) {
     const pids = folhasDosSetores(setorIds);
+    const l = listaDeDias(dias);
     // o relatório do dia (todos os setores) tem sempre o mesmo nome: um por dia; só alguns setores ganham o nome deles
     const parcial = setorIds.length < setores().length;
-    const nome = `Pranchetas_${data}${parcial ? '_' + setorIds.join('-') : ''}`;
-    if (formato === 'xml') return new File([gerarXml(data, pids)], nome + '.xml', { type: MIME.xml });
-    return new File([window.criarXlsx(pids.map((pid) => planilhaDaPrancheta(pid, data)), LOGO_PNG)], nome + '.xlsx', { type: MIME.xlsx });
+    const nome = `Pranchetas_${nomeDosDias(l)}${parcial ? '_' + setorIds.join('-') : ''}`;
+    if (formato === 'xml') return new File([gerarXml(l, pids)], nome + '.xml', { type: MIME.xml });
+    // vários dias: uma aba por folha de cada dia (o nome da aba leva o dia); "somar" põe a aba com os totais no começo
+    const abas = l.flatMap((data) => pids.map((pid) => { const a = planilhaDaPrancheta(pid, data); if (l.length > 1) a.name = `${String(a.name || pid).slice(0, 24)} ${data.slice(8, 10)}-${data.slice(5, 7)}`; return a; }));
+    if (somar) {
+      const cel = (v, b) => ({ v, st: { borda: true, b: !!b } });
+      const linhas = [[cel(`Totais de ${fmtData(l[0])} a ${fmtData(l[l.length - 1])}`, true), '', '', ''], [cel('Setor', true), cel('Insumo', true), cel('Quantidade', true), cel('Unidade', true)],
+        ...totaisDoEnvio(l, setorIds).map((x) => [cel(x.setor), cel(x.insumo), cel(x.quantidade), cel(x.unidade)])];
+      abas.unshift({ name: 'Totais do período', rows: linhas, widths: [24, 30, 14, 10], heights: {}, merges: ['A1:D1'], paisagem: false });
+    }
+    return new File([window.criarXlsx(abas, LOGO_PNG)], nome + '.xlsx', { type: MIME.xlsx });
   }
   /** PDF das folhas (pdf.js): uma página para cada folha de papel. A letra e o logo são buscados uma vez só. */
   let pecasDoPdf = null;
@@ -4755,12 +4893,13 @@
     pecasDoPdf = { fontes: [normal, negrito], logo };
     return pecasDoPdf;
   }
-  async function gerarPdf(data, setorIds) {
+  async function gerarPdf(dias, setorIds) {
     const pids = folhasDosSetores(setorIds);
+    const l = listaDeDias(dias);
     const parcial = setorIds.length < setores().length;
-    const nome = `Pranchetas_${data}${parcial ? '_' + setorIds.join('-') : ''}`;
+    const nome = `Pranchetas_${nomeDosDias(l)}${parcial ? '_' + setorIds.join('-') : ''}`;
     const pecas = await pecasPdf();
-    const bytes = window.criarPdf(pids.map((pid) => papel().folha(pid, data)), Object.assign({ fmtNum, titulo: `Pranchetas Ubirálcool ${fmtData(data)}` }, pecas));
+    const bytes = window.criarPdf(l.flatMap((data) => pids.map((pid) => papel().folha(pid, data))), Object.assign({ fmtNum, titulo: `Pranchetas Ubirálcool ${fmtData(l[0])}` }, pecas));
     return new File([bytes], nome + '.pdf', { type: MIME.pdf });
   }
   const paraBase64 = (arquivo) => new Promise((ok, erro) => {
@@ -4794,7 +4933,7 @@
     const insumos = lista.flatMap((s) => s.pranchetas.flatMap(folhasDe)).filter((pid) => prancheta(pid).tipo === 'insumo');
     if (insumos.length) {
       linhas.push('', '*TOTAIS DO DIA (insumos)*');
-      insumos.forEach((pid) => linhas.push(`• ${prancheta(pid).nome}: ${totalInsumo(linhasDeHora(listar(data, pid))) || 'nada adicionado'}`));
+      insumos.forEach((pid) => linhas.push(`• ${prancheta(pid).nome}: ${totalInsumo(linhasDeHora(listarPapel(data, pid))) || 'nada adicionado'}`));
     }
     return linhas.join('\n');
   }
@@ -4809,12 +4948,12 @@
   const base44Avisado = {};    // dia -> já avisou do erro (avisa uma vez só)
   let base44Ocupado = false;
   let base44Visto = 0;
-  function totaisDoDia(data) {
+  function totaisDoDia(data, ler = listar) {
     const itens = [];
     setores().forEach((s) => s.pranchetas.flatMap(folhasDe).filter((pid) => prancheta(pid).tipo === 'insumo').forEach((pid) => {
       const p = prancheta(pid);
       const soma = {};
-      linhasDeHora(listar(data, pid)).forEach((r) => {
+      linhasDeHora(ler(data, pid)).forEach((r) => {
         const n = parseFloat(r.valores.qtd);
         if (isNaN(n)) return;
         const u = r.valores.unidade || p.unidade || '';
@@ -4953,19 +5092,19 @@
     let arquivo = arquivoPronto;
     let formato = arquivo ? (/\.xml$/i.test(arquivo.name) ? 'xml' : /\.pdf$/i.test(arquivo.name) ? 'pdf' : 'xlsx') : null;
     let escolhidos = setores().map((s) => s.id);
+    let completo = true, resumo = '';
     if (!arquivo) {
-      const escolha = await escolherEnvio(destino === 'escritorio' ? `Enviar para o escritório (${alvo === 'whatsapp' ? 'WhatsApp' : 'e-mail'})` : nomes[alvo], alvo === 'whatsapp');
+      const escolha = await escolherEnvio(destino === 'escritorio' ? `Enviar para o escritório (${alvo === 'whatsapp' ? 'WhatsApp' : 'e-mail'})` : nomes[alvo], data);
       if (!escolha) return;
       formato = escolha.formato; escolhidos = escolha.setores;
-      await buscarDia(data); // dia antigo: as anotações vêm da central antes de montar o arquivo
-      if (formato === 'pdf') {
-        try { arquivo = await gerarPdf(data, escolhidos); } catch (e) { return toast('Não consegui montar o PDF', 'erro'); }
-      } else if (formato !== 'texto') arquivo = gerarArquivo(formato, data, escolhidos);
+      completo = escolha.dias.length === 1 && escolha.dias[0] === data && escolha.turnos.length === C.turnos.length;
+      data = escolha.dias[0];
+      try { const m = await montarEnvio(escolha); arquivo = m.arquivo || null; resumo = m.texto || ''; } catch (e) { return toast('Não consegui montar o arquivo', 'erro'); }
     }
-    const texto = formato === 'texto' ? resumoDoDia(data, escolhidos) : `Pranchetas Ubirálcool, folha de ${fmtData(data)}`;
+    const texto = formato === 'texto' ? resumo : `Pranchetas Ubirálcool, folha de ${fmtData(data)}`;
     const assunto = `Pranchetas Ubirálcool - ${fmtData(data)}`;
     // só o relatório com todos os setores fica guardado (um por dia, na pasta RelatoriosUsina)
-    if (arquivo && !arquivoPronto && formato !== 'pdf' && escolhidos.length === setores().length) guardarNaCentral(data, [arquivo]);
+    if (arquivo && !arquivoPronto && completo && formato !== 'pdf' && escolhidos.length === setores().length) guardarNaCentral(data, [arquivo]);
 
     if (alvo === 'baixar') {
       if (!arquivo) return;

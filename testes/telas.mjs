@@ -52,6 +52,8 @@ const TELAS = [
   ['nova-destilaria', '&papel=nova_destilaria&op=Operador%201&tela=prancheta&pid=nova_destilaria'],
   ['chefe-painel', '&papel=central'],
   ['chefe-escolher-formato', '&papel=central&modal=formato'],
+  ['chefe-envio-periodo', '&papel=central&modal=formato', async (a) => { await a.tocar('.modal [data-k="m:periodo"]'); await dormir(250); }],
+  ['chefe-envio-cheia', '&papel=central&modal=formato', async (a) => { await a.tocar('.modal [data-k="tamanho"]'); await dormir(250); }],
   ['chefe-relatorios', '&papel=central&tela=relatorios'],
   ['chefe-usina', '&papel=central&tela=config'],
   ['chefe-usina-base44', '&papel=central&tela=config&base44=1', async (a) => a.avaliar('document.getElementById("bloco-base44").scrollIntoView()')],

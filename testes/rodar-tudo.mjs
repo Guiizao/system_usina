@@ -38,6 +38,9 @@ import { testarPedidos211 } from './pedidos211.mjs';
 import { testarNiveis } from './niveis212.mjs';
 import { testarPedidos212 } from './pedidos212.mjs';
 import { testarPapel212 } from './papel212.mjs';
+import { testarRastreamento213 } from './rastreamento213.mjs';
+import { testarEscritorio } from './escritorio213.mjs';
+import { testarEnvio213 } from './envio213.mjs';
 import { testarApkWeb } from './rodar-apk-web.mjs';
 import { centralNode, centralJava, APP } from './servidores.mjs';
 
@@ -94,6 +97,18 @@ for (const [nome, ligar, porta] of [['computador', centralNode, 8265], ['tablet 
 {
   const g = novoGrupo('Folhas de papel e API de leitura da versão 2.12');
   await testarPapel212(g);
+  grupos.push(g);
+}
+// 3f. versão 2.13: contas do Escritório, lote, validades, etiqueta e a folha de rastreamento igual ao papel (sem central)
+{
+  const g = novoGrupo('Escritório 2.13: cálculos, lote, etiqueta e folha de rastreamento');
+  await testarRastreamento213(g);
+  grupos.push(g);
+}
+// 3g. versão 2.13: a folha de rastreamento só com a função Escritório e a fila da nuvem, nas duas centrais
+for (const [nome, ligar, porta] of [['computador', centralNode, 8245], ['tablet chefe', centralJava, 8246]]) {
+  const g = novoGrupo('Escritório e fila da nuvem, direto na central do ' + nome);
+  await testarEscritorio(ligar, porta, g);
   grupos.push(g);
 }
 // 3b. longo prazo direto na central: dias guardados, dias antigos no BackupUsina, central nova, 90 dias de uso
@@ -169,6 +184,13 @@ try {
   for (const [nome, ligar, porta] of [['computador', (p, d) => centralNode(p, d), 8247], ['tablet chefe', centralJava, 8248]]) {
     const g = novoGrupo('Versão 2.12 (configurações do sistema) no aplicativo, na central do ' + nome);
     await testarPedidos212(nav, ligar, porta, g, nome === 'computador');
+    grupos.push(g);
+  }
+  // 4m. versão 2.13: enviar com áreas, turnos, período, resumo somado e Excel com os totais
+  {
+    const g = novoGrupo('Enviar: período, turnos, resumo somado e Excel com os totais');
+    const c = await centralNode(8243);
+    try { await testarEnvio213(nav, c.url, g); } finally { await c.desligar(); }
     grupos.push(g);
   }
   // 4f. o aplicativo embaralhado (como vai no APK) continua funcionando igual
