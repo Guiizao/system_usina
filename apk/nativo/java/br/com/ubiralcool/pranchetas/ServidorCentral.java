@@ -313,13 +313,14 @@ public class ServidorCentral {
     }
   }
 
-  private synchronized void salvarRegistros() {
+  private synchronized boolean salvarRegistros() {
     try {
       JSONObject tudo = new JSONObject();
       tudo.put("seq", seq);
       tudo.put("registros", registros);
       salvarArquivo(new File(pastaServidor, "registros.json"), tudo.toString().getBytes(StandardCharsets.UTF_8));
-    } catch (Exception e) { /* tenta de novo na próxima gravação */ }
+      return true;
+    } catch (Exception e) { return false; }
   }
 
   /* A central guarda na memória os últimos 60 dias. Os mais antigos ficam só no BackupUsina (um arquivo por dia)
@@ -692,8 +693,15 @@ public class ServidorCentral {
   /* Rotas                                                               */
   /* ------------------------------------------------------------------ */
 
-  private synchronized void apiSync(byte[] corpo, String ip, String idCifrado, OutputStream saida) throws Exception {
-    JSONObject pedido = new JSONObject(new String(corpo, StandardCharsets.UTF_8));
+  private void apiSync(byte[] corpo, String ip, String idCifrado, OutputStream saida) throws Exception {
+    JSONObject resultado = sincronizar(new JSONObject(new String(corpo, StandardCharsets.UTF_8)), ip, idCifrado);
+    enviarJson(saida, "bloqueado".equals(resultado.optString("erro")) ? 423 : 200, resultado);
+  }
+
+  /** O sync local e a fila usam a mesma autorização, revisão e gravação. */
+  private synchronized JSONObject sincronizar(JSONObject pedido, String ip, String idCifrado) throws Exception {
+    JSONObject bloqueio = bloqueios().optJSONObject(idCifrado);
+    if (bloqueio != null) return new JSONObject().put("erro", "bloqueado").put("bloqueio", bloqueioPublico(bloqueio)).put("geracao", getGeracao());
     String aparelho = pedido.optString("aparelho");
     JSONObject antesDoAparelho = aparelho.isEmpty() ? null : aparelhos.get(aparelho);
     if (!aparelho.isEmpty()) {
@@ -715,8 +723,7 @@ public class ServidorCentral {
       // aparelho com anotações de antes de zerar: não aceita, manda ele limpar.
       // Aparelho que acabou de conectar numa central nova (tablet chefe trocado ou reinstalado): aceita o que ele tem.
       if (geracaoZerada(geracaoDele) || !pedido.optBoolean("novaConexao")) {
-        enviarJson(saida, 200, new JSONObject().put("ok", false).put("zerar", true).put("geracao", getGeracao()).put("seq", seq).put("agora", System.currentTimeMillis()));
-        return;
+        return new JSONObject().put("ok", false).put("zerar", true).put("geracao", getGeracao()).put("seq", seq).put("agora", System.currentTimeMillis());
       }
     }
     if (System.currentTimeMillis() - ultimoArquivamento > 3600000L) arquivarDiasAntigos();
@@ -750,6 +757,9 @@ public class ServidorCentral {
           if (!(Boolean) d[0]) { recusados.put(new JSONObject().put("id", r.optString("id")).put("motivo", d[2]).put("atual", atual == null ? JSONObject.NULL : atual)); continue; }
           r = (JSONObject) d[1];
           revs.put(r.optString("id"), r.optLong("rev"));
+        } else if ("rastreamento".equals(prancheta)) {
+          Set<String> f = nivelAqui > 0 ? funcoesNoAparelho(idCifrado) : funcoesNoSetor(idCifrado);
+          if (!f.contains("escritorio")) { recusados.put(new JSONObject().put("id", r.optString("id")).put("motivo", "sem_permissao")); continue; }
         } else if (nivelAqui > 0 && !"registro".equals(prancheta) && !"avisos-recibo".equals(prancheta)) {
           // tablet chefe: a função de quem está dentro (a mesma que a tela pede)
           String motivo = motivoNoChefe(idCifrado, prancheta);
@@ -769,6 +779,7 @@ public class ServidorCentral {
           }
         }
         // dia que só está no BackupUsina: junta lá (depois de conferido como os outros)
+        if ("rastreamento".equals(prancheta) && nivelAqui == 0 && liberadosNoSetor.containsKey(idCifrado)) liberadosNoSetor.get(idCifrado)[1] = System.currentTimeMillis() + LIBERADO_NO_SETOR_MS;
         if (doArquivo) {
           r.remove("sincronizado");
           r.put("recebidoEm", System.currentTimeMillis());
@@ -791,6 +802,7 @@ public class ServidorCentral {
     }
     for (Map.Entry<String, List<JSONObject>> e : antigos.entrySet()) {
       int n = juntarNoArquivo(e.getKey(), e.getValue());
+      if (n < 0) throw new IOException("Não foi possível gravar o dia arquivado");
       if (n > 0) aceitos += n;
     }
     if (aceitos > 0) {
@@ -802,10 +814,10 @@ public class ServidorCentral {
     // bloqueiosRev: "não está bloqueado até esta revisão" (resposta atrasada da nuvem com bloqueio mais velho não trava).
     // Confere o bloqueio junto com a revisão (apiSync é synchronized): bloqueado no meio do caminho responde como bloqueado.
     JSONObject blq = idCifrado == null || idCifrado.isEmpty() ? null : bloqueios().optJSONObject(idCifrado);
-    if (blq != null) { enviarJson(saida, 423, new JSONObject().put("erro", "bloqueado").put("bloqueio", bloqueioPublico(blq)).put("geracao", getGeracao())); return; }
+    if (blq != null) return new JSONObject().put("erro", "bloqueado").put("bloqueio", bloqueioPublico(blq)).put("geracao", getGeracao());
     long bloqueiosRev = config.optLong("bloqueiosRev", 0L);
-    enviarJson(saida, 200, new JSONObject().put("ok", true).put("aceitos", aceitos).put("recusados", recusados).put("revs", revs).put("seq", seq).put("agora", System.currentTimeMillis()).put("geracao", getGeracao())
-        .put("nuvem", nuvem().optString("url")).put("bloqueiosRev", bloqueiosRev));
+    return new JSONObject().put("ok", true).put("aceitos", aceitos).put("recusados", recusados).put("revs", revs).put("seq", seq).put("agora", System.currentTimeMillis()).put("geracao", getGeracao())
+        .put("nuvem", nuvem().optString("url")).put("nuvemToken", tokenNuvem(idCifrado)).put("bloqueiosRev", bloqueiosRev);
   }
 
   /* Dois aparelhos criaram a mesma linha sem um saber do outro (ex.: o tablet chefe corrigiu uma dorna nos segundos
@@ -1531,7 +1543,7 @@ public class ServidorCentral {
 
   private static boolean publica(JSONObject r) {
     String p = r.optString("prancheta");
-    return ehDia(r.optString("data")) && !"avisos".equals(p) && !"avisos-recibo".equals(p);
+    return ehDia(r.optString("data")) && !"avisos".equals(p) && !"avisos-recibo".equals(p) && !"registro".equals(p); // igual ao api-leitura.js: o registro do sistema fica só na central
   }
 
   private static void juntarPendente(Map<String, JSONObject> mapa, JSONObject r, long desde) {
@@ -1608,6 +1620,39 @@ public class ServidorCentral {
     return "A nuvem respondeu " + status + ": " + (e.length() > 200 ? e.substring(0, 200) : e);
   }
 
+  private synchronized String tokenNuvem(String aparelho) throws Exception {
+    JSONObject n = nuvem();
+    return n.optString("url").isEmpty() || n.optString("segredo").isEmpty() ? "" : hex(hmac(n.optString("segredo").getBytes(StandardCharsets.UTF_8), "aparelho|" + aparelho));
+  }
+
+  /** Confirma só a versão lida, sem apagar um envio mais novo que chegou no meio. */
+  private void puxarFilaNuvem(String url, String segredo) throws Exception {
+    Object[] r = pedirNuvem(url, segredo, "fila", null);
+    if ((Integer) r[0] != 200) throw new Exception(erroDaNuvem(r));
+    JSONArray fila = new JSONObject((String) r[1]).getJSONArray("itens");
+    JSONArray itens = new JSONArray();
+    for (int i = 0; i < fila.length(); i++) {
+      JSONObject item = fila.optJSONObject(i), registro = item.getJSONObject("registro");
+      String aparelho = item.getString("aparelho");
+      // sincronizar altera o JSONObject aceito; guarde a versão original para confirmar.
+      long atualizadoEm = registro.optLong("atualizadoEm");
+      JSONObject resultado = sincronizar(new JSONObject().put("registros", new JSONArray().put(registro)).put("geracao", item.optString("geracao")), "nuvem", aparelho);
+      JSONArray recusas = resultado.optJSONArray("recusados");
+      if (recusas == null) recusas = new JSONArray();
+      if (resultado.has("erro") || resultado.optBoolean("zerar")) recusas.put(new JSONObject().put("id", registro.optString("id")).put("motivo", resultado.optString("erro", "geracao")));
+      for (int k = 0; k < recusas.length(); k++) {
+        JSONObject recusa = recusas.optJSONObject(k);
+        registrar("nuvem", "Fila recusada: " + recusa.optString("id") + " (" + recusa.optString("motivo") + ")", "", nomeDoAparelho(aparelho), null);
+      }
+      itens.put(new JSONObject().put("aparelho", aparelho).put("id", registro.optString("id")).put("atualizadoEm", atualizadoEm));
+    }
+    if (itens.length() > 0) {
+      if (!salvarRegistros()) throw new IOException("Não foi possível gravar a fila na central");
+      Object[] c = pedirNuvem(url, segredo, "fila/confirmar", new JSONObject().put("itens", itens));
+      if ((Integer) c[0] != 200) throw new Exception(erroDaNuvem(c));
+    }
+  }
+
   /** Manda para a nuvem o que mudou depois do último envio. */
   void enviarParaNuvem() {
     if (!enviandoNuvem.compareAndSet(false, true)) return;
@@ -1617,6 +1662,7 @@ public class ServidorCentral {
       synchronized (this) { n = nuvem(); url = n.optString("url"); segredo = n.optString("segredo"); }
       if (url.isEmpty() || segredo.isEmpty()) return;
       try {
+        puxarFilaNuvem(url, segredo);
         if (!n.optBoolean("conferida")) {
           // na primeira vez (ou se a nuvem foi trocada ou zerada), confere até onde ela tem
           Object[] e = pedirNuvem(url, segredo, "central/estado", null);
@@ -1816,6 +1862,7 @@ public class ServidorCentral {
       if (vistoAntes != null && !vistoAntes.optString("nome").isEmpty()) return vistoAntes.optString("nome");
       String papel = visto == null ? "" : visto.optString("papel");
       if ("central".equals(papel)) return "Tablet chefe";
+      if ("escritorio".equals(papel)) return "Escritório";
       JSONObject forms = config.optJSONObject("nuvemForms");
       JSONArray setores = forms == null ? null : forms.optJSONArray("setores");
       if (setores != null) for (int i = 0; i < setores.length(); i++) {
@@ -2136,9 +2183,9 @@ public class ServidorCentral {
   /* da conexão cifrada, nunca o que vem no pedido.                     */
   /* ------------------------------------------------------------------ */
 
-  private static final List<String> FUNCOES_PADRAO = Arrays.asList("anotar", "corrigir", "avisos", "relatorios", "ler_folha", "usina", "folhas", "conexao", "integracoes", "ajustes", "registro", "chefes");
+  private static final List<String> FUNCOES_PADRAO = Arrays.asList("anotar", "corrigir", "avisos", "relatorios", "ler_folha", "usina", "folhas", "conexao", "integracoes", "ajustes", "registro", "chefes", "escritorio");
   private static final List<String> FUNCOES_DO_NIVEL_1 = Arrays.asList("corrigir", "relatorios");
-  private static final List<String> FUNCOES_NO_SETOR = Arrays.asList("ajustes", "usina");
+  private static final List<String> FUNCOES_NO_SETOR = Arrays.asList("ajustes", "usina", "escritorio");
   /** Folhas que só o tablet chefe anota (Vinho e Fermentação, iguais ao forms.js; os testes conferem). */
   private static final List<String> PRANCHETAS_SO_DO_CHEFE = Arrays.asList("med_dornas", "fermentacao");
   private static final List<String> FOLHAS_SISTEMA = Arrays.asList("dec", "oculto", "_operador", "_novos");

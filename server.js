@@ -325,6 +325,28 @@ function pedirNuvem(caminho, corpo) {
     pedido.end(dados || undefined);
   });
 }
+function tokenNuvem(aparelho) {
+  const n = config.nuvem;
+  return n.url && n.segredo ? crypto.createHmac('sha256', n.segredo).update('aparelho|' + aparelho).digest('hex') : '';
+}
+/** Confirma a versão lida; um envio mais novo durante o processamento continua na fila. */
+async function puxarFilaNuvem() {
+  const r = await pedirNuvem('fila');
+  if (r.status !== 200 || !r.json || !Array.isArray(r.json.itens)) throw new Error(erroDaNuvem(r));
+  const itens = [];
+  for (const item of r.json.itens) {
+    const resultado = sincronizar({ registros: [item.registro], geracao: item.geracao || '' }, item.aparelho, 'nuvem');
+    const recusas = resultado.recusados || [];
+    if (resultado.erro || resultado.zerar) recusas.push({ id: item.registro.id, motivo: resultado.erro || 'geracao' });
+    for (const recusa of recusas) registrar('nuvem', `Fila recusada: ${recusa.id} (${recusa.motivo})`, { aparelho: nomeDoAparelho(item.aparelho) });
+    itens.push({ aparelho: item.aparelho, id: item.registro.id, atualizadoEm: item.registro.atualizadoEm });
+  }
+  if (itens.length) {
+    gravarDisco(true); // só confirma depois que as anotações e recusas estão no disco
+    const c = await pedirNuvem('fila/confirmar', { itens });
+    if (c.status !== 200) throw new Error(erroDaNuvem(c));
+  }
+}
 const erroDaNuvem = (r) => r.erro || (r.status === 401 ? 'A nuvem recusou a senha da central' : `A nuvem respondeu ${r.status}: ${((r.json && r.json.erro) || r.texto || '').slice(0, 200)}`);
 /** O que falta mandar: o que mudou depois do último envio (e, na primeira vez, também os dias do BackupUsina). */
 function pendentesNuvem(n) {
@@ -343,6 +365,7 @@ async function enviarParaNuvem() {
   if (!n.url || !n.segredo || enviandoNuvem) return;
   enviandoNuvem = true;
   try {
+    await puxarFilaNuvem();
     // na primeira vez (ou se a nuvem foi trocada/zerada), confere até onde ela tem
     if (!n.conferida) {
       const e = await pedirNuvem('central/estado');
@@ -425,6 +448,7 @@ function nomeDoAparelho(id) {
   if (dele) return dele;
   const papel = (aparelhos[id] && aparelhos[id].papel) || (config.aparelhosVistos[id] && config.aparelhosVistos[id].papel);
   if (papel === 'central') return 'Tablet chefe';
+  if (papel === 'escritorio') return 'Escritório';
   let s = null;
   try { s = formsLidas().setores.find((x) => x.id === papel); } catch (e) { /* sem o forms */ }
   return s ? `Tablet da ${s.nome}` : 'Aparelho ' + String(id).slice(-6);
@@ -485,7 +509,7 @@ const negar = (res, f) => json(res, 403, { erro: 'Quem está neste aparelho não
 const liberadosNoSetor = {};
 const LIBERADO_NO_SETOR_MS = 10 * 60000;
 // no tablet de setor a senha só abre os ajustes dele (os operadores), seja de quem for: o resto é do tablet chefe
-const FUNCOES_NO_SETOR = ['ajustes', 'usina'];
+const FUNCOES_NO_SETOR = ['ajustes', 'usina', 'escritorio'];
 function funcoesNoSetor(aparelho) {
   const l = liberadosNoSetor[aparelho];
   if (!l || Date.now() > l.ate) return new Set();
@@ -744,13 +768,14 @@ try { db = JSON.parse(fs.readFileSync(ARQUIVO, 'utf8')); } catch (e) { /* primei
 const aparelhos = {}; // id -> { papel, operador, vistoEm, ip }
 
 let gravarTimer = null;
-function gravarDisco() {
+function gravarDisco(agora = false) {
   clearTimeout(gravarTimer);
-  gravarTimer = setTimeout(() => {
+  const gravar = () => {
     const tmp = ARQUIVO + '.tmp';
     fs.writeFileSync(tmp, JSON.stringify(db));
     fs.renameSync(tmp, ARQUIVO);
-  }, 500);
+  };
+  if (agora) gravar(); else gravarTimer = setTimeout(gravar, 500);
 }
 // backup: um arquivo por dia de produção
 const ehDia = (d) => /^\d{4}-\d{2}-\d{2}$/.test(d || '');
@@ -1017,89 +1042,101 @@ const servidor = http.createServer(async (req, res) => {
   }
 });
 
+/** O sync local e a fila usam a mesma autorização, revisão e gravação. */
+function sincronizar(corpo, aparelho, ip) {
+  const bloqueio = config.bloqueios[aparelho];
+  if (bloqueio) return { erro: 'bloqueado', bloqueio: bloqueioPublico(bloqueio), geracao: config.geracao };
+  if (corpo.aparelho) {
+    const antes = aparelhos[corpo.aparelho];
+    aparelhos[corpo.aparelho] = { papel: corpo.papel, nome: String(corpo.nome || '').slice(0, 60), operador: corpo.operador, versao: corpo.versao || '', vistoEm: Date.now(), ip, info: infoLimpa(corpo.info) };
+    eventosDoAparelho(corpo.aparelho, antes, corpo);
+  }
+  guardarErros(corpo.aparelho, corpo.erros, ip);
+  // aparelho com anotações de antes de zerar: não aceita, manda ele limpar.
+  // Aparelho que acabou de conectar numa central nova (tablet chefe trocado ou reinstalado): aceita o que ele tem.
+  if (corpo.geracao && corpo.geracao !== config.geracao) {
+    const zerada = (config.geracoesZeradas || []).includes(corpo.geracao);
+    if (zerada || !corpo.novaConexao) return { ok: false, zerar: true, geracao: config.geracao, seq: db.seq, agora: Date.now() };
+  }
+  const dias = new Set();
+  const antigos = {};
+  let aceitos = 0;
+  // o que a central não aceitou (versão 2.12): o aparelho não marca como enviado e mostra o motivo
+  const recusados = [];
+  const revs = {};
+  const nivelAqui = nivelDoAparelho(aparelho);
+  // a anotação guardada: na memória ou, de dia antigo, no BackupUsina (cada dia lido uma vez só)
+  const doArquivo = {};
+  const guardadaDe = (r) => db.registros[r.id] || (arquivado(r.data) ? (doArquivo[r.data] = doArquivo[r.data] || new Map(lerDiaArquivado(r.data).map((x) => [x.id, x]))).get(r.id) || null : null);
+  for (const r0 of Array.isArray(corpo.registros) ? corpo.registros : []) {
+    let r = r0;
+    if (!r || typeof r.id !== 'string' || typeof r.atualizadoEm !== 'number') continue;
+    // o id diz o que a anotação é (dia|folha|linha): com outro id, uma anotação poderia passar por configuração
+    if (r.id !== `${r.data}|${r.prancheta}|${r.chave}` || !(r.data === 'config' || ehDia(r.data))) { recusados.push({ id: r.id, motivo: 'invalido' }); continue; }
+    // configuração da usina: confere quem pode mudar cada parte, e o conflito
+    if (r.data === 'config') {
+      const d = decidirConfig(db.registros[r.id], r, aparelho);
+      if (!d.aceita) { recusados.push({ id: r.id, motivo: d.motivo, atual: db.registros[r.id] || null }); continue; }
+      r = d.entrada;
+      revs[r.id] = r.rev;
+    } else if (r.prancheta === 'rastreamento') {
+      const f = nivelAqui ? funcoesNoAparelho(aparelho) : funcoesNoSetor(aparelho);
+      if (!f.has('escritorio')) { recusados.push({ id: r.id, motivo: 'sem_permissao' }); continue; }
+    } else if (nivelAqui && !['registro', 'avisos-recibo'].includes(r.prancheta)) {
+      // tablet chefe: a função de quem está dentro (a mesma que a tela pede)
+      const motivo = motivoNoChefe(aparelho, r);
+      if (motivo) { recusados.push({ id: r.id, motivo }); continue; }
+    } else if (r.prancheta === 'avisos') {
+      // aviso só sai do tablet chefe
+      recusados.push({ id: r.id, motivo: 'sem_permissao' }); continue;
+    }
+    // tablet de setor não muda os campos que são só do escritório (NF, lote, validade...), nem de dia antigo
+    if (!nivelAqui && r.valores) {
+      const soEscritorio = camposSoDoEscritorio(r.prancheta);
+      if (soEscritorio.length) {
+        const guardado = guardadaDe(r);
+        const valores = Object.assign({}, r.valores);
+        soEscritorio.forEach((c) => { if (guardado && guardado.valores && c in guardado.valores) valores[c] = guardado.valores[c]; else delete valores[c]; });
+        r = Object.assign({}, r, { valores });
+      }
+    }
+    if (r.prancheta === 'rastreamento' && !nivelAqui && liberadosNoSetor[aparelho]) liberadosNoSetor[aparelho].ate = Date.now() + LIBERADO_NO_SETOR_MS;
+    if (arquivado(r.data)) {
+      const limpo = Object.assign({}, r, { recebidoEm: Date.now() });
+      delete limpo.sincronizado;
+      (antigos[r.data] = antigos[r.data] || []).push(limpo);
+      continue;
+    }
+    const atual = db.registros[r.id];
+    const entrada = criadasSemSaber(atual, r) ? juntarLinhas(atual, r) : r;
+    // a configuração já foi conferida pela revisão (o relógio do aparelho não decide)
+    if (!atual || entrada !== r || r.atualizadoEm >= atual.atualizadoEm || r.data === 'config') {
+      db.seq += 1;
+      const limpo = Object.assign({}, entrada, { seq: db.seq, recebidoEm: Date.now() });
+      delete limpo.sincronizado;
+      db.registros[r.id] = limpo;
+      dias.add(r.data);
+      aceitos += 1;
+    }
+  }
+  Object.entries(antigos).forEach(([d, lista]) => { aceitos += juntarNoArquivo(d, lista); });
+  if (aceitos) { gravarDisco(); dias.forEach(backupDoDia); agendarNuvem(); }
+  // bloqueado enquanto esta sincronização acontecia: responde como bloqueado (o 200 abaixo diz "livre até a revisão")
+  const blq = config.bloqueios[aparelho];
+  if (blq) return { erro: 'bloqueado', bloqueio: bloqueioPublico(blq), geracao: config.geracao };
+  // o endereço da nuvem vai junto: longe da usina, o aparelho pergunta lá se foi bloqueado
+  // bloqueiosRev: "não está bloqueado até esta revisão" (resposta atrasada da nuvem com bloqueio mais velho não trava)
+  return { ok: true, aceitos, recusados, revs, seq: db.seq, agora: Date.now(), geracao: config.geracao, nuvem: config.nuvem.url || '', nuvemToken: tokenNuvem(aparelho), bloqueiosRev: config.bloqueiosRev };
+}
+
 /** As rotas com os dados da usina. Chegam aqui só depois de abrir o pedido embaralhado. */
 async function rotaProtegida(req, res, url, ip) {
   const p = url.pathname;
   try {
       if (p === '/api/sync' && req.method === 'POST') {
         const corpo = JSON.parse(await lerCorpo(req));
-        if (corpo.aparelho) {
-          const antes = aparelhos[corpo.aparelho];
-          aparelhos[corpo.aparelho] = { papel: corpo.papel, nome: String(corpo.nome || '').slice(0, 60), operador: corpo.operador, versao: corpo.versao || '', vistoEm: Date.now(), ip, info: infoLimpa(corpo.info) };
-          eventosDoAparelho(corpo.aparelho, antes, corpo);
-        }
-        guardarErros(corpo.aparelho, corpo.erros, ip);
-        // aparelho com anotações de antes de zerar: não aceita, manda ele limpar.
-        // Aparelho que acabou de conectar numa central nova (tablet chefe trocado ou reinstalado): aceita o que ele tem.
-        if (corpo.geracao && corpo.geracao !== config.geracao) {
-          const zerada = (config.geracoesZeradas || []).includes(corpo.geracao);
-          if (zerada || !corpo.novaConexao) return json(res, 200, { ok: false, zerar: true, geracao: config.geracao, seq: db.seq, agora: Date.now() });
-        }
-        const dias = new Set();
-        const antigos = {};
-        let aceitos = 0;
-        // o que a central não aceitou (versão 2.12): o aparelho não marca como enviado e mostra o motivo
-        const recusados = [];
-        const revs = {};
-        const nivelAqui = nivelDoAparelho(req.aparelho);
-        // a anotação guardada: na memória ou, de dia antigo, no BackupUsina (cada dia lido uma vez só)
-        const doArquivo = {};
-        const guardadaDe = (r) => db.registros[r.id] || (arquivado(r.data) ? (doArquivo[r.data] = doArquivo[r.data] || new Map(lerDiaArquivado(r.data).map((x) => [x.id, x]))).get(r.id) || null : null);
-        for (const r0 of Array.isArray(corpo.registros) ? corpo.registros : []) {
-          let r = r0;
-          if (!r || typeof r.id !== 'string' || typeof r.atualizadoEm !== 'number') continue;
-          // o id diz o que a anotação é (dia|folha|linha): com outro id, uma anotação poderia passar por configuração
-          if (r.id !== `${r.data}|${r.prancheta}|${r.chave}` || !(r.data === 'config' || ehDia(r.data))) { recusados.push({ id: r.id, motivo: 'invalido' }); continue; }
-          // configuração da usina: confere quem pode mudar cada parte, e o conflito
-          if (r.data === 'config') {
-            const d = decidirConfig(db.registros[r.id], r, req.aparelho);
-            if (!d.aceita) { recusados.push({ id: r.id, motivo: d.motivo, atual: db.registros[r.id] || null }); continue; }
-            r = d.entrada;
-            revs[r.id] = r.rev;
-          } else if (nivelAqui && !['registro', 'avisos-recibo'].includes(r.prancheta)) {
-            // tablet chefe: a função de quem está dentro (a mesma que a tela pede)
-            const motivo = motivoNoChefe(req.aparelho, r);
-            if (motivo) { recusados.push({ id: r.id, motivo }); continue; }
-          } else if (r.prancheta === 'avisos') {
-            // aviso só sai do tablet chefe
-            recusados.push({ id: r.id, motivo: 'sem_permissao' }); continue;
-          }
-          // tablet de setor não muda os campos que são só do escritório (NF, lote, validade...), nem de dia antigo
-          if (!nivelAqui && r.valores) {
-            const soEscritorio = camposSoDoEscritorio(r.prancheta);
-            if (soEscritorio.length) {
-              const guardado = guardadaDe(r);
-              const valores = Object.assign({}, r.valores);
-              soEscritorio.forEach((c) => { if (guardado && guardado.valores && c in guardado.valores) valores[c] = guardado.valores[c]; else delete valores[c]; });
-              r = Object.assign({}, r, { valores });
-            }
-          }
-          if (arquivado(r.data)) {
-            const limpo = Object.assign({}, r, { recebidoEm: Date.now() });
-            delete limpo.sincronizado;
-            (antigos[r.data] = antigos[r.data] || []).push(limpo);
-            continue;
-          }
-          const atual = db.registros[r.id];
-          const entrada = criadasSemSaber(atual, r) ? juntarLinhas(atual, r) : r;
-          // a configuração já foi conferida pela revisão (o relógio do aparelho não decide)
-          if (!atual || entrada !== r || r.atualizadoEm >= atual.atualizadoEm || r.data === 'config') {
-            db.seq += 1;
-            const limpo = Object.assign({}, entrada, { seq: db.seq, recebidoEm: Date.now() });
-            delete limpo.sincronizado;
-            db.registros[r.id] = limpo;
-            dias.add(r.data);
-            aceitos += 1;
-          }
-        }
-        Object.entries(antigos).forEach(([d, lista]) => { aceitos += juntarNoArquivo(d, lista); });
-        if (aceitos) { gravarDisco(); dias.forEach(backupDoDia); agendarNuvem(); }
-        // bloqueado enquanto esta sincronização acontecia: responde como bloqueado (o 200 abaixo diz "livre até a revisão")
-        const blq = config.bloqueios[req.aparelho];
-        if (blq) return json(res, 423, { erro: 'bloqueado', bloqueio: bloqueioPublico(blq), geracao: config.geracao });
-        // o endereço da nuvem vai junto: longe da usina, o aparelho pergunta lá se foi bloqueado
-        // bloqueiosRev: "não está bloqueado até esta revisão" (resposta atrasada da nuvem com bloqueio mais velho não trava)
-        return json(res, 200, { ok: true, aceitos, recusados, revs, seq: db.seq, agora: Date.now(), geracao: config.geracao, nuvem: config.nuvem.url || '', bloqueiosRev: config.bloqueiosRev });
+        const resultado = sincronizar(corpo, req.aparelho, ip);
+        return json(res, resultado.erro === 'bloqueado' ? 423 : 200, resultado);
       }
 
       // pessoas do escritório: entrar com a senha, sair, e (só o administrador) cadastrar e dar permissões

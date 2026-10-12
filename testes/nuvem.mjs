@@ -18,6 +18,7 @@ import { teste, certo, igual, SENHA_ENCARREGADO } from './teste.mjs';
 import { centralNode, centralJava, pastaTemporaria, APP } from './servidores.mjs';
 import { diaDeExemplo } from './api-leitura.mjs';
 import { chaveDeTeste, telasDeTeste, montarPacote } from './atualizacao.mjs';
+import { conectarTeste } from './cifra.mjs';
 
 const NUVEM = path.join(APP, 'nuvem');
 const WRANGLER = path.join(NUVEM, 'node_modules', 'wrangler', 'bin', 'wrangler.js');
@@ -35,7 +36,7 @@ async function ligarNuvem(porta) {
   const publico = pastaTemporaria('nuvem-publico');
   fs.cpSync(path.join(NUVEM, 'publico'), publico, { recursive: true });
   const env = Object.assign({}, process.env, { WRANGLER_SEND_METRICS: 'false', CI: '1', NO_COLOR: '1' });
-  execFileSync(process.execPath, [WRANGLER, 'd1', 'execute', 'pranchetas', '--local', '--persist-to', banco, '--file', 'schema.sql'], { cwd: NUVEM, env, stdio: 'pipe' });
+  execFileSync(process.execPath, [WRANGLER, 'd1', 'execute', 'pranchetas', '--local', '--persist-to', banco, '--file', 'schema.sql'], { cwd: NUVEM, env, stdio: 'inherit' });
   const proc = spawn(process.execPath, [WRANGLER, 'dev', '--local', '--ip', '127.0.0.1', '--port', String(porta), '--persist-to', banco, '--assets', publico,
     '--var', `SEGREDO_CENTRAL:${SEGREDO}`, '--var', `TOKEN_LEITURA:${TOKEN}`, '--show-interactive-dev-session=false'], { cwd: NUVEM, env, stdio: 'ignore' });
   const url = `http://127.0.0.1:${porta}`;
@@ -51,8 +52,8 @@ async function ligarNuvem(porta) {
       const saida = execFileSync(process.execPath, [WRANGLER, 'd1', 'execute', 'pranchetas', '--local', '--persist-to', banco, '--command', sql, '--json'], { cwd: NUVEM, env, stdio: ['ignore', 'pipe', 'pipe'] }).toString();
       return JSON.parse(saida.slice(saida.indexOf('['))) [0].results;
     },
-    async pedir(rota, { senha = TOKEN, corpo } = {}) {
-      const r = await fetch(url + rota, { method: corpo ? 'POST' : 'GET', headers: Object.assign({ Authorization: 'Bearer ' + senha }, corpo ? { 'Content-Type': 'application/json' } : {}), body: corpo ? JSON.stringify(corpo) : undefined });
+    async pedir(rota, { senha = TOKEN, corpo, aparelho } = {}) {
+      const r = await fetch(url + rota, { method: corpo ? 'POST' : 'GET', headers: Object.assign({ Authorization: 'Bearer ' + senha }, aparelho ? { 'X-Aparelho': aparelho } : {}, corpo ? { 'Content-Type': 'application/json' } : {}), body: corpo ? JSON.stringify(corpo) : undefined });
       const texto = await r.text();
       let json = null; try { json = JSON.parse(texto); } catch { /* não é JSON */ }
       return { status: r.status, json, texto, cabecalhos: r.headers };
@@ -78,18 +79,59 @@ async function esperar(fn, descricao, ms = 40000) {
   throw new Error(`não aconteceu em ${ms / 1000}s: ${descricao}`);
 }
 
-export async function testarNuvem(grupo) {
-  if (!temWrangler()) {
+export async function testarNuvem(grupo, sqlite = false) {
+  if (!sqlite && !temWrangler()) {
     await teste(grupo, 'nuvem: wrangler instalado (npm install na pasta nuvem)', async () => certo(false, 'falta rodar npm install em app/nuvem'));
     return;
   }
-  const nuvem = await ligarNuvem(8791);
+  const nuvem = sqlite ? await (await import('./nuvem-sqlite.mjs')).ligarNuvemSQLite(8791, SEGREDO, TOKEN) : await ligarNuvem(8791);
   try {
     await teste(grupo, 'a nuvem liga e recusa quem não tem a senha', async () => {
       certo((await (await fetch(nuvem.url + '/')).text()).includes('no ar'), 'página inicial');
       igual((await nuvem.pedir('/central/estado', { senha: 'errada' })).status, 401);
       igual((await nuvem.pedir('/api/v1/esquema', { senha: 'errada' })).status, 401);
       igual((await nuvem.pedir('/api/v1/esquema')).status, 503, 'sem nada da central, a API avisa');
+    });
+
+    const tokenFila = (id) => crypto.createHmac('sha256', SEGREDO).update('aparelho|' + id).digest('hex');
+    const lerFila = async () => (await nuvem.pedir('/fila', { senha: SEGREDO })).json.itens;
+    const confirmar = (itens) => nuvem.pedir('/fila/confirmar', { senha: SEGREDO, corpo: { itens } });
+    const recibos = (itens) => itens.map((x) => ({ aparelho: x.aparelho, id: x.registro.id, atualizadoEm: x.registro.atualizadoEm }));
+    const exemploFila = { id: '2026-10-10|caldeira|20', data: '2026-10-10', prancheta: 'caldeira', chave: '20', atualizadoEm: 100, valores: { pressao: '6' } };
+    const enviarFila = (aparelho, registros, extra = {}) => nuvem.pedir('/fila', { aparelho, senha: tokenFila(aparelho), corpo: { registros, ...extra } });
+    await teste(grupo, 'fila: token errado, token de outro aparelho e acesso à leitura/confirmação são recusados', async () => {
+      igual((await nuvem.pedir('/fila', { aparelho: 'a', senha: 'errado', corpo: { registros: [] } })).status, 401);
+      igual((await nuvem.pedir('/fila', { aparelho: 'b', senha: tokenFila('a'), corpo: { registros: [] } })).status, 401);
+      igual((await nuvem.pedir('/fila', { senha: SEGREDO, corpo: { registros: [] } })).status, 401);
+      igual((await nuvem.pedir('/fila', { senha: tokenFila('a') })).status, 401);
+      igual((await nuvem.pedir('/fila/confirmar', { senha: tokenFila('a'), corpo: { itens: [] } })).status, 401);
+      const options = await fetch(nuvem.url + '/fila', { method: 'OPTIONS' });
+      certo(options.headers.get('access-control-allow-headers').includes('X-Aparelho'), 'CORS para o aparelho');
+      igual((await enviarFila('a', [])).status, 200);
+    });
+    await teste(grupo, 'fila: limite de 500 anotações, 1 MB e estrutura validada antes de gravar', async () => {
+      igual((await enviarFila('a', Array(501).fill(exemploFila))).status, 400);
+      igual((await enviarFila('a', [{ ...exemploFila, valores: { texto: 'a'.repeat(1024 * 1024) } }])).status, 413);
+      igual((await enviarFila('a', [{ ...exemploFila, atualizadoEm: '100' }])).status, 400);
+      igual((await enviarFila('a', [{ ...exemploFila, id: 'config|sistema|geral' }])).status, 400);
+      igual((await lerFila()).length, 0);
+    });
+    await teste(grupo, 'fila separada por aparelho/id; só versão mais nova substitui; confirmação antiga não apaga a nova', async () => {
+      igual((await enviarFila('a', [exemploFila])).status, 200);
+      await enviarFila('b', [exemploFila]);
+      const antigos = recibos(await lerFila());
+      await enviarFila('a', [{ ...exemploFila, atualizadoEm: 101, valores: { pressao: '7' } }]);
+      await enviarFila('a', [{ ...exemploFila, atualizadoEm: 100, valores: { pressao: '8' } }]);
+      await enviarFila('a', [{ ...exemploFila, atualizadoEm: 101, valores: { pressao: '9' } }]);
+      let itens = await lerFila();
+      igual(itens.length, 2);
+      igual(itens.find((x) => x.aparelho === 'a').registro.valores.pressao, '7');
+      // A fila não alimenta a API de leitura: a central ainda não mandou forms nem anotações.
+      igual((await nuvem.pedir('/api/v1/esquema')).status, 503);
+      igual((await nuvem.pedir('/central/estado', { senha: SEGREDO })).json.registros, 0);
+      await confirmar(antigos);
+      itens = await lerFila(); igual(itens.length, 1); igual(itens[0].registro.atualizadoEm, 101);
+      await confirmar(recibos(itens)); igual((await lerFila()).length, 0);
     });
 
     for (const [nome, ligar, porta] of [['computador', centralNode, 8792], ['tablet chefe', centralJava, 8793]]) {
@@ -107,7 +149,7 @@ export async function testarNuvem(grupo) {
           const r = await c.api('/api/nuvem', { acao: 'configurar', url: nuvem.url, segredo: SEGREDO, forms: formsDoApp() });
           certo(r && r.url === nuvem.url && r.temSegredo, 'configurar: ' + JSON.stringify(r));
           const publicas = regs.filter((x) => /^\d{4}-/.test(x.data) && x.prancheta !== 'avisos').length;
-          const e = await esperar(async () => { const x = (await nuvem.pedir('/central/estado', { senha: SEGREDO })).json; return x && x.registros >= publicas ? x : null; }, 'anotações na nuvem');
+          const e = await esperar(async () => { const x = (await nuvem.pedir('/central/estado', { senha: SEGREDO })).json; return x && x.registros === publicas ? x : null; }, 'anotações na nuvem (só as desta central: a da rodada anterior sai quando esta manda tudo)');
           igual(e.registros, publicas, 'a configuração da usina e os avisos não sobem');
           const st = await esperar(async () => { const x = await c.api('/api/nuvem', { acao: 'estado' }); return x && x.ultimoEnvio && !x.faltam ? x : null; }, 'estado da central');
           igual(st.erro, '');
@@ -178,6 +220,69 @@ export async function testarNuvem(grupo) {
           await c.api('/api/aparelhos', { acao: 'desbloquear', id: 'teste-nuvem' });
           const solto = await esperar(async () => { const d = await (await fetch(nuvem.url + '/aparelho/teste-nuvem')).json(); return d.bloqueio === null ? d : null; }, 'o desbloqueio na nuvem');
           certo(solto.revisao > b.rev, 'o desbloqueio é mais novo que o bloqueio (o aparelho só destrava assim): ' + JSON.stringify(solto));
+        });
+
+        const remoto = await conectarTeste(c.url, c.codigo());
+        const syncRemoto = async (registros = []) => (await remoto.pedir('/api/sync', { corpo: { aparelho: remoto.aparelho, papel: 'escritorio', registros } })).json;
+        const credencial = await syncRemoto();
+        const mandar = (registros, extra = {}) => nuvem.pedir('/fila', { aparelho: remoto.aparelho, senha: credencial.nuvemToken, corpo: { registros, geracao: credencial.geracao, ...extra } });
+        const puxar = async () => {
+          await c.api('/api/nuvem', { acao: 'enviar' });
+          await esperar(async () => !(await lerFila()).length, 'central confirmou a fila');
+        };
+        const registros = async () => (await c.api('/api/registros?desde=0')).registros;
+        const t = Date.now();
+        const r = { id: `${dia}|caldeira|fila`, data: dia, prancheta: 'caldeira', chave: 'fila', aparelho: remoto.aparelho, atualizadoEm: t, valores: { pressao: '5' } };
+        await teste(grupo, `${nome}: fila chega pelo aparelho certo, grava no disco e confirmado some`, async () => {
+          igual(credencial.nuvemToken, tokenFila(remoto.aparelho));
+          igual((await mandar([r])).status, 200);
+          await puxar();
+          igual((await registros()).find((x) => x.id === r.id).valores.pressao, '5');
+          const disco = JSON.parse(fs.readFileSync(path.join(c.pastaServidor, 'registros.json'), 'utf8'));
+          igual(disco.registros[r.id].valores.pressao, '5', 'gravado antes da confirmação');
+        });
+        await teste(grupo, `${nome}: fila mais velha perde; mais nova vence`, async () => {
+          await syncRemoto([{ ...r, atualizadoEm: t + 100, valores: { pressao: '6' } }]);
+          await mandar([{ ...r, atualizadoEm: t + 50, valores: { pressao: '4' } }]); await puxar();
+          igual((await registros()).find((x) => x.id === r.id).valores.pressao, '6');
+          await mandar([{ ...r, atualizadoEm: t + 200, valores: { pressao: '7' } }]); await puxar();
+          igual((await registros()).find((x) => x.id === r.id).valores.pressao, '7');
+        });
+        await teste(grupo, `${nome}: config pela fila respeita permissão, revisão e registro das recusas`, async () => {
+          const id = 'config|sistema|geral';
+          let cfg = (await registros()).find((x) => x.id === id);
+          const entrada = { id, data: 'config', prancheta: 'sistema', chave: 'geral', base: cfg?.rev || 0, valores: { ...(cfg?.valores || {}), operadores: { caldeira: ['Fila'] } }, atualizadoEm: t + 300 };
+          await mandar([entrada]); await puxar();
+          igual(JSON.stringify((await registros()).find((x) => x.id === id)?.valores), JSON.stringify(cfg?.valores));
+          await remoto.pedir('/api/pessoas', { corpo: { acao: 'verificar', pin: SENHA_ENCARREGADO } });
+          await mandar([{ ...entrada, atualizadoEm: t + 301 }]); await puxar();
+          cfg = (await registros()).find((x) => x.id === id);
+          igual(cfg.valores.operadores.caldeira[0], 'Fila');
+          await mandar([{ ...entrada, atualizadoEm: t + 302 }]); await puxar();
+          igual((await registros()).find((x) => x.id === id).rev, cfg.rev);
+          const log = (await c.api('/api/registro?dia=' + diaProducao())).registros;
+          certo(log.some((x) => x.valores.texto.includes('Fila recusada: ' + id) && x.valores.texto.includes('sem_permissao')), 'recusa registrada');
+          certo(log.some((x) => x.valores.texto.includes('Fila recusada: ' + id) && x.valores.texto.includes('conflito')), 'conflito registrado');
+        });
+        await teste(grupo, `${nome}: rastreamento sem permissão e aparelho bloqueado não entram pela fila`, async () => {
+          await remoto.pedir('/api/pessoas', { corpo: { acao: 'verificar', pin: SENHA_ENCARREGADO } });
+          const rast = { ...r, id: `${dia}|rastreamento|fila`, prancheta: 'rastreamento', atualizadoEm: t + 400 };
+          await mandar([rast]); await puxar();
+          certo((await registros()).some((x) => x.id === rast.id), 'com escritório entra');
+          await c.api('/api/pessoas', { acao: 'salvar', pessoa: { nome: 'Consulta fila', nivel: 'consulta', pin: '3333' } });
+          await remoto.pedir('/api/pessoas', { corpo: { acao: 'verificar', pin: '3333' } });
+          await mandar([{ ...rast, atualizadoEm: t + 401, valores: { pressao: '999' } }]); await puxar();
+          igual((await registros()).find((x) => x.id === rast.id).atualizadoEm, t + 400);
+          igual((await c.api('/api/aparelhos', { acao: 'bloquear', id: remoto.aparelho, modo: 'trava' })).ok, true);
+          await mandar([{ ...r, atualizadoEm: t + 402, valores: { pressao: '999' } }]); await puxar();
+          igual((await registros()).find((x) => x.id === r.id).valores.pressao, '7');
+          const log = (await c.api('/api/registro?dia=' + diaProducao())).registros;
+          certo(log.some((x) => x.valores.texto.includes('Fila recusada: ' + r.id) && x.valores.texto.includes('bloqueado')), 'bloqueio registrado');
+          await c.api('/api/aparelhos', { acao: 'desbloquear', id: remoto.aparelho });
+        });
+        await teste(grupo, `${nome}: fila de outra geração não ressuscita anotações`, async () => {
+          await mandar([{ ...r, atualizadoEm: t + 500, valores: { pressao: '999' } }], { geracao: 'geracao-antiga' }); await puxar();
+          igual((await registros()).find((x) => x.id === r.id).valores.pressao, '7');
         });
 
       } finally { await c.desligar(); }

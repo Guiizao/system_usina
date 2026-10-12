@@ -31,3 +31,13 @@ CREATE TABLE IF NOT EXISTS info (
   chave TEXT PRIMARY KEY,
   valor TEXT
 );
+
+-- 2.13: pendências dos aparelhos; só a central as promove para registros.
+CREATE TABLE IF NOT EXISTS fila (
+  aparelho TEXT NOT NULL,
+  id TEXT NOT NULL,
+  atualizadoEm INTEGER NOT NULL,
+  geracao TEXT NOT NULL DEFAULT '',
+  json TEXT NOT NULL,
+  PRIMARY KEY (aparelho, id)
+);

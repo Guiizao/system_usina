@@ -390,12 +390,108 @@
       return { nome: 'Fermentação', paisagem: true, grade: g, dados };
     }
 
-    const MODELOS = { pop011, pop03, caldeira, destilaria, nova, medicao, fermentacao };
+    /* ===== POP 03 - FOR 011: usando o fechamento guardado ===== */
+    function rastreamento(pid, data) {
+      const p = ctx.prancheta(pid), cfg = C.rastreamento;
+      const salvo = ctx.pegar(data, pid, 'dia');
+      const v = salvo && !salvo.apagado ? salvo.valores || {} : {};
+      const g = new Grade(Array(56).fill(1.8)), linhas = [];
+      const ler = (caminho) => caminho.split('.').reduce((o, k) => o == null ? undefined : o[k], v) ?? '';
+      const dataPapel = (d) => /^\d{4}-\d{2}-\d{2}$/.test(d || '') ? fmtData(d) : d || '';
+      const cel = (r, a, b, x, fim = r, st = {}) => g.bloco(r, a, fim, b, x, Object.assign({ borda: true, sz: 8, al: 'l', quebra: true }, st));
+      const cab = (r, a, b, x) => cel(r, a, b, x, r, { b: true, al: 'c' });
+      const valor = (r, a, b, caminho, fim = r, dec = 1) => {
+        const x = ler(caminho);
+        cel(r, a, b, x, fim, { dec, milhar: true, al: 'c' });
+        linhas.push({ rotulo: caminho, valores: [caminho, x], preenchida: x !== '' });
+      };
+      const fechamento = v.fechamento || '';
+      cel(0, 0, 3, '', 4);
+      cab(0, 4, 7, 'INÍCIO'); cab(0, 8, 11, 'FINAL');
+      cel(1, 4, 7, '07:00'); cel(1, 8, 11, '07:00');
+      cel(2, 4, 7, 'DIA ANTERIOR', 2, { sz: 7 }); cel(2, 8, 11, 'DIA ATUAL', 2, { sz: 7 });
+      cel(3, 4, 7, dataPapel(data)); cel(3, 8, 11, dataPapel(fechamento));
+      cel(4, 4, 11, 'DATA: ' + dataPapel(fechamento));
+      cab(0, 12, 55, `${p.codigo}: ${p.titulo} - ${p.revisao || '01/2026'}`);
+      [[12, 15, 'PRODUTO'], [16, 20, 'PRODUÇÃO (L)'], [21, 26, 'Nº DO LOTE'], [27, 31, 'VALIDADE']].forEach(([a, b, t]) => cab(1, a, b, t));
+      [['alcool', 'ÁLCOOL-PA', cfg.validadeAlcoolMeses + ' MESES'], ['vinhaca', 'VINHAÇA', cfg.validadeVinhacaDias + ' DIAS']].forEach(([id, nome, prazo], i) => {
+        const r = 2 + i;
+        cel(r, 12, 15, nome); valor(r, 16, 20, id + '.producao'); valor(r, 21, 26, id + '.lote');
+        cel(r, 27, 31, prazo + (ler(id + '.validade') ? '\n' + dataPapel(ler(id + '.validade')) : ''), r, { sz: 7, al: 'c' });
+      });
+      cel(4, 12, 20, 'VOLUME DESTILADO (L):'); valor(4, 21, 31, 'volumeDestilado');
+      cab(1, 32, 55, 'PRODUTOS INTERMEDIÁRIOS (PI)');
+      cel(2, 32, 47, '(PI) PRODUÇÃO DE HIDRÓLISE (L):'); valor(2, 48, 55, 'pi.hidrolise');
+      cel(3, 32, 47, '(PI) PRODUÇÃO DE VINHO (L):'); valor(3, 48, 55, 'pi.vinho');
+      cel(4, 32, 55, 'MP ÷ fator = hidrolisado; × Brix inicial ÷ Brix final = vinho', 4, { sz: 7 });
+      [['hidrolise', 'HIDRÓLISE', cfg.parametros.hidrolise], ['alcoolParam', 'PRODUÇÃO DE ÁLCOOL', cfg.parametros.alcool]].forEach(([id, nome, params], i) => {
+        const a = i * 16;
+        cab(5, a, a + 15, nome);
+        [[a, a + 5, 'DADOS'], [a + 6, a + 10, 'PARÂMETROS'], [a + 11, a + 15, 'RESULTADO']].forEach(([x, y, t]) => cab(6, x, y, t));
+        params.forEach(([campo, rotulo, limite], j) => {
+          cel(7 + j, a, a + 5, rotulo); cel(7 + j, a + 6, a + 10, limite);
+          valor(7 + j, a + 11, a + 15, id + '.' + campo, 7 + j, 2);
+        });
+      });
+      const tanques = cfg.tanques.flatMap((x) => x.lista);
+      const linhaTanques = (r, ids, ultima = r + 3) => {
+        cel(r, 0, 3, 'RESULTADO');
+        ids.forEach((id, i) => cel(r, (i + 1) * 4, (i + 2) * 4 - 1, ((tanques.find((t) => t[0] === id) || [])[1] || '').replace(' (volante)', ''), r, { sz: 7, al: 'c' }));
+        ['brix', 'ph', 'folga'].forEach((campo, j) => {
+          const fim = j === 2 ? ultima : r + j + 1;
+          cel(r + j + 1, 0, 3, campo.toUpperCase(), fim);
+          ids.forEach((id, i) => valor(r + j + 1, (i + 1) * 4, (i + 2) * 4 - 1, 'tanques.' + id + '.' + campo, fim, 2));
+        });
+      };
+      cab(10, 0, 11, 'HIDRÓLISE · TQs da Hidrólise'); cab(10, 12, 31, 'SACARIFICAÇÃO · TQs da Sacarificação');
+      linhaTanques(11, ['h1', 'h2', 's1', 's2', 's3', 's4', 's5']);
+      cab(15, 0, 23, 'FERMENTAÇÃO'); cab(15, 24, 31, 'VOLANTE');
+      linhaTanques(16, ['f1', 'f2', 'f3', 'f4', 'f5', 'v1', '']);
+      cab(20, 0, 31, 'DORNAS DE DESCANSO');
+      linhaTanques(21, ['d1', 'd2', 'd4', 'd5', 'd6', 'd7', 'd8']);
+      const cols = [[32, 39], [40, 42], [43, 45], [46, 49], [50, 51], [52, 55]];
+      ['INSUMOS', 'KGS/LTS', 'LOTE', 'VALIDADE', 'Nº NF', 'FORNECEDOR'].forEach((t, i) => cab(5, ...cols[i], t));
+      [...cfg.insumos, ...cfg.tratamentoAgua].forEach(([id, nome], i) => {
+        const r = 6 + i;
+        cel(r, 32, 39, (i >= cfg.insumos.length ? 'ÁGUA · ' : '') + nome + (ler('insumos.' + id + '.unidade') === 'copos' ? ' (copos)' : ''), r, { sz: 7 });
+        ['qtd', 'lote', 'validade', 'nf', 'fornecedor'].forEach((campo, j) => {
+          if (campo === 'validade') cel(r, ...cols[j + 1], String(ler('insumos.' + id + '.' + campo)).split(' / ').map(dataPapel).join(' / '), r, { sz: 7 });
+          else valor(r, ...cols[j + 1], 'insumos.' + id + '.' + campo, r, 3);
+        });
+      });
+      cab(19, 32, 55, 'HIGIENIZAÇÃO DE EQUIPAMENTOS');
+      [[32, 42, 'INSUMO'], [43, 45, 'KGS'], [46, 49, 'VALIDADE'], [50, 51, 'Nº NF'], [52, 55, 'FORNECEDOR']].forEach(([a, b, t]) => cab(20, a, b, t));
+      cel(21, 32, 42, 'SODA CÁUSTICA EM ESCAMAS'); valor(21, 43, 45, 'insumos.soda.qtd', 21, 3);
+      cel(21, 46, 49, dataPapel(ler('insumos.soda.validade'))); valor(21, 50, 51, 'insumos.soda.nf'); valor(21, 52, 55, 'insumos.soda.fornecedor');
+      cab(22, 32, 55, 'MOAGEM DE MATÉRIA-PRIMA (MP)');
+      [[32, 38, 'PRODUTO'], [39, 43, 'KG'], [44, 47, 'Nº NF'], [48, 55, 'FORNECEDOR']].forEach(([a, b, t]) => cab(23, a, b, t));
+      const nMP = Math.max(3, (v.mp || []).length);
+      for (let i = 0; i < nMP; i++) [[32, 38, 'produto'], [39, 43, 'kg'], [44, 47, 'nf'], [48, 55, 'fornecedor']].forEach(([a, b, campo]) => valor(24 + i, a, b, `mp.${i}.${campo}`, 24 + i, 3));
+      const lenha = 24 + nMP, nLenha = Math.max(2, (v.lenha || []).length), assinatura = lenha + 2 + nLenha;
+      cab(lenha, 32, 55, 'TIPO DE LENHA E VOLUME CONSUMIDO M³');
+      [[32, 41, 'TIPO LENHA'], [42, 47, 'M³'], [48, 55, 'FORNECEDOR']].forEach(([a, b, t]) => cab(lenha + 1, a, b, t));
+      for (let i = 0; i < nLenha; i++) [[32, 41, 'tipo'], [42, 47, 'm3'], [48, 55, 'fornecedor']].forEach(([a, b, campo]) => valor(lenha + 2 + i, a, b, `lenha.${i}.${campo}`, lenha + 2 + i, 3));
+      cel(assinatura, 32, 43, 'ENCARREGADO: ' + (v.encarregado || ''));
+      cel(assinatura, 44, 55, 'ASSINATURA:');
+      cab(25, 0, 15, 'DORNAS DE DESCANSO'); cab(25, 16, 31, 'AVISO');
+      linhaTanques(26, ['d9', 'd10', 'd11'], assinatura);
+      cel(26, 16, 31, cfg.aviso, assinatura, { va: 't', b: true, sz: 9 });
+      cel(assinatura + 1, 0, 55, 'OPERADORES: ' + (v.operadores || []).join(' - '));
+      for (let r = 0; r < g.linhas; r++) g.altura(r, r === 0 ? 22 : r === 2 || r === 3 ? 23 : 15);
+      return {
+        nome: p.nome, paisagem: true, grade: g, imagem: { linha: 0, coluna: 0, alturaPx: 46, dx: 1, dy: 22 },
+        dados: { cabecalho: [['Documento', p.titulo], ['Código', p.codigo], ['Produção', data], ['Fechamento', fechamento],
+          ['Lote', v.lote || ''], ['Validade álcool', ler('alcool.validade')], ['Validade vinhaça', ler('vinhaca.validade')]],
+          colunas: ['Campo', 'Valor'], linhas, rodape: [['Operadores', (v.operadores || []).join(' - ')], ['Encarregado', v.encarregado || '']] },
+      };
+    }
+
+    const MODELOS = { pop011, pop03, caldeira, destilaria, nova, medicao, fermentacao, rastreamento };
     return {
       /** Monta a folha de papel de uma prancheta num dia. */
       folha(pid, data) {
         const p = pranchetaCompleta(pid);
-        const nomeModelo = p.papel && p.papel.modelo ? p.papel.modelo : p.tipo === 'insumo' ? 'pop03' : p.tipo === 'dornas' ? 'pop011' : 'caldeira';
+        const nomeModelo = p.papel && p.papel.modelo ? p.papel.modelo : p.tipo === 'rastreamento' ? 'rastreamento' : p.tipo === 'insumo' ? 'pop03' : p.tipo === 'dornas' ? 'pop011' : 'caldeira';
         const f = MODELOS[nomeModelo](pid, data);
         const regs = ctx.listar(data, pid).filter((r) => /^\d+$/.test(r.chave));
         const novos = listas.flatMap((k) => (p[k] || []).filter((c) => c.novo === true));

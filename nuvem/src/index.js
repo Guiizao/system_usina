@@ -23,7 +23,8 @@ const MAX_POR_ENVIO = 500;
 const cabecalhos = {
   'Content-Type': 'application/json; charset=utf-8',
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'Authorization, Content-Type',
+  'Access-Control-Allow-Headers': 'Authorization, Content-Type, X-Aparelho',
+  'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
   'Cache-Control': 'no-store',
 };
 // banco de uma nuvem da 2.10: as folhas guardadas podiam ter a senha do administrador
@@ -44,6 +45,75 @@ async function lerInfo(env) {
   const info = {};
   results.forEach((l) => { info[l.chave] = l.valor; });
   return info;
+}
+
+/* ---------- fila dos aparelhos longe da central (2.13) ----------
+ * POST /fila: { registros, geracao? }, X-Aparelho + Bearer HMAC em hexadecimal.
+ * GET /fila: { itens: [{ aparelho, geracao, registro }] }, segredo da central.
+ * POST /fila/confirmar: { itens: [{ aparelho, id, atualizadoEm }] }, segredo da central.
+ * Só a central decide permissões e publica as anotações na API de leitura.
+ */
+const MAX_FILA_BYTES = 1024 * 1024;
+const idAparelho = (id) => typeof id === 'string' && /^[\w.-]{1,80}$/.test(id);
+async function tokenDoAparelho(segredo, aparelho) {
+  const enc = new TextEncoder();
+  const chave = await crypto.subtle.importKey('raw', enc.encode(segredo), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+  const bytes = new Uint8Array(await crypto.subtle.sign('HMAC', chave, enc.encode('aparelho|' + aparelho)));
+  return Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
+}
+/** Limita os bytes recebidos também quando não há Content-Length. */
+async function corpoFila(req) {
+  if (Number(req.headers.get('Content-Length')) > MAX_FILA_BYTES) throw 413;
+  const leitor = req.body && req.body.getReader();
+  if (!leitor) throw 400;
+  const partes = []; let tamanho = 0;
+  while (true) {
+    const { done, value } = await leitor.read();
+    if (done) break;
+    tamanho += value.byteLength;
+    if (tamanho > MAX_FILA_BYTES) { await leitor.cancel(); throw 413; }
+    partes.push(value);
+  }
+  const bytes = new Uint8Array(tamanho); let pos = 0;
+  for (const parte of partes) { bytes.set(parte, pos); pos += parte.byteLength; }
+  let corpo;
+  try { corpo = JSON.parse(new TextDecoder().decode(bytes)); } catch { throw 400; }
+  if (!corpo || typeof corpo !== 'object' || Array.isArray(corpo)) throw 400;
+  return corpo;
+}
+async function fila(req, env, confirmar) {
+  const aparelho = req.headers.get('X-Aparelho');
+  const envio = !confirmar && req.method === 'POST';
+  const senha = envio && idAparelho(aparelho) && env.SEGREDO_CENTRAL ? await tokenDoAparelho(env.SEGREDO_CENTRAL, aparelho) : envio ? '' : env.SEGREDO_CENTRAL;
+  if (!(await mesmoSegredo(senhaDoPedido(req), senha))) return responder(401, { erro: 'Credencial da fila inválida' });
+  if (!confirmar && req.method === 'GET') {
+    // Lotes de até 150 e 1 MB; nem uma fila grande faz a central baixar tudo de uma vez.
+    const { results } = await env.DB.prepare(`WITH lote AS (SELECT rowid AS ordem, * FROM fila ORDER BY rowid LIMIT 150),
+      tamanhos AS (SELECT *, SUM(length(CAST(json AS BLOB))) OVER (ORDER BY ordem) AS bytes FROM lote)
+      SELECT aparelho, geracao, json FROM tamanhos WHERE bytes <= ? ORDER BY ordem`).bind(MAX_FILA_BYTES).all();
+    return responder(200, { itens: results.map((r) => ({ aparelho: r.aparelho, geracao: r.geracao, registro: JSON.parse(r.json) })) });
+  }
+  if (req.method !== 'POST') return responder(405, { erro: 'Use GET ou POST' });
+  let corpo;
+  try { corpo = await corpoFila(req); } catch (status) { return responder(status === 413 ? 413 : 400, { erro: status === 413 ? 'Máximo de 1 MB por envio' : 'JSON inválido' }); }
+  const lista = confirmar ? corpo.itens : corpo.registros;
+  if (!Array.isArray(lista) || lista.length > MAX_POR_ENVIO) return responder(400, { erro: 'Máximo de 500 anotações por envio' });
+  if (confirmar) {
+    if (lista.some((r) => !r || !idAparelho(r.aparelho) || typeof r.id !== 'string' || !Number.isSafeInteger(r.atualizadoEm))) return responder(400, { erro: 'Confirmação inválida' });
+    // O horário faz parte da confirmação: não apaga uma versão posterior ao GET.
+    await env.DB.prepare(`DELETE FROM fila WHERE (aparelho, id, atualizadoEm) IN
+      (SELECT json_extract(value, '$.aparelho'), json_extract(value, '$.id'), json_extract(value, '$.atualizadoEm') FROM json_each(?))`).bind(JSON.stringify(lista)).run();
+    return responder(200, { ok: true });
+  }
+  if (corpo.geracao !== undefined && (typeof corpo.geracao !== 'string' || corpo.geracao.length > 100)) return responder(400, { erro: 'Geração inválida' });
+  if (lista.some((r) => !r || typeof r.id !== 'string' || r.id.length > 300 || typeof r.prancheta !== 'string' || typeof r.chave !== 'string'
+    || r.id !== `${r.data}|${r.prancheta}|${r.chave}` || !(r.data === 'config' || leitura.ehDia(r.data))
+    || !Number.isSafeInteger(r.atualizadoEm) || r.atualizadoEm < 0)) return responder(400, { erro: 'Anotação inválida' });
+  await env.DB.prepare(`INSERT INTO fila (aparelho, id, atualizadoEm, geracao, json)
+    SELECT ?, json_extract(value, '$.id'), json_extract(value, '$.atualizadoEm'), ?, value FROM json_each(?) WHERE true
+    ON CONFLICT(aparelho, id) DO UPDATE SET atualizadoEm = excluded.atualizadoEm, geracao = excluded.geracao, json = excluded.json
+    WHERE excluded.atualizadoEm > fila.atualizadoEm`).bind(aparelho, corpo.geracao || '', JSON.stringify(lista)).run();
+  return responder(200, { ok: true, recebidos: lista.length });
 }
 
 /* ---------- a central manda as anotações ---------- */
@@ -161,6 +231,7 @@ export default {
       if (p === '/' || p === '') {
         return new Response('Nuvem das Pranchetas Digitais da Ubirálcool: no ar.\n', { headers: { 'Content-Type': 'text/plain; charset=utf-8' } });
       }
+      if (p === '/fila' || p === '/fila/confirmar') return await fila(req, env, p === '/fila/confirmar');
       if (p.startsWith('/central/')) {
         if (!(await mesmoSegredo(senhaDoPedido(req), env.SEGREDO_CENTRAL))) return responder(401, { erro: 'Senha da central errada' });
         if (p === '/central/enviar' && req.method === 'POST') return await receber(req, env);

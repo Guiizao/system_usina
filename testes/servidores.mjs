@@ -74,7 +74,7 @@ export async function centralJava(porta, pasta = pastaTemporaria('java'), extras
   juntar(path.join(pastaJava, 'stubs'));
   fontes.push(path.join(APP, 'apk', 'nativo', 'java', 'br', 'com', 'ubiralcool', 'pranchetas', 'ServidorCentral.java'), path.join(APP, 'apk', 'nativo', 'java', 'br', 'com', 'ubiralcool', 'pranchetas', 'AtualizadorDeTelas.java'), path.join(pastaJava, 'RodarServidorJava.java'));
   fs.rmSync(saida, { recursive: true, force: true });
-  execFileSync(path.join(JDK, 'javac.exe'), ['-encoding', 'UTF-8', '-d', saida, ...fontes], { stdio: 'pipe' });
+  execFileSync(path.join(JDK, 'javac.exe'), ['-encoding', 'UTF-8', '-d', saida, ...fontes], { stdio: 'inherit' });
   let proc;
   const ligar = async () => {
     const opcoes = [

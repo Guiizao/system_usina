@@ -96,6 +96,8 @@ window.USINA = {
     { id: 'registro', nome: 'Ver o registro do sistema' },
     // versão 2.12: liberar um aparelho como tablet chefe (nível 1 ou 2) e mudar o nível dos outros
     { id: 'chefes', nome: 'Liberar tablets chefe e escolher o nível' },
+    // versão 2.13: o aparelho do Escritório (cálculos da produção, rastreamento de lotes e etiqueta das bombonas)
+    { id: 'escritorio', nome: 'Escritório: cálculos, rastreamento de lotes e etiqueta' },
   ],
   // Níveis do tablet chefe (versão 2.12), do aparelho: a central guarda e confere.
   // O que a pessoa faz no aparelho = funções dela ∩ funções do nível ∩ limite do aparelho.
@@ -162,6 +164,64 @@ window.USINA = {
   // Listas que o tablet chefe pode mudar em Configurações da usina (estes são os valores iniciais)
   produtosPadrao: ['MASSA', 'FINI', 'OUTRO'],
   fornecedoresPadrao: [],
+
+  // Escritório (versão 2.13): folha POP 03 - FOR 011 (rastreamento de lotes) e a etiqueta das bombonas.
+  // O dia de produção vai das 07:00 de um dia às 07:00 do outro; o lote fecha às 07:00 do dia seguinte (DIA ATUAL).
+  rastreamento: {
+    // conta que o Lucas passou: hidrolisado (L) = matéria-prima (kg) ÷ 0,29; vinho (L) = hidrolisado × Brix inicial ÷ Brix final
+    fatorMateriaPrima: 0.29,
+    // lote: UB + ano + letra do mês + dia + hora e minuto do fechamento. 08/10/2026 às 07:00 = UB26I080700
+    prefixoLote: 'UB',
+    letrasDosMeses: 'LABCDEFGHIJK', // janeiro L, fevereiro A, março B ... outubro I, novembro J, dezembro K
+    horaDoLote: '0700',
+    validadeAlcoolMeses: 36,
+    validadeVinhacaDias: 5,
+    // parâmetros impressos no papel (o resultado do dia vai do lado)
+    parametros: {
+      hidrolise: [['ph', 'PH', '6,00 — 7,00'], ['brix', 'BRIX', '15 — 22'], ['temp', 'TEMP °C', '92° — 96°']],
+      alcool: [['inpm', 'GRAU °INMP', '92,5 — 93,5'], ['gl', 'GRAU °GL', '95,0 — 95,8'], ['acidez', 'ACIDEZ (ppm/lts)', '< 1,00']],
+    },
+    // tanques do papel (nome, e a dorna do Volume de vinho que tem a folga dele; sem dorna: escrito à mão)
+    tanques: [
+      { titulo: 'HIDRÓLISE · TQs da Hidrólise', lista: [['h1', 'Hid. 1', 'hid1'], ['h2', 'Hid. 2', 'hid2']] },
+      { titulo: 'SACARIFICAÇÃO · TQs da Sacarificação', lista: [['s1', 'Sac. 1-7.5', 'sac1'], ['s2', 'Sac. 2-7.5', 'sac2'], ['s3', 'Sac. 3-7.5', 'sac3'], ['s4', 'Sac. 4-7.5', 'sac4'], ['s5', 'Sac. 5-7.5', 'sac5']] },
+      { titulo: 'FERMENTAÇÃO', lista: [['f1', 'F1-7.5'], ['f2', 'F2-7.5'], ['f3', 'F3-7.5'], ['f4', 'F4-7.5'], ['f5', 'F5-7.5'], ['v1', 'V1-30 (volante)']] },
+      { titulo: 'DORNAS DE DESCANSO', lista: [['d1', 'D1-30', 'dsc1'], ['d2', 'D2-30', 'dsc2'], ['d4', 'D4-30', 'dsc4'], ['d5', 'D5-30', 'dsc5'], ['d6', 'D6-30', 'dsc6'], ['d7', 'D7-30', 'dsc7'], ['d8', 'D8-30', 'dsc8'], ['d9', 'D9-30', 'dsc9'], ['d10', 'D10-30', 'dsc10'], ['d11', 'D11-30', 'dsc11']] },
+    ],
+    // insumos do papel; com prancheta, a quantidade do dia e o lote, a validade, a NF e o fornecedor vêm das folhas de insumo
+    insumos: [
+      ['lphera', 'LPHERA', 'ins_lphera'], ['saczyme', 'SACZYME', 'ins_saczyme'], ['ureia', 'URÉIA PECUÁRIA', 'ins_ureia'], ['cal', 'CAL', 'ins_cal'],
+      ['ferm_alcolina', 'FERMENTO ALCOLINA'], ['ferm_fleischmann', 'FERMENTO FLEISCHMANN'], ['anti_alcolina', 'ANTI. ALCOLINA', 'ins_alcolina'],
+      ['anti_lactol', 'ANTI. LACTOL', 'ins_lactrol'], ['biosperce', 'BIOSPERCE'], ['performax', 'PERFORMAX'], ['amertrol', 'AMERTROL'],
+    ],
+    tratamentoAgua: [['amersite', 'AMERSITE'], ['cloro', 'CLORO']],
+    higienizacao: [['soda', 'SODA CÁUSTICA EM ESCAMAS']],
+    encarregado: 'FERNANDO',
+    aviso: 'ANOTAR NO VERSO DO DOCUMENTO POP 03-FOR011 AS OCORRÊNCIAS DE PRODUTOS NÃO CONFORMES E LIMPEZA DOS EQUIPAMENTOS',
+    // etiqueta da bombona (igual ao adesivo de 01/10/2026). Peso líquido = volume × densidade; peso bruto = líquido + tara.
+    // 50 L davam 40,45 kg (0,809 kg/L) e 42,70 kg com a bombona (2,25 kg).
+    etiqueta: {
+      empresa: 'USINA UBIRALCOOL LTDA',
+      endereco: 'Rod. Ubirajara/Alvinlândia, KM 2 s/nº - Água do Caçador - Ubirajara - SP - CEP: 17.449-899 Brasil',
+      telefone: '(14) 3042-1870',
+      emergencia: '(14) 3042-1870',
+      produto: 'ETANOL, ÁLCOOL ETÍLICO HIDRATADO, ÁLCOOL DE CEREAIS',
+      onu: '1170',
+      nomeEmbarque: 'ETANOL (ÁLCOOL ETÍLICO)',
+      classeRisco: '3',
+      grupoEmbalagem: 'II',
+      numeroRisco: '33',
+      composicao: 'Etanol 96%',
+      responsavel: 'Jônatas Tavares Pedrão',
+      registro: 'CRQ 4ª Reg. Nº 04.493.760',
+      perigo: 'Líquido e vapores altamente inflamáveis. Provoca irritação ocular grave.',
+      precaucao: 'Mantenha afastado do calor, superfícies quentes, faíscas, chamas abertas e outras fontes de ignição. Não fume. Mantenha o recipiente hermeticamente fechado. Aterre o vaso contentor e o receptor do produto durante transferências. Utilize equipamento elétrico, de ventilação e de iluminação à prova de explosão. Lave cuidadosamente após o manuseio. Use luvas de proteção, roupa de proteção, proteção ocular, proteção facial e proteção auricular.',
+      ficha: 'A Ficha Com Dados De Segurança deste produto químico perigoso pode ser obtida por meio de contato no telefone: (14) 3042-1870.',
+      volumes: [50],
+      densidade: 0.809,
+      tara: { 50: 2.25 },
+    },
+  },
 
   // Ordem em que os setores aparecem
   setores: [
@@ -454,6 +514,16 @@ window.USINA = {
         { titulo: 'Condensadores', campos: ['cond_hidro', 'cond_b', 'cond_p'] },
         { titulo: 'Vapor e produção', campos: ['vapor', 'producao_lth', 'inpm'] },
       ],
+    },
+
+    /* ---------------- ESCRITÓRIO (versão 2.13) ---------------- */
+    // Uma anotação por dia de produção (chave 'dia'), feita no aparelho do Escritório. Não é de nenhum setor.
+    rastreamento: {
+      tipo: 'rastreamento',
+      nome: 'Rastreamento de lotes',
+      codigo: 'POP 03 - FOR 011',
+      titulo: 'RASTREAMENTO DE LOTES DA PRODUÇÃO DE VINHAÇA DE CEREAIS E DE ÁLCOOL',
+      revisao: '01/2026',
     },
   },
 };

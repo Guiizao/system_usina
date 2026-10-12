@@ -256,6 +256,27 @@ h3.secao-titulo { font-size: 21px; margin: 26px 0 10px; }
 .opcoes-painel button { border-radius: 10px; background: var(--papel); border: 2px solid var(--linha); font-size: 30px; font-weight: 700; display: flex; align-items: center; justify-content: center; gap: 10px; }
 .opcoes-painel button.sel { border: 4px solid var(--verde); background: var(--verde-fundo); color: var(--verde-escuro); }
 .painel-nav { display: grid; grid-template-columns: 1fr 1.6fr; gap: 8px; }
+/* lembrete de anotar a cada hora (versão 2.13): faixa no alto, laranja; passou das :30, vermelha e piscando */
+.lembrete { position: fixed; z-index: 60; left: 50%; transform: translateX(-50%); top: calc(var(--topo, 72px) + 8px); width: min(760px, calc(100vw - 24px));
+  display: flex; align-items: center; gap: 12px; padding: 10px 12px 10px 16px; border-radius: 10px; background: var(--ambar-fundo, #fbefcf); color: var(--tinta);
+  border: 3px solid var(--ambar, #9a6a00); box-shadow: 0 6px 18px rgba(0, 0, 0, .25); font-size: 19px; }
+.lembrete[hidden] { display: none; }
+.lembrete span { flex: 1 1 auto; min-width: 0; }
+.lembrete b { display: block; font-size: 21px; }
+.lembrete .btn { flex: none; min-height: 56px; }
+.lembrete svg.ico { width: 30px; height: 30px; flex: none; }
+.lembrete.urgente { background: var(--vermelho-fundo); border-color: var(--vermelho); color: var(--vermelho); animation: piscarLembrete 1s steps(2) infinite; }
+@keyframes piscarLembrete { 50% { border-color: transparent; } }
+@media (prefers-reduced-motion: reduce) { .lembrete.urgente { animation: none; } }
+.lembrete-config { margin-top: 12px; flex-wrap: wrap; }
+.lembrete-config > div { flex: 1 1 220px; }
+.linha-config.lembrete-config small { word-break: normal; }
+/* painel que não cabe na tela (versão 2.13): sem a dica e com o visor menor; se ainda não couber, teclas menores. Nunca rola. */
+.painel.apertado .dica-painel { display: none; }
+.painel.apertado .visor { min-height: 64px; font-size: 40px; padding-block: 4px; align-items: center; }
+.painel.muito-apertado { gap: 6px; }
+.painel.muito-apertado .teclas { grid-auto-rows: minmax(34px, 1fr); gap: 6px; }
+.painel.muito-apertado .painel-nav .btn { min-height: 50px; }
 .painel-nav .btn { min-height: 70px; font-size: 22px; padding: 0 10px; }
 
 /* ---------- Seletor de linha (dornas / horas) ---------- */
@@ -489,6 +510,14 @@ table.papel td.atencao { background: var(--ambar-fundo); color: var(--ambar-text
 .nav-data .data-grande { display: flex; flex-direction: column; padding: 0 6px; }
 .nav-data .data-grande b { font-size: 28px; line-height: 1.1; }
 .nav-data .data-grande span { font-size: 15px; color: var(--tinta-2); }
+/* Monitorar (versão 2.13): o dia fica no canto direito da barra das abas */
+.linha-monitor { display: flex; align-items: flex-start; gap: 12px; }
+.linha-monitor .abas { flex: 1 1 auto; min-width: 0; }
+.nav-monitor { flex: none; gap: 6px; padding-bottom: 8px; }
+.nav-monitor .btn { min-width: 48px; min-height: 48px; padding: 0 10px; }
+.nav-monitor .data-grande { align-items: center; }
+.nav-monitor .data-grande b { font-size: 22px; }
+.nav-monitor .data-grande span { font-size: 13px; }
 .numeros { display: flex; gap: 10px; }
 .numeros div { min-width: 120px; background: var(--papel); border: 2px solid var(--linha-clara); border-radius: 10px; padding: 8px 14px; }
 .numeros div.atencao { border-color: var(--ambar); background: var(--ambar-fundo); color: var(--ambar-texto); }
@@ -628,8 +657,8 @@ table.papel.medicao td:first-child { text-align: left; }
 
 /* Versão 2.7: os blocos de quadros ocupam a tela (arrumarQuadros, em app.js). A altura dos quadros (--q) é a que cabe
    entre o alto da tela e o botão de salvar, entre --q-min e --q-max; a largura divide a linha pelo número de quadros. */
-.edicao main .grupos { display: flex; flex-wrap: wrap; align-items: stretch; align-content: start; column-gap: 8px; row-gap: 0; --gap-linha: 8px; --q: 96px; --q-min: 64px; --q-max: 170px; --q-largura-min: 124px; }
-:root[data-dispositivo="celular"] .edicao main .grupos { --q-min: 62px; --q-max: 112px; --q-largura-min: 104px; column-gap: 6px; --gap-linha: 6px; }
+.edicao main .grupos { display: flex; flex-wrap: wrap; align-items: stretch; align-content: start; column-gap: 8px; row-gap: 0; --gap-linha: 8px; --q: 96px; --q-min: 64px; --q-max: 560px; --q-largura-min: 124px; }
+:root[data-dispositivo="celular"] .edicao main .grupos { --q-min: 62px; --q-max: 260px; --q-largura-min: 104px; column-gap: 6px; --gap-linha: 6px; }
 /* entre uma linha de blocos e a outra (a quebra de linha é um elemento vazio, que não pode somar espaço) */
 html:root .edicao main .grupos > .grupo { margin-bottom: var(--gap-linha); }
 @media (orientation: landscape) and (max-height: 620px) { .edicao main .grupos { --q-min: 56px; --q-max: 96px; } }
@@ -642,12 +671,12 @@ html:root .edicao main .grupos .grupo .par { display: grid; grid-template-column
 html:root .edicao main .grupos .grupo .campo { height: var(--q); min-height: 0; padding: 6px 10px; container-type: size; }
 /* quadro alto: o aviso pode ir para a linha de baixo do nome (o número continua cabendo) */
 @container (min-height: 76px) { html:root .edicao main .grupos .grupo .campo .rot { flex-wrap: wrap; row-gap: 0; } }
-html:root .edicao main .grupos .grupo .campo .rot { font-size: clamp(14px, calc(var(--q) * 0.16), 18px); flex-wrap: nowrap; gap: 6px; }
-html:root .edicao main .grupos .grupo .campo .val { font-size: clamp(18px, calc(var(--q) * 0.34), 52px); white-space: nowrap; }
-html:root .edicao main .grupos .grupo .campo .val.vazio { font-size: clamp(13px, calc(var(--q) * 0.17), 19px); white-space: normal; line-height: 1.15; overflow: hidden; }
-html:root .edicao main .grupos .grupo .campo .val.texto { font-size: clamp(16px, calc(var(--q) * 0.24), 30px); white-space: nowrap; }
+html:root .edicao main .grupos .grupo .campo .rot { font-size: clamp(14px, min(calc(var(--q) * 0.16), 7cqw), 30px); flex-wrap: nowrap; gap: 6px; }
+html:root .edicao main .grupos .grupo .campo .val { font-size: clamp(18px, min(calc(var(--q) * 0.34), 30cqw), 150px); white-space: nowrap; line-height: 1.2; }
+html:root .edicao main .grupos .grupo .campo .val.vazio { font-size: clamp(13px, min(calc(var(--q) * 0.17), 5cqw), 30px); white-space: normal; line-height: 1.15; overflow: hidden; }
+html:root .edicao main .grupos .grupo .campo .val.texto { font-size: clamp(16px, min(calc(var(--q) * 0.24), 9cqw), 70px); white-space: nowrap; }
 html:root .edicao main .grupos .grupo-largo .campo .val.texto { white-space: normal; overflow: hidden; }
-html:root .edicao main .grupos .grupo .campo .val small { font-size: max(13px, .45em); }
+html:root .edicao main .grupos .grupo .campo .val small { font-size: max(13px, .45em); line-height: 0; } /* a unidade não deixa a linha mais alta que o quadro */
 .campo .rot-txt { flex: none; }
 /* títulos dos blocos escondidos (tela baixa): o quadro mostra o nome inteiro, senão ficam dois "Hidro" sem saber de quê */
 .campo .rot-longo { display: none; }

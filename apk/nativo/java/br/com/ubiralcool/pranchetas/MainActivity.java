@@ -8,6 +8,7 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.view.WindowManager;
 
+import androidx.activity.OnBackPressedCallback;
 import androidx.core.graphics.Insets;
 import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowCompat;
@@ -41,6 +42,13 @@ public class MainActivity extends BridgeActivity {
     if (getBridge() == null || getBridge().getWebView() == null) return; // aparelho sem WebView: o Capacitor já mostra o aviso
     // o bipe do aviso do escritório toca mesmo sem ninguém ter tocado na tela antes
     getBridge().getWebView().getSettings().setMediaPlaybackRequiresUserGesture(false);
+    // botão voltar do Android (versão 2.13): fecha a janela aberta ou volta uma tela dentro do aplicativo, nunca sai dele
+    getOnBackPressedDispatcher().addCallback(this, new OnBackPressedCallback(true) {
+      @Override
+      public void handleOnBackPressed() {
+        getBridge().getWebView().evaluateJavascript("window.voltarDoAndroid && window.voltarDoAndroid()", null);
+      }
+    });
     WindowCompat.setDecorFitsSystemWindows(getWindow(), false);
     pintarBarras();
 

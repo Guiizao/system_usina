@@ -254,6 +254,7 @@
       aparelho: cfg.deviceId, apagado: false, sincronizado: false,
     }, extra);
     salvarRegistros(); sincronizarLogo();
+    if (registros[id].prancheta !== PID_REGISTRO) verificarLembrete();
     return registros[id];
   }
   function apagar(data, pid, chave) {
@@ -792,7 +793,7 @@
       Devolve uma promessa: quem vai gerar o relatório de um dia antigo espera ele chegar. */
   const promessasDoDia = new Map();
   function buscarDia(data) {
-    if (!ehCentral() || cfg.demo || !cfg.chave || !/^\d{4}-\d{2}-\d{2}$/.test(data || '') || data >= primeiroDiaGuardado()) return Promise.resolve();
+    if (cfg.demo || !cfg.chave || !/^\d{4}-\d{2}-\d{2}$/.test(data || '') || data >= primeiroDiaGuardado()) return Promise.resolve();
     if (promessasDoDia.has(data)) return promessasDoDia.get(data);
     const promessa = (async () => {
       diasAbertos.add(data); diasBuscando.add(data);
@@ -2243,6 +2244,65 @@
       setTimeout(() => ctx.close().catch(() => {}), 900);
     } catch (e) { /* sem som */ }
   }
+  /* ---------- Lembrete de anotar a cada hora (versão 2.13) ----------
+     Ligado por setor no tablet chefe (Configurações da usina). Na virada da hora, se a linha daquela hora de uma folha
+     hora a hora do setor está vazia: faixa no alto da tela e um apito tranquilo. Passou das :30 sem anotar: apito chato,
+     que só para quando a linha for anotada. */
+  let lembrete = { id: null, avisou: false, apito: null };
+  let lembreteUrgente = false; // só na demonstração
+  function horaPendente() {
+    if (!cfg.papel || ehCentral() || !setorPorId(cfg.papel) || !operadorAtual() || !(configSistema().lembretes || {})[cfg.papel]) return null;
+    const h = new Date().getHours();
+    const data = dataProducao();
+    const falta = pranchetasDo(cfg.papel).filter((pid) => prancheta(pid).tipo === 'grade' && !pegar(data, pid, h));
+    return falta.length ? { id: `${data}|${h}`, h, falta } : null;
+  }
+  function tocar(freq, tipo, vezes, volume) {
+    try {
+      const Ctx = window.AudioContext || window.webkitAudioContext;
+      if (!Ctx) return;
+      const ctx = new Ctx();
+      for (let i = 0; i < vezes; i++) {
+        const t = i * 0.32;
+        const o = ctx.createOscillator(), g = ctx.createGain();
+        o.type = tipo; o.frequency.value = freq; o.connect(g); g.connect(ctx.destination);
+        g.gain.setValueAtTime(0.0001, ctx.currentTime + t);
+        g.gain.exponentialRampToValueAtTime(volume, ctx.currentTime + t + 0.02);
+        g.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + t + 0.26);
+        o.start(ctx.currentTime + t); o.stop(ctx.currentTime + t + 0.28);
+      }
+      setTimeout(() => ctx.close().catch(() => {}), vezes * 320 + 400);
+    } catch (e) { /* sem som */ }
+  }
+  const apitoTranquilo = () => tocar(660, 'sine', 2, 0.18);
+  const apitoChato = () => { tocar(1200, 'square', 3, 0.35); try { if (navigator.vibrate) navigator.vibrate([400, 150, 400]); } catch (e) { /* sem vibração */ } };
+  function faixaLembrete(p, urgente) {
+    let el = document.getElementById('lembrete');
+    if (!el) {
+      el = Object.assign(document.createElement('div'), { id: 'lembrete', className: 'lembrete' });
+      el.setAttribute('role', 'alert');
+      el.addEventListener('click', (e) => {
+        const b = e.target.closest('[data-pid]');
+        if (b && !modalAberto()) ir({ tela: 'prancheta', pid: b.dataset.pid, chave: Number(b.dataset.h) });
+      });
+      document.body.appendChild(el);
+    }
+    if (!p) { el.hidden = true; return; }
+    const nomes = p.falta.map((pid) => prancheta(pid).nome).join(' e ');
+    el.hidden = false;
+    el.classList.toggle('urgente', !!urgente);
+    el.innerHTML = `${ico(urgente ? 'alerta' : 'relogio')}<span><b>${urgente ? 'Ainda falta anotar' : 'Hora de anotar'} as ${pad2(p.h)}:00</b> ${esc(nomes)}</span>
+      <button class="btn" data-pid="${p.falta[0]}" data-h="${p.h}">Anotar agora</button>`;
+  }
+  function verificarLembrete() {
+    const p = horaPendente();
+    if (!p || lembrete.id !== p.id) { if (lembrete.apito) clearInterval(lembrete.apito); lembrete = { id: p ? p.id : null, avisou: false, apito: null }; }
+    if (!p) return faixaLembrete(null);
+    const urgente = lembreteUrgente || new Date().getMinutes() >= 30;
+    faixaLembrete(p, urgente);
+    if (!lembrete.avisou) { lembrete.avisou = true; apitoTranquilo(); }
+    if (urgente && !lembrete.apito) { apitoChato(); lembrete.apito = setInterval(apitoChato, 2500); }
+  }
   let avisoNaTela = null;
   /** Mostra o aviso mais antigo que ainda não foi lido por quem está trabalhando neste aparelho. */
   function verificarAvisos() {
@@ -2487,7 +2547,7 @@
       refeitos.push(g);
     });
     const p = document.getElementById('painel');
-    if (p) { p.innerHTML = htmlPainel(); refeitos.push(p); }
+    if (p) { p.innerHTML = htmlPainel(); refeitos.push(p); apertarPainel(); }
     const ativo = document.querySelector('.campo.ativo');
     // depois que o teclado abriu e a tela se ajeitou
     if (ativo && ed.alvoId !== ed.rolouPara) requestAnimationFrame(() => { const el = document.querySelector('.campo.ativo'); if (el) el.scrollIntoView({ block: 'nearest' }); });
@@ -2502,7 +2562,17 @@
   // o espaço da tela muda depois de desenhar (letra das abas ajustada, teclado, celular virado): arruma de novo
   const observarEspaco = typeof ResizeObserver === 'function' ? new ResizeObserver(() => requestAnimationFrame(() => arrumarQuadros())) : null;
   let espacoObservado = null;
+  /** Painel do teclado sem rolar (versão 2.13): se não couber, sai a dica e o visor diminui; se ainda não couber, as teclas encolhem. */
+  function apertarPainel() {
+    const p = document.getElementById('painel');
+    if (!p || !p.offsetHeight) return;
+    p.classList.remove('apertado', 'muito-apertado');
+    if (p.scrollHeight <= p.clientHeight + 1) return;
+    p.classList.add('apertado');
+    if (p.scrollHeight > p.clientHeight + 1) p.classList.add('muito-apertado');
+  }
   function arrumarQuadros(semTitulos) {
+    if (!semTitulos) apertarPainel();
     const caixa = app.querySelector('.edicao main .grupos');
     if (!caixa) return;
     const main = caixa.closest('main');
@@ -2627,6 +2697,7 @@
   if (!DEMO_IMG) {
     history.pushState({ app: 1 }, '');
     window.addEventListener('popstate', () => { history.pushState({ app: 1 }, ''); voltar(); });
+    window.voltarDoAndroid = voltar;
   }
   function telaInicial() {
     if (!cfg.chave && !cfg.demo) return { tela: 'conectar' };
@@ -3532,9 +3603,14 @@
 
     // Monitoramento: a folha do dia inteira, fora da tela de anotar
     if (v.monitor) {
+      // versão 2.13: dia anterior e próximo; no tablet do setor, dia anterior é só para consultar
+      const diaHoje = dataProducao();
+      const navDia = `<div class="nav-data nav-monitor"><button class="btn" data-a="monitor-dia" data-n="-1" aria-label="Dia anterior">${ico('voltar')}</button>
+        <div class="data-grande"><b>${fmtData(data).slice(0, 5)}</b><span>${data === diaHoje ? 'hoje' : diaSemana(data)}</span></div>
+        <button class="btn" data-a="monitor-dia" data-n="1" aria-label="Próximo dia" ${data >= diaHoje ? 'disabled' : ''}>${ico('seta')}</button></div>`;
       return `${cabecalho(p.nome, subtituloTopo, false, atalhosOperador())}
-        <div class="edicao"><div class="coluna"><div class="barra-trabalho">${abasDoSetor(v)}</div><main>
-          <p class="sub" style="margin:2px 0 10px">Toque em uma linha para abrir e corrigir.</p>
+        <div class="edicao"><div class="coluna"><div class="barra-trabalho"><div class="linha-monitor">${abasDoSetor(v)}${navDia}</div></div><main>
+          <p class="sub" style="margin:2px 0 10px">${hoje || ehCentral() ? 'Toque em uma linha para abrir e corrigir.' : `Folha de ${fmtData(data)}: só para consultar.`}</p>
           ${folha()}</main>
         <div class="rodape"><button class="btn primario" data-a="monitor">${ico('voltar')} Voltar para anotar</button></div></div></div>`;
     }
@@ -4258,6 +4334,8 @@
                 const on = off.indexOf(pid) < 0;
                 return `<button class="chip-liga ${on ? 'sel' : ''}" data-a="prancheta-liga" data-setor="${s.id}" data-id="${pid}">${on ? ico('certo') : ico('fechar')} ${esc(prancheta(pid).nome)}</button>`;
               }).join('')}</div>
+              ${!s.soChefe && s.pranchetas.some((pid) => prancheta(pid).tipo === 'grade') ? `<div class="linha-config lembrete-config"><div><b>Lembrete de anotar a cada hora</b><small>Apito tranquilo na virada da hora. Às :30, se a linha ainda estiver vazia, apito chato até anotar.</small></div>
+                <button class="interruptor ${(configSistema().lembretes || {})[s.id] ? 'ligado' : ''}" data-a="lembrete-liga" data-id="${s.id}" aria-label="Lembrete da ${esc(s.nome)}"><i></i><span>${(configSistema().lembretes || {})[s.id] ? 'Ligado' : 'Desligado'}</span></button></div>` : ''}
               ${s.soChefe ? '<p class="sub" style="margin:10px 0 0">Só o tablet chefe anota estas folhas. Nenhum tablet de setor fica com elas.</p>' : `<h3 style="margin-top:14px">Operadores <small>${ops.length}</small></h3>
               <div class="pessoas">${visiveis.map((o) => {
                 const i = ops.indexOf(o);
@@ -4796,7 +4874,7 @@
     compartilhar: 'relatorios', relatorios: 'relatorios', 'relatorio-enviar': 'relatorios', 'relatorio-apagar': 'relatorios', 'gerar-hoje': 'relatorios', imprimir: 'relatorios',
     'aviso-enviar': 'avisos', 'aviso-cancelar': 'avisos', 'ler-folha': 'ler_folha', 'leitura-salvar': 'ler_folha',
     config: 'usina', 'medida-grupo': 'usina', 'medidas-planilha': 'usina', contato: 'usina', 'lista-add': 'usina', 'lista-remove': 'usina',
-    'setor-liga': 'usina', 'prancheta-liga': 'usina', 'op-add': 'usina', 'op-senha': 'usina', 'op-remove': 'usina',
+    'setor-liga': 'usina', 'prancheta-liga': 'usina', 'lembrete-liga': 'usina', 'op-add': 'usina', 'op-senha': 'usina', 'op-remove': 'usina',
     'nuvem-url': 'integracoes', 'nuvem-segredo': 'integracoes', 'nuvem-enviar': 'integracoes', 'base44-url': 'integracoes', 'base44-segredo': 'integracoes', 'base44-enviar': 'integracoes',
     'novo-codigo': 'conexao',
     graficos: 'relatorios', folhas: 'folhas', 'folha-campo': 'folhas', 'folha-unidades': 'folhas',
@@ -4923,12 +5001,21 @@
         if (ch != null) { nova.chave = ch; lembrar[`${dataDaView(v)}|${b.dataset.id}`] = ch; }
         return ir(nova, true);
       }
-      case 'monitor': return ir(Object.assign({}, v, { monitor: !v.monitor }), true);
+      // saindo do Monitorar num dia anterior, o tablet do setor volta para a folha de hoje
+      case 'monitor': return ir(Object.assign({}, v, { monitor: !v.monitor }, v.monitor && !ehCentral() ? { data: undefined, chave: undefined } : {}), true);
+      case 'monitor-dia': {
+        const d = somarDias(dataDaView(v), Number(b.dataset.n));
+        if (d > dataProducao()) return;
+        buscarDia(d);
+        return ir(Object.assign({}, v, { data: d === dataProducao() && !ehCentral() ? undefined : d, chave: undefined }), true);
+      }
       case 'inicio-setor': return ir({ tela: 'inicio' }, true);
       case 'painel': return ir({ tela: 'central', data: v.data || dataProducao() }, true);
       case 'linha': {
         const chave = /^\d+$/.test(b.dataset.chave) ? Number(b.dataset.chave) : b.dataset.chave;
         if (rascunho && rascunho.chave === chave && !v.monitor) return;
+        // tablet do setor olhando um dia anterior no Monitorar: só consulta
+        if (v.monitor && !ehCentral() && dataDaView(v) !== dataProducao()) return;
         if (rascunhoSujo()) salvarRascunho(true);
         rascunho = null; ed.alvoId = null;
         pilha[pilha.length - 1] = Object.assign({}, v, { chave, monitor: false });
@@ -5299,6 +5386,12 @@
       }
       case 'mostrar-mais': { const abertos = Object.assign({}, v.abertos); abertos[b.dataset.setor] = !abertos[b.dataset.setor]; v.abertos = abertos; return render(); }
       case 'setor-liga': return mudarConfigLista('setor', b.dataset.id);
+      case 'lembrete-liga': {
+        const m = Object.assign({}, configSistema().lembretes || {});
+        m[b.dataset.id] = !m[b.dataset.id];
+        salvarConfigSistema({ lembretes: m });
+        return render();
+      }
       case 'prancheta-liga': return mudarConfigLista('prancheta', b.dataset.setor, b.dataset.id);
       case 'op-add': {
         const setor = b.dataset.setor;
@@ -5645,6 +5738,8 @@
     if (params.get('aparelho')) verAparelho(params.get('aparelho'));
     if (params.get('modal') === 'entrar') entrarNoChefe();
     if (params.get('modal') === 'liberar') liberarEsteAparelho();
+    // lembrete de anotar (versão 2.13): ?demo&papel=destilaria&op=Mateus&lembrete=1 (ou =urgente, como se fosse depois das :30)
+    if (params.get('lembrete') && cfg.papel) { lembreteUrgente = params.get('lembrete') === 'urgente'; salvarConfigSistema({ lembretes: { [cfg.papel]: true } }); verificarLembrete(); }
     if (params.get('aviso') && cfg.papel && !ehCentral() && operadorAtual()) {
       enviarAviso(cfg.papel, operadorAtual(), 'Passe no escritório antes de sair, por favor. O encarregado quer falar sobre a troca de turno de amanhã.');
       verificarAvisos();
@@ -5691,6 +5786,7 @@
     if (podeAtualizar() && pluginCentral.telasOk) setTimeout(() => pluginCentral.telasOk().then((r) => { if (r && r.voltou) toast(`A versão ${r.voltou} não abriu direito. Voltei para a anterior.`, 'erro'); }).catch(() => {}), 5000);
     // todos os aparelhos sincronizam a cada 5 segundos
     setInterval(sincronizar, 5000);
+    setInterval(verificarLembrete, 10000);
     setInterval(() => { if (foraDaRede() && view().tela !== 'bloqueado' && !modalAberto()) render(); }, 60000);
     app.addEventListener('pointerdown', function primeira() { entrarTelaCheia(); app.removeEventListener('pointerdown', primeira); });
     if (!NO_APK && 'serviceWorker' in navigator && window.isSecureContext) navigator.serviceWorker.register('sw.js').catch(() => {});
