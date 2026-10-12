@@ -1,12 +1,14 @@
 <title>Totem do Tab A11+</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans+Condensed:wght@500;600;700&display=swap">
 <style>
-  /* Folha de oficina: desenhos em milímetros reais (1 unidade = 1 mm), cotas em azul, aço em cinza, tela em azul claro. */
+  /* Folha de oficina: desenhos em milímetros reais (1 unidade = 1 mm), cotas em azul, aço em cinza, tela em azul claro, cabo em vermelho. */
   :root {
     --chao: #eef0ec; --folha: #ffffff; --folha-2: #f4f6f2; --tinta: #1d2320; --tinta-2: #57615b; --linha: #d3d9d3;
     --cota: #2c6a88; --aco: #8a969c; --aco-fundo: #e3e8ea; --tela: #cfe3ec; --tablet: #1d2320; --borracha: #3d4642;
-    --eva: #f2d9a6; --verde: #1b7a3e; --verde-fundo: #e2f0e6; --vermelho: #a8321e; --vermelho-fundo: #f8e3de;
+    --eva: #f2d9a6; --eva-borda: #b0873a; --verde: #1b7a3e; --verde-fundo: #e2f0e6; --vermelho: #a8321e; --vermelho-fundo: #f8e3de;
+    --parede: #d9d4c7; --madeira: #d8b98a;
     --fonte: "Atkinson Hyperlegible", "Segoe UI", Arial, sans-serif;
     --titulo: "IBM Plex Sans Condensed", "Arial Narrow", Arial, sans-serif;
     --mono: "IBM Plex Mono", Consolas, "Courier New", monospace;
@@ -15,13 +17,15 @@
     :root:not([data-theme="light"]) {
       --chao: #121614; --folha: #1b201d; --folha-2: #222824; --tinta: #e7ebe8; --tinta-2: #a5afa9; --linha: #343c37;
       --cota: #7db8d4; --aco: #7d898f; --aco-fundo: #2a3236; --tela: #26414d; --tablet: #0b0d0c; --borracha: #9aa59f;
-      --eva: #6b5a33; --verde: #5dbd80; --verde-fundo: #1c3325; --vermelho: #e58a74; --vermelho-fundo: #3a201a; color-scheme: dark;
+      --eva: #6b5a33; --eva-borda: #c9a25a; --verde: #5dbd80; --verde-fundo: #1c3325; --vermelho: #e58a74; --vermelho-fundo: #3a201a;
+      --parede: #3a372f; --madeira: #5c4a30; color-scheme: dark;
     }
   }
   :root[data-theme="dark"] {
     --chao: #121614; --folha: #1b201d; --folha-2: #222824; --tinta: #e7ebe8; --tinta-2: #a5afa9; --linha: #343c37;
     --cota: #7db8d4; --aco: #7d898f; --aco-fundo: #2a3236; --tela: #26414d; --tablet: #0b0d0c; --borracha: #9aa59f;
-    --eva: #6b5a33; --verde: #5dbd80; --verde-fundo: #1c3325; --vermelho: #e58a74; --vermelho-fundo: #3a201a; color-scheme: dark;
+    --eva: #6b5a33; --eva-borda: #c9a25a; --verde: #5dbd80; --verde-fundo: #1c3325; --vermelho: #e58a74; --vermelho-fundo: #3a201a;
+    --parede: #3a372f; --madeira: #5c4a30; color-scheme: dark;
   }
   * { box-sizing: border-box; }
   body { margin: 0; background: var(--chao); color: var(--tinta); font-family: var(--fonte); font-size: 16.5px; line-height: 1.55; padding-inline: 16px; padding-block: 0 56px; }
@@ -37,12 +41,14 @@
   .bloco { background: var(--folha); border: 1px solid var(--linha); border-radius: 6px; padding: 18px 20px; display: grid; gap: 10px; min-width: 0; }
   .num { font-family: var(--mono); font-variant-numeric: tabular-nums; }
   .ficha { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 210px), 1fr)); gap: 12px; }
-  .ficha div { background: var(--folha); border: 1px solid var(--linha); border-radius: 6px; padding: 12px 14px; display: grid; gap: 2px; }
+  .ficha div { background: var(--folha); border: 1px solid var(--linha); border-radius: 6px; padding: 12px 14px; display: grid; gap: 2px; align-content: start; }
   .ficha small { font-family: var(--titulo); font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: var(--tinta-2); }
   .ficha b { font-family: var(--mono); font-size: 19px; font-weight: 600; }
   .ficha span { font-size: 14px; color: var(--tinta-2); }
+  .mudou { margin: 0; padding-left: 22px; display: grid; gap: 6px; max-width: 75ch; }
+  .mudou li::marker { color: var(--cota); }
   .decisao { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr)); gap: 12px; }
-  .sim, .nao { border-radius: 6px; padding: 14px 16px; display: grid; gap: 6px; border: 1px solid var(--linha); }
+  .sim, .nao { border-radius: 6px; padding: 14px 16px; display: grid; gap: 6px; border: 1px solid var(--linha); align-content: start; }
   .sim { background: var(--verde-fundo); }
   .nao { background: var(--vermelho-fundo); }
   .sim b { color: var(--verde); } .nao b { color: var(--vermelho); }
@@ -51,47 +57,83 @@
   .desenho h3 { font-size: 14px; letter-spacing: .06em; text-transform: uppercase; color: var(--tinta-2); }
   .rolar { overflow-x: auto; }
   .desenho svg { width: 100%; height: auto; display: block; min-width: 560px; }
+  .desenho svg.alto { max-width: 760px; margin: 0 auto; }
   svg text { font-family: var(--mono); fill: var(--tinta); }
-  svg .rot { font-family: var(--titulo); font-weight: 600; fill: var(--tinta-2); }
+  svg .rot, svg .rot text { font-family: var(--titulo); font-weight: 600; fill: var(--tinta-2); }
+  svg .tit, svg .tit text { font-family: var(--titulo); font-weight: 700; fill: var(--tinta); letter-spacing: .04em; }
   .s-aco { fill: var(--aco-fundo); stroke: var(--tinta); stroke-width: .8; }
+  .s-dentro { fill: var(--folha-2); stroke: var(--tinta-2); stroke-width: .4; }
   .s-janela { fill: var(--tela); stroke: var(--tinta); stroke-width: .8; }
   .s-tablet { fill: none; stroke: var(--tinta-2); stroke-width: .6; stroke-dasharray: 3 2; }
   .s-acesa { fill: none; stroke: var(--cota); stroke-width: .5; stroke-dasharray: 1.5 1.5; }
   .s-cota { fill: none; stroke: var(--cota); stroke-width: .45; }
-  .s-cota-t { fill: var(--cota); }
+  .s-cota-t, .s-cota-t text { fill: var(--cota); }
   .s-borracha { fill: var(--borracha); }
-  .s-eva { fill: var(--eva); stroke: var(--tinta-2); stroke-width: .3; }
+  .s-eva { fill: var(--eva); stroke: var(--eva-borda); stroke-width: .4; }
+  .s-eva-tr { fill: none; stroke: var(--eva-borda); stroke-width: .7; stroke-dasharray: 3 2; }
   .s-tab { fill: var(--tablet); }
   .s-pel { fill: var(--cota); }
   .s-furo { fill: var(--folha); stroke: var(--tinta); stroke-width: .6; }
+  .s-rebite { fill: var(--folha); stroke: var(--cota); stroke-width: 1.1; }
+  .s-passa { fill: var(--folha); stroke: var(--vermelho); stroke-width: 1.1; }
+  .s-cabo { fill: none; stroke: var(--vermelho); stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+  .s-cabo-t { fill: none; stroke: var(--vermelho); stroke-width: 1.4; stroke-dasharray: 4 3; stroke-linecap: round; }
+  .s-plugue { fill: var(--vermelho); }
+  .s-marca { fill: none; stroke: var(--tinta-2); stroke-width: .7; stroke-dasharray: 2.5 1.8; }
+  .s-dobra { fill: none; stroke: var(--cota); stroke-width: .5; stroke-dasharray: 6 2 1 2; }
+  .s-dobradica { fill: var(--aco); stroke: var(--tinta); stroke-width: .5; }
+  .s-frente { stroke: var(--cota); stroke-width: 2.4; }
+  .s-chao { stroke: var(--tinta); stroke-width: 4; }
+  .s-parede { fill: var(--parede); stroke: var(--tinta-2); stroke-width: 1; }
+  .s-madeira { fill: var(--madeira); stroke: var(--tinta); stroke-width: 1.5; }
+  .s-tomada { fill: var(--folha); stroke: var(--tinta); stroke-width: 1.5; }
+  /* desenho grande (os três totens em escala real): traços e letras maiores */
+  svg.grande .s-aco { stroke-width: 2.4; }
+  svg.grande .s-cota { stroke-width: 2; }
+  svg.grande .s-frente { stroke-width: 7; }
+  svg.grande .s-cabo-t { stroke-width: 4; stroke-dasharray: 14 9; }
   .legenda { display: flex; flex-wrap: wrap; gap: 8px 18px; font-size: 14px; color: var(--tinta-2); }
   .legenda span { display: inline-flex; align-items: center; gap: 6px; }
-  .legenda i { width: 14px; height: 14px; border-radius: 3px; display: inline-block; border: 1px solid var(--linha); }
+  .legenda i { width: 14px; height: 14px; border-radius: 3px; display: inline-block; border: 1px solid var(--linha); flex: none; }
   .tabela { overflow-x: auto; border: 1px solid var(--linha); border-radius: 6px; background: var(--folha); }
-  table { border-collapse: collapse; width: 100%; min-width: 660px; font-size: 15px; }
+  table { border-collapse: collapse; width: 100%; min-width: 680px; font-size: 15px; }
   th, td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--linha); vertical-align: top; }
   th { font-family: var(--titulo); font-weight: 600; font-size: 13px; letter-spacing: .06em; text-transform: uppercase; color: var(--tinta-2); background: var(--folha-2); }
   td.v { text-align: right; white-space: nowrap; font-family: var(--mono); font-variant-numeric: tabular-nums; }
+  td.n { font-family: var(--mono); font-weight: 600; color: var(--cota); white-space: nowrap; }
   td small { display: block; color: var(--tinta-2); font-size: 13px; }
+  tr.grupo td { background: var(--folha-2); font-family: var(--titulo); font-weight: 700; font-size: 14px; letter-spacing: .04em; }
   ol.passos { margin: 0; padding-left: 22px; display: grid; gap: 8px; max-width: 75ch; }
   ol.passos li::marker { font-family: var(--mono); font-weight: 600; color: var(--cota); }
+  .tres { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 290px), 1fr)); gap: 12px; }
   .aviso { background: var(--folha-2); border: 1px solid var(--linha); border-left: 5px solid var(--cota); border-radius: 6px; padding: 12px 16px; }
   .fontes { font-size: 14px; color: var(--tinta-2); display: grid; gap: 4px; }
   .fontes a { color: var(--cota); }
   a:focus-visible { outline: 3px solid var(--cota); outline-offset: 2px; }
   @media print {
     body { background: #fff; padding: 0; font-size: 12px; }
-    .bloco, .desenho, .tabela, .decisao, .ficha { break-inside: avoid; }
+    .bloco, .desenho, .tabela, .decisao, .ficha, .tres > div, tr { break-inside: avoid; }
     .desenho svg { min-width: 0; }
+    h2 { break-after: avoid; }
   }
 </style>
 
 <div class="pagina">
   <header class="capa">
-    <span class="etiqueta">Ubirálcool · Pranchetas digitais · Projeto de oficina</span>
-    <h1>Totem do Galaxy Tab A11+</h1>
-    <p class="intro">Caixa de aço com moldura por cima da borda preta do tablet, a mesma do orçamento de 16/09/2026, agora com as medidas da tela, da borracha e das camadas por dentro. Tudo em milímetros. As medidas de fábrica do tablet são 257,1 × 168,7 × 6,9 mm.</p>
+    <span class="etiqueta">Ubirálcool · Pranchetas digitais · Projeto de oficina · versão de 12/10/2026</span>
+    <h1>Totem do Galaxy Tab A11+: de pé, de mesa e de parede</h1>
+    <p class="intro">Uma caixa de aço só, igual nos três totens, com a moldura por cima da borda preta do tablet. O que muda de um para outro é o suporte. O tablet entra e sai por uma tampa de trás com chave, e o cabo corre por dentro até a tomada. Tudo em milímetros. As medidas de fábrica do tablet são 257,1 × 168,7 × 6,9 mm.</p>
   </header>
+
+  <section>
+    <h2>O que mudou desde o primeiro desenho</h2>
+    <ul class="mudou">
+      <li><b>Moldura proporcional:</b> a janela agora fica bem no centro, com 30 mm de borda nos quatro lados. Antes eram 20 mm de um lado e 44 do outro.</li>
+      <li><b>O tablet sai por trás:</b> a frente é fixa, e uma tampa de trás com fechadura abre sem desmontar o suporte.</li>
+      <li><b>Cabo por dentro:</b> plugue em L, uma volta de sobra, abraçadeira e passa-fio de borracha. Dentro da coluna, do pescoço ou da canaleta, o cabo vai até a tomada, e a fonte fica fora da caixa.</li>
+      <li><b>Três montagens com a mesma caixa:</b> de pé (coluna), de mesa (pé curto) e de parede (abre como uma porta).</li>
+    </ul>
+  </section>
 
   <section>
     <h2>O tablet</h2>
@@ -103,7 +145,7 @@
     </div>
     <div class="bloco">
       <h3>Vai aguentar o sistema?</h3>
-      <p>Vai, com folga. O aplicativo das pranchetas é leve: a bateria de testes mede cada toque num processador 4 vezes mais lento que o computador de testes, com 90 dias de anotações guardadas, e cada toque responde em menos de 100 milésimos. O Dimensity 7300 é um processador intermediário recente, bem acima disso. A central do tablet chefe guarda 60 dias na memória (poucos megabytes) e o resto em arquivos de backup de poucos quilobytes por dia. Os 128 GB sobram por anos.</p>
+      <p>Vai, com folga. O aplicativo das pranchetas é leve: a bateria de testes mede cada toque num processador 4 vezes mais lento que o computador de testes, com 90 dias de anotações guardadas, e cada toque responde em menos de 100 milésimos. O Dimensity 7300 é um processador intermediário recente, bem acima disso. Os 128 GB sobram por anos.</p>
       <p>Como o tablet fica ligado na tomada o dia todo, ligue a proteção da bateria do Android (Configurações &gt; Bateria &gt; Proteção da bateria, carga até 80% ou 85%). Ela dura muito mais assim.</p>
     </div>
   </section>
@@ -118,120 +160,452 @@
   </section>
 
   <section>
-    <h2>Frente da caixa (a moldura)</h2>
-    <p class="intro">Chapa de aço de 2 mm, 305 × 205. A janela é a área acesa com 2 mm de folga em volta: assim a moldura cobre 8 mm da borda preta e não aperta a beira da tela (aperto na beira dá toque fantasma).</p>
+    <h2>A caixa (igual nos três totens)</h2>
+    <div class="ficha">
+      <div><small>Caixa por fora</small><b>301 × 212 × 45</b><span>chapa 2 mm, tampa de trás 1,5 mm</span></div>
+      <div><small>Janela da tela</small><b>241 × 152</b><span>no centro, 30 mm de borda em volta</span></div>
+      <div><small>Folga em volta do tablet</small><b>≈ 20 mm</b><span>nos quatro lados, para o cabo e os calços</span></div>
+      <div><small>Peso com o tablet</small><b>≈ 2,7 kg</b><span>aço 2,0 kg, tablet 0,5, o resto 0,2</span></div>
+    </div>
+
     <div class="desenho">
-      <h3>Vista de frente · escala real em mm</h3>
+      <h3>Frente (a moldura) · escala real em mm</h3>
       <div class="rolar">
-        <svg viewBox="-44 -40 400 292" role="img" aria-label="Frente da caixa com a janela da tela e as medidas">
-          <rect x="0" y="0" width="305" height="205" class="s-aco"/>
-          <rect x="20.1" y="26.3" width="241" height="152" rx="2" class="s-janela"/>
-          <rect x="12" y="18" width="257.1" height="168.7" rx="9" class="s-tablet"/>
-          <rect x="22.1" y="28.3" width="236.9" height="148.1" class="s-acesa"/>
-          <circle cx="72" cy="198" r="2.2" class="s-furo"/><circle cx="233" cy="198" r="2.2" class="s-furo"/>
-          <text x="140.6" y="104" font-size="8" text-anchor="middle" class="rot">janela 241 × 152</text>
-          <text x="140.6" y="114" font-size="6" text-anchor="middle" class="rot">área acesa 236,9 × 148,1 (tracejado azul)</text>
-          <text x="140.6" y="196" font-size="5.5" text-anchor="middle" class="rot">contorno do tablet 257,1 × 168,7 (tracejado)</text>
+        <svg viewBox="-48 -44 412 304" role="img" aria-label="Frente da caixa: 301 por 212, janela de 241 por 152 no centro com 30 milímetros de borda dos quatro lados">
+          <rect x="0" y="0" width="301" height="212" class="s-aco"/>
+          <rect x="30" y="30" width="241" height="152" rx="2" class="s-janela"/>
+          <rect x="21.95" y="21.65" width="257.1" height="168.7" rx="9" class="s-tablet"/>
+          <rect x="32.05" y="31.95" width="236.9" height="148.1" class="s-acesa"/>
+          <text x="150.5" y="102" font-size="8" text-anchor="middle" class="rot">janela 241 × 152</text>
+          <text x="150.5" y="113" font-size="6" text-anchor="middle" class="rot">área acesa 236,9 × 148,1 (tracejado azul)</text>
+          <text x="150.5" y="203" font-size="5.5" text-anchor="middle" class="rot">contorno do tablet 257,1 × 168,7 (tracejado)</text>
           <g class="s-cota">
-            <line x1="0" y1="-22" x2="305" y2="-22"/><line x1="0" y1="-27" x2="0" y2="-17"/><line x1="305" y1="-27" x2="305" y2="-17"/>
-            <line x1="0" y1="-9" x2="20.1" y2="-9"/><line x1="20.1" y1="-13" x2="20.1" y2="26.3"/><line x1="261.1" y1="-13" x2="261.1" y2="26.3"/>
-            <line x1="20.1" y1="-9" x2="261.1" y2="-9"/>
-            <line x1="325" y1="0" x2="325" y2="205"/><line x1="320" y1="0" x2="330" y2="0"/><line x1="320" y1="205" x2="330" y2="205"/>
-            <line x1="312" y1="0" x2="312" y2="26.3"/><line x1="308" y1="26.3" x2="316" y2="26.3"/>
-            <line x1="312" y1="26.3" x2="312" y2="178.3"/><line x1="308" y1="178.3" x2="316" y2="178.3"/>
-            <line x1="-14" y1="18" x2="-14" y2="186.7"/><line x1="-18" y1="18" x2="-10" y2="18"/><line x1="-18" y1="186.7" x2="-10" y2="186.7"/>
-            <line x1="12" y1="214" x2="20.1" y2="214"/><line x1="12" y1="210" x2="12" y2="218"/><line x1="20.1" y1="210" x2="20.1" y2="218"/>
+            <line x1="0" y1="-26" x2="301" y2="-26"/><line x1="0" y1="-31" x2="0" y2="-21"/><line x1="301" y1="-31" x2="301" y2="-21"/>
+            <line x1="0" y1="-11" x2="301" y2="-11"/><line x1="0" y1="-15" x2="0" y2="-7"/><line x1="301" y1="-15" x2="301" y2="-7"/>
+            <line x1="30" y1="-15" x2="30" y2="30"/><line x1="271" y1="-15" x2="271" y2="30"/>
+            <line x1="345" y1="0" x2="345" y2="212"/><line x1="340" y1="0" x2="350" y2="0"/><line x1="340" y1="212" x2="350" y2="212"/>
+            <line x1="317" y1="0" x2="317" y2="212"/><line x1="313" y1="0" x2="321" y2="0"/><line x1="313" y1="212" x2="321" y2="212"/>
+            <line x1="271" y1="30" x2="321" y2="30"/><line x1="271" y1="182" x2="321" y2="182"/>
+            <line x1="-14" y1="21.65" x2="-14" y2="190.35"/><line x1="-18" y1="21.65" x2="-10" y2="21.65"/><line x1="-18" y1="190.35" x2="-10" y2="190.35"/>
+            <line x1="21.95" y1="224" x2="30" y2="224"/><line x1="21.95" y1="220" x2="21.95" y2="228"/><line x1="30" y1="220" x2="30" y2="228"/>
           </g>
-          <text x="152.5" y="-25" font-size="7" text-anchor="middle" class="s-cota-t">305</text>
-          <text x="10" y="-11" font-size="6" text-anchor="middle" class="s-cota-t">20</text>
-          <text x="140.6" y="-11" font-size="6" text-anchor="middle" class="s-cota-t">241</text>
-          <text x="338" y="105" font-size="7" class="s-cota-t">205</text>
-          <text x="316" y="15" font-size="6" class="s-cota-t">26,5</text>
-          <text x="316" y="105" font-size="6" class="s-cota-t">152</text>
-          <text x="-20" y="105" font-size="6" text-anchor="end" class="s-cota-t">168,7</text>
-          <text x="16" y="226" font-size="5.5" text-anchor="middle" class="s-cota-t">8 mm sobre a borda</text>
-          <text x="152.5" y="240" font-size="6" text-anchor="middle" class="rot">dobradiça piano no alto · 2 orelhas embaixo com parafuso de segurança (furos Ø4,5)</text>
+          <text x="150.5" y="-29" font-size="7" text-anchor="middle" class="s-cota-t">301</text>
+          <text x="15" y="-14" font-size="6" text-anchor="middle" class="s-cota-t">30</text>
+          <text x="150.5" y="-14" font-size="6" text-anchor="middle" class="s-cota-t">241</text>
+          <text x="286" y="-14" font-size="6" text-anchor="middle" class="s-cota-t">30</text>
+          <text x="352" y="108" font-size="7" class="s-cota-t">212</text>
+          <text x="323" y="18" font-size="6" class="s-cota-t">30</text>
+          <text x="323" y="108" font-size="6" class="s-cota-t">152</text>
+          <text x="323" y="200" font-size="6" class="s-cota-t">30</text>
+          <text x="-20" y="108" font-size="6" text-anchor="end" class="s-cota-t">168,7</text>
+          <text x="34" y="227" font-size="5.5" class="s-cota-t">8 mm da moldura sobre a borda preta</text>
+          <text x="150.5" y="246" font-size="6" text-anchor="middle" class="rot">vista de frente · neste desenho o lado do cabo (porta USB-C) é o da direita</text>
         </svg>
       </div>
       <div class="legenda"><span><i style="background:var(--aco-fundo)"></i>chapa 2 mm</span><span><i style="background:var(--tela)"></i>janela aberta</span><span><i style="border:1.5px dashed var(--tinta-2)"></i>tablet por trás</span><span><i style="border:1.5px dashed var(--cota)"></i>área acesa da tela</span></div>
     </div>
-  </section>
 
-  <section>
-    <h2>Por dentro: as camadas</h2>
-    <p class="intro">De frente para trás, cortando a caixa no meio. A caixa tem 45 mm de fundo por fora (41 por dentro). O EVA atrás empurra o tablet contra a borracha; com a tampa fechada, a borracha aperta de 3 para 2 mm.</p>
+    <div class="desenho">
+      <h3>Por dentro, vista de trás com a tampa aberta · escala real em mm</h3>
+      <div class="rolar">
+        <svg viewBox="-74 -34 458 296" role="img" aria-label="Caixa vista de trás sem a tampa: tablet no centro, calços de EVA, plugue em L, cabo com volta de sobra até o passa-fio da base">
+          <rect x="0" y="0" width="301" height="212" class="s-aco"/>
+          <rect x="2" y="2" width="297" height="208" class="s-dentro"/>
+          <rect x="21.95" y="21.65" width="257.1" height="168.7" rx="9" class="s-tab"/>
+          <rect x="50.5" y="41" width="200" height="130" class="s-eva-tr"/>
+          <text x="150.5" y="100" font-size="6.5" text-anchor="middle" class="rot" style="fill:var(--eva-borda)">placas de EVA 200 × 130</text>
+          <text x="150.5" y="109" font-size="5.5" text-anchor="middle" class="rot" style="fill:var(--eva-borda)">(coladas na tampa: saem junto com ela)</text>
+          <!-- calços de EVA 20 mm -->
+          <rect x="70" y="2" width="40" height="19.65" class="s-eva"/><rect x="191" y="2" width="40" height="19.65" class="s-eva"/>
+          <rect x="70" y="190.35" width="40" height="19.65" class="s-eva"/><rect x="191" y="190.35" width="40" height="19.65" class="s-eva"/>
+          <rect x="279.05" y="86" width="19.95" height="40" class="s-eva"/>
+          <rect x="2" y="58" width="19.95" height="32" class="s-eva"/><rect x="2" y="122" width="19.95" height="32" class="s-eva"/>
+          <!-- plugue em L na porta USB-C e o cabo -->
+          <rect x="9" y="100" width="13" height="12" rx="2" class="s-plugue"/>
+          <path d="M 12 112 L 12 172 C 12 198 34 202 50 197 C 64 192 62 178 50 180 C 38 182 42 201 78 201 L 128 201 C 140 201 147 203 150.5 209" class="s-cabo"/>
+          <path d="M 12 172 C 12 192 16 200 21 209" class="s-cabo-t"/>
+          <rect x="126" y="197" width="8" height="8" rx="1.5" class="s-furo"/>
+          <circle cx="150.5" cy="210" r="5" class="s-passa"/>
+          <circle cx="21" cy="210" r="5" class="s-passa" style="stroke-dasharray:2 1.5"/>
+          <!-- dobradiça da tampa (lado sem cabo) e lingueta da fechadura (lado do cabo) -->
+          <rect x="301" y="16" width="5" height="180" class="s-dobradica"/>
+          <rect x="2" y="98" width="5" height="16" class="s-dobradica"/>
+          <line x1="-4" y1="120" x2="3" y2="114" class="s-marca"/>
+          <!-- rótulos -->
+          <g class="rot" font-size="6">
+            <text x="-6" y="96" text-anchor="end">plugue em L</text>
+            <text x="-6" y="104" text-anchor="end">na porta USB-C</text>
+            <text x="-6" y="124" text-anchor="end">lingueta da fechadura</text>
+            <text x="-6" y="132" text-anchor="end">(atrás do plugue)</text>
+            <text x="-6" y="168" text-anchor="end">volta de sobra</text>
+            <text x="-6" y="176" text-anchor="end">(uns 15 cm)</text>
+            <text x="312" y="60">dobradiça</text>
+            <text x="312" y="68">da tampa</text>
+            <text x="312" y="76">(lado sem cabo)</text>
+            <text x="90" y="-6" text-anchor="middle">calços de EVA 20 mm</text>
+          </g>
+          <g font-size="5.5" class="rot">
+            <text x="150.5" y="226" text-anchor="middle">passa-fio Ø25 do meio: pé e mesa (cabo em vermelho)</text>
+            <text x="21" y="238" text-anchor="middle">passa-fio do canto: parede (tracejado)</text>
+            <text x="130" y="238">abraçadeira P perto do passa-fio</text>
+            <text x="150.5" y="252" text-anchor="middle">vista de trás: o lado do cabo fica à esquerda aqui (é a direita de quem olha de frente)</text>
+          </g>
+        </svg>
+      </div>
+      <div class="legenda"><span><i style="background:var(--tablet)"></i>costas do tablet</span><span><i style="background:var(--eva)"></i>calços de EVA</span><span><i style="background:var(--vermelho)"></i>plugue e cabo</span><span><i style="background:var(--aco)"></i>dobradiça e lingueta</span></div>
+      <p class="intro">O cabo corre atrás do nível do tablet, por trás dos calços, que só têm 10 mm de fundo. A volta de sobra deixa tirar o tablet e soltar o plugue sem puxar o cabo, e a abraçadeira P segura um puxão antes que ele chegue no plugue.</p>
+    </div>
+
     <div class="desenho">
       <h3>Corte lateral · espessuras ampliadas 4 vezes</h3>
       <div class="rolar">
-        <svg viewBox="-10 -24 380 150" role="img" aria-label="Corte com as camadas da caixa">
-          <!-- cada mm de espessura vale 4 unidades na horizontal; a altura mostra 168,7 mm do tablet em escala 0,5 -->
-          <rect x="0" y="0" width="8" height="102" class="s-aco"/>
-          <rect x="8" y="0" width="8" height="10" class="s-borracha"/><rect x="8" y="92" width="8" height="10" class="s-borracha"/>
-          <rect x="16" y="6" width="1.3" height="90" class="s-pel"/>
-          <rect x="17.3" y="6" width="27.6" height="90" rx="2" class="s-tab"/>
-          <rect x="44.9" y="8" width="30" height="86" class="s-eva"/><rect x="74.9" y="8" width="30" height="86" class="s-eva"/>
-          <rect x="164" y="0" width="8" height="102" class="s-aco"/>
-          <rect x="0" y="-6" width="172" height="6" class="s-aco"/><rect x="0" y="102" width="172" height="6" class="s-aco"/>
-          <text x="4" y="-10" font-size="6" text-anchor="middle" class="s-cota-t">2,0</text>
-          <text x="12" y="120" font-size="5.5" text-anchor="middle" class="s-cota-t">2,0</text>
-          <text x="31" y="120" font-size="5.5" text-anchor="middle" class="s-cota-t">6,9 + 0,33</text>
-          <text x="75" y="120" font-size="5.5" text-anchor="middle" class="s-cota-t">EVA 2 × 10 (aperta para 15)</text>
-          <text x="168" y="-10" font-size="6" text-anchor="middle" class="s-cota-t">2,0</text>
-          <g class="s-cota"><line x1="0" y1="-18" x2="172" y2="-18"/><line x1="0" y1="-21" x2="0" y2="-15"/><line x1="172" y1="-21" x2="172" y2="-15"/></g>
-          <text x="86" y="-20" font-size="6" text-anchor="middle" class="s-cota-t">45 por fora</text>
-          <text x="190" y="12" font-size="7" class="rot">1 · moldura de aço 2 mm (a tampa da frente)</text>
-          <text x="190" y="28" font-size="7" class="rot">2 · borracha EPDM 10 × 3 mm, só na borda preta</text>
-          <text x="190" y="44" font-size="7" class="rot">3 · película de vidro 0,33 mm colada na tela</text>
-          <text x="190" y="60" font-size="7" class="rot">4 · tablet 6,9 mm</text>
-          <text x="190" y="76" font-size="7" class="rot">5 · duas placas de EVA 10 mm (255 × 165)</text>
-          <text x="190" y="92" font-size="7" class="rot">6 · fundo da caixa 2 mm, preso no suporte</text>
-          <text x="125" y="56" font-size="6" text-anchor="middle" class="rot">vão para o cabo</text>
+        <svg viewBox="-12 -30 480 152" role="img" aria-label="Corte com as camadas da caixa, da frente para trás">
+          <!-- cada mm de fundo vale 4 unidades na horizontal; a altura está em escala 0,5 -->
+          <rect x="0" y="0" width="8" height="15" class="s-aco"/><rect x="0" y="91" width="8" height="15" class="s-aco"/>
+          <rect x="0" y="0" width="174" height="3" class="s-aco"/><rect x="0" y="103" width="174" height="3" class="s-aco"/>
+          <rect x="8" y="9.5" width="8" height="5" class="s-borracha"/><rect x="8" y="91.5" width="8" height="5" class="s-borracha"/>
+          <rect x="16" y="10.8" width="1.3" height="84.4" class="s-pel"/>
+          <rect x="17.3" y="10.8" width="27.6" height="84.4" rx="2" class="s-tab"/>
+          <rect x="17.3" y="3" width="40" height="7.8" class="s-eva"/><rect x="17.3" y="95.2" width="40" height="7.8" class="s-eva"/>
+          <rect x="44.9" y="20.5" width="55.3" height="65" class="s-eva"/><rect x="100.2" y="20.5" width="73.8" height="65" class="s-eva"/>
+          <rect x="174" y="-1" width="6" height="108" class="s-aco"/>
+          <rect x="134" y="3" width="40" height="2" class="s-aco"/><rect x="134" y="101" width="40" height="2" class="s-aco"/>
+          <ellipse cx="96" cy="99" rx="8" ry="2" class="s-plugue"/>
+          <g class="s-cota"><line x1="0" y1="-20" x2="180" y2="-20"/><line x1="0" y1="-24" x2="0" y2="-16"/><line x1="180" y1="-24" x2="180" y2="-16"/></g>
+          <text x="90" y="-23" font-size="6" text-anchor="middle" class="s-cota-t">45 por fora · 41,5 por dentro</text>
+          <text x="4" y="-6" font-size="5.5" text-anchor="middle" class="s-cota-t">2,0</text>
+          <text x="31" y="118" font-size="5.5" text-anchor="middle" class="s-cota-t">0,33 + 6,9</text>
+          <text x="110" y="118" font-size="5.5" text-anchor="middle" class="s-cota-t">EVA 15 + 20 (aperta para 32)</text>
+          <text x="177" y="-6" font-size="5.5" text-anchor="middle" class="s-cota-t">1,5</text>
+          <g class="rot" font-size="6.5">
+            <text x="196" y="8">1 · moldura de aço 2 mm, fixa</text>
+            <text x="196" y="21">2 · borracha EPDM 10 × 3 (aperta para 2), só na borda preta</text>
+            <text x="196" y="34">3 · película de vidro 0,33 mm colada na tela</text>
+            <text x="196" y="47">4 · tablet 6,9 mm</text>
+            <text x="196" y="60">5 · calços de EVA 20 mm em volta (10 de fundo)</text>
+            <text x="196" y="73">6 · placas de EVA 15 + 20 mm, coladas na tampa</text>
+            <text x="196" y="86">7 · tampa de trás 1,5 mm com aba de 10 para dentro</text>
+            <text x="196" y="99">vermelho · o cabo, na folga de baixo, atrás dos calços</text>
+          </g>
         </svg>
       </div>
+      <p class="intro">Com a tampa fechada, as placas de EVA apertam de 35 para 32 mm e empurram o tablet contra a borracha da moldura. A pressão é de leve, sem forçar a tela.</p>
     </div>
+
     <div class="bloco">
       <h3>Folgas que importam</h3>
-      <p><b>Lado direito (cabo):</b> do tablet até a parede de dentro sobram <span class="num">33,9 mm</span>. Use cabo USB-C com plugue em L (90°): o plugue reto bate na parede. Rasgo de 20 × 12 na lateral direita para o cabo sair.</p>
-      <p><b>Som do apito:</b> os alto-falantes ficam nas laterais do tablet. Faça 6 rasgos de 3 × 20 mm em cada lateral da caixa, na altura do tablet, senão o lembrete de anotar fica abafado dentro do aço.</p>
-      <p><b>Calço da esquerda:</b> uma tira de EVA de 10 mm entre a parede esquerda e o tablet, para ele não correr para o lado do cabo.</p>
+      <p><b>Cabo:</b> de cada lado do tablet sobram 20 mm até a parede de dentro. O plugue em L (90°) cabe com folga; o plugue reto não cabe. A porta USB-C pode ficar para qualquer lado (o Android gira a tela), mas use o mesmo lado em todos os totens: o lado do cabo deste desenho.</p>
+      <p><b>Som do apito:</b> os alto-falantes ficam nas laterais do tablet. Por isso as duas laterais da caixa têm 6 rasgos de 15 × 3 mm perto da frente, senão o lembrete de anotar fica abafado dentro do aço. Confira no tablet comprado onde estão os alto-falantes e ponha os rasgos na frente deles.</p>
+      <p><b>Botões:</b> os botões do tablet ficam cobertos. O tablet fica ligado o tempo todo, e para desligar é só abrir a tampa de trás.</p>
     </div>
   </section>
 
   <section>
-    <h2>Peças da caixa (por totem)</h2>
+    <h2>Furos e rasgos: a caixa planificada</h2>
+    <p class="intro">Assim fica a caixa antes de dobrar, vista de fora: a frente no meio e as quatro paredes abertas em volta. Ela pode sair de uma chapa só, dobrada (blank de 384 × 295, com os cantos recortados), ou ter as paredes soldadas atrás da frente. A medida <span class="num">z</span> conta da frente da caixa para trás.</p>
+    <div class="desenho">
+      <h3>Planificação vista de fora · escala real em mm</h3>
+      <div class="rolar">
+        <svg viewBox="-40 -52 466 410" role="img" aria-label="Caixa planificada: frente com a janela, topo, base e laterais com os furos numerados">
+          <rect x="41.5" y="0" width="301" height="41.5" class="s-aco"/>
+          <rect x="41.5" y="253.5" width="301" height="41.5" class="s-aco"/>
+          <rect x="0" y="41.5" width="41.5" height="212" class="s-aco"/>
+          <rect x="342.5" y="41.5" width="41.5" height="212" class="s-aco"/>
+          <rect x="41.5" y="41.5" width="301" height="212" class="s-aco"/>
+          <rect x="71.5" y="71.5" width="241" height="152" rx="2" class="s-janela"/>
+          <g class="s-dobra"><line x1="41.5" y1="41.5" x2="342.5" y2="41.5"/><line x1="41.5" y1="253.5" x2="342.5" y2="253.5"/><line x1="41.5" y1="41.5" x2="41.5" y2="253.5"/><line x1="342.5" y1="41.5" x2="342.5" y2="253.5"/></g>
+          <!-- topo: 1 porcas-rebite M5 da viseira, 2 ventilação -->
+          <circle cx="117" cy="20.5" r="3.5" class="s-rebite"/><circle cx="267" cy="20.5" r="3.5" class="s-rebite"/>
+          <g class="s-furo"><circle cx="152" cy="20.5" r="3"/><circle cx="168" cy="20.5" r="3"/><circle cx="184" cy="20.5" r="3"/><circle cx="200" cy="20.5" r="3"/><circle cx="216" cy="20.5" r="3"/><circle cx="232" cy="20.5" r="3"/></g>
+          <!-- base: 3 M6 do cabeçote, 4 passa-fio pé/mesa, 5 passa-fio parede, 6 M5 trava da parede, 7 ventilação -->
+          <circle cx="92" cy="263.5" r="4.5" class="s-rebite"/><circle cx="92" cy="288.5" r="4.5" class="s-rebite"/><circle cx="292" cy="263.5" r="4.5" class="s-rebite"/><circle cx="292" cy="288.5" r="4.5" class="s-rebite"/>
+          <circle cx="192" cy="273.5" r="12.5" class="s-passa"/>
+          <circle cx="321.5" cy="273.5" r="12.5" class="s-passa" style="stroke-dasharray:3 2"/>
+          <circle cx="76.5" cy="277.5" r="3.5" class="s-rebite"/>
+          <g class="s-furo"><circle cx="53.5" cy="265.5" r="3"/><circle cx="63.5" cy="265.5" r="3"/><circle cx="53.5" cy="283.5" r="3"/><circle cx="63.5" cy="283.5" r="3"/></g>
+          <!-- laterais: 8 rasgos de som; lado do cabo: 9 M5 das dobradiças da parede, 10 lingueta; lado sem cabo: 11 dobradiça da tampa -->
+          <g class="s-furo"><rect x="22.5" y="116" width="15" height="3"/><rect x="22.5" y="128" width="15" height="3"/><rect x="22.5" y="140" width="15" height="3"/><rect x="22.5" y="152" width="15" height="3"/><rect x="22.5" y="164" width="15" height="3"/><rect x="22.5" y="176" width="15" height="3"/></g>
+          <g class="s-furo"><rect x="346.5" y="116" width="15" height="3"/><rect x="346.5" y="128" width="15" height="3"/><rect x="346.5" y="140" width="15" height="3"/><rect x="346.5" y="152" width="15" height="3"/><rect x="346.5" y="164" width="15" height="3"/><rect x="346.5" y="176" width="15" height="3"/></g>
+          <circle cx="366.5" cy="66.5" r="3.5" class="s-rebite"/><circle cx="366.5" cy="96.5" r="3.5" class="s-rebite"/><circle cx="366.5" cy="198.5" r="3.5" class="s-rebite"/><circle cx="366.5" cy="228.5" r="3.5" class="s-rebite"/>
+          <rect x="374" y="137.5" width="7" height="20" class="s-marca"/>
+          <rect x="0" y="57.5" width="12" height="180" class="s-marca"/>
+          <!-- números -->
+          <g font-size="8" font-weight="600" class="s-cota-t">
+            <text x="117" y="-6" text-anchor="middle">1</text><text x="192" y="-6" text-anchor="middle">2</text>
+            <text x="92" y="309" text-anchor="middle">3</text><text x="192" y="309" text-anchor="middle">4</text><text x="321.5" y="309" text-anchor="middle">5</text>
+            <text x="76.5" y="320" text-anchor="middle">6</text><text x="58.5" y="309" text-anchor="middle">7</text>
+            <text x="30" y="110" text-anchor="middle">8</text><text x="354" y="110" text-anchor="middle">8</text>
+            <text x="396" y="70">9</text><text x="396" y="150">10</text><text x="-12" y="150" text-anchor="end">11</text>
+          </g>
+          <g class="tit" font-size="7">
+            <text x="192" y="-26" text-anchor="middle">TOPO</text>
+            <text x="192" y="334" text-anchor="middle">BASE</text>
+            <text transform="translate(-24 147.5) rotate(-90)" text-anchor="middle">LADO SEM CABO</text>
+            <text transform="translate(414 147.5) rotate(90)" text-anchor="middle">LADO DO CABO</text>
+            <text x="192" y="62" text-anchor="middle">FRENTE (vista de fora)</text>
+          </g>
+          <g class="rot" font-size="5.5">
+            <text x="192" y="-16" text-anchor="middle">borda de cima = trás da caixa</text>
+            <text x="192" y="345" text-anchor="middle">borda de baixo = trás da caixa</text>
+          </g>
+          <g class="s-cota"><line x1="41.5" y1="-36" x2="342.5" y2="-36"/><line x1="41.5" y1="-40" x2="41.5" y2="-32"/><line x1="342.5" y1="-40" x2="342.5" y2="-32"/></g>
+          <text x="192" y="-39" font-size="6" text-anchor="middle" class="s-cota-t">301</text>
+          <g class="s-cota"><line x1="356" y1="0" x2="356" y2="41.5"/><line x1="352" y1="0" x2="360" y2="0"/><line x1="352" y1="41.5" x2="360" y2="41.5"/></g>
+          <text x="362" y="23" font-size="6" class="s-cota-t">41,5 (aba)</text>
+        </svg>
+      </div>
+      <div class="legenda"><span><i style="border:1.5px solid var(--cota)"></i>porca-rebite</span><span><i style="border:1.5px solid var(--tinta)"></i>furo ou rasgo</span><span><i style="border:1.5px solid var(--vermelho)"></i>passa-fio Ø25</span><span><i style="border:1.5px dashed var(--tinta-2)"></i>peça soldada ou rebitada (sem furo)</span><span><i style="border:1.5px dashed var(--cota)"></i>linha de dobra</span></div>
+    </div>
+    <div class="tabela">
+      <table>
+        <thead><tr><th>Nº</th><th>Onde</th><th>O que é</th><th>Furo</th><th>Posição (x da esquerda, olhando de frente · z da frente para trás)</th></tr></thead>
+        <tbody>
+          <tr><td class="n">1</td><td>Topo</td><td>2 porcas-rebite M5 da viseira</td><td class="v">Ø7</td><td>x 75,5 e 225,5 · z 21</td></tr>
+          <tr><td class="n">2</td><td>Topo</td><td>6 furos de ventilação</td><td class="v">Ø6</td><td>x 110,5 a 190,5, de 16 em 16 · z 21 (a viseira cobre)</td></tr>
+          <tr><td class="n">3</td><td>Base</td><td>4 porcas-rebite M6 do cabeçote (pé e mesa)</td><td class="v">Ø9</td><td>x 50,5 e 250,5 · z 10 e 35</td></tr>
+          <tr><td class="n">4</td><td>Base</td><td>Passa-fio do cabo, pé e mesa</td><td class="v">Ø25</td><td>x 150,5 · z 20</td></tr>
+          <tr><td class="n">5</td><td>Base</td><td>Passa-fio do cabo, parede (perto da dobradiça)</td><td class="v">Ø25</td><td>x 280 · z 20</td></tr>
+          <tr><td class="n">6</td><td>Base</td><td>Porca-rebite M5 da trava da parede</td><td class="v">Ø7</td><td>x 35 · z 24</td></tr>
+          <tr><td class="n">7</td><td>Base</td><td>4 furos de ventilação</td><td class="v">Ø6</td><td>x 12 e 22 · z 12 e 30</td></tr>
+          <tr><td class="n">8</td><td>As duas laterais</td><td>6 rasgos de som em cada</td><td class="v">15 × 3</td><td>altura 76 a 136, de 12 em 12 · z 4 a 19</td></tr>
+          <tr><td class="n">9</td><td>Lado do cabo</td><td>4 porcas-rebite M5 das dobradiças da parede</td><td class="v">Ø7</td><td>altura 25, 55, 157 e 187 · z 24</td></tr>
+          <tr><td class="n">10</td><td>Lado do cabo, por dentro</td><td>Lingueta 20 × 15 soldada, onde o came da fechadura prende</td><td class="v">—</td><td>altura 106 (meio) · z 36</td></tr>
+          <tr><td class="n">11</td><td>Lado sem cabo, por fora</td><td>Dobradiça piano da tampa, rebitada</td><td class="v">—</td><td>altura 16 a 196 · rente à borda de trás</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="intro">Os furos 4 e 5 servem um para cada tipo de totem: o que não for usado fica fechado com tampão de borracha. As porcas-rebite 1, 6 e 9 só trabalham na parede e no pé; pôr em todas as caixas deixa qualquer caixa servir em qualquer totem.</p>
+  </section>
+
+  <section>
+    <h2>Os três totens</h2>
+    <p class="intro">A mesma caixa nos três. De lado, em escala real: a frente da tela está em azul e o cabo em vermelho tracejado.</p>
+    <div class="desenho">
+      <h3>Vista de lado · escala real em mm · o chão é a linha de baixo</h3>
+      <div class="rolar">
+        <svg class="grande" viewBox="-300 -70 1790 1720" role="img" aria-label="Os três totens de lado: de pé com coluna, de mesa com pé curto e de parede, com as alturas do meio da tela">
+          <line x1="-250" y1="1450" x2="1470" y2="1450" class="s-chao"/>
+          <!-- DE PÉ -->
+          <rect x="-175" y="1443.65" width="350" height="6.35" class="s-aco"/>
+          <polygon points="-25,1443.65 -125,1443.65 -25,1343.65" class="s-aco"/>
+          <polygon points="25,1443.65 125,1443.65 25,1343.65" class="s-aco"/>
+          <polygon points="-25,1443.65 -25,263.65 25,281.9 25,1443.65" class="s-aco"/>
+          <rect x="25" y="1000" width="55" height="100" rx="6" class="s-tomada"/>
+          <path d="M 52 1050 L 0 1050 L 0 290" class="s-cabo-t"/>
+          <g transform="translate(0 267.74) rotate(20)">
+            <rect x="-25" y="0" width="50" height="4.75" class="s-aco"/>
+            <rect x="-22.5" y="-212" width="45" height="212" class="s-aco"/>
+            <line x1="-22.5" y1="-182" x2="-22.5" y2="-30" class="s-frente"/>
+            <rect x="-112.5" y="-214" width="135" height="2.5" class="s-aco"/>
+          </g>
+          <!-- cotas do pé -->
+          <g class="s-cota">
+            <line x1="-160" y1="263.65" x2="-160" y2="1443.65"/><line x1="-172" y1="263.65" x2="-148" y2="263.65"/><line x1="-172" y1="1443.65" x2="-148" y2="1443.65"/>
+            <line x1="-225" y1="160.4" x2="-225" y2="1450"/><line x1="-237" y1="160.4" x2="-213" y2="160.4"/><line x1="-225" y1="160.4" x2="15" y2="160.4" stroke-dasharray="8 6"/>
+            <line x1="-175" y1="1500" x2="175" y2="1500"/><line x1="-175" y1="1488" x2="-175" y2="1512"/><line x1="175" y1="1488" x2="175" y2="1512"/>
+          </g>
+          <text x="-168" y="860" font-size="30" text-anchor="middle" class="s-cota-t" transform="rotate(-90 -168 860)">coluna 1.180</text>
+          <text x="-233" y="800" font-size="30" text-anchor="middle" class="s-cota-t" transform="rotate(-90 -233 800)">1.290 até o meio da tela</text>
+          <text x="0" y="1540" font-size="28" text-anchor="middle" class="s-cota-t">base 350 × 350</text>
+          <text x="118" y="210" font-size="30" class="s-cota-t">20°</text>
+          <text x="90" y="1060" font-size="26" class="rot">tomada + fonte</text>
+          <text x="90" y="1090" font-size="26" class="rot">(400 do chão)</text>
+          <text x="0" y="1600" font-size="36" text-anchor="middle" class="tit">DE PÉ</text>
+          <!-- DE MESA -->
+          <rect x="480" y="700" width="440" height="25" class="s-madeira"/>
+          <rect x="492" y="725" width="22" height="725" class="s-madeira"/><rect x="886" y="725" width="22" height="725" class="s-madeira"/>
+          <rect x="630" y="695.25" width="140" height="4.75" class="s-aco"/>
+          <polygon points="675,695.25 675,575.25 725,603.5 725,695.25" class="s-aco"/>
+          <g transform="translate(700 583.64) rotate(30)">
+            <rect x="-25" y="0" width="50" height="4.75" class="s-aco"/>
+            <rect x="-22.5" y="-212" width="45" height="212" class="s-aco"/>
+            <line x1="-22.5" y1="-182" x2="-22.5" y2="-30" class="s-frente"/>
+          </g>
+          <rect x="780" y="725" width="55" height="45" rx="6" class="s-tomada"/>
+          <path d="M 700 600 L 700 745 L 780 748" class="s-cabo-t"/>
+          <g class="s-cota">
+            <line x1="950" y1="700" x2="950" y2="1450"/><line x1="938" y1="700" x2="962" y2="700"/><line x1="938" y1="1450" x2="962" y2="1450"/>
+            <line x1="600" y1="480.6" x2="600" y2="700"/><line x1="588" y1="480.6" x2="612" y2="480.6"/><line x1="600" y1="480.6" x2="733" y2="480.6" stroke-dasharray="8 6"/>
+          </g>
+          <text x="965" y="1080" font-size="30" class="s-cota-t">mesa 750</text>
+          <text x="590" y="600" font-size="30" text-anchor="end" class="s-cota-t">220 até o</text>
+          <text x="590" y="634" font-size="30" text-anchor="end" class="s-cota-t">meio da tela</text>
+          <text x="820" y="450" font-size="30" class="s-cota-t">30°</text>
+          <text x="740" y="660" font-size="24" class="rot">pescoço 120</text>
+          <text x="845" y="800" font-size="24" class="rot">tomada embaixo da mesa</text>
+          <text x="700" y="1600" font-size="36" text-anchor="middle" class="tit">DE MESA</text>
+          <!-- NA PAREDE -->
+          <rect x="1350" y="-60" width="40" height="1510" class="s-parede"/>
+          <rect x="1348" y="44" width="2" height="212" class="s-aco"/>
+          <rect x="1298" y="44" width="45" height="212" class="s-aco"/>
+          <line x1="1298" y1="74" x2="1298" y2="226" class="s-frente"/>
+          <rect x="1208" y="41.5" width="135" height="2.5" class="s-aco" style="stroke-dasharray:6 4"/>
+          <rect x="1295" y="400" width="55" height="100" rx="6" class="s-tomada"/>
+          <rect x="1336" y="256" width="12" height="144" class="s-aco"/>
+          <path d="M 1342 268 L 1342 450 L 1322 450" class="s-cabo-t"/>
+          <g class="s-cota">
+            <line x1="1180" y1="150" x2="1180" y2="1450"/><line x1="1168" y1="150" x2="1192" y2="150"/><line x1="1168" y1="1450" x2="1192" y2="1450"/><line x1="1180" y1="150" x2="1298" y2="150" stroke-dasharray="8 6"/>
+          </g>
+          <text x="1172" y="820" font-size="30" text-anchor="end" class="s-cota-t" transform="rotate(-90 1172 820)">1.300 até o meio da tela</text>
+          <text x="1260" y="560" font-size="24" class="rot" text-anchor="end">tomada + fonte</text>
+          <text x="1260" y="330" font-size="24" class="rot" text-anchor="end">canaleta</text>
+          <text x="1200" y="20" font-size="22" class="rot">viseira (se quiser)</text>
+          <text x="1290" y="1600" font-size="36" text-anchor="middle" class="tit">NA PAREDE</text>
+        </svg>
+      </div>
+    </div>
+
+    <div class="ficha">
+      <div><small>De pé</small><b>1.290 do chão</b><span>meio da tela, inclinada 20°, base 350 × 350 chumbada no piso. ≈ 15 kg.</span></div>
+      <div><small>De mesa</small><b>220 da mesa</b><span>meio da tela, inclinada 30°, base 200 × 140 parafusada no tampo. ≈ 4,5 kg.</span></div>
+      <div><small>Na parede</small><b>1.300 do chão</b><span>meio da tela, reta, abre como uma porta para chegar na tampa de trás. ≈ 4 kg.</span></div>
+    </div>
+
+    <div class="desenho">
+      <h3>Cabeçote do pé e da mesa (chapa 3/16") · vista de cima · escala real em mm</h3>
+      <div class="rolar">
+        <svg viewBox="-44 -40 320 128" role="img" aria-label="Cabeçote: chapa de 220 por 50 com quatro furos de 7 e um furo de 25 para o cabo">
+          <rect x="0" y="0" width="220" height="50" class="s-aco"/>
+          <rect x="60" y="0" width="100" height="50" class="s-tablet"/>
+          <rect x="85" y="0" width="50" height="50" class="s-acesa"/>
+          <circle cx="10" cy="12.5" r="3.5" class="s-furo"/><circle cx="10" cy="37.5" r="3.5" class="s-furo"/><circle cx="210" cy="12.5" r="3.5" class="s-furo"/><circle cx="210" cy="37.5" r="3.5" class="s-furo"/>
+          <circle cx="110" cy="22.5" r="12.5" class="s-passa"/>
+          <g class="s-cota">
+            <line x1="0" y1="-22" x2="220" y2="-22"/><line x1="0" y1="-26" x2="0" y2="-18"/><line x1="220" y1="-26" x2="220" y2="-18"/>
+            <line x1="10" y1="-10" x2="210" y2="-10"/><line x1="10" y1="-14" x2="10" y2="12.5"/><line x1="210" y1="-14" x2="210" y2="12.5"/>
+            <line x1="236" y1="0" x2="236" y2="50"/><line x1="232" y1="0" x2="240" y2="0"/><line x1="232" y1="50" x2="240" y2="50"/>
+            <line x1="-12" y1="12.5" x2="-12" y2="37.5"/><line x1="-16" y1="12.5" x2="-8" y2="12.5"/><line x1="-16" y1="37.5" x2="-8" y2="37.5"/>
+          </g>
+          <text x="110" y="-25" font-size="6" text-anchor="middle" class="s-cota-t">220</text>
+          <text x="40" y="-12" font-size="6" text-anchor="middle" class="s-cota-t">200 entre furos</text>
+          <text x="242" y="28" font-size="6" class="s-cota-t">50</text>
+          <text x="-18" y="28" font-size="6" text-anchor="end" class="s-cota-t">25</text>
+          <text x="110" y="64" font-size="5.5" text-anchor="middle" class="rot">4 furos Ø7 (parafusos M6 nas porcas-rebite da base da caixa) · furo Ø25 do cabo a 22,5 da frente</text>
+          <text x="110" y="74" font-size="5.5" text-anchor="middle" class="rot">tracejado cinza: coluna do pé (metalon 100 × 50) · tracejado azul: pescoço da mesa (metalon 50 × 50)</text>
+          <text x="110" y="84" font-size="5.5" text-anchor="middle" class="rot">a borda de cima do desenho é a da frente (fica 2,5 mm à frente da caixa)</text>
+        </svg>
+      </div>
+    </div>
+
+    <div class="desenho">
+      <h3>Na parede · vista de cima, a caixa abrindo como uma porta · escala real em mm</h3>
+      <div class="rolar">
+        <svg viewBox="-120 -60 600 400" role="img" aria-label="Totem de parede visto de cima: chapa presa na parede, dobradiças no lado do cabo, a caixa gira 90 graus e libera a tampa de trás">
+          <rect x="-90" y="-50" width="500" height="50" class="s-parede"/>
+          <rect x="0" y="0" width="301" height="2" class="s-aco"/>
+          <rect x="301" y="0" width="3" height="12" class="s-aco"/>
+          <rect x="-3" y="0" width="3" height="12" class="s-aco"/>
+          <rect x="0" y="7" width="301" height="45" class="s-aco"/>
+          <line x1="30" y1="52" x2="271" y2="52" class="s-frente"/>
+          <circle cx="303.5" cy="7" r="3.5" class="s-dobradica"/>
+          <g transform="rotate(-90 301 7)" style="opacity:.75">
+            <rect x="0" y="7" width="301" height="45" class="s-aco" style="stroke-dasharray:5 3"/>
+            <line x1="30" y1="52" x2="271" y2="52" class="s-frente"/>
+          </g>
+          <path d="M 0 7 A 301 301 0 0 0 301 308" class="s-marca"/>
+          <circle cx="16" cy="58" r="3" class="s-furo"/>
+          <g class="rot" font-size="7">
+            <text x="150" y="-22" text-anchor="middle">parede</text>
+            <text x="150" y="30" text-anchor="middle">caixa fechada (a frente olha para baixo no desenho)</text>
+            <text x="310" y="-6">dobradiças (2)</text>
+            <text x="310" y="2">no lado do cabo</text>
+            <text x="356" y="160">caixa aberta 90°:</text>
+            <text x="356" y="170">a tampa de trás</text>
+            <text x="356" y="180">fica livre para abrir</text>
+            <text x="-6" y="74" text-anchor="end">parafuso de</text>
+            <text x="-6" y="83" text-anchor="end">segurança por</text>
+            <text x="-6" y="92" text-anchor="end">baixo (trava)</text>
+            <text x="120" y="250" text-anchor="middle">a caixa gira em volta</text>
+            <text x="120" y="260" text-anchor="middle">das dobradiças</text>
+          </g>
+          <text x="150" y="330" font-size="6" text-anchor="middle" class="rot">o cabo sai pela base, no canto das dobradiças: quase não mexe quando a caixa abre</text>
+        </svg>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Lista de peças</h2>
     <div class="tabela">
       <table>
         <thead><tr><th>Peça</th><th>Material</th><th>Medida (mm)</th><th class="v">Qtd</th><th>Observação</th></tr></thead>
         <tbody>
-          <tr><td>Tampa da frente (moldura)</td><td>Chapa 2,00 mm</td><td class="num">305 × 205</td><td class="v">1</td><td>Janela 241 × 152 a 20 da esquerda e 26,5 de cima. Cantos da janela com raio 2. Lixar a beira da janela.</td></tr>
-          <tr><td>Fundo da caixa</td><td>Chapa 2,00 mm</td><td class="num">305 × 205</td><td class="v">1</td><td>Furos do suporte (4 × Ø7 em 70 × 120) e 1 furo Ø25 com passa-fio.</td></tr>
-          <tr><td>Topo e base da caixa</td><td>Chapa 2,00 mm</td><td class="num">301 × 41</td><td class="v">2</td><td>6 furos Ø6 de ventilação em cada; o de cima fica embaixo da viseira.</td></tr>
-          <tr><td>Laterais da caixa</td><td>Chapa 2,00 mm</td><td class="num">205 × 41</td><td class="v">2</td><td>Direita: rasgo 20 × 12 do cabo. As duas: 6 rasgos 3 × 20 para o som.</td></tr>
-          <tr><td>Viseira</td><td>Chapa 2,00 mm</td><td class="num">305 × 90</td><td class="v">1</td><td>Dobra de 15 para parafusar no alto, aba para a frente.</td></tr>
-          <tr><td>Borracha da janela</td><td>Perfil EPDM autoadesivo 10 × 3</td><td class="num">≈ 900 de comprimento</td><td class="v">1</td><td>Colada por dentro da tampa, a 1 mm da beira da janela, em volta toda.</td></tr>
-          <tr><td>Enchimento de trás</td><td>Placa de EVA 10 mm</td><td class="num">255 × 165</td><td class="v">2</td><td>Mais uma tira 165 × 10 × 10 de calço na esquerda.</td></tr>
-          <tr><td>Película</td><td>Vidro temperado 9H para Tab A11+ 11"</td><td class="num">tela de 11"</td><td class="v">1</td><td>Colar antes de pôr na caixa, sem bolha.</td></tr>
-          <tr><td>Cabo</td><td>USB-C com plugue em L, reforçado</td><td class="num">2 m</td><td class="v">1</td><td>Sobe por dentro da coluna até a caixa de tomada.</td></tr>
-          <tr><td>Dobradiça e fechos</td><td>Dobradiça piano + parafuso de segurança Torx M5</td><td class="num">300 de dobradiça</td><td class="v">1 + 2</td><td>Iguais ao orçamento.</td></tr>
+          <tr class="grupo"><td colspan="5">Caixa: uma por totem, igual nos três</td></tr>
+          <tr><td>Frente (moldura)</td><td>Chapa de aço 2,00</td><td class="num">301 × 212</td><td class="v">1</td><td>Janela de 241 × 152 bem no centro (30 mm de borda nos quatro lados). Cantos da janela com raio 2; lixar a beira.</td></tr>
+          <tr><td>Topo e base</td><td>Chapa 2,00</td><td class="num">301 × 41,5</td><td class="v">2</td><td>Furos 1 a 7. Ou a caixa inteira de uma chapa dobrada (384 × 295).</td></tr>
+          <tr><td>Laterais</td><td>Chapa 2,00</td><td class="num">208 × 41,5</td><td class="v">2</td><td>Rasgos de som nas duas; furos 9 e lingueta 10 no lado do cabo.</td></tr>
+          <tr><td>Tampa de trás</td><td>Chapa 1,50</td><td class="num">321 × 232</td><td class="v">1</td><td>Dobrada fica 301 × 212 com aba de 10 para dentro. Furo Ø19 da fechadura a 20 da borda do lado do cabo, na altura 106.</td></tr>
+          <tr><td>Dobradiça piano</td><td>Aço</td><td class="num">180</td><td class="v">1</td><td>Tampa de trás, no lado sem cabo, rebitada.</td></tr>
+          <tr><td>Fechadura de came</td><td>Tambor Ø19, came de 1/4 de volta, com chave</td><td class="num">—</td><td class="v">1</td><td>Na tampa de trás. Peça o mesmo segredo para todos os totens.</td></tr>
+          <tr><td>Porcas-rebite</td><td>M6 e M5, aço zincado</td><td class="num">—</td><td class="v">4 + 7</td><td>M6 na base (cabeçote). M5: 2 no topo, 1 na base e 4 no lado do cabo.</td></tr>
+          <tr><td>Passa-fio com membrana</td><td>Borracha</td><td class="num">Ø25</td><td class="v">2</td><td>Na base; o que não for usado leva tampão.</td></tr>
+          <tr><td>Borracha da janela</td><td>Perfil EPDM autoadesivo 10 × 3</td><td class="num">≈ 900</td><td class="v">1</td><td>Colada por dentro da frente, em volta da janela, a 1 mm da beira.</td></tr>
+          <tr><td>Placas de pressão</td><td>EVA 15 e 20 mm</td><td class="num">200 × 130</td><td class="v">1 + 1</td><td>Coladas uma sobre a outra, por dentro da tampa de trás, no centro.</td></tr>
+          <tr><td>Calços</td><td>EVA 20 mm</td><td class="num">40 × 20, 10 de fundo</td><td class="v">7</td><td>Colados nas paredes de dentro: 2 em cima, 2 embaixo, 1 no lado sem cabo, 2 no lado do cabo (acima e abaixo do plugue).</td></tr>
+          <tr><td>Abraçadeira P</td><td>Aço com borracha, Ø8</td><td class="num">—</td><td class="v">1</td><td>Parafusada por dentro, perto do passa-fio usado.</td></tr>
+          <tr><td>Película</td><td>Vidro temperado 9H para Tab A11+</td><td class="num">11"</td><td class="v">1</td><td>Colar antes de pôr na caixa, sem bolha.</td></tr>
+          <tr><td>Cabo</td><td>USB-C com plugue em L (90°), reforçado</td><td class="num">2 m</td><td class="v">1</td><td>Na mesa, 1,5 m basta.</td></tr>
+          <tr><td>Fonte</td><td>Carregador USB-C 25 W</td><td class="num">—</td><td class="v">1</td><td>Fica na tomada, fora da caixa, para não esquentar o tablet.</td></tr>
+          <tr><td>Pintura</td><td>Fosfatização + pintura eletrostática a pó</td><td class="num">—</td><td class="v">—</td><td>Cor a combinar. Pintar antes de colar borracha e EVA.</td></tr>
+          <tr class="grupo"><td colspan="5">De pé</td></tr>
+          <tr><td>Base</td><td>Chapa 1/4" (6,35)</td><td class="num">350 × 350</td><td class="v">1</td><td>4 furos Ø12 para parabolt 3/8" no piso.</td></tr>
+          <tr><td>Coluna</td><td>Metalon 100 × 50 × 2,00</td><td class="num">1.180</td><td class="v">1</td><td>Topo cortado a 20°. Furo Ø25 com passa-fio atrás, a 400 do chão, ao lado da tomada.</td></tr>
+          <tr><td>Mãos-francesas da base</td><td>Chapa 1/4"</td><td class="num">triângulo 100 × 100</td><td class="v">4</td><td>Uma de cada lado da coluna.</td></tr>
+          <tr><td>Cabeçote</td><td>Chapa 3/16" (4,75)</td><td class="num">220 × 50</td><td class="v">1</td><td>Soldado no topo da coluna, inclinado 20°. Mais 2 mãos-francesas de 50 × 50 embaixo.</td></tr>
+          <tr><td>Viseira</td><td>Chapa 2,00</td><td class="num">301 × 105</td><td class="v">1</td><td>90 para a frente + aba de 15 dobrada, presa nas porcas-rebite M5 do topo.</td></tr>
+          <tr><td>Parafusos do cabeçote</td><td>M6 × 16, cabeça Allen, inox</td><td class="num">—</td><td class="v">4</td><td>Nas porcas-rebite M6 da base da caixa.</td></tr>
+          <tr><td>Tomada</td><td>Caixa 4×2 de sobrepor com tomada 10 A</td><td class="num">—</td><td class="v">1</td><td>Atrás da coluna, a 400 do chão. A fonte fica ligada nela.</td></tr>
+          <tr class="grupo"><td colspan="5">De mesa</td></tr>
+          <tr><td>Base</td><td>Chapa 3/16" (4,75)</td><td class="num">200 × 140</td><td class="v">1</td><td>4 furos Ø6 para parafusar no tampo e furo Ø25 no meio, com passa-fio.</td></tr>
+          <tr><td>Pescoço</td><td>Metalon 50 × 50 × 1,50</td><td class="num">120</td><td class="v">1</td><td>Topo cortado a 30°.</td></tr>
+          <tr><td>Cabeçote</td><td>Chapa 3/16"</td><td class="num">220 × 50</td><td class="v">1</td><td>Igual ao do pé, soldado inclinado 30°.</td></tr>
+          <tr><td>Parafusos</td><td>M6 × 16 Allen (cabeçote) e 4 parafusos para o tampo</td><td class="num">—</td><td class="v">4 + 4</td><td>Mesa de madeira: parafuso 5 × 40. Mesa de aço: M5 com porca.</td></tr>
+          <tr><td>Furo na mesa</td><td>—</td><td class="num">Ø35</td><td class="v">1</td><td>Embaixo do furo da base, para o cabo descer até a tomada.</td></tr>
+          <tr class="grupo"><td colspan="5">Na parede</td></tr>
+          <tr><td>Chapa da parede</td><td>Chapa 2,00</td><td class="num">301 × 212</td><td class="v">1</td><td>4 furos Ø6 para bucha S8. Orelha de 30 dobrada para a frente no lado das dobradiças e orelha de 30 × 30 embaixo, no outro lado, para a trava.</td></tr>
+          <tr><td>Dobradiças</td><td>Aço, 2" (50 mm)</td><td class="num">—</td><td class="v">2</td><td>Soldadas na orelha da chapa e parafusadas (M5) nas porcas-rebite do lado do cabo da caixa.</td></tr>
+          <tr><td>Trava</td><td>Parafuso de segurança Torx com pino M5</td><td class="num">—</td><td class="v">1</td><td>Pela orelha de baixo, na porca-rebite 6 da base.</td></tr>
+          <tr><td>Buchas e parafusos</td><td>Bucha S8 + parafuso 5 × 50</td><td class="num">—</td><td class="v">4</td><td>Em parede de alvenaria. Em drywall, use bucha própria.</td></tr>
+          <tr><td>Canaleta</td><td>PVC 20 × 10 com adesivo</td><td class="num">≈ 200</td><td class="v">1</td><td>Da tomada até o canto da caixa, no lado das dobradiças.</td></tr>
+          <tr><td>Tomada</td><td>Caixa 4×2 de sobrepor com tomada 10 A</td><td class="num">—</td><td class="v">1</td><td>Uns 200 abaixo da caixa, no lado das dobradiças. Deixe 30 cm de cabo sobrando para a caixa abrir.</td></tr>
         </tbody>
       </table>
     </div>
-    <p class="intro">A coluna (metalon 100 × 50, 1.180 de altura), a base de 350 × 350 em chapa 1/4", as mãos-francesas e o suporte inclinado 20° continuam como no orçamento de 16/09/2026: só a caixa ganhou estas medidas por dentro.</p>
   </section>
 
   <section>
-    <h2>Montagem da caixa</h2>
+    <h2>Montagem</h2>
     <ol class="passos">
-      <li>Antes de abrir a janela, ponha o tablet de verdade em cima da chapa da tampa, encostado a 12 mm da esquerda e a 18 mm de cima, e risque a área acesa com o tablet ligado. Confira se bate com 22,1 e 28,3 mm; se a área do tablet comprado for diferente, vale o risco.</li>
+      <li>Antes de abrir a janela, ponha o tablet de verdade em cima da chapa da frente, bem no centro (21,95 da esquerda e 21,65 de cima), e risque a área acesa com o tablet ligado. Confira se ela começa a 32 mm das bordas. Se a área do tablet comprado for diferente, vale o risco.</li>
       <li>Corte a janela 2 mm para fora do risco em volta (241 × 152) e lixe a beira.</li>
-      <li>Solde o fundo, o topo, a base e as laterais por fora. Faça os rasgos do cabo e do som antes de soldar.</li>
-      <li>Pinte (fundo anticorrosivo e duas demãos de esmalte) e espere secar antes de colar a borracha.</li>
-      <li>Cole a borracha EPDM por dentro da tampa, em volta da janela, a 1 mm da beira.</li>
-      <li>Cole a película no tablet, ligue o cabo em L e ponha o tablet com a tela para a frente, o calço na esquerda e as duas placas de EVA atrás.</li>
-      <li>Feche a tampa e teste o toque nos quatro cantos e no meio da tela. Se um canto não responder ou tocar sozinho, a borracha está encostando na área acesa: afaste 1 mm.</li>
-      <li>Aperte os parafusos de segurança das orelhas de baixo.</li>
+      <li>Faça os furos e os rasgos da planificação, dobre ou solde a caixa e rebite as porcas-rebite. A lingueta 10 é soldada por dentro, no lado do cabo.</li>
+      <li>Pinte (fundo anticorrosivo e duas demãos) e espere secar antes de colar borracha e EVA.</li>
+      <li>Cole a borracha EPDM por dentro da frente, em volta da janela, a 1 mm da beira. Cole os 7 calços nas paredes de dentro e as duas placas de EVA no centro da tampa de trás.</li>
+      <li>Passe o cabo pelo passa-fio (o do meio no pé e na mesa; o do canto na parede), prenda na abraçadeira P deixando a volta de sobra e ligue o plugue em L no tablet.</li>
+      <li>Cole a película no tablet e ponha ele por trás, com a tela para a frente e a porta USB-C no lado do cabo, entre os calços.</li>
+      <li>Feche a tampa de trás e passe a chave. Teste o toque nos quatro cantos e no meio da tela. Se um canto não responder ou tocar sozinho, a borracha está encostando na área acesa: afaste 1 mm.</li>
     </ol>
-    <div class="aviso">Tablet chefe e escritório não precisam de caixa de aço: um suporte de mesa com a mesma película basta.</div>
+  </section>
+
+  <section>
+    <h2>Manutenção: tirar o tablet pelas costas</h2>
+    <div class="tres">
+      <div class="bloco"><h3>De pé e de mesa</h3><p>Abra a tampa de trás com a chave e segure o tablet com a outra mão, porque a caixa é inclinada. Solte o plugue em L e puxe o tablet para trás. O suporte não sai do lugar.</p></div>
+      <div class="bloco"><h3>Na parede</h3><p>Tire o parafuso de segurança de baixo (chave Torx com pino), gire a caixa nas dobradiças como uma porta e abra a tampa de trás com a chave. O cabo continua ligado, por isso a volta de sobra.</p></div>
+      <div class="bloco"><h3>Na volta</h3><p>Confira se o tablet ficou entre os calços e se o plugue está firme antes de fechar a tampa. Teste o toque nos cantos.</p></div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Para o serralheiro conferir antes de cortar</h2>
+    <ol class="passos">
+      <li>O tablet na mão: medida, área acesa, onde ficam a porta USB-C e os alto-falantes.</li>
+      <li>Em cada lugar: se o totem é de pé, de mesa ou de parede, a altura e onde fica a tomada (a fonte não vai dentro da caixa).</li>
+      <li>De pé: se o piso aceita parabolt. De mesa: se o tampo é de madeira ou de aço. Na parede: se a parede é de alvenaria ou drywall.</li>
+      <li>As fechaduras com o mesmo segredo e uma chave Torx com pino para a manutenção.</li>
+      <li>A cor da pintura.</li>
+    </ol>
+    <div class="aviso">A borda de 30 mm é o que deixa o plugue em L entrar com folga. Ela pode afinar até 28 mm; abaixo disso, o plugue passa a encostar na parede da caixa.</div>
   </section>
 
   <section>
@@ -239,7 +613,7 @@
     <div class="fontes">
       <span>Tablet: <a href="https://m.gsmarena.com/samsung_galaxy_tab_a11+-14192.php">GSMArena · Galaxy Tab A11+</a> (257,1 × 168,7 × 6,9 mm, 11", Dimensity 7300) e <a href="https://www.samsung.com/in/tablets/galaxy-tab-a/galaxy-tab-a11-plus-gray-128gb-sm-x236bzaains">página da Samsung</a>.</span>
       <span>Área acesa: calculada pela diagonal de 11" em 16:10 (236,9 × 148,1 mm). A borda preta é a diferença dividida pelos dois lados. Confirme com o tablet na mão antes de cortar.</span>
-      <span>Caixa, coluna e base: orçamento do totem de 16/09/2026.</span>
+      <span>Coluna, base e mãos-francesas do totem de pé: orçamento do totem de 16/09/2026. Caixa, mesa e parede: este projeto.</span>
     </div>
   </section>
 </div>
