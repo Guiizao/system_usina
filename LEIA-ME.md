@@ -420,6 +420,8 @@ Salva em `../telas`.
 
 Versão 2 (16/09/2026): avisos de pH e Brix, telas LPHERA / Cal e Saczyme / Alcolina com a soma das dornas da hora, casinha nas abas, rolagem do painel do chefe que não volta mais para o topo, pastas *Usina, tela de relatórios, janela de Excel ou XML, listas do ralo, cadastro protegido por senha e busca do tablet chefe no Wi-Fi. Testado no navegador contra o servidor: anotação, envio, queda de rede, relatórios e Excel/XML.
 
+Versão 2.13.4 (12/10/2026): turnos de cada setor nas Configurações da usina (tablet chefe nível 2 ou 3, função usina): 3 turnos (forms.js `turnos`) ou 2 de 12 horas (forms.js `turnos12h`, 7h às 19h e 19h às 7h), guardado em `configSistema().turnosSetor[setor] = '12h'`. O turno de cada hora conta no dia de produção (7h às 7h), então o das 19h às 7h fica inteiro. Na virada do turno o operador sai (o lembrete para no celular de quem foi embora). Seguem o turno do setor: a observação de cada turno, o Monitorar, os blocos de turno do papel (Caldeira, Destilaria e Nova Destilaria), o filtro de turnos do Enviar e a API (`turno` de cada linha e `turnos` de cada setor). Teste: `testes/turnos213.mjs`.
+
 Versão 2.13.3 (12/10/2026): horário de trabalho de cada setor no lembrete; fora dele o celular não apita (antes ele só respeitava o turno do aplicativo, e quem levava o celular para casa antes de o turno acabar ouvia o apito em casa).
 
 Versão 2.13.2 (12/10/2026): "Anotar agora" cala o apito do lembrete e fecha a faixa até a próxima hora; no celular a faixa ficou menor (botão embaixo do texto). O teste das telas passou a rodar em 10 tamanhos, com o computador, e a demonstração do lembrete deixa a hora atual vazia (antes, dependendo da hora, a faixa nem aparecia na foto). Teste novo: `testes/lembrete213.mjs`.

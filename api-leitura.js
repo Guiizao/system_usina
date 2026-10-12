@@ -64,7 +64,11 @@ function criar(C, medidasAtuais, opcoes = {}) {
   const base = (r) => ({ id: r.id, operador: r.operador || null, atualizadoEm: iso(r.atualizadoEm), ...(r.alteradoPeloEscritorio ? { alteradoPeloEscritorio: { em: iso(r.alteradoPeloEscritorio.em), autorizadoPor: r.alteradoPeloEscritorio.autorizadoPor } } : {}) });
   const horaDaChave = (k) => `${pad2(Number(k))}:00`;
   const ordemNoDia = (h) => (Number(h) - C.inicioDoDia + 24) % 24;
-  const turnoDaHora = (h) => C.turnos.find((t) => h >= t.inicio && h < t.fim) || C.turnos[0];
+  // turnos de cada setor (2.13.4): o padrão ou os 2 de 12 horas (C.turnosSetor vem da configuração da usina);
+  // a hora conta no dia de produção, então o turno das 19h às 7h fica inteiro
+  const turnosDo = (s) => (s && (C.turnosSetor || {})[s.id] === '12h' && C.turnos12h) || C.turnos;
+  const horaNoDia = (h) => (h < C.inicioDoDia ? h + 24 : h);
+  const turnoDaHora = (h, turnos = C.turnos) => turnos.find((t) => horaNoDia(h) >= horaNoDia(t.inicio) && horaNoDia(h) < (t.fim <= C.inicioDoDia ? t.fim + 24 : t.fim)) || turnos[0];
 
   /* ---------- cada tipo de prancheta ---------- */
   function folhaDornas(p, regs, data) {
@@ -83,10 +87,11 @@ function criar(C, medidasAtuais, opcoes = {}) {
     const meta = (regs.find((r) => r.chave === 'meta') || { valores: {} }).valores;
     return { insumo: p.nome, total: Object.entries(soma).map(([u, q]) => ({ quantidade: Math.round(q * 100) / 100, unidade: u || null })), lote: meta.lote || null, verificadoPor: meta.verificado || null, linhas };
   }
-  function folhaGrade(p, regs, data) {
+  function folhaGrade(p, regs, data, s) {
+    const turnos = turnosDo(s);
     return {
-      linhas: regs.filter((r) => /^\d+$/.test(r.chave)).sort((a, b) => ordemNoDia(a.chave) - ordemNoDia(b.chave)).map((r) => Object.assign({ hora: horaDaChave(r.chave), turno: turnoDaHora(Number(r.chave)).nome }, base(r), { campos: camposDe(p.itens, r.valores, data) })),
-      observacoes: C.turnos.map((t) => ({ turno: t.nome, texto: ((regs.find((r) => r.chave === 'obs' + t.id) || { valores: {} }).valores.texto) || null })).filter((o) => o.texto),
+      linhas: regs.filter((r) => /^\d+$/.test(r.chave)).sort((a, b) => ordemNoDia(a.chave) - ordemNoDia(b.chave)).map((r) => Object.assign({ hora: horaDaChave(r.chave), turno: turnoDaHora(Number(r.chave), turnos).nome }, base(r), { campos: camposDe(p.itens, r.valores, data) })),
+      observacoes: turnos.map((t) => ({ turno: t.nome, texto: ((regs.find((r) => r.chave === 'obs' + t.id) || { valores: {} }).valores.texto) || null })).filter((o) => o.texto),
     };
   }
   function folhaMedicao(p, regs, data) {
@@ -129,7 +134,7 @@ function criar(C, medidasAtuais, opcoes = {}) {
       id: s.id, nome: s.nome,
       pranchetas: folhasDoSetor(s).map((pid) => {
         const p = pranchetas[pid];
-        return Object.assign({ id: pid, nome: p.nome, codigo: p.codigo || null, titulo: (p.papel && p.papel.titulo) || p.titulo || p.nome, tipo: p.tipo }, MONTAR[p.tipo] ? MONTAR[p.tipo](p, porFolha[pid] || [], data) : {});
+        return Object.assign({ id: pid, nome: p.nome, codigo: p.codigo || null, titulo: (p.papel && p.papel.titulo) || p.titulo || p.nome, tipo: p.tipo }, MONTAR[p.tipo] ? MONTAR[p.tipo](p, porFolha[pid] || [], data, s) : {});
       }),
     }));
     const insumos = setores.flatMap((s) => s.pranchetas.filter((p) => p.tipo === 'insumo').flatMap((p) => (p.total.length ? p.total : [{ quantidade: 0, unidade: pranchetas[p.id].unidade || null }]).map((t) => ({ setor: s.nome, prancheta: p.id, insumo: p.nome, quantidade: t.quantidade, unidade: t.unidade }))));
@@ -163,6 +168,7 @@ function criar(C, medidasAtuais, opcoes = {}) {
       turnos: C.turnos.map((t) => ({ nome: t.nome, inicio: `${pad2(t.inicio)}:00`, fim: `${pad2(t.fim % 24)}:00` })),
       setores: C.setores.map((s) => ({
         id: s.id, nome: s.nome,
+        turnos: turnosDo(s).map((t) => ({ nome: t.nome, inicio: `${pad2(t.inicio)}:00`, fim: `${pad2(t.fim % 24)}:00` })),
         pranchetas: folhasDoSetor(s).map((pid) => {
           const p = pranchetas[pid];
           const campos = p.tipo === 'insumo' ? [{ id: 'qtd', label: 'Quantidade', type: 'num' }, ...(p.camposOperador || []), ...(p.camposEscritorio || []).filter((c) => !(p.camposOperador || []).some((o) => o.id === c.id))]

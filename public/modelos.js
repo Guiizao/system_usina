@@ -67,7 +67,12 @@
       return String(v);
     };
     const textoNum = (v) => (typeof v === 'number' ? fmtNum(String(v)) : v);
-    const operadoresDoTurno = (regs, t) => [...new Set(regs.filter((r) => /^\d+$/.test(r.chave)).filter((r) => { const h = Number(r.chave); return h >= t.inicio && h < t.fim; }).map((r) => r.operador).filter(Boolean))].join(', ');
+    // a hora conta no dia de produção (7h às 7h): o turno das 19h às 7h (2.13.4) fica inteiro
+    const horaNoDia = (h) => (h < C.inicioDoDia ? h + 24 : h);
+    const noTurno = (t, h) => horaNoDia(h) >= horaNoDia(t.inicio) && horaNoDia(h) < (t.fim <= C.inicioDoDia ? t.fim + 24 : t.fim);
+    const operadoresDoTurno = (regs, t) => [...new Set(regs.filter((r) => /^\d+$/.test(r.chave)).filter((r) => noTurno(t, Number(r.chave))).map((r) => r.operador).filter(Boolean))].join(', ');
+    /** Turnos do setor da folha (2.13.4): os 3 de sempre ou os 2 de 12 horas. */
+    const turnosDa = (pid) => (ctx.turnos ? ctx.turnos(pid) : C.turnos);
     const casas = (c, v) => {
       if (!c || c.type !== 'num') return {};
       const [mantissa, expoente] = String(v).toLowerCase().split('e');
@@ -199,7 +204,7 @@
       const valorHora = (c, h, i) => { const r = i === horas.length - 1 ? amanha : porHora[h]; return r ? valorCampo(c, r.valores[c.id]) : ''; };
       const colunas = ['HORAS', ...horas.map(String)];
       const linhas = p.itens.map((c) => ({ rotulo: c.papel || c.label, valores: [c.papel || c.label, ...horas.map((h, i) => valorHora(c, h, i))] }));
-      const turnos = C.turnos.map((t) => ({ nome: t.nome, operador: operadoresDoTurno(regs, t), horario: horarioDoTurno(t), obs: (ctx.pegar(data, pid, 'obs' + t.id) || { valores: {} }).valores.texto || '' }));
+      const turnos = turnosDa(pid).map((t) => ({ nome: t.nome, operador: operadoresDoTurno(regs, t), horario: horarioDoTurno(t), obs: (ctx.pegar(data, pid, 'obs' + t.id) || { valores: {} }).valores.texto || '' }));
       const dados = {
         cabecalho: [['Documento', 'CONTROLE DIÁRIO DA CALDEIRA'], ['Responsável', (doc.responsavel || []).filter(Boolean).join(' ')], ['Data', fmtData(data)]],
         colunas, linhas,
@@ -218,9 +223,9 @@
         l.valores.forEach((v, i) => g.set(6 + j, i, v, i === 0 ? { b: true, sz: 7, al: 'l', borda: true, quebra: true } : Object.assign({ sz: 9, al: 'c', borda: true }, casas(p.itens[j], v))));
         g.altura(6 + j, 34);
       });
-      // blocos de turno embaixo (1º: 7 a 16 | 2º: 17 a 23 | 3º: 0 a 7)
+      // blocos de turno embaixo (1º: 7 a 16 | 2º: 17 a 23 | 3º: 0 a 7); 2 turnos de 12 horas: 7 a 18 | 19 a 7
       const b0 = 6 + linhas.length;
-      const blocos = [[0, 10], [11, 17], [18, n - 1]];
+      const blocos = turnos.length === 2 ? [[0, 12], [13, n - 1]] : [[0, 10], [11, 17], [18, n - 1]];
       turnos.forEach((t, i) => {
         const [a, b] = blocos[i] || blocos[blocos.length - 1];
         g.bloco(b0, a, b0, b, `OPERADOR: ${t.operador}`, { b: true, sz: 9, al: 'l', borda: true });
@@ -238,7 +243,7 @@
       const porHora = {}; ctx.linhasDeHora(regs).forEach((r) => { porHora[r.chave] = r; });
       const parte1 = ctx.HORAS.slice(0, 12); const parte2 = ctx.HORAS.slice(12);
       const linhaItem = (c, horas) => [c.papel || c.label, ...horas.map((h) => (porHora[h] ? valorCampo(c, porHora[h].valores[c.id]) : ''))];
-      const turnos = C.turnos.map((t) => ({ nome: t.nome, operador: operadoresDoTurno(regs, t), obs: (ctx.pegar(data, pid, 'obs' + t.id) || { valores: {} }).valores.texto || '' }));
+      const turnos = turnosDa(pid).map((t) => ({ nome: t.nome, operador: operadoresDoTurno(regs, t), obs: (ctx.pegar(data, pid, 'obs' + t.id) || { valores: {} }).valores.texto || '' }));
       const dados = {
         cabecalho: [['Documento', 'CONTROLE DIÁRIO DA DESTILARIA'], ['Data', fmtData(data)]],
         colunas: ['Itens /Horas', ...ctx.HORAS.map(String)],
@@ -268,7 +273,7 @@
         r++;
       });
       g.set(r, 0, 'TURNOS', { b: true, sz: 10, al: 'c', borda: true });
-      const blocos = dividir(1, n - 1, 3);
+      const blocos = dividir(1, n - 1, turnos.length);
       turnos.forEach((t, i) => g.bloco(r, blocos[i][0], r, blocos[i][1], `${i + 1}º TURNO: ${t.operador}`, { sz: 9, al: 'l', borda: true }));
       g.altura(r, 22);
       const obs = turnos.filter((t) => t.obs).map((t) => `${t.nome}: ${t.obs}`).join('   |   ');
@@ -281,7 +286,7 @@
       const p = ctx.prancheta(pid);
       const regs = ctx.listar(data, pid);
       const porHora = {}; ctx.linhasDeHora(regs).forEach((r) => { porHora[r.chave] = r; });
-      const turnos = C.turnos.map((t) => ({ nome: t.nome, operador: operadoresDoTurno(regs, t), obs: (ctx.pegar(data, pid, 'obs' + t.id) || { valores: {} }).valores.texto || '' }));
+      const turnos = turnosDa(pid).map((t) => ({ nome: t.nome, operador: operadoresDoTurno(regs, t), obs: (ctx.pegar(data, pid, 'obs' + t.id) || { valores: {} }).valores.texto || '' }));
       const colunas = ['Itens/Horas', ...ctx.HORAS.map(String)];
       const linhas = p.itens.map((c) => ({ rotulo: c.papel || c.label, valores: [c.papel || c.label, ...ctx.HORAS.map((h) => (porHora[h] ? valorCampo(c, porHora[h].valores[c.id]) : ''))] }));
       const dados = {
@@ -300,7 +305,7 @@
       linhas.forEach((l, j) => { l.valores.forEach((v, i) => g.set(5 + j, i, v, Object.assign({ sz: i === 0 ? 10 : 9, al: i === 0 ? 'l' : 'c', borda: true }, i ? casas(p.itens[j], v) : {}))); g.altura(5 + j, 24); });
       const t = 5 + linhas.length;
       g.set(t, 0, '', BORDA);
-      const blocos = [[1, 10], [11, 17], [18, n - 1]];
+      const blocos = turnos.length === 2 ? [[1, 12], [13, n - 1]] : [[1, 10], [11, 17], [18, n - 1]];
       turnos.forEach((tu, i) => g.bloco(t, blocos[i][0], t, blocos[i][1], `${i + 1}° TURNO${tu.operador ? ': ' + tu.operador : ''}`, { sz: 9, al: 'c', borda: true }));
       const obs = turnos.filter((x) => x.obs).map((x) => `${x.nome}: ${x.obs}`).join('   |   ');
       g.bloco(t + 1, 0, t + 3, n - 1, `Obs: ${obs}`, { sz: 9, al: 'l', va: 't', borda: true, quebra: true });

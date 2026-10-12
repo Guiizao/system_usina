@@ -74,6 +74,12 @@ window.USINA = {
     { id: 2, nome: '2º Turno', inicio: 16, fim: 24 },
     { id: 3, nome: '3º Turno', inicio: 0, fim: 7 },
   ],
+  // Turnos de 12 horas (versão 2.13.4): o setor que trabalha assim escolhe este modelo nas Configurações da usina
+  // (tablet chefe nível 2 ou 3). O dia de produção continua das 7h às 7h.
+  turnos12h: [
+    { id: 1, nome: '1º Turno', inicio: 7, fim: 19 },
+    { id: 2, nome: '2º Turno', inicio: 19, fim: 7 },
+  ],
 
   // Senha de emergência dos ajustes dos tablets dos setores, quando a central não responde (é a do administrador).
   // Com a central, quem entra é cada pessoa com a sua senha (Pessoas e permissões, no tablet chefe).

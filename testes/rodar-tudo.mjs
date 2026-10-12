@@ -42,6 +42,7 @@ import { testarRastreamento213 } from './rastreamento213.mjs';
 import { testarEscritorio } from './escritorio213.mjs';
 import { testarEnvio213 } from './envio213.mjs';
 import { testarLembrete213 } from './lembrete213.mjs';
+import { testarTurnos213 } from './turnos213.mjs';
 import { testarApkWeb } from './rodar-apk-web.mjs';
 import { centralNode, centralJava, APP } from './servidores.mjs';
 
@@ -199,6 +200,13 @@ try {
     const g = novoGrupo('Lembrete de anotar: Anotar agora cala o apito');
     const c = await centralNode(8244);
     try { await testarLembrete213(nav, c.url, g); } finally { await c.desligar(); }
+    grupos.push(g);
+  }
+  // 4o. versão 2.13.4: turnos de cada setor (3 ou 2 de 12 horas) no papel, na API, na virada das 19h e no Monitorar
+  {
+    const g = novoGrupo('Turnos de cada setor: 3 ou 2 de 12 horas');
+    const c = await centralNode(8259);
+    try { await testarTurnos213(nav, c.url, g); } finally { await c.desligar(); }
     grupos.push(g);
   }
   // 4f. o aplicativo embaralhado (como vai no APK) continua funcionando igual

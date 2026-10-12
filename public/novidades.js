@@ -4,6 +4,13 @@
    Depois do sinal de igual vem JSON puro, porque o servidor do tablet chefe (Java) também lê este arquivo. */
 window.NOVIDADES = [
   {
+    "versao": "2.13.4",
+    "data": "2026-10-12",
+    "itens": [
+      "Turnos de cada setor (Configurações da usina, tablet chefe nível 2 ou 3): 3 turnos, como sempre, ou 2 turnos de 12 horas (7h às 19h e 19h às 7h). Na troca do turno o nome de quem anotava sai e o lembrete para no celular dele; a folha, o Monitorar, o papel e o Enviar seguem os turnos do setor."
+    ]
+  },
+  {
     "versao": "2.13.3",
     "data": "2026-10-12",
     "itens": [

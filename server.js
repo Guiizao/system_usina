@@ -161,10 +161,12 @@ function carregarPranchetas() {
 let Folhas = null;
 try { Folhas = require(path.join(PUBLICO, 'folhas.js')); } catch (e) { Folhas = require(path.join(__dirname, 'public', 'folhas.js')); }
 const folhasDaConfig = () => { const cs = db.registros['config|sistema|geral']; return cs && !cs.apagado && cs.valores ? cs.valores.folhas || {} : {}; };
-const formsEmVigor = () => Folhas.aplicar(carregarPranchetas(), folhasDaConfig(), new Map());
+// os turnos de cada setor (2.13.4) vão junto: a API diz o turno de cada linha pelo setor dela
+const turnosDaConfig = () => { const cs = db.registros['config|sistema|geral']; return cs && !cs.apagado && cs.valores ? cs.valores.turnosSetor || {} : {}; };
+const formsEmVigor = () => Object.assign(Folhas.aplicar(carregarPranchetas(), folhasDaConfig(), new Map()), { turnosSetor: turnosDaConfig() });
 let folhasDaApi = '';
 const apiDeLeitura = () => {
-  const chave = JSON.stringify(folhasDaConfig());
+  const chave = JSON.stringify([folhasDaConfig(), turnosDaConfig()]);
   if (!apiLeituraPronta || chave !== folhasDaApi) { folhasDaApi = chave; apiLeituraPronta = leitura.criar(formsEmVigor(), medidasDoEscritorio); }
   return apiLeituraPronta;
 };
