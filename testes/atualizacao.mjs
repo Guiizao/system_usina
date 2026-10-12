@@ -278,7 +278,8 @@ export async function testarAtualizacao(nav, grupo) {
       await a.recarregar();
       await a.esperar(modalTem(`Aplicativo atualizado: versão ${VERSAO}`), 10000, 'janela das novidades');
       // veio da 2.6: mostra o que mudou em todas as versões depois dela
-      igual(await a.avaliar('[...document.querySelectorAll(".modal li")].map((l) => l.textContent)'), novidades().flatMap((n) => n.itens));
+      // a janela troca o hífen pelo que não quebra a linha (2.13.1): volta ele para comparar com o novidades.js
+      igual(await a.avaliar('[...document.querySelectorAll(".modal li")].map((l) => l.textContent.replace(/\u2011/g, "-"))'), novidades().flatMap((n) => n.itens));
       await a.tocar('.modal [data-k="ok"]');
       igual(await a.avaliar('JSON.parse(localStorage.getItem("usina.cfg")).versaoVista'), VERSAO);
       await a.recarregar();
