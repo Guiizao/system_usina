@@ -966,7 +966,7 @@
   }
   /** Novidades das versões depois de "de" até esta. Sem "de": só as desta versão. */
   const novidadesDesde = (de) => (window.NOVIDADES || []).filter((n) => (de ? numeroDaVersao(n.versao) > numeroDaVersao(de) && numeroDaVersao(n.versao) <= numeroDaVersao(VERSAO) : n.versao === VERSAO));
-  const htmlNovidades = (lista) => `<div class="novidades-lista">${lista.map((n) => `${lista.length > 1 ? `<h4>Versão ${esc(n.versao)}</h4>` : ''}<ul>${(n.itens || []).map((i) => `<li>${esc(i)}</li>`).join('')}</ul>`).join('')}</div>`;
+  const htmlNovidades = (lista) => `<div class="novidades-lista">${lista.map((n) => `${lista.length > 1 ? `<h4>Versão ${esc(n.versao)}</h4>` : ''}<ul>${(n.itens || []).map((i) => `<li>${esc(i).replace(/-/g, '\u2011')}</li>`).join('')}</ul>`).join('')}</div>`;
   function mostrarNovidades(de) {
     const lista = novidadesDesde(de);
     if (!lista.length) return;
