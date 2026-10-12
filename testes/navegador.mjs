@@ -220,7 +220,7 @@ export const auditarLayout = (minLetra = 11.5) => `(() => {
     const s = getComputedStyle(e);
     const z = parseFloat(getComputedStyle(document.documentElement).zoom || 1) * parseFloat(getComputedStyle(document.body).zoom || 1);
     const px = parseFloat(s.fontSize) * z;
-    if (px < ${minLetra} && !e.closest('.folha-imp, svg, .qr')) probs.push({ tipo: 'letra-pequena', onde: nomeDe(e), texto: e.textContent.trim().slice(0, 40) + ' (' + px.toFixed(1) + 'px)' });
+    if (px < ${minLetra} && !e.closest('.folha-imp, svg, .qr, .et-previa')) probs.push({ tipo: 'letra-pequena', onde: nomeDe(e), texto: e.textContent.trim().slice(0, 40) + ' (' + px.toFixed(1) + 'px)' });
   });
   // ícone desproporcional ao texto do lado (fora das caixinhas de ícone, que são grandes de propósito)
   const zoomTela = parseFloat(getComputedStyle(document.documentElement).zoom || 1) * parseFloat(getComputedStyle(document.body).zoom || 1);

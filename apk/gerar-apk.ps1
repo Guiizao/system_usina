@@ -26,7 +26,7 @@ Remove-Item www\sw.js, www\moldura.html, www\testes.js, www\teste-*.jpg -ErrorAc
 Log 'Embaralhando o código do aplicativo...'
 New-Item -ItemType Directory -Force saida\mapas | Out-Null
 # (o qrcode.js é uma biblioteca aberta, licença MIT: vai como está, com o aviso do autor dela)
-foreach ($js in 'app.js', 'forms.js', 'folhas.js', 'modelos.js', 'pdf.js', 'xlsx.js', 'leitor.js', 'cifra.js') {
+foreach ($js in 'app.js', 'forms.js', 'folhas.js', 'rastreamento.js', 'modelos.js', 'pdf.js', 'xlsx.js', 'leitor.js', 'cifra.js') {
   $arquivo = "www\$js"
   & cmd /c "npx terser `"$arquivo`" --compress --mangle --comments `"/Guilherme/`" --source-map `"filename='$js'`" -o `"$arquivo`"" 2>&1 | Select-Object -Last 2
   if ($LASTEXITCODE -ne 0) { throw "Não consegui embaralhar $js" }
