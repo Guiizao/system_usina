@@ -116,11 +116,14 @@ export async function testarPedidos24(nav, ligar, porta, grupo) {
     });
 
     const chefeCel = await novo('tablet chefe no celular', TAMANHOS.motorola);
-    await teste(grupo, 'celular do tablet chefe: a atualização a cada 5 s não mexe na rolagem das abas', async () => {
+    await teste(grupo, 'celular do tablet chefe: a atualização a cada 5 s não mexe na rolagem das abas nem pisca a tela', async () => {
       await conectar(chefeCel, 'central');
       await chefeCel.tocar('[data-a="abrir-setor"][data-id="hidrolise"]');
       await chefeCel.esperar('document.querySelector(".abas").scrollWidth > document.querySelector(".abas").clientWidth', 5000, 'abas maiores que a tela');
       await chefeCel.avaliar('document.querySelector(".abas").scrollLeft = 160');
+      // 2.13: cada tela redesenhada por trás não pode entrar com a animação da troca de tela (piscava a cada 5 s)
+      await chefeCel.avaliar(`(() => { window.__animacoes = []; new MutationObserver(() => { const m = document.querySelector('#app main');
+        if (m && !m.__visto) { m.__visto = 1; window.__animacoes.push(getComputedStyle(m).animationName); } }).observe(document.getElementById('app'), { childList: true }); return 1; })()`);
       await dormir(1800);
       // chega anotação nova de outro aparelho: o celular redesenha a tela por trás
       await tab.tocar('[data-a="linha"][data-chave="1"]');
@@ -130,6 +133,9 @@ export async function testarPedidos24(nav, ligar, porta, grupo) {
       await dormir(1200);
       const rolagem = await chefeCel.avaliar('document.querySelector(".abas").scrollLeft');
       certo(rolagem >= 150, 'as abas voltaram para o começo: ' + rolagem);
+      const animacoes = await chefeCel.avaliar('window.__animacoes');
+      certo(animacoes.length > 0, 'a tela não foi redesenhada');
+      certo(animacoes.every((x) => x === 'none'), 'a tela piscou ao redesenhar: ' + animacoes.join(', '));
     });
 
     await teste(grupo, 'monitoramento no celular: a folha aparece inteira (sem corte) e a área rola com o dedo', async () => {

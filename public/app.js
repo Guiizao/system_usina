@@ -3,7 +3,7 @@
 (function () {
   'use strict';
   const C = window.USINA;
-  const VERSAO = '2.13.0'; // aparece nos ajustes e vai junto com cada envio para a central
+  const VERSAO = '2.13.1'; // aparece nos ajustes e vai junto com cada envio para a central
   const AUTORIA = '© 2026 Guilherme. Todos os direitos reservados. Uso somente com autorização do autor.';
   const params = new URLSearchParams(location.search);
   const DEMO_IMG = params.has('demo'); // usado só para gerar imagens de apresentação
@@ -2909,6 +2909,8 @@
     const ROLAM = '.abas, .seletor, .tabela-wrap, .cabecalho-form, .chips-escolha, .lista-avisos, main';
     const rolagens = mesmaTela ? [...app.querySelectorAll(ROLAM)].map((el) => [el.scrollLeft, el.scrollTop]) : [];
     alvos = [];
+    // a animação de entrada é só de quem trocou de tela: o redesenho que vem da central (a cada 5 s) não pode piscar
+    app.classList.remove('troca', 'troca-linha');
     app.innerHTML = (telas[v.tela] || telaInicio)(v);
     ultimaChaveTela = chaveTela;
     if (mesmaTela) app.querySelectorAll(ROLAM).forEach((el, i) => { if (rolagens[i]) { el.scrollLeft = rolagens[i][0]; el.scrollTop = rolagens[i][1]; } });
@@ -2917,10 +2919,7 @@
     if (v.tela === 'conectar' && NO_APK && pluginCentral && !procura.feita && !conexaoForm.endereco) setTimeout(procurarCentral, 300);
     if (v.tela === 'relatorios' && !v.carregado) carregarRelatorios();
     if (v.data) buscarDia(v.data);
-    if (trocouDeTela) {
-      app.classList.remove('troca', 'troca-linha'); void app.offsetWidth;
-      app.classList.add(outraTela ? 'troca' : 'troca-linha');
-    }
+    if (trocouDeTela) app.classList.add(outraTela ? 'troca' : 'troca-linha');
     arrumarQuadros();
     agendarCaber();
     requestAnimationFrame(caberFolhas); // folha inteira na tela (monitoramento)

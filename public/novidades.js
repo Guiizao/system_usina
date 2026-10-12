@@ -4,6 +4,13 @@
    Depois do sinal de igual vem JSON puro, porque o servidor do tablet chefe (Java) também lê este arquivo. */
 window.NOVIDADES = [
   {
+    "versao": "2.13.1",
+    "data": "2026-10-12",
+    "itens": [
+      "A tela não pisca mais quando chegam as anotações dos outros aparelhos (a cada 5 segundos). O efeito de entrada ficou só para quando você troca de tela."
+    ]
+  },
+  {
     "versao": "2.13.0",
     "data": "2026-10-12",
     "itens": [

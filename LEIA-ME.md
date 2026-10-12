@@ -420,6 +420,8 @@ Salva em `../telas`.
 
 Versão 2 (16/09/2026): avisos de pH e Brix, telas LPHERA / Cal e Saczyme / Alcolina com a soma das dornas da hora, casinha nas abas, rolagem do painel do chefe que não volta mais para o topo, pastas *Usina, tela de relatórios, janela de Excel ou XML, listas do ralo, cadastro protegido por senha e busca do tablet chefe no Wi-Fi. Testado no navegador contra o servidor: anotação, envio, queda de rede, relatórios e Excel/XML.
 
+Versão 2.13.1 (12/10/2026): a tela não pisca mais quando a sincronização (a cada 5 s) redesenha; o efeito de entrada fica só na troca de tela (`render` em `app.js`). O teste "não pisca a tela" está em `testes/pedidos24.mjs`.
+
 Versão 2.13.0 (12/10/2026): Escritório (cálculos da produção, rastreamento de lotes POP 03 - FOR 011 e etiqueta das bombonas), lembrete de anotar a cada hora, enviar e imprimir com áreas, turnos e período, Monitorar com os dias anteriores, aparelho longe da central mandando pela nuvem, botão voltar do Android dentro do aplicativo e quadros que crescem até ocupar a tela.
 
 Versão 2.12.0 (06/10/2026): três níveis de tablet chefe (vê, corrige e envia; tudo e libera outros; tudo mais as configurações do sistema, só o dono), liberação de tablet chefe com senha, recuperação do dono com a senha do programador, configurações do sistema (vírgula, quadro escondido do operador, campos do escritório para o operador e campos novos fora do papel), unidades com os dias antigos na unidade antiga, e a central conferindo a permissão em cada rota e na sincronização.
