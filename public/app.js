@@ -3,7 +3,7 @@
 (function () {
   'use strict';
   const C = window.USINA;
-  const VERSAO = '2.13.1'; // aparece nos ajustes e vai junto com cada envio para a central
+  const VERSAO = '2.13.2'; // aparece nos ajustes e vai junto com cada envio para a central
   const AUTORIA = '© 2026 Guilherme. Todos os direitos reservados. Uso somente com autorização do autor.';
   const params = new URLSearchParams(location.search);
   const DEMO_IMG = params.has('demo'); // usado só para gerar imagens de apresentação
@@ -2381,7 +2381,7 @@
   /* ---------- Lembrete de anotar a cada hora (versão 2.13) ----------
      Ligado por setor no tablet chefe (Configurações da usina). Na virada da hora, se a linha daquela hora de uma folha
      hora a hora do setor está vazia: faixa no alto da tela e um apito tranquilo. Passou das :30 sem anotar: apito chato,
-     que só para quando a linha for anotada. */
+     que para quando a linha for anotada ou quando a pessoa tocar em "Anotar agora" (aí só volta na hora seguinte). */
   let lembrete = { id: null, avisou: false, apito: null };
   let lembreteUrgente = false; // só na demonstração
   function horaPendente() {
@@ -2417,7 +2417,12 @@
       el.setAttribute('role', 'alert');
       el.addEventListener('click', (e) => {
         const b = e.target.closest('[data-pid]');
-        if (b && !modalAberto()) ir({ tela: 'prancheta', pid: b.dataset.pid, chave: Number(b.dataset.h) });
+        if (!b || modalAberto()) return;
+        // "Anotar agora": o apito para e a faixa some até a próxima hora
+        if (lembrete.apito) clearInterval(lembrete.apito);
+        Object.assign(lembrete, { atendido: true, apito: null });
+        el.hidden = true;
+        ir({ tela: 'prancheta', pid: b.dataset.pid, chave: Number(b.dataset.h) });
       });
       document.body.appendChild(el);
     }
@@ -2425,13 +2430,13 @@
     const nomes = p.falta.map((pid) => prancheta(pid).nome).join(' e ');
     el.hidden = false;
     el.classList.toggle('urgente', !!urgente);
-    el.innerHTML = `${ico(urgente ? 'alerta' : 'relogio')}<span><b>${urgente ? 'Ainda falta anotar' : 'Hora de anotar'} as ${pad2(p.h)}:00</b> ${esc(nomes)}</span>
+    el.innerHTML = `${ico(urgente ? 'alerta' : 'relogio')}<span><b>${urgente ? 'Ainda falta a leitura' : 'Hora de anotar a leitura'} das ${pad2(p.h)}:00</b> ${esc(nomes)}</span>
       <button class="btn" data-pid="${p.falta[0]}" data-h="${p.h}">Anotar agora</button>`;
   }
   function verificarLembrete() {
     const p = horaPendente();
     if (!p || lembrete.id !== p.id) { if (lembrete.apito) clearInterval(lembrete.apito); lembrete = { id: p ? p.id : null, avisou: false, apito: null }; }
-    if (!p) return faixaLembrete(null);
+    if (!p || lembrete.atendido) return faixaLembrete(null);
     const urgente = lembreteUrgente || new Date().getMinutes() >= 30;
     faixaLembrete(p, urgente);
     if (!lembrete.avisou) { lembrete.avisou = true; apitoTranquilo(); }
@@ -4745,7 +4750,7 @@
                 const on = off.indexOf(pid) < 0;
                 return `<button class="chip-liga ${on ? 'sel' : ''}" data-a="prancheta-liga" data-setor="${s.id}" data-id="${pid}">${on ? ico('certo') : ico('fechar')} ${esc(prancheta(pid).nome)}</button>`;
               }).join('')}</div>
-              ${!s.soChefe && s.pranchetas.some((pid) => prancheta(pid).tipo === 'grade') ? `<div class="linha-config lembrete-config"><div><b>Lembrete de anotar a cada hora</b><small>Apito tranquilo na virada da hora. Às :30, se a linha ainda estiver vazia, apito chato até anotar.</small></div>
+              ${!s.soChefe && s.pranchetas.some((pid) => prancheta(pid).tipo === 'grade') ? `<div class="linha-config lembrete-config"><div><b>Lembrete de anotar a cada hora</b><small>Apito tranquilo na virada da hora. Às :30, se a linha ainda estiver vazia, apito chato até anotar ou tocar em Anotar agora.</small></div>
                 <button class="interruptor ${(configSistema().lembretes || {})[s.id] ? 'ligado' : ''}" data-a="lembrete-liga" data-id="${s.id}" aria-label="Lembrete da ${esc(s.nome)}"><i></i><span>${(configSistema().lembretes || {})[s.id] ? 'Ligado' : 'Desligado'}</span></button></div>` : ''}
               ${s.soChefe ? '<p class="sub" style="margin:10px 0 0">Só o tablet chefe anota estas folhas. Nenhum tablet de setor fica com elas.</p>' : `<h3 style="margin-top:14px">Operadores <small>${ops.length}</small></h3>
               <div class="pessoas">${visiveis.map((o) => {
@@ -6186,7 +6191,12 @@
     if (params.get('modal') === 'entrar') entrarNoChefe();
     if (params.get('modal') === 'liberar') liberarEsteAparelho();
     // lembrete de anotar (versão 2.13): ?demo&papel=destilaria&op=Mateus&lembrete=1 (ou =urgente, como se fosse depois das :30)
-    if (params.get('lembrete') && cfg.papel) { lembreteUrgente = params.get('lembrete') === 'urgente'; salvarConfigSistema({ lembretes: { [cfg.papel]: true } }); verificarLembrete(); }
+    if (params.get('lembrete') && cfg.papel) {
+      lembreteUrgente = params.get('lembrete') === 'urgente';
+      // a linha da hora atual fica vazia, seja qual for a hora em que a demonstração abriu
+      pranchetasDo(cfg.papel).forEach((pid) => delete registros[`${dataProducao()}|${pid}|${new Date().getHours()}`]);
+      salvarConfigSistema({ lembretes: { [cfg.papel]: true } }); render(); verificarLembrete();
+    }
     if (params.get('aviso') && cfg.papel && !ehCentral() && operadorAtual()) {
       enviarAviso(cfg.papel, operadorAtual(), 'Passe no escritório antes de sair, por favor. O encarregado quer falar sobre a troca de turno de amanhã.');
       verificarAvisos();

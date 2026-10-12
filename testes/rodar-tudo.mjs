@@ -41,6 +41,7 @@ import { testarPapel212 } from './papel212.mjs';
 import { testarRastreamento213 } from './rastreamento213.mjs';
 import { testarEscritorio } from './escritorio213.mjs';
 import { testarEnvio213 } from './envio213.mjs';
+import { testarLembrete213 } from './lembrete213.mjs';
 import { testarApkWeb } from './rodar-apk-web.mjs';
 import { centralNode, centralJava, APP } from './servidores.mjs';
 
@@ -193,6 +194,13 @@ try {
     try { await testarEnvio213(nav, c.url, g); } finally { await c.desligar(); }
     grupos.push(g);
   }
+  // 4n. versão 2.13.2: "Anotar agora" cala o apito do lembrete e tira a faixa
+  {
+    const g = novoGrupo('Lembrete de anotar: Anotar agora cala o apito');
+    const c = await centralNode(8244);
+    try { await testarLembrete213(nav, c.url, g); } finally { await c.desligar(); }
+    grupos.push(g);
+  }
   // 4f. o aplicativo embaralhado (como vai no APK) continua funcionando igual
   await testarApkWeb(nav, grupos);
   // 4c. 90 dias de uso, troca de turno e virada das 07:00 no meio da anotação, central nova, sem Wi-Fi
@@ -235,10 +243,10 @@ try {
 } finally { await nav.fechar(); }
 
 // 6. telas (roda separado, com a própria central)
-const g6 = novoGrupo('Todas as telas em 9 tamanhos (celulares, celular deitado, tablets pequenos, tablets e tablet em pé)');
+const g6 = novoGrupo('Todas as telas em 10 tamanhos (computador, celulares, celular deitado, tablets pequenos, tablets e tablet em pé)');
 const c6 = await centralNode(8296);
 try {
-  spawnSync(process.execPath, [path.join(APP, 'testes', 'telas.mjs'), c6.url, 'celular,motorola,celularGrande,celularDeitado,tablet8,tablet8Deitado,tablet10,tablet,tabletEmPe'], { stdio: 'inherit' });
+  spawnSync(process.execPath, [path.join(APP, 'testes', 'telas.mjs'), c6.url], { stdio: 'inherit' });
 } finally { await c6.desligar(); }
 const telas = JSON.parse(fs.readFileSync(path.join(SAIDA, 'telas.json'), 'utf8')).telas;
 const porTamanho = {};

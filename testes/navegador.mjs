@@ -162,7 +162,8 @@ export async function abrirNavegador({ porta = 9340 + Math.floor(Math.random() *
 
 /**
  * Procura problemas de layout na tela atual: texto saindo da caixa, palavra quebrada no meio,
- * rolagem para o lado, letra pequena demais, pouco contraste entre a letra e o fundo e botão pequeno demais para o dedo.
+ * rolagem para o lado, caixa fixa passando da borda, letra pequena demais, pouco contraste entre a letra e o fundo e botão
+ * pequeno demais para o dedo.
  */
 export const auditarLayout = (minLetra = 11.5) => `(() => {
   const probs = [];
@@ -172,6 +173,12 @@ export const auditarLayout = (minLetra = 11.5) => `(() => {
   const visivel = (e) => { const s = getComputedStyle(e); if (s.visibility === 'hidden' || s.display === 'none' || +s.opacity === 0) return false; const b = e.getBoundingClientRect(); return b.width > 0 && b.height > 0; };
   const nomeDe = (e) => (e.tagName.toLowerCase() + (e.id ? '#' + e.id : '') + (typeof e.className === 'string' && e.className ? '.' + e.className.trim().split(/\\s+/).join('.') : ''));
   const recorte = (e) => { let p = e.parentElement; while (p && p !== document.body) { const s = getComputedStyle(p); if (/(auto|scroll|hidden|clip)/.test(s.overflowX + s.overflowY)) return p; p = p.parentElement; } return null; };
+  // caixa fixa (faixa do lembrete, notificação) passando da borda: não cria rolagem para o lado, então só aparece assim
+  document.querySelectorAll('body *').forEach((e) => {
+    if (getComputedStyle(e).position !== 'fixed' || !visivel(e)) return;
+    const b = e.getBoundingClientRect();
+    if (b.left < -1 || b.right > larg + 1) probs.push({ tipo: 'fora-da-tela', onde: nomeDe(e), texto: 'passa da borda da tela: ' + Math.round(b.left) + ' a ' + Math.round(b.right) + ' de ' + larg });
+  });
   // janela cujo formulário rola para baixo e passou a rolar para o lado: algo largo demais lá dentro corta a borda direita
   document.querySelectorAll('.modal, .modal *').forEach((e) => {
     if (!/(auto|scroll)/.test(getComputedStyle(e).overflowX) || !visivel(e)) return;

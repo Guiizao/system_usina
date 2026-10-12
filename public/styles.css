@@ -257,13 +257,14 @@ h3.secao-titulo { font-size: 21px; margin: 26px 0 10px; }
 .opcoes-painel button.sel { border: 4px solid var(--verde); background: var(--verde-fundo); color: var(--verde-escuro); }
 .painel-nav { display: grid; grid-template-columns: 1fr 1.6fr; gap: 8px; }
 /* lembrete de anotar a cada hora (versão 2.13): faixa no alto, laranja; passou das :30, vermelha e piscando */
-.lembrete { position: fixed; z-index: 60; left: 50%; transform: translateX(-50%); top: calc(var(--topo, 72px) + 8px); width: min(760px, calc(100vw - 24px));
-  display: flex; align-items: center; gap: 12px; padding: 10px 12px 10px 16px; border-radius: 10px; background: var(--ambar-fundo, #fbefcf); color: var(--tinta);
+.lembrete { position: fixed; z-index: 60; left: 50%; transform: translateX(-50%); top: calc(var(--topo, 72px) + 8px); width: min(760px, calc((100vw - 24px) / var(--escala, 1)));
+  display: flex; flex-wrap: wrap; align-items: center; gap: 10px 12px; padding: 10px 12px 10px 16px; border-radius: 10px; background: var(--ambar-fundo, #fbefcf); color: var(--tinta);
   border: 3px solid var(--ambar, #9a6a00); box-shadow: 0 6px 18px rgba(0, 0, 0, .25); font-size: 19px; }
 .lembrete[hidden] { display: none; }
-.lembrete span { flex: 1 1 auto; min-width: 0; }
+/* o texto fica com quase toda a sobra; sem espaço, o botão desce sozinho e ocupa a linha inteira */
+.lembrete span { flex: 99 1 220px; min-width: 0; }
 .lembrete b { display: block; font-size: 21px; }
-.lembrete .btn { flex: none; min-height: 56px; }
+.lembrete .btn { flex: 1 0 auto; min-height: 56px; }
 .lembrete svg.ico { width: 30px; height: 30px; flex: none; }
 .lembrete.urgente { background: var(--vermelho-fundo); border-color: var(--vermelho); color: var(--vermelho); animation: piscarLembrete 1s steps(2) infinite; }
 @keyframes piscarLembrete { 50% { border-color: transparent; } }
