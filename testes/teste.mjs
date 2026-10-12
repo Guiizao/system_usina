@@ -20,7 +20,10 @@ export async function entrarComoChefe(a) {
 }
 /** Se a tela "Liberar este aparelho como tablet chefe" abriu: continua com o nível marcado e digita a senha. */
 export async function liberarSePedir(a, nivel) {
-  try { await a.esperar('!!document.querySelector(".modal .opcoes-nivel")', 2500); } catch { return false; }
+  // a central responde se este aparelho já é tablet chefe (fica o nível) ou abre a janela de liberar; com a máquina
+  // carregada (bateria inteira) isso passa de 2,5 s, então espera o que vier primeiro
+  try { await a.esperar('!!document.querySelector(".modal .opcoes-nivel") || !!(JSON.parse(localStorage.getItem("usina.cfg") || "{}").nivelChefe)', 10000); } catch { return false; }
+  if (!(await a.avaliar('!!document.querySelector(".modal .opcoes-nivel")'))) return false;
   if (nivel) await a.tocar(`.modal [data-k="n:${nivel}"]`);
   await a.tocar('.modal [data-k="ok"]');
   await a.teclar(teclasDaSenha());
