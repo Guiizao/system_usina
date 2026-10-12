@@ -30,7 +30,7 @@
 <body>
 
 <h1>Guia do projeto</h1>
-<p class="sub">Pranchetas Digitais da Ubirálcool, versão 2.12 (06/10/2026). Tudo que o projeto tem, em que linguagem foi feito, como as peças conversam e onde mexer em cada coisa.</p>
+<p class="sub">Pranchetas Digitais da Ubirálcool, versão 2.13 (12/10/2026). Tudo que o projeto tem, em que linguagem foi feito, como as peças conversam e onde mexer em cada coisa.</p>
 
 <h2>1. O que é</h2>
 <p>As pranchetas de papel dos setores (Hidrólise, Caldeira, Ralo, Destilaria) viraram um aplicativo. Cada setor tem um tablet ou celular. O operador escolhe o nome dele, anota nos quadros e salva. A anotação vai pelo Wi-Fi da usina até a central, que guarda tudo e mostra para o escritório. No fim do dia sai o Excel e o XML no mesmo desenho do papel.</p>
@@ -130,6 +130,7 @@
 <p>Desde a 2.10 o painel mostra os <b>gráficos do dia</b> (Brix, pH e temperaturas, hora a hora, com as linhas dos avisos), e a tela <b>Folhas e avisos</b> deixa mudar o nome dos quadros, a unidade, a faixa esperada e os avisos sem versão nova. A folha do dia também sai em <b>PDF</b>, uma página por folha, montado dentro do aparelho (<code>pdf.js</code>).</p>
 <p>Desde a 2.11 a tela <b>Aparelhos</b> mostra quem está usando cada aparelho, o nome dele no Android e o modelo; no + aparecem o endereço na rede, a versão e quando conectou. O administrador pode <b>bloquear</b> um aparelho: na hora escolhe se ele pede uma senha para liberar ou se trava de vez, e se apaga as anotações guardadas nele.</p>
 
+<p>Desde a 2.13 existe o aparelho do <b>Escritório</b>: com a senha de quem tem essa função, ele faz os cálculos da produção (hidrolisado, vinho, álcool e vinhaça), monta a folha de rastreamento de lotes POP 03 - FOR 011 com o lote do dia (UB26I080700) e imprime a etiqueta das bombonas. As contas ficam em <code>rastreamento.js</code>. Os setores ganharam o lembrete de anotar a cada hora, e enviar e imprimir agora escolhe áreas, turnos e um período.</p>
 <p>Desde a 2.12 o tablet chefe tem <b>três níveis</b>, guardados na central: o 1 vê, corrige e envia; o 2 faz tudo e libera outros tablets chefe; o 3 faz tudo e tem as <b>configurações do sistema</b>, só para o dono. Tablet chefe novo só entra depois de liberado com a senha de quem pode. Nas configurações do sistema o dono muda a vírgula de cada quadro, esconde um quadro do operador, deixa o operador preencher um campo do escritório e cria campos novos em cada folha. Campo novo não entra no desenho do papel: aparece no aplicativo, no Monitorar, no XML e na API. Trocar a unidade de um quadro vale a partir daquele dia; os dias antes ficam com a unidade antiga.</p>
 
 <h2>6. Ler folha de papel</h2>
@@ -195,6 +196,6 @@
   <li>Instalar a 2.12 por cima, primeiro no tablet chefe, e conferir se abre. Pôr o tablet do dono no nível 3 (Pessoas e permissões > Tablets chefe > este aparelho) e testar as configurações do sistema; depois atualizar os outros tablets.</li>
 </ul>
 
-<p class="rodape">Pranchetas Digitais 2.12 · © 2026 Guilherme · Todos os direitos reservados</p>
+<p class="rodape">Pranchetas Digitais 2.13 · © 2026 Guilherme · Todos os direitos reservados</p>
 </body>
 </html>

@@ -1,0 +1,245 @@
+<title>Totem do Tab A11+</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans+Condensed:wght@500;600;700&display=swap">
+<style>
+  /* Folha de oficina: desenhos em milímetros reais (1 unidade = 1 mm), cotas em azul, aço em cinza, tela em azul claro. */
+  :root {
+    --chao: #eef0ec; --folha: #ffffff; --folha-2: #f4f6f2; --tinta: #1d2320; --tinta-2: #57615b; --linha: #d3d9d3;
+    --cota: #2c6a88; --aco: #8a969c; --aco-fundo: #e3e8ea; --tela: #cfe3ec; --tablet: #1d2320; --borracha: #3d4642;
+    --eva: #f2d9a6; --verde: #1b7a3e; --verde-fundo: #e2f0e6; --vermelho: #a8321e; --vermelho-fundo: #f8e3de;
+    --fonte: "Atkinson Hyperlegible", "Segoe UI", Arial, sans-serif;
+    --titulo: "IBM Plex Sans Condensed", "Arial Narrow", Arial, sans-serif;
+    --mono: "IBM Plex Mono", Consolas, "Courier New", monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --chao: #121614; --folha: #1b201d; --folha-2: #222824; --tinta: #e7ebe8; --tinta-2: #a5afa9; --linha: #343c37;
+      --cota: #7db8d4; --aco: #7d898f; --aco-fundo: #2a3236; --tela: #26414d; --tablet: #0b0d0c; --borracha: #9aa59f;
+      --eva: #6b5a33; --verde: #5dbd80; --verde-fundo: #1c3325; --vermelho: #e58a74; --vermelho-fundo: #3a201a; color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --chao: #121614; --folha: #1b201d; --folha-2: #222824; --tinta: #e7ebe8; --tinta-2: #a5afa9; --linha: #343c37;
+    --cota: #7db8d4; --aco: #7d898f; --aco-fundo: #2a3236; --tela: #26414d; --tablet: #0b0d0c; --borracha: #9aa59f;
+    --eva: #6b5a33; --verde: #5dbd80; --verde-fundo: #1c3325; --vermelho: #e58a74; --vermelho-fundo: #3a201a; color-scheme: dark;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--chao); color: var(--tinta); font-family: var(--fonte); font-size: 16.5px; line-height: 1.55; padding-inline: 16px; padding-block: 0 56px; }
+  .pagina { max-width: 1000px; margin: 0 auto; display: grid; gap: 28px; }
+  header.capa { padding-block: 32px 4px; display: grid; gap: 6px; }
+  .etiqueta { font-family: var(--titulo); font-weight: 600; font-size: 13px; letter-spacing: .12em; text-transform: uppercase; color: var(--tinta-2); }
+  h1 { font-family: var(--titulo); font-weight: 700; font-size: clamp(32px, 5.4vw, 48px); line-height: 1.02; margin: 0; text-wrap: balance; }
+  h2 { font-family: var(--titulo); font-weight: 700; font-size: 26px; margin: 0; line-height: 1.1; text-wrap: balance; }
+  h3 { font-family: var(--titulo); font-weight: 600; font-size: 18px; margin: 0; }
+  p { margin: 0; max-width: 70ch; }
+  .intro { color: var(--tinta-2); }
+  section { display: grid; gap: 14px; }
+  .bloco { background: var(--folha); border: 1px solid var(--linha); border-radius: 6px; padding: 18px 20px; display: grid; gap: 10px; min-width: 0; }
+  .num { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+  .ficha { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 210px), 1fr)); gap: 12px; }
+  .ficha div { background: var(--folha); border: 1px solid var(--linha); border-radius: 6px; padding: 12px 14px; display: grid; gap: 2px; }
+  .ficha small { font-family: var(--titulo); font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: var(--tinta-2); }
+  .ficha b { font-family: var(--mono); font-size: 19px; font-weight: 600; }
+  .ficha span { font-size: 14px; color: var(--tinta-2); }
+  .decisao { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr)); gap: 12px; }
+  .sim, .nao { border-radius: 6px; padding: 14px 16px; display: grid; gap: 6px; border: 1px solid var(--linha); }
+  .sim { background: var(--verde-fundo); }
+  .nao { background: var(--vermelho-fundo); }
+  .sim b { color: var(--verde); } .nao b { color: var(--vermelho); }
+  .sim b, .nao b { font-family: var(--titulo); font-size: 18px; }
+  .desenho { background: var(--folha); border: 1px solid var(--linha); border-radius: 6px; padding: 14px; display: grid; gap: 8px; min-width: 0; }
+  .desenho h3 { font-size: 14px; letter-spacing: .06em; text-transform: uppercase; color: var(--tinta-2); }
+  .rolar { overflow-x: auto; }
+  .desenho svg { width: 100%; height: auto; display: block; min-width: 560px; }
+  svg text { font-family: var(--mono); fill: var(--tinta); }
+  svg .rot { font-family: var(--titulo); font-weight: 600; fill: var(--tinta-2); }
+  .s-aco { fill: var(--aco-fundo); stroke: var(--tinta); stroke-width: .8; }
+  .s-janela { fill: var(--tela); stroke: var(--tinta); stroke-width: .8; }
+  .s-tablet { fill: none; stroke: var(--tinta-2); stroke-width: .6; stroke-dasharray: 3 2; }
+  .s-acesa { fill: none; stroke: var(--cota); stroke-width: .5; stroke-dasharray: 1.5 1.5; }
+  .s-cota { fill: none; stroke: var(--cota); stroke-width: .45; }
+  .s-cota-t { fill: var(--cota); }
+  .s-borracha { fill: var(--borracha); }
+  .s-eva { fill: var(--eva); stroke: var(--tinta-2); stroke-width: .3; }
+  .s-tab { fill: var(--tablet); }
+  .s-pel { fill: var(--cota); }
+  .s-furo { fill: var(--folha); stroke: var(--tinta); stroke-width: .6; }
+  .legenda { display: flex; flex-wrap: wrap; gap: 8px 18px; font-size: 14px; color: var(--tinta-2); }
+  .legenda span { display: inline-flex; align-items: center; gap: 6px; }
+  .legenda i { width: 14px; height: 14px; border-radius: 3px; display: inline-block; border: 1px solid var(--linha); }
+  .tabela { overflow-x: auto; border: 1px solid var(--linha); border-radius: 6px; background: var(--folha); }
+  table { border-collapse: collapse; width: 100%; min-width: 660px; font-size: 15px; }
+  th, td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--linha); vertical-align: top; }
+  th { font-family: var(--titulo); font-weight: 600; font-size: 13px; letter-spacing: .06em; text-transform: uppercase; color: var(--tinta-2); background: var(--folha-2); }
+  td.v { text-align: right; white-space: nowrap; font-family: var(--mono); font-variant-numeric: tabular-nums; }
+  td small { display: block; color: var(--tinta-2); font-size: 13px; }
+  ol.passos { margin: 0; padding-left: 22px; display: grid; gap: 8px; max-width: 75ch; }
+  ol.passos li::marker { font-family: var(--mono); font-weight: 600; color: var(--cota); }
+  .aviso { background: var(--folha-2); border: 1px solid var(--linha); border-left: 5px solid var(--cota); border-radius: 6px; padding: 12px 16px; }
+  .fontes { font-size: 14px; color: var(--tinta-2); display: grid; gap: 4px; }
+  .fontes a { color: var(--cota); }
+  a:focus-visible { outline: 3px solid var(--cota); outline-offset: 2px; }
+  @media print {
+    body { background: #fff; padding: 0; font-size: 12px; }
+    .bloco, .desenho, .tabela, .decisao, .ficha { break-inside: avoid; }
+    .desenho svg { min-width: 0; }
+  }
+</style>
+
+<div class="pagina">
+  <header class="capa">
+    <span class="etiqueta">Ubirálcool · Pranchetas digitais · Projeto de oficina</span>
+    <h1>Totem do Galaxy Tab A11+</h1>
+    <p class="intro">Caixa de aço com moldura por cima da borda preta do tablet, a mesma do orçamento de 16/09/2026, agora com as medidas da tela, da borracha e das camadas por dentro. Tudo em milímetros. As medidas de fábrica do tablet são 257,1 × 168,7 × 6,9 mm.</p>
+  </header>
+
+  <section>
+    <h2>O tablet</h2>
+    <div class="ficha">
+      <div><small>Tablet inteiro</small><b>257,1 × 168,7</b><span>6,9 mm de espessura, 477 g</span></div>
+      <div><small>Área acesa da tela</small><b>236,9 × 148,1</b><span>11" em 16:10, 1920 × 1200</span></div>
+      <div><small>Borda preta</small><b>≈ 10,1 / 10,3</b><span>dos lados / em cima e embaixo</span></div>
+      <div><small>Processador</small><b>Dimensity 7300</b><span>8 núcleos até 2,5 GHz, 6 ou 8 GB</span></div>
+    </div>
+    <div class="bloco">
+      <h3>Vai aguentar o sistema?</h3>
+      <p>Vai, com folga. O aplicativo das pranchetas é leve: a bateria de testes mede cada toque num processador 4 vezes mais lento que o computador de testes, com 90 dias de anotações guardadas, e cada toque responde em menos de 100 milésimos. O Dimensity 7300 é um processador intermediário recente, bem acima disso. A central do tablet chefe guarda 60 dias na memória (poucos megabytes) e o resto em arquivos de backup de poucos quilobytes por dia. Os 128 GB sobram por anos.</p>
+      <p>Como o tablet fica ligado na tomada o dia todo, ligue a proteção da bateria do Android (Configurações &gt; Bateria &gt; Proteção da bateria, carga até 80% ou 85%). Ela dura muito mais assim.</p>
+    </div>
+  </section>
+
+  <section>
+    <h2>Vidro, plástico ou película?</h2>
+    <div class="decisao">
+      <div class="sim"><b>Película de vidro temperado colada na tela</b><p>O toque funciona normal, porque ela é fina (0,33 mm) e fica colada sem ar. Riscou ou trincou: troca por uns R$ 30 e o tablet continua novo por baixo.</p></div>
+      <div class="nao"><b>Vidro ou acrílico solto por cima</b><p>Uma placa de 2 a 3 mm encostada, com uma camada de ar no meio, deixa o toque fraco ou sem resposta. Se entrar água ou vapor entre as duas, o tablet passa a "tocar sozinho".</p></div>
+      <div class="sim"><b>Borracha por dentro da moldura</b><p>Um perfil de EPDM autoadesivo colado por dentro, em volta da janela. Ele aperta a borda preta, segura o tablet sem folga e não deixa entrar pó nem respingo. Nunca encosta na área acesa.</p></div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Frente da caixa (a moldura)</h2>
+    <p class="intro">Chapa de aço de 2 mm, 305 × 205. A janela é a área acesa com 2 mm de folga em volta: assim a moldura cobre 8 mm da borda preta e não aperta a beira da tela (aperto na beira dá toque fantasma).</p>
+    <div class="desenho">
+      <h3>Vista de frente · escala real em mm</h3>
+      <div class="rolar">
+        <svg viewBox="-44 -40 400 292" role="img" aria-label="Frente da caixa com a janela da tela e as medidas">
+          <rect x="0" y="0" width="305" height="205" class="s-aco"/>
+          <rect x="20.1" y="26.3" width="241" height="152" rx="2" class="s-janela"/>
+          <rect x="12" y="18" width="257.1" height="168.7" rx="9" class="s-tablet"/>
+          <rect x="22.1" y="28.3" width="236.9" height="148.1" class="s-acesa"/>
+          <circle cx="72" cy="198" r="2.2" class="s-furo"/><circle cx="233" cy="198" r="2.2" class="s-furo"/>
+          <text x="140.6" y="104" font-size="8" text-anchor="middle" class="rot">janela 241 × 152</text>
+          <text x="140.6" y="114" font-size="6" text-anchor="middle" class="rot">área acesa 236,9 × 148,1 (tracejado azul)</text>
+          <text x="140.6" y="196" font-size="5.5" text-anchor="middle" class="rot">contorno do tablet 257,1 × 168,7 (tracejado)</text>
+          <g class="s-cota">
+            <line x1="0" y1="-22" x2="305" y2="-22"/><line x1="0" y1="-27" x2="0" y2="-17"/><line x1="305" y1="-27" x2="305" y2="-17"/>
+            <line x1="0" y1="-9" x2="20.1" y2="-9"/><line x1="20.1" y1="-13" x2="20.1" y2="26.3"/><line x1="261.1" y1="-13" x2="261.1" y2="26.3"/>
+            <line x1="20.1" y1="-9" x2="261.1" y2="-9"/>
+            <line x1="325" y1="0" x2="325" y2="205"/><line x1="320" y1="0" x2="330" y2="0"/><line x1="320" y1="205" x2="330" y2="205"/>
+            <line x1="312" y1="0" x2="312" y2="26.3"/><line x1="308" y1="26.3" x2="316" y2="26.3"/>
+            <line x1="312" y1="26.3" x2="312" y2="178.3"/><line x1="308" y1="178.3" x2="316" y2="178.3"/>
+            <line x1="-14" y1="18" x2="-14" y2="186.7"/><line x1="-18" y1="18" x2="-10" y2="18"/><line x1="-18" y1="186.7" x2="-10" y2="186.7"/>
+            <line x1="12" y1="214" x2="20.1" y2="214"/><line x1="12" y1="210" x2="12" y2="218"/><line x1="20.1" y1="210" x2="20.1" y2="218"/>
+          </g>
+          <text x="152.5" y="-25" font-size="7" text-anchor="middle" class="s-cota-t">305</text>
+          <text x="10" y="-11" font-size="6" text-anchor="middle" class="s-cota-t">20</text>
+          <text x="140.6" y="-11" font-size="6" text-anchor="middle" class="s-cota-t">241</text>
+          <text x="338" y="105" font-size="7" class="s-cota-t">205</text>
+          <text x="316" y="15" font-size="6" class="s-cota-t">26,5</text>
+          <text x="316" y="105" font-size="6" class="s-cota-t">152</text>
+          <text x="-20" y="105" font-size="6" text-anchor="end" class="s-cota-t">168,7</text>
+          <text x="16" y="226" font-size="5.5" text-anchor="middle" class="s-cota-t">8 mm sobre a borda</text>
+          <text x="152.5" y="240" font-size="6" text-anchor="middle" class="rot">dobradiça piano no alto · 2 orelhas embaixo com parafuso de segurança (furos Ø4,5)</text>
+        </svg>
+      </div>
+      <div class="legenda"><span><i style="background:var(--aco-fundo)"></i>chapa 2 mm</span><span><i style="background:var(--tela)"></i>janela aberta</span><span><i style="border:1.5px dashed var(--tinta-2)"></i>tablet por trás</span><span><i style="border:1.5px dashed var(--cota)"></i>área acesa da tela</span></div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Por dentro: as camadas</h2>
+    <p class="intro">De frente para trás, cortando a caixa no meio. A caixa tem 45 mm de fundo por fora (41 por dentro). O EVA atrás empurra o tablet contra a borracha; com a tampa fechada, a borracha aperta de 3 para 2 mm.</p>
+    <div class="desenho">
+      <h3>Corte lateral · espessuras ampliadas 4 vezes</h3>
+      <div class="rolar">
+        <svg viewBox="-10 -24 380 150" role="img" aria-label="Corte com as camadas da caixa">
+          <!-- cada mm de espessura vale 4 unidades na horizontal; a altura mostra 168,7 mm do tablet em escala 0,5 -->
+          <rect x="0" y="0" width="8" height="102" class="s-aco"/>
+          <rect x="8" y="0" width="8" height="10" class="s-borracha"/><rect x="8" y="92" width="8" height="10" class="s-borracha"/>
+          <rect x="16" y="6" width="1.3" height="90" class="s-pel"/>
+          <rect x="17.3" y="6" width="27.6" height="90" rx="2" class="s-tab"/>
+          <rect x="44.9" y="8" width="30" height="86" class="s-eva"/><rect x="74.9" y="8" width="30" height="86" class="s-eva"/>
+          <rect x="164" y="0" width="8" height="102" class="s-aco"/>
+          <rect x="0" y="-6" width="172" height="6" class="s-aco"/><rect x="0" y="102" width="172" height="6" class="s-aco"/>
+          <text x="4" y="-10" font-size="6" text-anchor="middle" class="s-cota-t">2,0</text>
+          <text x="12" y="120" font-size="5.5" text-anchor="middle" class="s-cota-t">2,0</text>
+          <text x="31" y="120" font-size="5.5" text-anchor="middle" class="s-cota-t">6,9 + 0,33</text>
+          <text x="75" y="120" font-size="5.5" text-anchor="middle" class="s-cota-t">EVA 2 × 10 (aperta para 15)</text>
+          <text x="168" y="-10" font-size="6" text-anchor="middle" class="s-cota-t">2,0</text>
+          <g class="s-cota"><line x1="0" y1="-18" x2="172" y2="-18"/><line x1="0" y1="-21" x2="0" y2="-15"/><line x1="172" y1="-21" x2="172" y2="-15"/></g>
+          <text x="86" y="-20" font-size="6" text-anchor="middle" class="s-cota-t">45 por fora</text>
+          <text x="190" y="12" font-size="7" class="rot">1 · moldura de aço 2 mm (a tampa da frente)</text>
+          <text x="190" y="28" font-size="7" class="rot">2 · borracha EPDM 10 × 3 mm, só na borda preta</text>
+          <text x="190" y="44" font-size="7" class="rot">3 · película de vidro 0,33 mm colada na tela</text>
+          <text x="190" y="60" font-size="7" class="rot">4 · tablet 6,9 mm</text>
+          <text x="190" y="76" font-size="7" class="rot">5 · duas placas de EVA 10 mm (255 × 165)</text>
+          <text x="190" y="92" font-size="7" class="rot">6 · fundo da caixa 2 mm, preso no suporte</text>
+          <text x="125" y="56" font-size="6" text-anchor="middle" class="rot">vão para o cabo</text>
+        </svg>
+      </div>
+    </div>
+    <div class="bloco">
+      <h3>Folgas que importam</h3>
+      <p><b>Lado direito (cabo):</b> do tablet até a parede de dentro sobram <span class="num">33,9 mm</span>. Use cabo USB-C com plugue em L (90°): o plugue reto bate na parede. Rasgo de 20 × 12 na lateral direita para o cabo sair.</p>
+      <p><b>Som do apito:</b> os alto-falantes ficam nas laterais do tablet. Faça 6 rasgos de 3 × 20 mm em cada lateral da caixa, na altura do tablet, senão o lembrete de anotar fica abafado dentro do aço.</p>
+      <p><b>Calço da esquerda:</b> uma tira de EVA de 10 mm entre a parede esquerda e o tablet, para ele não correr para o lado do cabo.</p>
+    </div>
+  </section>
+
+  <section>
+    <h2>Peças da caixa (por totem)</h2>
+    <div class="tabela">
+      <table>
+        <thead><tr><th>Peça</th><th>Material</th><th>Medida (mm)</th><th class="v">Qtd</th><th>Observação</th></tr></thead>
+        <tbody>
+          <tr><td>Tampa da frente (moldura)</td><td>Chapa 2,00 mm</td><td class="num">305 × 205</td><td class="v">1</td><td>Janela 241 × 152 a 20 da esquerda e 26,5 de cima. Cantos da janela com raio 2. Lixar a beira da janela.</td></tr>
+          <tr><td>Fundo da caixa</td><td>Chapa 2,00 mm</td><td class="num">305 × 205</td><td class="v">1</td><td>Furos do suporte (4 × Ø7 em 70 × 120) e 1 furo Ø25 com passa-fio.</td></tr>
+          <tr><td>Topo e base da caixa</td><td>Chapa 2,00 mm</td><td class="num">301 × 41</td><td class="v">2</td><td>6 furos Ø6 de ventilação em cada; o de cima fica embaixo da viseira.</td></tr>
+          <tr><td>Laterais da caixa</td><td>Chapa 2,00 mm</td><td class="num">205 × 41</td><td class="v">2</td><td>Direita: rasgo 20 × 12 do cabo. As duas: 6 rasgos 3 × 20 para o som.</td></tr>
+          <tr><td>Viseira</td><td>Chapa 2,00 mm</td><td class="num">305 × 90</td><td class="v">1</td><td>Dobra de 15 para parafusar no alto, aba para a frente.</td></tr>
+          <tr><td>Borracha da janela</td><td>Perfil EPDM autoadesivo 10 × 3</td><td class="num">≈ 900 de comprimento</td><td class="v">1</td><td>Colada por dentro da tampa, a 1 mm da beira da janela, em volta toda.</td></tr>
+          <tr><td>Enchimento de trás</td><td>Placa de EVA 10 mm</td><td class="num">255 × 165</td><td class="v">2</td><td>Mais uma tira 165 × 10 × 10 de calço na esquerda.</td></tr>
+          <tr><td>Película</td><td>Vidro temperado 9H para Tab A11+ 11"</td><td class="num">tela de 11"</td><td class="v">1</td><td>Colar antes de pôr na caixa, sem bolha.</td></tr>
+          <tr><td>Cabo</td><td>USB-C com plugue em L, reforçado</td><td class="num">2 m</td><td class="v">1</td><td>Sobe por dentro da coluna até a caixa de tomada.</td></tr>
+          <tr><td>Dobradiça e fechos</td><td>Dobradiça piano + parafuso de segurança Torx M5</td><td class="num">300 de dobradiça</td><td class="v">1 + 2</td><td>Iguais ao orçamento.</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="intro">A coluna (metalon 100 × 50, 1.180 de altura), a base de 350 × 350 em chapa 1/4", as mãos-francesas e o suporte inclinado 20° continuam como no orçamento de 16/09/2026: só a caixa ganhou estas medidas por dentro.</p>
+  </section>
+
+  <section>
+    <h2>Montagem da caixa</h2>
+    <ol class="passos">
+      <li>Antes de abrir a janela, ponha o tablet de verdade em cima da chapa da tampa, encostado a 12 mm da esquerda e a 18 mm de cima, e risque a área acesa com o tablet ligado. Confira se bate com 22,1 e 28,3 mm; se a área do tablet comprado for diferente, vale o risco.</li>
+      <li>Corte a janela 2 mm para fora do risco em volta (241 × 152) e lixe a beira.</li>
+      <li>Solde o fundo, o topo, a base e as laterais por fora. Faça os rasgos do cabo e do som antes de soldar.</li>
+      <li>Pinte (fundo anticorrosivo e duas demãos de esmalte) e espere secar antes de colar a borracha.</li>
+      <li>Cole a borracha EPDM por dentro da tampa, em volta da janela, a 1 mm da beira.</li>
+      <li>Cole a película no tablet, ligue o cabo em L e ponha o tablet com a tela para a frente, o calço na esquerda e as duas placas de EVA atrás.</li>
+      <li>Feche a tampa e teste o toque nos quatro cantos e no meio da tela. Se um canto não responder ou tocar sozinho, a borracha está encostando na área acesa: afaste 1 mm.</li>
+      <li>Aperte os parafusos de segurança das orelhas de baixo.</li>
+    </ol>
+    <div class="aviso">Tablet chefe e escritório não precisam de caixa de aço: um suporte de mesa com a mesma película basta.</div>
+  </section>
+
+  <section>
+    <h2>De onde vêm as medidas</h2>
+    <div class="fontes">
+      <span>Tablet: <a href="https://m.gsmarena.com/samsung_galaxy_tab_a11+-14192.php">GSMArena · Galaxy Tab A11+</a> (257,1 × 168,7 × 6,9 mm, 11", Dimensity 7300) e <a href="https://www.samsung.com/in/tablets/galaxy-tab-a/galaxy-tab-a11-plus-gray-128gb-sm-x236bzaains">página da Samsung</a>.</span>
+      <span>Área acesa: calculada pela diagonal de 11" em 16:10 (236,9 × 148,1 mm). A borda preta é a diferença dividida pelos dois lados. Confirme com o tablet na mão antes de cortar.</span>
+      <span>Caixa, coluna e base: orçamento do totem de 16/09/2026.</span>
+    </div>
+  </section>
+</div>
