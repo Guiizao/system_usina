@@ -2,7 +2,8 @@
 /*
  * Versão 2.13.2, no aplicativo (demonstração): o lembrete de anotar a cada hora.
  *   - passou das :30 com a linha vazia: faixa vermelha e apito chato repetindo;
- *   - tocar em "Anotar agora" cala o apito, tira a faixa (até a próxima hora) e abre a linha daquela hora.
+ *   - tocar em "Anotar agora" cala o apito, tira a faixa (até a próxima hora) e abre a linha daquela hora;
+ *   - 2.13.3: fora do horário de trabalho do setor não toca (o celular da firma vai para casa com a pessoa).
  */
 import { teste, certo, igual } from './teste.mjs';
 import { TAMANHOS, dormir } from './navegador.mjs';
@@ -29,6 +30,14 @@ export async function testarLembrete213(nav, url, grupo) {
       await dormir(12000);
       igual(await a.avaliar('window.__apitos'), 0, 'apitos depois de tocar em Anotar agora');
       certo(await a.avaliar('document.getElementById("lembrete").hidden'), 'a faixa voltou sem a linha ser anotada');
+    });
+
+    await teste(grupo, 'fora do horário do setor o lembrete não toca, mesmo com a linha vazia e alguém no turno', async () => {
+      await a.ir(url + '/?demo&papel=destilaria&op=Mateus&lembrete=fora', 'document.querySelector("#app main")');
+      await dormir(1500);
+      certo(!(await a.existe('#lembrete:not([hidden])')), 'a faixa apareceu fora do horário');
+      // a mesma hora, dentro do horário (o dia todo): a faixa aparece
+      await a.ir(url + '/?demo&papel=destilaria&op=Mateus&lembrete=1', '!!document.querySelector("#lembrete:not([hidden])")');
     });
   } finally { await a.fechar(); }
 }

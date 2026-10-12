@@ -3,7 +3,7 @@
 (function () {
   'use strict';
   const C = window.USINA;
-  const VERSAO = '2.13.2'; // aparece nos ajustes e vai junto com cada envio para a central
+  const VERSAO = '2.13.3'; // aparece nos ajustes e vai junto com cada envio para a central
   const AUTORIA = '© 2026 Guilherme. Todos os direitos reservados. Uso somente com autorização do autor.';
   const params = new URLSearchParams(location.search);
   const DEMO_IMG = params.has('demo'); // usado só para gerar imagens de apresentação
@@ -1263,6 +1263,13 @@
       } else if (k === 'pranchetasDesligadas') partes.push('mudou as folhas ligadas dos setores');
       else if (k === 'medicao') partes.push(depois ? 'mudou as medidas das dornas' : 'voltou para as medidas da planilha');
       else if (k === 'folhas') { /* quem mexe nas folhas escreve o que mudou (editarCampoDaFolha) */ }
+      else if (k === 'lembretes') {
+        new Set([...Object.keys(antes || {}), ...Object.keys(depois || {})]).forEach((s) => {
+          const a = comoHorario((antes || {})[s]), d = comoHorario((depois || {})[s]);
+          if (JSON.stringify(a) === JSON.stringify(d)) return;
+          partes.push(d ? `${a ? 'mudou' : 'ligou'} o lembrete da ${nomeSetor(s)}: toca ${textoHorario(d)}` : `desligou o lembrete da ${nomeSetor(s)}`);
+        });
+      }
       else partes.push({ produtos: 'mudou a lista de produtos', fornecedores: 'mudou a lista de fornecedores', whatsapp: 'mudou o WhatsApp do escritório', email: 'mudou o e-mail do escritório' }[k] || `mudou ${k}`);
     });
     return partes;
@@ -2379,14 +2386,22 @@
     } catch (e) { /* sem som */ }
   }
   /* ---------- Lembrete de anotar a cada hora (versão 2.13) ----------
-     Ligado por setor no tablet chefe (Configurações da usina). Na virada da hora, se a linha daquela hora de uma folha
+     Ligado por setor no tablet chefe (Configurações da usina), com o horário de trabalho do setor (2.13.3): fora dele
+     não toca, porque o celular da firma vai para casa com a pessoa. Na virada da hora, se a linha daquela hora de uma folha
      hora a hora do setor está vazia: faixa no alto da tela e um apito tranquilo. Passou das :30 sem anotar: apito chato,
      que para quando a linha for anotada ou quando a pessoa tocar em "Anotar agora" (aí só volta na hora seguinte). */
   let lembrete = { id: null, avisou: false, apito: null };
   let lembreteUrgente = false; // só na demonstração
+  /** Horário do lembrete do setor: { de, ate } em horas cheias; de = ate é o dia todo. Desligado: null (true é o dia todo). */
+  const comoHorario = (l) => (l ? (l === true ? { de: 7, ate: 7 } : l) : null);
+  const horarioLembrete = (id) => comoHorario((configSistema().lembretes || {})[id]);
+  const dentroDoHorario = (hor, h) => hor.de === hor.ate || (hor.de < hor.ate ? h >= hor.de && h < hor.ate : h >= hor.de || h < hor.ate);
+  const textoHorario = (hor) => (hor.de === hor.ate ? 'o dia todo' : `das ${pad2(hor.de)}h às ${pad2(hor.ate)}h`);
   function horaPendente() {
-    if (!cfg.papel || ehCentral() || !setorPorId(cfg.papel) || !operadorAtual() || !(configSistema().lembretes || {})[cfg.papel]) return null;
+    const hor = cfg.papel ? horarioLembrete(cfg.papel) : null;
+    if (!hor || ehCentral() || !setorPorId(cfg.papel) || !operadorAtual()) return null;
     const h = new Date().getHours();
+    if (!dentroDoHorario(hor, h)) return null; // fora do horário de trabalho do setor
     const data = dataProducao();
     const falta = pranchetasDo(cfg.papel).filter((pid) => prancheta(pid).tipo === 'grade' && !pegar(data, pid, h));
     return falta.length ? { id: `${data}|${h}`, h, falta } : null;
@@ -2441,6 +2456,25 @@
     faixaLembrete(p, urgente);
     if (!lembrete.avisou) { lembrete.avisou = true; apitoTranquilo(); }
     if (urgente && !lembrete.apito) { apitoChato(); lembrete.apito = setInterval(apitoChato, 2500); }
+  }
+  /** Linha do lembrete nas Configurações da usina: liga e desliga, e o horário de trabalho do setor. */
+  function linhaLembrete(s) {
+    const hor = horarioLembrete(s.id);
+    return `<div class="linha-config lembrete-config"><div><b>Lembrete de anotar a cada hora</b><small>Apito tranquilo na virada da hora. Às :30, se a linha ainda estiver vazia, apito chato até anotar ou tocar em Anotar agora. Fora do horário do setor não toca.</small></div>
+      <span class="lembrete-controles"><button class="interruptor ${hor ? 'ligado' : ''}" data-a="lembrete-liga" data-id="${s.id}" aria-label="Lembrete da ${esc(s.nome)}"><i></i><span>${hor ? 'Ligado' : 'Desligado'}</span></button>
+      ${hor ? `<button class="btn" data-a="lembrete-horario" data-id="${s.id}" aria-label="Horário do lembrete: ${textoHorario(hor)}">${ico('relogio')} ${hor.de === hor.ate ? 'O dia todo' : `${pad2(hor.de)}h às ${pad2(hor.ate)}h`}</button>` : ''}</span></div>`;
+  }
+  async function escolherHorarioLembrete(id) {
+    const hor = horarioLembrete(id) || { de: 7, ate: 7 };
+    const horas = (sel) => Array.from({ length: 24 }, (_, h) => `<option value="${h}" ${h === sel ? 'selected' : ''}>${pad2(h)}h</option>`).join('');
+    const resp = await abrirModal(`<h3>Horário do lembrete</h3><p class="dica">${esc((setorPorId(id) || {}).nome || id)}</p>
+      <p class="sub">O lembrete só toca dentro deste horário. Com os dois iguais (07h e 07h), toca o dia todo; de 19h às 07h, toca à noite.</p>
+      <div class="linha-horario"><label>Das <select id="lh-de">${horas(hor.de)}</select></label><label>às <select id="lh-ate">${horas(hor.ate)}</select></label></div>
+      <div class="acoes-modal"><button class="btn" data-k="x">Cancelar</button><button class="btn primario" data-k="ok">Salvar</button></div>`,
+    (k, b, fechar, f) => { if (k === 'x') fechar(null); else if (k === 'ok') fechar({ de: Number(f.querySelector('#lh-de').value), ate: Number(f.querySelector('#lh-ate').value) }); });
+    if (!resp) return;
+    salvarConfigSistema({ lembretes: Object.assign({}, configSistema().lembretes || {}, { [id]: resp }) });
+    render();
   }
   let avisoNaTela = null;
   /** Mostra o aviso mais antigo que ainda não foi lido por quem está trabalhando neste aparelho. */
@@ -4750,8 +4784,7 @@
                 const on = off.indexOf(pid) < 0;
                 return `<button class="chip-liga ${on ? 'sel' : ''}" data-a="prancheta-liga" data-setor="${s.id}" data-id="${pid}">${on ? ico('certo') : ico('fechar')} ${esc(prancheta(pid).nome)}</button>`;
               }).join('')}</div>
-              ${!s.soChefe && s.pranchetas.some((pid) => prancheta(pid).tipo === 'grade') ? `<div class="linha-config lembrete-config"><div><b>Lembrete de anotar a cada hora</b><small>Apito tranquilo na virada da hora. Às :30, se a linha ainda estiver vazia, apito chato até anotar ou tocar em Anotar agora.</small></div>
-                <button class="interruptor ${(configSistema().lembretes || {})[s.id] ? 'ligado' : ''}" data-a="lembrete-liga" data-id="${s.id}" aria-label="Lembrete da ${esc(s.nome)}"><i></i><span>${(configSistema().lembretes || {})[s.id] ? 'Ligado' : 'Desligado'}</span></button></div>` : ''}
+              ${!s.soChefe && s.pranchetas.some((pid) => prancheta(pid).tipo === 'grade') ? linhaLembrete(s) : ''}
               ${s.soChefe ? '<p class="sub" style="margin:10px 0 0">Só o tablet chefe anota estas folhas. Nenhum tablet de setor fica com elas.</p>' : `<h3 style="margin-top:14px">Operadores <small>${ops.length}</small></h3>
               <div class="pessoas">${visiveis.map((o) => {
                 const i = ops.indexOf(o);
@@ -5308,7 +5341,7 @@
     compartilhar: 'relatorios', relatorios: 'relatorios', 'relatorio-enviar': 'relatorios', 'relatorio-apagar': 'relatorios', 'gerar-hoje': 'relatorios', imprimir: 'relatorios',
     'aviso-enviar': 'avisos', 'aviso-cancelar': 'avisos', 'ler-folha': 'ler_folha', 'leitura-salvar': 'ler_folha',
     config: 'usina', 'medida-grupo': 'usina', 'medidas-planilha': 'usina', contato: 'usina', 'lista-add': 'usina', 'lista-remove': 'usina',
-    'setor-liga': 'usina', 'prancheta-liga': 'usina', 'lembrete-liga': 'usina', 'op-add': 'usina', 'op-senha': 'usina', 'op-remove': 'usina',
+    'setor-liga': 'usina', 'prancheta-liga': 'usina', 'lembrete-liga': 'usina', 'lembrete-horario': 'usina', 'op-add': 'usina', 'op-senha': 'usina', 'op-remove': 'usina',
     'nuvem-url': 'integracoes', 'nuvem-segredo': 'integracoes', 'nuvem-enviar': 'integracoes', 'base44-url': 'integracoes', 'base44-segredo': 'integracoes', 'base44-enviar': 'integracoes',
     'novo-codigo': 'conexao',
     graficos: 'relatorios', folhas: 'folhas', 'folha-campo': 'folhas', 'folha-unidades': 'folhas',
@@ -5840,10 +5873,11 @@
       case 'setor-liga': return mudarConfigLista('setor', b.dataset.id);
       case 'lembrete-liga': {
         const m = Object.assign({}, configSistema().lembretes || {});
-        m[b.dataset.id] = !m[b.dataset.id];
+        m[b.dataset.id] = m[b.dataset.id] ? false : { de: 7, ate: 7 };
         salvarConfigSistema({ lembretes: m });
         return render();
       }
+      case 'lembrete-horario': return escolherHorarioLembrete(b.dataset.id);
       case 'prancheta-liga': return mudarConfigLista('prancheta', b.dataset.setor, b.dataset.id);
       case 'op-add': {
         const setor = b.dataset.setor;
@@ -6190,13 +6224,21 @@
     if (params.get('aparelho')) verAparelho(params.get('aparelho'));
     if (params.get('modal') === 'entrar') entrarNoChefe();
     if (params.get('modal') === 'liberar') liberarEsteAparelho();
-    // lembrete de anotar (versão 2.13): ?demo&papel=destilaria&op=Mateus&lembrete=1 (ou =urgente, como se fosse depois das :30)
+    // lembrete de anotar (versão 2.13): ?demo&papel=destilaria&op=Mateus&lembrete=1 (=urgente: como se fosse depois das :30;
+    // =fora: fora do horário do setor). No tablet chefe, &lembrete=1 mostra o horário nas Configurações da usina.
     if (params.get('lembrete') && cfg.papel) {
-      lembreteUrgente = params.get('lembrete') === 'urgente';
-      // a linha da hora atual fica vazia, seja qual for a hora em que a demonstração abriu
-      pranchetasDo(cfg.papel).forEach((pid) => delete registros[`${dataProducao()}|${pid}|${new Date().getHours()}`]);
-      salvarConfigSistema({ lembretes: { [cfg.papel]: true } }); render(); verificarLembrete();
+      const h = new Date().getHours();
+      if (ehCentral()) salvarConfigSistema({ lembretes: { destilaria: { de: 7, ate: 19 } } });
+      else {
+        lembreteUrgente = params.get('lembrete') === 'urgente';
+        // a linha da hora atual fica vazia, seja qual for a hora em que a demonstração abriu
+        pranchetasDo(cfg.papel).forEach((pid) => delete registros[`${dataProducao()}|${pid}|${h}`]);
+        // =fora: o horário do setor deixa de fora só a hora atual
+        salvarConfigSistema({ lembretes: { [cfg.papel]: params.get('lembrete') === 'fora' ? { de: (h + 1) % 24, ate: h } : true } });
+      }
+      render(); verificarLembrete();
     }
+    if (params.get('modal') === 'lembrete-horario') escolherHorarioLembrete('destilaria');
     if (params.get('aviso') && cfg.papel && !ehCentral() && operadorAtual()) {
       enviarAviso(cfg.papel, operadorAtual(), 'Passe no escritório antes de sair, por favor. O encarregado quer falar sobre a troca de turno de amanhã.');
       verificarAvisos();

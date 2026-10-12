@@ -270,8 +270,13 @@ h3.secao-titulo { font-size: 21px; margin: 26px 0 10px; }
 @keyframes piscarLembrete { 50% { border-color: transparent; } }
 @media (prefers-reduced-motion: reduce) { .lembrete.urgente { animation: none; } }
 .lembrete-config { margin-top: 12px; flex-wrap: wrap; }
-.lembrete-config > div { flex: 1 1 220px; }
+.linha-config.lembrete-config > div { flex: 1 1 220px; }
+/* liga e desliga com o horário do lado: mudam de linha juntos */
+.lembrete-controles { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .linha-config.lembrete-config small { word-break: normal; }
+.linha-horario { display: flex; flex-wrap: wrap; gap: 12px 20px; margin: 14px 0 6px; }
+.linha-horario label { display: flex; align-items: center; gap: 10px; font-size: 19px; font-weight: 700; }
+.linha-horario select { min-height: 54px; font-size: 20px; padding: 0 10px; border-radius: 8px; border: 2px solid var(--linha); background: var(--papel); color: var(--tinta); }
 /* painel que não cabe na tela (versão 2.13): sem a dica e com o visor menor; se ainda não couber, teclas menores. Nunca rola. */
 .painel.apertado .dica-painel { display: none; }
 .painel.apertado .visor { min-height: 64px; font-size: 40px; padding-block: 4px; align-items: center; }
