@@ -92,6 +92,16 @@
   svg.grande .s-cota { stroke-width: 2; }
   svg.grande .s-frente { stroke-width: 7; }
   svg.grande .s-cabo-t { stroke-width: 4; stroke-dasharray: 14 9; }
+  .camadas-lados { display: flex; justify-content: space-between; font-family: var(--titulo); font-weight: 600; font-size: 13px; letter-spacing: .08em; text-transform: uppercase; color: var(--tinta-2); }
+  .camadas-barra { display: flex; height: 46px; border: 1px solid var(--linha); border-radius: 6px; overflow: hidden; }
+  .camadas-barra i { min-width: 5px; }
+  .camadas-lista { margin: 0; padding: 0; list-style: none; display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr)); gap: 6px 14px; }
+  .camadas-lista li { display: grid; grid-template-columns: 16px 1fr auto; gap: 10px; align-items: center; padding: 6px 0; border-bottom: 1px solid var(--linha); }
+  .camadas-lista li > i { width: 16px; height: 16px; border-radius: 3px; border: 1px solid var(--linha); }
+  .camadas-lista b { display: block; font-family: var(--titulo); font-size: 15px; }
+  .camadas-lista small { display: block; color: var(--tinta-2); font-size: 13px; line-height: 1.35; }
+  .camadas-lista em { font-style: normal; font-family: var(--mono); font-size: 13.5px; color: var(--cota); }
+  .desenho .intro a { color: var(--cota); }
   .legenda { display: flex; flex-wrap: wrap; gap: 8px 18px; font-size: 14px; color: var(--tinta-2); }
   .legenda span { display: inline-flex; align-items: center; gap: 6px; }
   .legenda i { width: 14px; height: 14px; border-radius: 3px; display: inline-block; border: 1px solid var(--linha); flex: none; }
@@ -257,39 +267,20 @@
     </div>
 
     <div class="desenho">
-      <h3>Corte lateral · espessuras ampliadas 4 vezes</h3>
-      <div class="rolar">
-        <svg viewBox="-12 -30 480 152" role="img" aria-label="Corte com as camadas da caixa, da frente para trás">
-          <!-- cada mm de fundo vale 4 unidades na horizontal; a altura está em escala 0,5 -->
-          <rect x="0" y="0" width="8" height="15" class="s-aco"/><rect x="0" y="91" width="8" height="15" class="s-aco"/>
-          <rect x="0" y="0" width="174" height="3" class="s-aco"/><rect x="0" y="103" width="174" height="3" class="s-aco"/>
-          <rect x="8" y="9.5" width="8" height="5" class="s-borracha"/><rect x="8" y="91.5" width="8" height="5" class="s-borracha"/>
-          <rect x="16" y="10.8" width="1.3" height="84.4" class="s-pel"/>
-          <rect x="17.3" y="10.8" width="27.6" height="84.4" rx="2" class="s-tab"/>
-          <rect x="17.3" y="3" width="40" height="7.8" class="s-eva"/><rect x="17.3" y="95.2" width="40" height="7.8" class="s-eva"/>
-          <rect x="44.9" y="20.5" width="55.3" height="65" class="s-eva"/><rect x="100.2" y="20.5" width="73.8" height="65" class="s-eva"/>
-          <rect x="174" y="-1" width="6" height="108" class="s-aco"/>
-          <rect x="134" y="3" width="40" height="2" class="s-aco"/><rect x="134" y="101" width="40" height="2" class="s-aco"/>
-          <ellipse cx="96" cy="99" rx="8" ry="2" class="s-plugue"/>
-          <g class="s-cota"><line x1="0" y1="-20" x2="180" y2="-20"/><line x1="0" y1="-24" x2="0" y2="-16"/><line x1="180" y1="-24" x2="180" y2="-16"/></g>
-          <text x="90" y="-23" font-size="6" text-anchor="middle" class="s-cota-t">45 por fora · 41,5 por dentro</text>
-          <text x="4" y="-6" font-size="5.5" text-anchor="middle" class="s-cota-t">2,0</text>
-          <text x="31" y="118" font-size="5.5" text-anchor="middle" class="s-cota-t">0,33 + 6,9</text>
-          <text x="110" y="118" font-size="5.5" text-anchor="middle" class="s-cota-t">EVA 15 + 20 (aperta para 32)</text>
-          <text x="177" y="-6" font-size="5.5" text-anchor="middle" class="s-cota-t">1,5</text>
-          <g class="rot" font-size="6.5">
-            <text x="196" y="8">1 · moldura de aço 2 mm, fixa</text>
-            <text x="196" y="21">2 · borracha EPDM 10 × 3 (aperta para 2), só na borda preta</text>
-            <text x="196" y="34">3 · película de vidro 0,33 mm colada na tela</text>
-            <text x="196" y="47">4 · tablet 6,9 mm</text>
-            <text x="196" y="60">5 · calços de EVA 20 mm em volta (10 de fundo)</text>
-            <text x="196" y="73">6 · placas de EVA 15 + 20 mm, coladas na tampa</text>
-            <text x="196" y="86">7 · tampa de trás 1,5 mm com aba de 10 para dentro</text>
-            <text x="196" y="99">vermelho · o cabo, na folga de baixo, atrás dos calços</text>
-          </g>
-        </svg>
+      <h3>As camadas, da frente para trás · na proporção certa dos 45 mm</h3>
+      <div class="camadas-lados"><span>Frente (quem anota)</span><span>Trás (tampa)</span></div>
+      <div class="camadas-barra" role="img" aria-label="Régua das camadas: moldura 2, borracha 2, película 0,33, tablet 6,9, EVA 32,3 e tampa 1,5 milímetros">
+        <i style="flex:2 1 0;background:var(--aco)"></i><i style="flex:2 1 0;background:var(--borracha)"></i><i style="flex:.33 1 0;background:var(--cota)"></i><i style="flex:6.9 1 0;background:var(--tablet)"></i><i style="flex:32.27 1 0;background:var(--eva)"></i><i style="flex:1.5 1 0;background:var(--aco)"></i>
       </div>
-      <p class="intro">Com a tampa fechada, as placas de EVA apertam de 35 para 32 mm e empurram o tablet contra a borracha da moldura. A pressão é de leve, sem forçar a tela.</p>
+      <ol class="camadas-lista">
+        <li><i style="background:var(--aco)"></i><span><b>Moldura de aço</b><small>fixa, cobre 8 mm da borda preta</small></span><em>2 mm</em></li>
+        <li><i style="background:var(--borracha)"></i><span><b>Borracha EPDM</b><small>3 mm que apertam para 2, só na borda preta</small></span><em>2 mm</em></li>
+        <li><i style="background:var(--cota)"></i><span><b>Película de vidro</b><small>colada na tela, sem ar</small></span><em>0,33 mm</em></li>
+        <li><i style="background:var(--tablet)"></i><span><b>Tablet</b><small>entre a borracha e o EVA, centrado pelos calços</small></span><em>6,9 mm</em></li>
+        <li><i style="background:var(--eva)"></i><span><b>EVA de pressão</b><small>15 + 20 mm colados na tampa, apertam para 32</small></span><em>32,3 mm</em></li>
+        <li><i style="background:var(--aco)"></i><span><b>Tampa de trás</b><small>abre com chave; o EVA sai junto</small></span><em>1,5 mm</em></li>
+      </ol>
+      <p class="intro">Somando: 2 + 2 + 0,33 + 6,9 + 32,3 + 1,5 = 45 mm. O cabo corre na folga de 20 mm em volta do tablet, atrás dos calços. Na <a href="https://claude.ai/artifact/MTPZKuSFTyFZoNcZoWPR3J" target="_blank" rel="noopener">maquete 3D</a> dá para separar as camadas e ver por todos os lados.</p>
     </div>
 
     <div class="bloco">

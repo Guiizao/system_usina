@@ -1,0 +1,833 @@
+<title>Maquete 3D do Totem</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans+Condensed:wght@500;600;700&display=swap">
+<style>
+  /* Bancada de oficina: a maquete ocupa o centro, o painel de controles fica do lado (embaixo no celular).
+     Cores das peças iguais às do projeto de oficina: aço cinza, cota azul, cabo vermelho, EVA cor de espuma. */
+  :root {
+    --fundo: #eef0ec; --folha: #ffffff; --folha-2: #f4f6f2; --tinta: #1d2320; --tinta-2: #56605a; --linha: #d3d9d3;
+    --cota: #2c6a88; --cota-fundo: #e1edf3; --cabo: #b8402c; --eva: #e2b45e; --aco: #aeb6ba; --borracha: #2c312f;
+    --pelicula: #9fd3ea; --tablet: #22272a; --sel: #e0a100;
+    --palco: #e6eae5; --palco-chao: #cfd5cd; --grade-1: #b6beb6; --grade-2: #c8cfc7;
+    --fonte: "Atkinson Hyperlegible", "Segoe UI", Arial, sans-serif;
+    --titulo: "IBM Plex Sans Condensed", "Arial Narrow", Arial, sans-serif;
+    --mono: "IBM Plex Mono", Consolas, "Courier New", monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --fundo: #121614; --folha: #1b201d; --folha-2: #222824; --tinta: #e7ebe8; --tinta-2: #a5afa9; --linha: #343c37;
+      --cota: #7db8d4; --cota-fundo: #1d2c34; --cabo: #e5826c; --eva: #d6a650; --aco: #8d979c; --borracha: #6c7470;
+      --pelicula: #6fb4d1; --tablet: #0d1011; --sel: #f2b52b;
+      --palco: #161b18; --palco-chao: #222925; --grade-1: #36403a; --grade-2: #2b332e; color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --fundo: #121614; --folha: #1b201d; --folha-2: #222824; --tinta: #e7ebe8; --tinta-2: #a5afa9; --linha: #343c37;
+    --cota: #7db8d4; --cota-fundo: #1d2c34; --cabo: #e5826c; --eva: #d6a650; --aco: #8d979c; --borracha: #6c7470;
+    --pelicula: #6fb4d1; --tablet: #0d1011; --sel: #f2b52b;
+    --palco: #161b18; --palco-chao: #222925; --grade-1: #36403a; --grade-2: #2b332e; color-scheme: dark;
+  }
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  body { margin: 0; background: var(--fundo); color: var(--tinta); font-family: var(--fonte); font-size: 16px; line-height: 1.55; padding-inline: 16px; padding-block: 0 56px; }
+  .pagina { max-width: 1240px; margin: 0 auto; display: grid; gap: 30px; }
+  header.capa { padding-block: 26px 0; display: grid; gap: 6px; }
+  .etiqueta { font-family: var(--titulo); font-weight: 600; font-size: 13px; letter-spacing: .12em; text-transform: uppercase; color: var(--tinta-2); }
+  h1 { font-family: var(--titulo); font-weight: 700; font-size: clamp(30px, 5vw, 46px); line-height: 1.02; margin: 0; text-wrap: balance; }
+  h2 { font-family: var(--titulo); font-weight: 700; font-size: 25px; margin: 0; line-height: 1.1; text-wrap: balance; }
+  h3 { font-family: var(--titulo); font-weight: 600; font-size: 18px; margin: 0; }
+  p { margin: 0; max-width: 68ch; }
+  .intro { color: var(--tinta-2); }
+  section { display: grid; gap: 14px; }
+  /* filho de grid encolhe: a tabela larga rola dentro do quadro dela, não alarga a página */
+  .pagina > *, section > * { min-width: 0; }
+  button { font: inherit; color: inherit; cursor: pointer; }
+  button:focus-visible, input:focus-visible, summary:focus-visible, a:focus-visible { outline: 3px solid var(--cota); outline-offset: 2px; }
+
+  /* ---------- estúdio: maquete + painel ---------- */
+  .estudio { display: grid; grid-template-columns: minmax(0, 1fr) 310px; gap: 14px; align-items: start; }
+  .palco { position: relative; border: 1px solid var(--linha); border-radius: 8px; overflow: hidden; background: var(--palco); height: min(74vh, 680px); min-height: 420px; }
+  .palco canvas { display: block; width: 100%; height: 100%; touch-action: none; }
+  .rotulos { position: absolute; inset: 0; pointer-events: none; }
+  .rotulo { position: absolute; left: 0; top: 0; display: flex; align-items: center; gap: 6px; transform: translate(-5px, -50%); white-space: nowrap; font-family: var(--titulo); font-weight: 600; font-size: 13px; }
+  .rotulo i { width: 10px; height: 10px; border-radius: 50%; background: var(--cota); border: 2px solid var(--folha); flex: none; }
+  .rotulo span { background: var(--folha); border: 1px solid var(--linha); border-radius: 5px; padding: 2px 7px; color: var(--tinta); box-shadow: 0 1px 4px rgba(0, 0, 0, .12); }
+  .rotulo.esq { flex-direction: row-reverse; }
+  .rotulo.forte span { background: var(--cota); border-color: var(--cota); color: var(--folha); }
+  .dica { position: absolute; left: 12px; bottom: 12px; right: 12px; margin: 0; max-width: none; font-size: 13px; color: var(--tinta-2); pointer-events: none; text-shadow: 0 0 6px var(--palco); }
+  .aviso-3d { position: absolute; inset: 0; display: grid; place-items: center; padding: 24px; text-align: center; color: var(--tinta-2); font-family: var(--titulo); font-size: 18px; }
+  .painel { background: var(--folha); border: 1px solid var(--linha); border-radius: 8px; padding: 14px; display: grid; gap: 14px; min-width: 0; }
+  .ctl { display: grid; gap: 7px; }
+  .ctl > .rot { font-family: var(--titulo); font-weight: 600; font-size: 12px; letter-spacing: .1em; text-transform: uppercase; color: var(--tinta-2); display: flex; justify-content: space-between; gap: 8px; }
+  .ctl output { font-family: var(--mono); letter-spacing: 0; text-transform: none; color: var(--tinta); }
+  .seg { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; border: 1px solid var(--linha); border-radius: 6px; overflow: hidden; }
+  .seg button { border: 0; border-left: 1px solid var(--linha); background: var(--folha-2); padding: 9px 6px; font-family: var(--titulo); font-weight: 600; font-size: 15px; min-height: 42px; }
+  .seg button:first-child { border-left: 0; }
+  .seg button[aria-pressed="true"] { background: var(--cota); color: var(--folha); }
+  .botoes { display: flex; flex-wrap: wrap; gap: 6px; }
+  .botoes button { border: 1px solid var(--linha); background: var(--folha-2); border-radius: 6px; padding: 8px 11px; font-family: var(--titulo); font-weight: 600; font-size: 14px; min-height: 40px; }
+  .botoes button[aria-pressed="true"] { border-color: var(--cota); background: var(--cota-fundo); }
+  .botoes button:hover, .seg button:hover { border-color: var(--cota); }
+  input[type="range"] { width: 100%; accent-color: var(--cota); min-height: 28px; }
+  .chk { display: flex; align-items: center; gap: 9px; font-family: var(--titulo); font-weight: 600; font-size: 15px; cursor: pointer; }
+  .chk input { width: 20px; height: 20px; accent-color: var(--cota); }
+  .info { border-top: 1px solid var(--linha); padding-top: 12px; display: grid; gap: 8px; }
+  .info h3 { font-size: 19px; }
+  .info dl { margin: 0; display: grid; grid-template-columns: auto 1fr; gap: 3px 10px; font-size: 14px; }
+  .info dt { color: var(--tinta-2); font-family: var(--titulo); font-weight: 600; }
+  .info dd { margin: 0; font-family: var(--mono); font-size: 13.5px; }
+  .info p { font-size: 14.5px; }
+  .info .vazio { color: var(--tinta-2); font-size: 14.5px; }
+
+  /* ---------- camadas ---------- */
+  .regua { background: var(--folha); border: 1px solid var(--linha); border-radius: 8px; padding: 16px; display: grid; gap: 12px; min-width: 0; }
+  .regua-lados { display: flex; justify-content: space-between; font-family: var(--titulo); font-weight: 600; font-size: 13px; letter-spacing: .08em; text-transform: uppercase; color: var(--tinta-2); }
+  .barra { display: flex; height: 54px; border-radius: 6px; overflow: hidden; border: 1px solid var(--linha); }
+  .barra button { border: 0; padding: 0; min-width: 6px; position: relative; }
+  .barra button[aria-pressed="true"] { outline: 3px solid var(--sel); outline-offset: -3px; }
+  .cotas { display: flex; font-family: var(--mono); font-size: 12px; color: var(--cota); }
+  .lista-camadas { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 230px), 1fr)); gap: 8px; }
+  .lista-camadas button { display: grid; grid-template-columns: 16px 1fr auto; align-items: center; gap: 10px; text-align: left; border: 1px solid var(--linha); background: var(--folha-2); border-radius: 6px; padding: 9px 11px; }
+  .lista-camadas button[aria-pressed="true"] { border-color: var(--sel); }
+  .lista-camadas i { width: 16px; height: 16px; border-radius: 3px; border: 1px solid var(--linha); }
+  .lista-camadas b { font-family: var(--titulo); font-size: 15px; display: block; }
+  .lista-camadas small { color: var(--tinta-2); font-size: 13px; display: block; line-height: 1.35; }
+  .lista-camadas em { font-style: normal; font-family: var(--mono); font-size: 13px; color: var(--cota); }
+
+  /* ---------- modelos ---------- */
+  .tres { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr)); gap: 12px; }
+  .cartao { background: var(--folha); border: 1px solid var(--linha); border-radius: 8px; padding: 16px; display: grid; gap: 10px; align-content: start; }
+  .cartao .grande { font-family: var(--mono); font-size: 22px; font-weight: 600; }
+  .cartao ul { margin: 0; padding-left: 18px; display: grid; gap: 4px; font-size: 14.5px; }
+  .cartao ol { margin: 0; padding-left: 20px; display: grid; gap: 5px; font-size: 14.5px; }
+  .cartao button { justify-self: start; border: 1px solid var(--cota); background: var(--cota-fundo); color: var(--tinta); border-radius: 6px; padding: 8px 14px; font-family: var(--titulo); font-weight: 600; font-size: 15px; min-height: 40px; }
+  .num { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+  details { background: var(--folha); border: 1px solid var(--linha); border-radius: 8px; }
+  summary { padding: 13px 16px; font-family: var(--titulo); font-weight: 700; font-size: 17px; cursor: pointer; }
+  .tabela { overflow-x: auto; border-top: 1px solid var(--linha); }
+  table { border-collapse: collapse; width: 100%; min-width: 560px; font-size: 14.5px; }
+  th, td { text-align: left; padding: 8px 14px; border-bottom: 1px solid var(--linha); vertical-align: top; }
+  th { font-family: var(--titulo); font-weight: 600; font-size: 12.5px; letter-spacing: .06em; text-transform: uppercase; color: var(--tinta-2); background: var(--folha-2); }
+  td.m { font-family: var(--mono); font-size: 13.5px; white-space: nowrap; }
+  .rodape { font-size: 14px; color: var(--tinta-2); }
+  .rodape a { color: var(--cota); }
+
+  @media (max-width: 860px) {
+    .estudio { grid-template-columns: minmax(0, 1fr); }
+    .palco { height: min(62vh, 520px); min-height: 340px; }
+  }
+  @media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; } }
+</style>
+
+<div class="pagina">
+  <header class="capa">
+    <span class="etiqueta">Ubirálcool · Pranchetas digitais · Totem do Galaxy Tab A11+</span>
+    <h1>Maquete 3D do totem</h1>
+    <p class="intro">Os três modelos montados em tamanho real, em milímetros: de pé, de mesa e na parede. A caixa é a mesma nos três. Gire, aproxime, ligue o raio-X para ver por dentro, separe as camadas e abra a tampa de trás, como na manutenção. Cada quadrado do chão tem 10 cm.</p>
+  </header>
+
+  <section class="estudio" aria-label="Maquete">
+    <div class="palco" id="palco" role="img" aria-label="Maquete 3D do totem. Arraste para girar, use a roda ou a pinça para aproximar.">
+      <div class="rotulos" id="rotulos" aria-hidden="true"></div>
+      <p class="dica" id="dica">Arraste para girar · roda ou pinça para aproximar · toque numa peça</p>
+      <div class="aviso-3d" id="carregando">Montando a maquete…</div>
+    </div>
+    <aside class="painel" aria-label="Controles da maquete">
+      <div class="ctl">
+        <span class="rot">Modelo</span>
+        <div class="seg" role="group" aria-label="Modelo">
+          <button type="button" id="m-pe" data-modelo="pe" aria-pressed="true">De pé</button>
+          <button type="button" id="m-mesa" data-modelo="mesa" aria-pressed="false">De mesa</button>
+          <button type="button" id="m-parede" data-modelo="parede" aria-pressed="false">Na parede</button>
+        </div>
+      </div>
+      <div class="ctl">
+        <span class="rot">Vista</span>
+        <div class="seg" role="group" aria-label="Vista">
+          <button type="button" id="v-normal" aria-pressed="true">Normal</button>
+          <button type="button" id="v-raiox" aria-pressed="false">Raio-X</button>
+        </div>
+      </div>
+      <div class="ctl">
+        <label class="rot" for="explodir">Separar as camadas <output id="explodir-v" for="explodir">0%</output></label>
+        <input type="range" id="explodir" min="0" max="100" value="0">
+      </div>
+      <div class="ctl">
+        <label class="chk" for="cortar"><input type="checkbox" id="cortar"> Cortar a maquete ao meio</label>
+        <input type="range" id="corte" min="-160" max="160" value="0" disabled aria-label="Onde cortar, da esquerda para a direita">
+      </div>
+      <div class="ctl">
+        <span class="rot">Abrir</span>
+        <div class="botoes">
+          <button type="button" id="abrir-tampa" aria-pressed="false">Abrir a tampa de trás</button>
+          <button type="button" id="abrir-caixa" aria-pressed="false" hidden>Abrir a caixa (porta)</button>
+        </div>
+      </div>
+      <div class="ctl">
+        <span class="rot">Câmera</span>
+        <div class="botoes">
+          <button type="button" data-cam="tudo">Tudo</button>
+          <button type="button" data-cam="caixa">Caixa</button>
+          <button type="button" data-cam="frente">Frente</button>
+          <button type="button" data-cam="tras">Trás</button>
+          <button type="button" data-cam="lado">Lado do cabo</button>
+        </div>
+      </div>
+      <label class="chk" for="medidas"><input type="checkbox" id="medidas" checked> Mostrar as medidas</label>
+      <div class="info" id="info" aria-live="polite"><p class="vazio">Toque numa peça da maquete, ou numa camada logo abaixo, para ver o nome, a medida e para que ela serve.</p></div>
+    </aside>
+  </section>
+
+  <section aria-labelledby="t-camadas">
+    <h2 id="t-camadas">As camadas, da frente para trás</h2>
+    <p class="intro">A caixa tem 45 mm de fundo. A régua abaixo está na proporção certa: quase todo o fundo é EVA, que empurra o tablet de leve contra a borracha da moldura. Toque numa camada para ver ela na maquete.</p>
+    <div class="regua">
+      <div class="regua-lados"><span>Frente (quem anota)</span><span>Trás (tampa)</span></div>
+      <div class="barra" id="barra" role="group" aria-label="Camadas em proporção"></div>
+      <div class="cotas" id="cotas"></div>
+      <div class="lista-camadas" id="lista-camadas"></div>
+    </div>
+  </section>
+
+  <section aria-labelledby="t-modelos">
+    <h2 id="t-modelos">Os três modelos</h2>
+    <div class="tres">
+      <div class="cartao">
+        <h3>De pé</h3>
+        <span class="grande">1.290 mm</span>
+        <ul>
+          <li>Meio da tela a 1.290 mm do chão, inclinada 20°.</li>
+          <li>Coluna de metalon 100 × 50 com 1.180 mm; o cabo sobe por dentro.</li>
+          <li>Base 350 × 350 em chapa 1/4", com 4 parabolts no piso.</li>
+          <li>Tomada e fonte atrás da coluna, a 400 mm do chão.</li>
+          <li>Peso ≈ 15 kg.</li>
+        </ul>
+        <button type="button" data-ver="pe">Ver em 3D</button>
+      </div>
+      <div class="cartao">
+        <h3>De mesa</h3>
+        <span class="grande">220 mm</span>
+        <ul>
+          <li>Meio da tela 220 mm acima do tampo, inclinada 30°.</li>
+          <li>Pescoço de metalon 50 × 50 com 120 mm.</li>
+          <li>Base 200 × 140 parafusada na mesa; o cabo desce por um furo de 35 mm.</li>
+          <li>Tomada embaixo da mesa.</li>
+          <li>Peso ≈ 4,5 kg.</li>
+        </ul>
+        <button type="button" data-ver="mesa">Ver em 3D</button>
+      </div>
+      <div class="cartao">
+        <h3>Na parede</h3>
+        <span class="grande">1.300 mm</span>
+        <ul>
+          <li>Meio da tela a 1.300 mm do chão, reta.</li>
+          <li>A caixa abre como uma porta, em 2 dobradiças do lado do cabo.</li>
+          <li>Trava com parafuso de segurança por baixo.</li>
+          <li>Tomada uns 200 mm abaixo, com canaleta até a caixa.</li>
+          <li>Peso ≈ 4 kg.</li>
+        </ul>
+        <button type="button" data-ver="parede">Ver em 3D</button>
+      </div>
+    </div>
+  </section>
+
+  <section aria-labelledby="t-manut">
+    <h2 id="t-manut">Tirar o tablet pelas costas</h2>
+    <div class="tres">
+      <div class="cartao">
+        <h3>De pé e de mesa</h3>
+        <ol>
+          <li>Abra a tampa de trás com a chave. Segure o tablet com a outra mão: a caixa é inclinada.</li>
+          <li>Solte o plugue em L.</li>
+          <li>Puxe o tablet para trás. O suporte não sai do lugar.</li>
+        </ol>
+        <button type="button" data-mostrar="pe">Mostrar na maquete</button>
+      </div>
+      <div class="cartao">
+        <h3>Na parede</h3>
+        <ol>
+          <li>Tire o parafuso de segurança de baixo (chave Torx com pino).</li>
+          <li>Gire a caixa nas dobradiças, como uma porta.</li>
+          <li>Abra a tampa de trás com a chave e tire o tablet. O cabo continua ligado, por isso a volta de sobra.</li>
+        </ol>
+        <button type="button" data-mostrar="parede">Mostrar na maquete</button>
+      </div>
+      <div class="cartao">
+        <h3>Na volta</h3>
+        <ol>
+          <li>Ponha o tablet entre os calços, com a tela para a frente e a porta USB-C no lado do cabo.</li>
+          <li>Ligue o plugue e confira se a volta de sobra ficou dentro da caixa.</li>
+          <li>Feche a tampa, passe a chave e teste o toque nos quatro cantos.</li>
+        </ol>
+      </div>
+    </div>
+  </section>
+
+  <section aria-labelledby="t-pecas">
+    <h2 id="t-pecas">Peças</h2>
+    <details open>
+      <summary>Caixa (igual nos três)</summary>
+      <div class="tabela"><table>
+        <thead><tr><th>Peça</th><th>Medida (mm)</th><th>Qtd</th><th>Observação</th></tr></thead>
+        <tbody>
+          <tr><td>Frente (moldura), chapa 2,00</td><td class="m">301 × 212</td><td class="m">1</td><td>Janela 241 × 152 no centro, 30 de borda em volta.</td></tr>
+          <tr><td>Topo e base, chapa 2,00</td><td class="m">301 × 41,5</td><td class="m">2</td><td>Ventilação, porcas-rebite e passa-fios.</td></tr>
+          <tr><td>Laterais, chapa 2,00</td><td class="m">208 × 41,5</td><td class="m">2</td><td>6 rasgos de som em cada.</td></tr>
+          <tr><td>Tampa de trás, chapa 1,50</td><td class="m">301 × 212</td><td class="m">1</td><td>Aba de 10 para dentro, dobradiça piano e fechadura com chave.</td></tr>
+          <tr><td>Borracha EPDM 10 × 3</td><td class="m">≈ 900</td><td class="m">1</td><td>Em volta da janela, por dentro.</td></tr>
+          <tr><td>EVA de pressão 15 + 20 mm</td><td class="m">200 × 130</td><td class="m">1 + 1</td><td>Colado na tampa de trás.</td></tr>
+          <tr><td>Calços de EVA 20 mm</td><td class="m">40 × 20 × 10</td><td class="m">7</td><td>Em volta do tablet.</td></tr>
+          <tr><td>Cabo USB-C com plugue em L</td><td class="m">2 m</td><td class="m">1</td><td>Volta de sobra, abraçadeira P e passa-fio Ø25.</td></tr>
+          <tr><td>Película de vidro 9H</td><td class="m">11"</td><td class="m">1</td><td>Colada na tela, sem bolha.</td></tr>
+        </tbody>
+      </table></div>
+    </details>
+    <details>
+      <summary>De pé</summary>
+      <div class="tabela"><table>
+        <thead><tr><th>Peça</th><th>Medida (mm)</th><th>Qtd</th><th>Observação</th></tr></thead>
+        <tbody>
+          <tr><td>Base, chapa 1/4"</td><td class="m">350 × 350</td><td class="m">1</td><td>4 furos Ø12 para parabolt 3/8".</td></tr>
+          <tr><td>Coluna, metalon 100 × 50 × 2,00</td><td class="m">1.180</td><td class="m">1</td><td>Topo cortado a 20°; passa-fio a 400 do chão.</td></tr>
+          <tr><td>Mãos-francesas, chapa 1/4"</td><td class="m">100 × 100</td><td class="m">4</td><td>Uma de cada lado da coluna.</td></tr>
+          <tr><td>Cabeçote, chapa 3/16"</td><td class="m">220 × 50</td><td class="m">1</td><td>4 parafusos M6 na base da caixa.</td></tr>
+          <tr><td>Viseira, chapa 2,00</td><td class="m">301 × 105</td><td class="m">1</td><td>Contra respingo e reflexo.</td></tr>
+          <tr><td>Tomada 4×2 de sobrepor + fonte USB-C 25 W</td><td class="m">—</td><td class="m">1</td><td>Atrás da coluna.</td></tr>
+        </tbody>
+      </table></div>
+    </details>
+    <details>
+      <summary>De mesa</summary>
+      <div class="tabela"><table>
+        <thead><tr><th>Peça</th><th>Medida (mm)</th><th>Qtd</th><th>Observação</th></tr></thead>
+        <tbody>
+          <tr><td>Base, chapa 3/16"</td><td class="m">200 × 140</td><td class="m">1</td><td>4 parafusos no tampo e furo Ø25 no meio.</td></tr>
+          <tr><td>Pescoço, metalon 50 × 50 × 1,50</td><td class="m">120</td><td class="m">1</td><td>Topo cortado a 30°.</td></tr>
+          <tr><td>Cabeçote, chapa 3/16"</td><td class="m">220 × 50</td><td class="m">1</td><td>Igual ao do pé.</td></tr>
+          <tr><td>Furo na mesa</td><td class="m">Ø35</td><td class="m">1</td><td>Para o cabo descer até a tomada.</td></tr>
+        </tbody>
+      </table></div>
+    </details>
+    <details>
+      <summary>Na parede</summary>
+      <div class="tabela"><table>
+        <thead><tr><th>Peça</th><th>Medida (mm)</th><th>Qtd</th><th>Observação</th></tr></thead>
+        <tbody>
+          <tr><td>Chapa da parede, chapa 2,00</td><td class="m">301 × 212</td><td class="m">1</td><td>4 buchas S8.</td></tr>
+          <tr><td>Dobradiças de aço</td><td class="m">50</td><td class="m">2</td><td>No lado do cabo.</td></tr>
+          <tr><td>Parafuso de segurança Torx com pino</td><td class="m">M5</td><td class="m">1</td><td>Trava por baixo.</td></tr>
+          <tr><td>Canaleta PVC 20 × 10</td><td class="m">≈ 200</td><td class="m">1</td><td>Da tomada até o canto da caixa.</td></tr>
+        </tbody>
+      </table></div>
+    </details>
+    <p class="rodape">A furação completa, a planificação da caixa e a lista para o serralheiro estão no <a href="https://claude.ai/artifact/Ac81P151rT3ShaAgfr7xNc" target="_blank" rel="noopener">projeto de oficina do totem</a>. Os tamanhos do tablet vêm da Samsung (257,1 × 168,7 × 6,9 mm). Confira com o tablet na mão antes de cortar.</p>
+  </section>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+<script>
+(() => {
+  const palco = document.getElementById('palco');
+  const carregando = document.getElementById('carregando');
+  if (!window.THREE || !THREE.OrbitControls) { carregando.textContent = 'Não consegui carregar o 3D neste aparelho. O resto da página continua valendo.'; return; }
+  const T = THREE;
+  const reduz = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const graus = (g) => g * Math.PI / 180;
+
+  /* ---------- o que é cada peça ---------- */
+  const PARTES = {
+    moldura: { nome: 'Moldura (frente)', medida: '301 × 212, chapa 2 mm', material: 'Aço pintado', papel: 'Fica fixa. A janela de 241 × 152 está no centro, com 30 mm de borda dos quatro lados, e cobre 8 mm da borda preta do tablet.' },
+    paredes: { nome: 'Paredes da caixa', medida: '41,5 de fundo, chapa 2 mm', material: 'Aço pintado', papel: 'Têm os furos de ventilação, os rasgos de som, as porcas-rebite e os passa-fios do cabo.' },
+    porta: { nome: 'Tampa de trás', medida: '301 × 212, chapa 1,5 mm, aba de 10 para dentro', material: 'Aço pintado', papel: 'Abre com chave para tirar o tablet. As placas de EVA ficam coladas nela e saem junto.' },
+    dobradica: { nome: 'Dobradiça piano da tampa', medida: '180 mm', material: 'Aço, rebitada', papel: 'Fica no lado sem cabo. A tampa abre como um livro.' },
+    fechadura: { nome: 'Fechadura de came', medida: 'Ø19, 1/4 de volta', material: 'Com chave, o mesmo segredo em todos os totens', papel: 'O came prende numa lingueta soldada por dentro do lado do cabo.' },
+    lingueta: { nome: 'Lingueta da fechadura', medida: '20 × 15', material: 'Aço soldado por dentro', papel: 'É onde o came da fechadura da tampa prende.' },
+    tablet: { nome: 'Galaxy Tab A11+', medida: '257,1 × 168,7 × 6,9 mm', material: 'Tablet', papel: 'Fica apertado entre a borracha da moldura (frente) e o EVA da tampa (trás), centrado pelos calços.' },
+    tela: { nome: 'Tela do tablet', medida: 'Área acesa 236,9 × 148,1 (11")', material: 'Com a película colada', papel: 'A moldura não encosta nela: aperto na beira da tela faz o tablet tocar sozinho.' },
+    pelicula: { nome: 'Película de vidro', medida: '0,33 mm, 9H', material: 'Vidro temperado colado', papel: 'Colada sem ar, o toque funciona normal. Trincou, troca por uns R$ 30. Vidro solto por cima não serve: o toque falha.' },
+    borracha: { nome: 'Borracha EPDM', medida: 'Perfil 10 × 3 (aperta para 2), ≈ 900 de comprimento', material: 'Autoadesiva', papel: 'Colada por dentro da moldura, só em cima da borda preta. Segura o tablet sem folga e veda pó e respingo.' },
+    eva: { nome: 'Placas de pressão de EVA', medida: '200 × 130, 15 + 20 mm (apertam para 32)', material: 'EVA colado na tampa', papel: 'Com a tampa fechada, empurram o tablet de leve contra a borracha da frente.' },
+    calco: { nome: 'Calços de EVA', medida: '40 × 20, 10 de fundo, 7 peças', material: 'EVA 20 mm colado nas paredes', papel: 'Deixam o tablet no centro e seguram ele quando a tampa abre.' },
+    plugue: { nome: 'Plugue USB-C em L', medida: '90°', material: 'Do cabo', papel: 'O plugue reto não cabe: bate na parede da caixa. Em L, o cabo já sai para trás.' },
+    cabo: { nome: 'Cabo USB-C', medida: '2 m (na mesa, 1,5 m)', material: 'Reforçado', papel: 'Faz uma volta de sobra dentro da caixa, passa pela abraçadeira P e sai pelo passa-fio até a tomada. A fonte fica fora da caixa.' },
+    passafio: { nome: 'Passa-fio de borracha', medida: 'Ø25 com membrana', material: 'Borracha', papel: 'O do meio da base é do pé e da mesa. O do canto, do lado do cabo, é da parede. O que não for usado leva tampão.' },
+    abracadeira: { nome: 'Abraçadeira P', medida: 'Ø8', material: 'Aço com borracha', papel: 'Segura o cabo perto do passa-fio: um puxão não chega no plugue.' },
+    rasgos: { nome: 'Rasgos de som', medida: '6 por lado, 15 × 3', material: 'Cortados nas laterais', papel: 'Deixam o apito do lembrete sair da caixa de aço.' },
+    viseira: { nome: 'Viseira', medida: '301 × 105, chapa 2 mm', material: 'Aço pintado', papel: 'Protege de respingo e do reflexo da lâmpada. Presa nas porcas-rebite do topo.' },
+    base_pe: { nome: 'Base do totem de pé', medida: '350 × 350, chapa 1/4"', material: 'Aço', papel: 'Presa no piso com 4 parabolts de 3/8".' },
+    coluna: { nome: 'Coluna', medida: 'Metalon 100 × 50 × 2, 1.180 mm', material: 'Aço', papel: 'O cabo sobe por dentro dela, da tomada até a caixa.' },
+    maofrancesa: { nome: 'Mão-francesa', medida: 'Chapa 1/4", 100 × 100', material: 'Aço soldado', papel: 'Firma a coluna na base. São 4, uma de cada lado.' },
+    cabecote: { nome: 'Cabeçote', medida: 'Chapa 3/16", 220 × 50', material: 'Aço soldado', papel: 'Inclinado 20° no pé e 30° na mesa. Prende na base da caixa com 4 parafusos M6.' },
+    tomada: { nome: 'Tomada e fonte', medida: 'Caixa 4×2 de sobrepor, carregador USB-C 25 W', material: 'Elétrica', papel: 'A fonte fica aqui, fora da caixa, para não esquentar o tablet.' },
+    mesa: { nome: 'Mesa', medida: 'Tampo a 750 do chão', material: '—', papel: 'Leva um furo de 35 mm embaixo da base para o cabo descer.' },
+    base_mesa: { nome: 'Base do totem de mesa', medida: '200 × 140, chapa 3/16"', material: 'Aço', papel: 'Parafusada no tampo com 4 parafusos.' },
+    pescoco: { nome: 'Pescoço', medida: 'Metalon 50 × 50 × 1,5, 120 mm', material: 'Aço', papel: 'O cabo desce por dentro dele.' },
+    parede: { nome: 'Parede', medida: '—', material: 'Alvenaria ou drywall', papel: 'Em drywall, use bucha própria.' },
+    chapa_parede: { nome: 'Chapa da parede', medida: '301 × 212, chapa 2 mm', material: 'Aço', papel: 'Presa com 4 buchas S8. A caixa fica pendurada nela pelas dobradiças.' },
+    dobradicas_parede: { nome: 'Dobradiças da parede', medida: '2 de 50 mm', material: 'Aço', papel: 'Ficam no lado do cabo. A caixa abre como uma porta e o cabo quase não mexe.' },
+    trava: { nome: 'Trava', medida: 'Parafuso de segurança Torx com pino M5', material: 'Aço', papel: 'Por baixo, numa orelha da chapa da parede. Sem a chave Torx, ninguém abre a caixa.' },
+    canaleta: { nome: 'Canaleta', medida: 'PVC 20 × 10', material: 'Com adesivo', papel: 'Leva o cabo da tomada até o canto da caixa.' },
+  };
+
+  /* ---------- cena ---------- */
+  const renderer = new T.WebGLRenderer({ antialias: true });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+  renderer.localClippingEnabled = true;
+  palco.insertBefore(renderer.domElement, palco.firstChild);
+  renderer.domElement.setAttribute('aria-hidden', 'true');
+  const cena = new T.Scene();
+  const camera = new T.PerspectiveCamera(35, 1, 5, 40000);
+  camera.position.set(2000, 1500, 2400);
+  const controles = new T.OrbitControls(camera, renderer.domElement);
+  controles.enableDamping = true; controles.dampingFactor = 0.08;
+  controles.minDistance = 120; controles.maxDistance = 7000; controles.maxPolarAngle = graus(175);
+  cena.add(new T.HemisphereLight(0xffffff, 0x8a8f86, 0.78));
+  const sol = new T.DirectionalLight(0xffffff, 0.72); sol.position.set(900, 2200, 1500); cena.add(sol);
+  const contra = new T.DirectionalLight(0xffffff, 0.32); contra.position.set(-1500, 900, -1600); cena.add(contra);
+
+  const mats = [];
+  const mat = (cor, o) => { const m = new T.MeshStandardMaterial(Object.assign({ color: cor, roughness: 0.55, metalness: 0.15, side: T.DoubleSide }, o || {})); mats.push(m); return m; };
+  const M = {
+    aco: mat(0xb3bbbf, { metalness: 0.35, roughness: 0.5 }),
+    tampa: mat(0x9ea8ad, { metalness: 0.35, roughness: 0.5 }),
+    suporte: mat(0x7f898e, { metalness: 0.4, roughness: 0.45 }),
+    tablet: mat(0x22272a, { roughness: 0.35 }),
+    borracha: mat(0x2c312f, { roughness: 0.9 }),
+    eva: mat(0xe2b45e, { roughness: 0.95 }),
+    cabo: mat(0xc8402c, { roughness: 0.5, emissive: 0x3a0c06 }),
+    pelicula: mat(0x9fd3ea, { transparent: true, opacity: 0.3, roughness: 0.1, depthWrite: false }),
+    metal: mat(0x5e676c, { metalness: 0.7, roughness: 0.35 }),
+    madeira: mat(0xb58a55, { roughness: 0.8 }),
+    parede: mat(0xd3cdbf, { roughness: 0.95 }),
+    branco: mat(0xf1f0ea, { roughness: 0.7 }),
+    furo: mat(0x161a18, { roughness: 1 }),
+  };
+  const CASCA = [M.aco, M.tampa, M.suporte, M.madeira, M.parede, M.branco];
+  const telaMat = new T.MeshBasicMaterial({ map: texturaTela(), side: T.DoubleSide }); mats.push(telaMat);
+  const chaoMat = new T.MeshStandardMaterial({ color: 0xcfd5cd, roughness: 1 });
+  const chao = new T.Mesh(new T.CircleGeometry(2600, 64), chaoMat); chao.rotation.x = -Math.PI / 2; chao.position.y = -0.5; cena.add(chao);
+  let grade = null;
+
+  function texturaTela() {
+    const c = document.createElement('canvas'); c.width = 1024; c.height = 640;
+    const x = c.getContext('2d');
+    const caixa = (px, py, w, h, r) => { x.beginPath(); if (x.roundRect) x.roundRect(px, py, w, h, r); else x.rect(px, py, w, h); };
+    x.fillStyle = '#dfe3df'; x.fillRect(0, 0, 1024, 640);
+    x.fillStyle = '#2b302d'; x.fillRect(0, 0, 1024, 84);
+    x.fillStyle = '#ffffff'; x.font = '600 32px Arial'; x.fillText('Controle Diário - Nova Destilaria', 26, 54);
+    x.fillStyle = '#ffffff'; x.font = '600 34px Arial'; x.fillText('13:20', 880, 54);
+    const quadros = [['Coluna Hidro', '78'], ['Coluna B', '92'], ['Coluna P', ''], ['Vapor', ''], ['LT/H', '2.140'], ['INPM', '']];
+    quadros.forEach(([t, v], i) => {
+      const px = 26 + (i % 3) * 330, py = 108 + Math.floor(i / 3) * 210;
+      caixa(px, py, 312, 190, 14); x.fillStyle = '#ffffff'; x.fill();
+      x.lineWidth = 3; x.strokeStyle = v ? '#1e7a3e' : '#9aa39d'; if (!v) x.setLineDash([10, 7]); x.stroke(); x.setLineDash([]);
+      x.fillStyle = '#3a403c'; x.font = '600 26px Arial'; x.fillText(t, px + 18, py + 40);
+      if (v) { x.fillStyle = '#1d2320'; x.font = '700 64px Arial'; x.fillText(v, px + 18, py + 130); }
+      else { x.fillStyle = '#7a827d'; x.font = '24px Arial'; x.fillText('Toque para anotar', px + 18, py + 168); }
+    });
+    caixa(26, 548, 972, 70, 12); x.fillStyle = '#1e7a3e'; x.fill();
+    x.fillStyle = '#ffffff'; x.font = '600 30px Arial'; x.textAlign = 'center'; x.fillText('Salvar leitura das 13:00', 512, 594);
+    const t = new T.CanvasTexture(c); t.anisotropy = 4; return t;
+  }
+
+  const bloco = (pai, w, h, d, px, py, pz, m, parte) => { const g = new T.Mesh(new T.BoxGeometry(w, h, d), m); g.position.set(px, py, pz); if (parte) g.userData.parte = parte; pai.add(g); return g; };
+  const cilindro = (pai, r, h, px, py, pz, m, parte, eixo) => {
+    const g = new T.Mesh(new T.CylinderGeometry(r, r, h, 20), m); g.position.set(px, py, pz);
+    if (eixo === 'z') g.rotation.x = Math.PI / 2; if (eixo === 'x') g.rotation.z = Math.PI / 2;
+    if (parte) g.userData.parte = parte; pai.add(g); return g;
+  };
+  const tubo = (pai, pontos, r, m, parte) => {
+    const curva = new T.CatmullRomCurve3(pontos.map((p) => new T.Vector3(p[0], p[1], p[2])));
+    const g = new T.Mesh(new T.TubeGeometry(curva, Math.max(40, pontos.length * 16), r, 10, false), m);
+    g.userData.parte = parte; pai.add(g); return g;
+  };
+
+  /* ---------- a caixa (igual nos três) ----------
+     Medidas da caixa, centrada na origem: x = largura (+x é o lado do cabo, olhando de frente),
+     y = altura, z = fundo (frente em z = +22,5, trás em z = -22,5). */
+  function construirCaixa(saida) {
+    const caixa = new T.Group();
+    const frente = new T.Group(), borr = new T.Group(), pel = new T.Group(), tab = new T.Group(), dentro = new T.Group();
+    caixa.add(frente, borr, pel, tab, dentro);
+    // moldura: 4 faixas em volta da janela de 241 × 152
+    bloco(frente, 301, 30, 2, 0, 91, 21.5, M.aco, 'moldura'); bloco(frente, 301, 30, 2, 0, -91, 21.5, M.aco, 'moldura');
+    bloco(frente, 30, 152, 2, -135.5, 0, 21.5, M.aco, 'moldura'); bloco(frente, 30, 152, 2, 135.5, 0, 21.5, M.aco, 'moldura');
+    // paredes (41,5 de fundo, de z -21 a 20,5)
+    bloco(caixa, 301, 2, 41.5, 0, 105, -0.25, M.aco, 'paredes'); bloco(caixa, 301, 2, 41.5, 0, -105, -0.25, M.aco, 'paredes');
+    bloco(caixa, 2, 208, 41.5, -149.5, 0, -0.25, M.aco, 'paredes'); bloco(caixa, 2, 208, 41.5, 149.5, 0, -0.25, M.aco, 'paredes');
+    for (const s of [-1, 1]) for (let k = 0; k < 6; k++) bloco(caixa, 0.8, 3, 15, s * 150.6, -30 + k * 12, 11, M.furo, 'rasgos');
+    for (let k = 0; k < 6; k++) cilindro(caixa, 3, 0.8, -40 + k * 16, 106.1, 1.5, M.furo, 'paredes');
+    // borracha EPDM (só na borda preta) e película
+    bloco(borr, 263, 10, 2, 0, 82, 19.5, M.borracha, 'borracha'); bloco(borr, 263, 10, 2, 0, -82, 19.5, M.borracha, 'borracha');
+    bloco(borr, 10, 154, 2, -126.5, 0, 19.5, M.borracha, 'borracha'); bloco(borr, 10, 154, 2, 126.5, 0, 19.5, M.borracha, 'borracha');
+    bloco(pel, 250, 162, 0.33, 0, 0, 18.34, M.pelicula, 'pelicula');
+    // tablet (z 11,27 a 18,17) e a tela acesa
+    bloco(tab, 257.1, 168.7, 6.9, 0, 0, 14.72, M.tablet, 'tablet');
+    const tela = new T.Mesh(new T.PlaneGeometry(236.9, 148.1), telaMat); tela.position.set(0, 0, 18.19); tela.userData.parte = 'tela'; tab.add(tela);
+    // calços de EVA 20 mm (10 de fundo)
+    for (const [px, py] of [[-60.5, 94.2], [60.5, 94.2], [-60.5, -94.2], [60.5, -94.2]]) bloco(dentro, 40, 19.65, 10, px, py, 13.5, M.eva, 'calco');
+    bloco(dentro, 19.95, 40, 10, -138.5, 0, 13.5, M.eva, 'calco');
+    bloco(dentro, 19.95, 32, 10, 138.5, 32, 13.5, M.eva, 'calco'); bloco(dentro, 19.95, 32, 10, 138.5, -32, 13.5, M.eva, 'calco');
+    // plugue em L e o cabo com a volta de sobra
+    bloco(dentro, 13, 10, 6, 135, 0, 14.7, M.cabo, 'plugue'); bloco(dentro, 8, 10, 12, 138, 0, 6, M.cabo, 'plugue');
+    const comeco = [[138, 0, 0.5], [140, -14, -6], [141, -55, -10], [140, -84, -10]];
+    const caminho = saida === 'canto'
+      ? comeco.concat([[132, -97, -4], [120, -91, -10], [126, -80, -8], [135, -90, -3], [130, -99, 1.5], [129.5, -108, 2.5], [129.5, -126, 2.5]])
+      : comeco.concat([[126, -97, -6], [110, -90, -12], [117, -78, -10], [130, -87, -6], [118, -97, -3], [80, -97, -1], [35, -97, 0.5], [9, -98, 2], [0, -104, 2.5], [0, -126, 2.5]]);
+    tubo(dentro, caminho, 2, M.cabo, 'cabo');
+    const pclip = new T.Mesh(new T.TorusGeometry(3.6, 1.1, 8, 18), M.metal);
+    if (saida === 'canto') { pclip.position.set(130, -96, 1); pclip.rotation.x = Math.PI / 2; } else { pclip.position.set(35, -97, 0.5); pclip.rotation.y = Math.PI / 2; }
+    pclip.userData.parte = 'abracadeira'; dentro.add(pclip);
+    for (const [px, usado] of [[0, saida !== 'canto'], [129.5, saida === 'canto']]) {
+      const pf = new T.Mesh(new T.TorusGeometry(12.5, 2.2, 8, 30), usado ? M.borracha : M.furo);
+      pf.rotation.x = Math.PI / 2; pf.position.set(px, -106, 2.5); pf.userData.parte = 'passafio'; caixa.add(pf);
+    }
+    for (const px of [-100, 100]) for (const pz of [12.5, -12.5]) cilindro(caixa, 4.5, 2, px, -106.5, pz, M.metal, 'paredes');
+    bloco(caixa, 5, 15, 20, 146, 0, -11, M.metal, 'lingueta');
+    cilindro(caixa, 2.6, 180, -150.5, 0, -22.5, M.metal, 'dobradica');
+    // tampa de trás: gira na dobradiça (x -150,5, z -22,5); as placas de EVA vão junto
+    const porta = new T.Group(); porta.position.set(-150.5, 0, -22.5); caixa.add(porta);
+    const px = (v) => v + 150.5, pz = (v) => v + 22.5;
+    bloco(porta, 301, 212, 1.5, px(0), 0, pz(-21.75), M.tampa, 'porta');
+    bloco(porta, 293, 1.5, 10, px(0), 101.5, pz(-16), M.tampa, 'porta'); bloco(porta, 293, 1.5, 10, px(0), -101.5, pz(-16), M.tampa, 'porta');
+    bloco(porta, 1.5, 200, 10, px(-146), 0, pz(-16), M.tampa, 'porta'); bloco(porta, 1.5, 200, 10, px(146), 0, pz(-16), M.tampa, 'porta');
+    cilindro(porta, 9.5, 8, px(130.5), 0, pz(-26.5), M.metal, 'fechadura', 'z');
+    const eva = new T.Group(); porta.add(eva);
+    bloco(eva, 200, 130, 18.45, px(0), 0, pz(-11.78), M.eva, 'eva');
+    bloco(eva, 200, 130, 13.8, px(0), 0, pz(4.37), M.eva, 'eva');
+    return { caixa, frente, borr, pel, tab, dentro, porta, eva, tela };
+  }
+  const viseira = (cx) => bloco(cx.caixa, 301, 2, 135, 0, 107, 45, M.aco, 'viseira');
+  function maoFrancesa(pai, lado) {
+    const forma = new T.Shape(); forma.moveTo(0, 0); forma.lineTo(100, 0); forma.lineTo(0, 100); forma.lineTo(0, 0);
+    const g = new T.Mesh(new T.ExtrudeGeometry(forma, { depth: 6.35, bevelEnabled: false }), M.suporte); g.userData.parte = 'maofrancesa';
+    if (lado === 'd') g.position.set(50, 6.35, -3.175);
+    if (lado === 'e') { g.scale.x = -1; g.position.set(-50, 6.35, -3.175); }
+    if (lado === 'f') { g.rotation.y = -Math.PI / 2; g.position.set(-3.175, 6.35, 25); }
+    if (lado === 't') { g.rotation.y = Math.PI / 2; g.position.set(3.175, 6.35, -25); }
+    pai.add(g);
+  }
+
+  /* ---------- os três modelos ---------- */
+  function modeloPe() {
+    const g = new T.Group();
+    bloco(g, 350, 6.35, 350, 0, 3.175, 0, M.suporte, 'base_pe');
+    bloco(g, 100, 1180, 50, 0, 6.35 + 590, 0, M.suporte, 'coluna');
+    ['d', 'e', 'f', 't'].forEach((l) => maoFrancesa(g, l));
+    const piv = new T.Group(); piv.position.set(0, 1186.35, 0); piv.rotation.x = graus(-20); g.add(piv);
+    bloco(piv, 220, 4.75, 50, 0, 2.375, 0, M.suporte, 'cabecote');
+    const cx = construirCaixa('meio'); cx.caixa.position.set(0, 4.75 + 106, 0); piv.add(cx.caixa); viseira(cx);
+    bloco(g, 70, 115, 40, 0, 400, -45, M.branco, 'tomada');
+    bloco(g, 40, 30, 22, 0, 395, -76, M.branco, 'tomada');
+    tubo(g, [[0, 370, -66], [0, 372, -40], [0, 420, -8], [0, 520, 0], [0, 1150, 0], [0, 1182, 0]], 2, M.cabo, 'cabo');
+    return { g, cx, tudo: { alvo: [0, 720, 0], dist: 2900 } };
+  }
+  function modeloMesa() {
+    const g = new T.Group();
+    bloco(g, 900, 25, 600, 0, 737.5, -150, M.madeira, 'mesa');
+    for (const px of [-420, 420]) for (const pz of [-420, 120]) bloco(g, 40, 725, 40, px, 362.5, pz, M.madeira, 'mesa');
+    bloco(g, 200, 4.75, 140, 0, 752.375, 0, M.suporte, 'base_mesa');
+    bloco(g, 50, 120, 50, 0, 754.75 + 60, 0, M.suporte, 'pescoco');
+    const piv = new T.Group(); piv.position.set(0, 874.75, 0); piv.rotation.x = graus(-30); g.add(piv);
+    bloco(piv, 220, 4.75, 50, 0, 2.375, 0, M.suporte, 'cabecote');
+    const cx = construirCaixa('meio'); cx.caixa.position.set(0, 4.75 + 106, 0); piv.add(cx.caixa);
+    bloco(g, 80, 50, 60, 230, 697, -40, M.branco, 'tomada');
+    tubo(g, [[0, 872, 0], [0, 800, 0], [0, 740, 0], [0, 712, 0], [40, 700, -10], [120, 699, -30], [190, 698, -40]], 2, M.cabo, 'cabo');
+    return { g, cx, tudo: { alvo: [0, 700, -80], dist: 2300 } };
+  }
+  function modeloParede() {
+    const g = new T.Group();
+    bloco(g, 1300, 2300, 80, 0, 1150, -69.5, M.parede, 'parede');
+    bloco(g, 301, 212, 2, 0, 1300, -28.5, M.suporte, 'chapa_parede');
+    for (const py of [1375, 1225]) cilindro(g, 3.2, 50, 152.5, py, -25.5, M.metal, 'dobradicas_parede');
+    bloco(g, 30, 2.5, 34, -115.5, 1192.5, -12.5, M.suporte, 'trava');
+    cilindro(g, 3.2, 10, -115.5, 1190, -2, M.metal, 'trava');
+    const piv = new T.Group(); piv.position.set(152.5, 1300, -25.5); g.add(piv);
+    const cx = construirCaixa('canto'); cx.caixa.position.set(-152.5, 0, 25.5); piv.add(cx.caixa);
+    bloco(g, 20, 130, 10, 129.5, 1110, -24.5, M.branco, 'canaleta');
+    bloco(g, 70, 115, 40, 129.5, 985, -9.5, M.branco, 'tomada');
+    tubo(g, [[129.5, 1174, 2.5], [129.5, 1166, -6], [129.5, 1156, -20], [129.5, 1140, -24.5], [129.5, 1050, -24.5]], 2, M.cabo, 'cabo');
+    return { g, cx, piv, tudo: { alvo: [0, 1120, 0], dist: 2500 } };
+  }
+  const MODELOS = { pe: modeloPe(), mesa: modeloMesa(), parede: modeloParede() };
+  for (const k in MODELOS) { cena.add(MODELOS[k].g); MODELOS[k].g.visible = false; }
+  cena.updateMatrixWorld(true);
+
+  /* ---------- medidas (rótulos que acompanham a maquete) ---------- */
+  const mundo = (obj, p) => obj.localToWorld(new T.Vector3(p[0], p[1], p[2]));
+  function rotulosDo(k) {
+    const m = MODELOS[k], cx = m.cx;
+    const centroTela = () => cx.tela.getWorldPosition(new T.Vector3());
+    const r = [{ txt: 'Caixa 301 × 212 × 45', pos: () => mundo(cx.caixa, [150.5, 106, 22.5]) }];
+    // curto: os que continuam em tela estreita (celular), para não amontoar
+    if (k === 'pe') r.push(
+      { txt: 'Meio da tela: 1.290 mm do chão', pos: centroTela, forte: true, curto: true },
+      { txt: 'Inclinada 20°', pos: () => mundo(cx.caixa, [-150.5, 107, 112]) },
+      { txt: 'Coluna 1.180 (o cabo sobe por dentro)', pos: () => new T.Vector3(50, 820, 0), curto: true },
+      { txt: 'Tomada + fonte a 400 mm', pos: () => new T.Vector3(35, 400, -65), curto: true },
+      { txt: 'Base 350 × 350', pos: () => new T.Vector3(175, 6, 175) });
+    if (k === 'mesa') r.push(
+      { txt: 'Meio da tela: 220 mm acima da mesa', pos: centroTela, forte: true, curto: true },
+      { txt: 'Inclinada 30°', pos: () => mundo(cx.caixa, [-150.5, 106, 22.5]) },
+      { txt: 'Pescoço 120', pos: () => new T.Vector3(25, 815, 25) },
+      { txt: 'Mesa a 750 mm', pos: () => new T.Vector3(450, 750, 150), curto: true },
+      { txt: 'Tomada embaixo da mesa', pos: () => new T.Vector3(270, 690, -40), curto: true });
+    if (k === 'parede') r.push(
+      { txt: 'Meio da tela: 1.300 mm do chão', pos: centroTela, forte: true, curto: true },
+      { txt: 'Dobradiças (abre como porta)', pos: () => new T.Vector3(156, 1375, -25), curto: true },
+      { txt: 'Trava por baixo', pos: () => new T.Vector3(-115.5, 1188, 0) },
+      { txt: 'Canaleta', pos: () => new T.Vector3(140, 1110, -20) },
+      { txt: 'Tomada + fonte', pos: () => new T.Vector3(165, 985, 10), curto: true });
+    return r;
+  }
+  const camadaRotulos = document.getElementById('rotulos');
+  let rotulos = [];
+  function montarRotulos() {
+    camadaRotulos.textContent = '';
+    rotulos = rotulosDo(atual).map((r) => {
+      const el = document.createElement('div'); el.className = 'rotulo' + (r.forte ? ' forte' : '');
+      el.innerHTML = '<i></i><span></span>'; el.querySelector('span').textContent = r.txt;
+      camadaRotulos.appendChild(el); return { el, pos: r.pos, curto: !!r.curto };
+    });
+  }
+  const v3 = new T.Vector3();
+  function atualizarRotulos() {
+    const ligado = document.getElementById('medidas').checked;
+    const w = palco.clientWidth, h = palco.clientHeight;
+    for (const r of rotulos) {
+      if (!ligado || (w < 560 && !r.curto)) { r.el.hidden = true; continue; }
+      v3.copy(r.pos()).project(camera);
+      const fora = v3.z > 1 || v3.x < -1.05 || v3.x > 1.05 || v3.y < -1.05 || v3.y > 1.05;
+      r.el.hidden = fora;
+      if (fora) continue;
+      // perto da borda direita, o rótulo vira para a esquerda do ponto (senão a moldura corta)
+      const px = ((v3.x + 1) / 2) * w, py = ((1 - v3.y) / 2) * h, esq = px + r.el.offsetWidth > w - 8;
+      r.el.classList.toggle('esq', esq);
+      const x = Math.max(4, Math.min(w - r.el.offsetWidth - 4, esq ? px - r.el.offsetWidth + 5 : px - 5));
+      r.el.style.transform = `translate(${x}px, ${py}px) translateY(-50%)`;
+    }
+  }
+
+  /* ---------- animação simples ---------- */
+  const animacoes = [];
+  const suave = (k) => (k < 0.5 ? 4 * k * k * k : 1 - Math.pow(-2 * k + 2, 3) / 2);
+  function animar(ms, passo, fim) {
+    if (reduz || !ms) { passo(1); if (fim) fim(); return; }
+    animacoes.push({ t0: performance.now(), ms, passo, fim });
+  }
+  function irCamera(pos, alvo, ms = 750) {
+    const p0 = camera.position.clone(), a0 = controles.target.clone();
+    animar(ms, (e) => { camera.position.lerpVectors(p0, pos, e); controles.target.lerpVectors(a0, alvo, e); });
+  }
+
+  /* ---------- estado e controles ---------- */
+  let atual = 'pe', raiox = false, explosao = 0, tampaAberta = false, caixaAberta = false;
+  const plano = new T.Plane(new T.Vector3(-1, 0, 0), 0);
+  let cortando = false;
+
+  function aplicarExplosao() {
+    const e = explosao;
+    for (const k in MODELOS) {
+      const c = MODELOS[k].cx;
+      c.frente.position.z = 80 * e; c.borr.position.z = 56 * e; c.pel.position.z = 34 * e;
+      c.porta.position.z = -22.5 - 72 * e; c.eva.position.z = 40 * e;
+    }
+  }
+  function aplicarRaioX() {
+    for (const m of CASCA) { m.transparent = raiox; m.opacity = raiox ? 0.13 : 1; m.depthWrite = !raiox; m.needsUpdate = true; }
+    M.tablet.transparent = raiox; M.tablet.opacity = raiox ? 0.55 : 1; M.tablet.needsUpdate = true;
+    telaMat.transparent = raiox; telaMat.opacity = raiox ? 0.45 : 1; telaMat.needsUpdate = true;
+  }
+  function aplicarCorte() {
+    for (const m of mats) { m.clippingPlanes = cortando ? [plano] : []; m.needsUpdate = true; }
+  }
+  function centroCaixa() { return MODELOS[atual].cx.caixa.localToWorld(new T.Vector3(0, 0, 0)); }
+  function normalTela() { return new T.Vector3(0, 0, 1).applyQuaternion(MODELOS[atual].cx.caixa.getWorldQuaternion(new T.Quaternion())); }
+  function lateralCaixa() { return new T.Vector3(1, 0, 0).applyQuaternion(MODELOS[atual].cx.caixa.getWorldQuaternion(new T.Quaternion())); }
+  function camera_(tipo) {
+    const m = MODELOS[atual];
+    if (tipo === 'tudo') {
+      const alvo = new T.Vector3(...m.tudo.alvo);
+      const dir = new T.Vector3(0.75, 0.32, 1).normalize();
+      return irCamera(alvo.clone().addScaledVector(dir, m.tudo.dist), alvo);
+    }
+    const c = centroCaixa(), n = normalTela(), l = lateralCaixa();
+    const dirs = {
+      caixa: n.clone().multiplyScalar(1).addScaledVector(l, 0.75).add(new T.Vector3(0, 0.35, 0)),
+      frente: n.clone().add(new T.Vector3(0, 0.05, 0)),
+      tras: n.clone().negate().addScaledVector(l, -0.25).add(new T.Vector3(0, 0.3, 0)),
+      lado: l.clone().addScaledVector(n, 0.12).add(new T.Vector3(0, 0.12, 0)),
+    };
+    const dist = { caixa: 780, frente: 680, tras: 720, lado: 640 }[tipo];
+    irCamera(c.clone().addScaledVector(dirs[tipo].normalize(), dist), c);
+  }
+  function ajustarCorte() {
+    const c = centroCaixa();
+    plano.constant = c.x + Number(document.getElementById('corte').value);
+  }
+
+  function marcar(seletor, ativo) { document.querySelectorAll(seletor).forEach((b) => b.setAttribute('aria-pressed', String(b === ativo))); }
+  function trocarModelo(k, semCamera) {
+    if (MODELOS[atual]) MODELOS[atual].g.visible = false;
+    atual = k; MODELOS[k].g.visible = true;
+    marcar('[data-modelo]', document.querySelector(`[data-modelo="${k}"]`));
+    document.getElementById('abrir-caixa').hidden = k !== 'parede';
+    limparSelecao(); montarRotulos(); ajustarCorte();
+    if (!semCamera) camera_('tudo');
+  }
+  function abrirTampa(abrir) {
+    tampaAberta = abrir === undefined ? !tampaAberta : abrir;
+    document.getElementById('abrir-tampa').setAttribute('aria-pressed', String(tampaAberta));
+    document.getElementById('abrir-tampa').textContent = tampaAberta ? 'Fechar a tampa de trás' : 'Abrir a tampa de trás';
+    for (const k in MODELOS) {
+      const p = MODELOS[k].cx.porta, de = p.rotation.y, para = tampaAberta ? graus(105) : 0;
+      animar(800, (e) => { p.rotation.y = de + (para - de) * e; });
+    }
+  }
+  function abrirCaixa(abrir) {
+    caixaAberta = abrir === undefined ? !caixaAberta : abrir;
+    const b = document.getElementById('abrir-caixa');
+    b.setAttribute('aria-pressed', String(caixaAberta)); b.textContent = caixaAberta ? 'Fechar a caixa (porta)' : 'Abrir a caixa (porta)';
+    const piv = MODELOS.parede.piv, de = piv.rotation.y, para = caixaAberta ? graus(90) : 0;
+    animar(900, (e) => { piv.rotation.y = de + (para - de) * e; });
+  }
+
+  /* ---------- escolher uma peça ---------- */
+  const info = document.getElementById('info');
+  let contorno = null;
+  function limparSelecao() {
+    if (contorno) { cena.remove(contorno); contorno = null; }
+    info.innerHTML = '<p class="vazio">Toque numa peça da maquete, ou numa camada logo abaixo, para ver o nome, a medida e para que ela serve.</p>';
+    document.querySelectorAll('[data-parte]').forEach((b) => b.setAttribute('aria-pressed', 'false'));
+  }
+  function selecionar(obj) {
+    if (contorno) cena.remove(contorno);
+    contorno = new T.BoxHelper(obj, new T.Color(getComputedStyle(document.documentElement).getPropertyValue('--sel').trim() || '#e0a100'));
+    contorno.material.depthTest = false; contorno.renderOrder = 10; cena.add(contorno);
+    const p = PARTES[obj.userData.parte] || { nome: 'Peça', medida: '—', material: '—', papel: '' };
+    info.innerHTML = '';
+    const h = document.createElement('h3'); h.textContent = p.nome;
+    const dl = document.createElement('dl');
+    for (const [rot, val] of [['Medida', p.medida], ['Material', p.material]]) { const dt = document.createElement('dt'); dt.textContent = rot; const dd = document.createElement('dd'); dd.textContent = val; dl.append(dt, dd); }
+    const pp = document.createElement('p'); pp.textContent = p.papel;
+    info.append(h, dl, pp);
+    document.querySelectorAll('[data-parte]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.parte === obj.userData.parte)));
+  }
+  const visivel = (o) => { for (let x = o; x; x = x.parent) if (!x.visible) return false; return true; };
+  const raio = new T.Raycaster(), ponteiro = new T.Vector2();
+  let apertou = null;
+  renderer.domElement.addEventListener('pointerdown', (e) => { apertou = [e.clientX, e.clientY]; document.getElementById('dica').hidden = true; });
+  renderer.domElement.addEventListener('pointerup', (e) => {
+    if (!apertou) return;
+    const d = Math.hypot(e.clientX - apertou[0], e.clientY - apertou[1]); apertou = null;
+    if (d > 6) return;
+    const r = renderer.domElement.getBoundingClientRect();
+    ponteiro.set(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1);
+    raio.setFromCamera(ponteiro, camera);
+    const achou = raio.intersectObject(MODELOS[atual].g, true).find((h) => h.object.userData.parte && visivel(h.object)
+      && !(cortando && plano.distanceToPoint(h.point) < 0) && !(raiox && CASCA.includes(h.object.material)));
+    if (achou) selecionar(achou.object); else limparSelecao();
+  });
+  function acharParte(parte) {
+    let achado = null;
+    MODELOS[atual].g.traverse((o) => { if (!achado && o.userData.parte === parte) achado = o; });
+    return achado;
+  }
+
+  /* ---------- botões ---------- */
+  document.querySelectorAll('[data-modelo]').forEach((b) => b.addEventListener('click', () => trocarModelo(b.dataset.modelo)));
+  document.getElementById('v-normal').addEventListener('click', (e) => { raiox = false; marcar('#v-normal, #v-raiox', e.currentTarget); aplicarRaioX(); });
+  document.getElementById('v-raiox').addEventListener('click', (e) => { raiox = true; marcar('#v-normal, #v-raiox', e.currentTarget); aplicarRaioX(); });
+  const explodir = document.getElementById('explodir');
+  function mudarExplosao(v) { explodir.value = v; explosao = v / 100; document.getElementById('explodir-v').textContent = v + '%'; aplicarExplosao(); }
+  explodir.addEventListener('input', () => mudarExplosao(Number(explodir.value)));
+  document.getElementById('cortar').addEventListener('change', (e) => { cortando = e.target.checked; document.getElementById('corte').disabled = !cortando; ajustarCorte(); aplicarCorte(); });
+  document.getElementById('corte').addEventListener('input', ajustarCorte);
+  document.getElementById('abrir-tampa').addEventListener('click', () => abrirTampa());
+  document.getElementById('abrir-caixa').addEventListener('click', () => abrirCaixa());
+  document.querySelectorAll('[data-cam]').forEach((b) => b.addEventListener('click', () => camera_(b.dataset.cam)));
+  document.querySelectorAll('[data-ver]').forEach((b) => b.addEventListener('click', () => { trocarModelo(b.dataset.ver); palco.scrollIntoView({ behavior: reduz ? 'auto' : 'smooth', block: 'center' }); }));
+  document.querySelectorAll('[data-mostrar]').forEach((b) => b.addEventListener('click', () => {
+    const k = b.dataset.mostrar;
+    trocarModelo(k, true); abrirTampa(false); if (k === 'parede') abrirCaixa(false);
+    palco.scrollIntoView({ behavior: reduz ? 'auto' : 'smooth', block: 'center' });
+    if (k === 'parede') {
+      irCamera(new T.Vector3(-700, 1450, 900), new T.Vector3(60, 1300, 60));
+      setTimeout(() => abrirCaixa(true), reduz ? 0 : 900);
+      setTimeout(() => { abrirTampa(true); const t = acharParte('tablet'); if (t) selecionar(t); }, reduz ? 0 : 2000);
+    } else {
+      camera_('tras');
+      setTimeout(() => { abrirTampa(true); const t = acharParte('tablet'); if (t) selecionar(t); }, reduz ? 0 : 900);
+    }
+  }));
+
+  /* ---------- régua das camadas ---------- */
+  const CAMADAS = [
+    { parte: 'moldura', nome: 'Moldura de aço', mm: 2, cor: 'var(--aco)', dica: 'fixa, cobre a borda preta' },
+    { parte: 'borracha', nome: 'Borracha EPDM', mm: 2, cor: 'var(--borracha)', dica: '3 mm que apertam para 2' },
+    { parte: 'pelicula', nome: 'Película de vidro', mm: 0.33, cor: 'var(--pelicula)', dica: 'colada na tela' },
+    { parte: 'tablet', nome: 'Tablet', mm: 6.9, cor: 'var(--tablet)', dica: 'entre a borracha e o EVA' },
+    { parte: 'eva', nome: 'EVA de pressão', mm: 32.27, cor: 'var(--eva)', dica: '15 + 20 mm, apertam para 32' },
+    { parte: 'porta', nome: 'Tampa de trás', mm: 1.5, cor: 'var(--aco)', dica: 'abre com chave' },
+  ];
+  const barra = document.getElementById('barra'), cotas = document.getElementById('cotas'), lista = document.getElementById('lista-camadas');
+  CAMADAS.forEach((c) => {
+    const b = document.createElement('button'); b.type = 'button'; b.dataset.parte = c.parte; b.setAttribute('aria-pressed', 'false');
+    b.style.flex = `${c.mm} 1 0`; b.style.background = c.cor; b.setAttribute('aria-label', `${c.nome}, ${String(c.mm).replace('.', ',')} mm`);
+    barra.appendChild(b);
+    const s = document.createElement('span'); s.style.flex = `${c.mm} 1 0`; s.style.minWidth = '6px'; s.textContent = c.mm >= 6 ? String(c.mm).replace('.', ',') : ''; cotas.appendChild(s);
+    const l = document.createElement('button'); l.type = 'button'; l.dataset.parte = c.parte; l.setAttribute('aria-pressed', 'false');
+    l.innerHTML = '<i></i><span><b></b><small></small></span><em></em>';
+    l.querySelector('i').style.background = c.cor; l.querySelector('b').textContent = c.nome; l.querySelector('small').textContent = c.dica;
+    l.querySelector('em').textContent = String(c.mm).replace('.', ',') + ' mm';
+    lista.appendChild(l);
+  });
+  document.querySelectorAll('.barra [data-parte], .lista-camadas [data-parte]').forEach((b) => b.addEventListener('click', () => {
+    const parte = b.dataset.parte;
+    if (explosao < 0.5) mudarExplosao(70);
+    if (parte === 'porta' || parte === 'eva') { if (!document.getElementById('cortar').checked) camera_('lado'); } else camera_('caixa');
+    const o = acharParte(parte); if (o) selecionar(o);
+    palco.scrollIntoView({ behavior: reduz ? 'auto' : 'smooth', block: 'center' });
+  }));
+
+  /* ---------- tema (o fundo da maquete segue o da página) ---------- */
+  function aplicarTema() {
+    const css = getComputedStyle(document.documentElement);
+    const cor = (n, p) => new T.Color(css.getPropertyValue(n).trim() || p);
+    renderer.setClearColor(cor('--palco', '#e6eae5'));
+    chaoMat.color = cor('--palco-chao', '#cfd5cd');
+    if (grade) cena.remove(grade);
+    grade = new T.GridHelper(5000, 50, cor('--grade-1', '#b6beb6'), cor('--grade-2', '#c8cfc7')); grade.position.y = 0.2; cena.add(grade);
+  }
+  aplicarTema();
+  if (window.matchMedia) window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', aplicarTema);
+  new MutationObserver(aplicarTema).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+
+  /* ---------- tamanho e laço ---------- */
+  function ajustarTamanho() {
+    const w = palco.clientWidth, h = palco.clientHeight;
+    renderer.setSize(w, h, false); camera.aspect = w / Math.max(1, h); camera.updateProjectionMatrix();
+  }
+  new ResizeObserver(ajustarTamanho).observe(palco);
+  ajustarTamanho();
+  trocarModelo('pe', true);
+  const m0 = MODELOS.pe, a0 = new T.Vector3(...m0.tudo.alvo);
+  camera.position.copy(a0.clone().addScaledVector(new T.Vector3(0.75, 0.32, 1).normalize(), m0.tudo.dist)); controles.target.copy(a0);
+  carregando.remove();
+  function laco(agora) {
+    requestAnimationFrame(laco);
+    for (let i = animacoes.length - 1; i >= 0; i--) {
+      const a = animacoes[i], k = Math.min(1, (agora - a.t0) / a.ms);
+      a.passo(suave(k));
+      if (k >= 1) { animacoes.splice(i, 1); if (a.fim) a.fim(); }
+    }
+    controles.update();
+    if (contorno) contorno.update();
+    renderer.render(cena, camera);
+    atualizarRotulos();
+  }
+  requestAnimationFrame(laco);
+})();
+</script>
