@@ -230,14 +230,17 @@ export async function testarAparelhos(nav, central, grupo) {
       await cel.esperar('document.body.innerText.includes("minutos sem ninguém mexer") || (document.querySelector(".opcoes.nomes") && (document.getElementById("turno-topo") || {}).textContent !== ' + JSON.stringify(turnoAntes) + ')', 10000, 'trava por inatividade');
       return (await cel.existe('.aviso', 'minutos sem ninguém mexer')) ? '' : 'passou da troca de turno: pediu o nome do turno novo';
     });
-    await teste(grupo, '12 horas fora da rede da usina: o celular trava e destrava quando volta', async () => {
+    // 2.13.5: sem a trava de 12 horas (pedido do Guilherme em 15/10): longe da central o aplicativo continua funcionando
+    await teste(grupo, '13 horas sem a rede da usina: o celular continua funcionando e volta a falar com a central sozinho', async () => {
+      const luz = 'document.querySelector("#status-con .luzes i") && document.querySelector("#status-con .luzes i").className';
       await cel.semRede(true);
       await cel.adiantar(13 * 3600000);
       await cel.tocar('[data-a="tema"]');
-      await cel.esperar('document.querySelector("[data-a=\\"tentar\\"]")', 15000, 'tela de travado');
+      await cel.esperar(`${luz} === "off"`, 20000, 'luz da central apagada');
+      certo(!(await cel.avaliar('document.body.innerText.includes("Conecte no Wi-Fi da usina")')), 'o celular travou sem a central');
+      certo(await cel.avaliar('!!document.querySelector("#app main")'), 'a tela do aplicativo sumiu');
       await cel.semRede(false);
-      await cel.tocar('[data-a="tentar"]');
-      await cel.esperar('!document.querySelector("[data-a=\\"tentar\\"]")', 15000, 'destravar');
+      await cel.esperar(`${luz} === "ok"`, 20000, 'luz da central acesa de novo');
     });
     await teste(grupo, 'nenhum erro de JavaScript nos três aparelhos', async () => {
       const erros = aparelhos.flatMap((a) => a.erros.map((e) => `${a.nome}: ${e}`));

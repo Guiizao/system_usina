@@ -130,6 +130,18 @@ svg.ico { width: 1.25em; height: 1.25em; flex: none; stroke: currentColor; fill:
 .conexao.ok i { background: var(--verde); }
 .conexao.off { color: var(--ambar-texto); font-weight: 700; }
 .conexao.off i { background: var(--ambar); }
+/* botão Conexão (2.13.5): luz da central e luz da nuvem */
+.status-con .luzes { display: flex; align-items: center; justify-content: center; gap: 6px; height: 24px; }
+.status-con .luzes i { width: 13px; height: 13px; border-radius: 50%; background: var(--linha); box-shadow: 0 0 0 2px rgba(255, 255, 255, .25); }
+.status-con .luzes i.ok { background: var(--verde); }
+.status-con .luzes i.off { background: var(--ambar); }
+.status-linhas { display: grid; gap: 10px; margin: 12px 0; }
+.status-linha { display: grid; grid-template-columns: 16px 1fr; gap: 12px; align-items: start; padding: 10px 12px; border: 1px solid var(--linha); border-radius: 8px; }
+.status-linha > i { width: 16px; height: 16px; margin-top: 4px; border-radius: 50%; background: var(--linha); }
+.status-linha.ok > i { background: var(--verde); }
+.status-linha.off > i { background: var(--ambar); }
+.status-linha b { display: block; font-size: 18px; }
+.status-linha small { display: block; color: var(--tinta-2); }
 .chip { display: inline-flex; align-items: center; gap: 8px; min-height: 52px; padding: 0 16px; border: 2px solid var(--linha); border-radius: 10px; background: var(--papel); font-size: 18px; }
 .chip.icone-so { padding: 0 14px; }
 .chip.alerta { border-color: var(--ambar); background: var(--ambar-fundo); color: var(--ambar-texto); font-weight: 700; }

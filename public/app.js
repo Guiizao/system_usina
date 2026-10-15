@@ -3,7 +3,7 @@
 (function () {
   'use strict';
   const C = window.USINA;
-  const VERSAO = '2.13.4'; // aparece nos ajustes e vai junto com cada envio para a central
+  const VERSAO = '2.13.5'; // aparece nos ajustes e vai junto com cada envio para a central
   const AUTORIA = '© 2026 Guilherme. Todos os direitos reservados. Uso somente com autorização do autor.';
   const params = new URLSearchParams(location.search);
   const DEMO_IMG = params.has('demo'); // usado só para gerar imagens de apresentação
@@ -639,7 +639,6 @@
   async function sincronizar() {
     if (cfg.demo || !cfg.chave || sync.ocupado) return;
     sync.ocupado = true;
-    const bloqueadoAntes = foraDaRede();
     try {
       const r0 = await buscar('api/ping');
       const info = r0.ok ? await r0.json() : null;
@@ -768,7 +767,7 @@
       if (NO_APK && sync.falhas >= 3 && Date.now() - (sync.ultimaBusca || 0) > 180000) { sync.ultimaBusca = Date.now(); setTimeout(reencontrarCentral, 0); }
     } finally {
       sync.ocupado = false;
-      if (bloqueadoAntes !== foraDaRede()) render(); else atualizarConexao();
+      atualizarConexao();
     }
   }
   /* Longe da central (outra rede, 4G), versão 2.13: depois de 2 minutos sem achar a central, o que ainda não subiu vai
@@ -787,6 +786,7 @@
         headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + cfg.nuvemToken, 'X-Aparelho': cfg.deviceId },
         body: JSON.stringify({ registros: corpo, geracao: cfg.geracao || '' }),
       });
+      marcarNuvem(r.status < 500);
       if (!r.ok) return;
       lista.forEach((x) => { const local = registros[x.id]; if (local && local.atualizadoEm === x.atualizadoEm) local.naNuvem = x.atualizadoEm; });
       salvarRegistros();
@@ -811,7 +811,6 @@
   const LOTE_ENVIO = 300;
   let syncTimer = null;
   function sincronizarLogo() { clearTimeout(syncTimer); syncTimer = setTimeout(sincronizar, 400); atualizarConexao(); }
-  const foraDaRede = () => !cfg.demo && !!cfg.chave && !ehCentral() && Date.now() - (cfg.ultimoContato || 0) > C.horasForaDaRede * 3600 * 1000;
   /** Apaga as anotações guardadas neste aparelho (a configuração da usina fica). */
   function zerarLocal(geracao) {
     Object.keys(registros).forEach((id) => { if (registros[id].data !== 'config') delete registros[id]; });
@@ -855,14 +854,17 @@
     const p = pendentes();
     if (cfg.demo) return 'Demonstração, dados só neste aparelho';
     if (sync.modo === 'online') return p ? `Enviando ${contar(p, 'anotação', 'anotações')}` : 'Tudo enviado para a central';
-    if (sync.modo === 'offline') return p ? `Sem Wi-Fi. ${contar(p, 'anotação guardada', 'anotações guardadas')} aqui` : 'Sem Wi-Fi. Pode anotar: fica guardado aqui';
+    if (nuvemLeva()) { const n = faltamNaNuvem(); return n ? `Sem a central. Enviando ${contar(n, 'anotação', 'anotações')} pela nuvem` : 'Sem a central. Tudo enviado pela nuvem'; }
+    if (sync.modo === 'offline') return p ? `Sem conexão. ${contar(p, 'anotação guardada', 'anotações guardadas')} aqui` : 'Sem conexão. Pode anotar: fica guardado aqui';
     return 'Procurando a central';
   }
-  const classeConexao = () => (cfg.demo ? '' : sync.modo === 'online' ? 'ok' : sync.modo === 'offline' ? 'off' : '');
+  const classeConexao = () => (cfg.demo ? '' : sync.modo === 'online' || nuvemLeva() ? 'ok' : sync.modo === 'offline' ? 'off' : '');
   const subtituloDaFolha = (data) => `Folha de ${fmtData(data)}, ${cfg.demo ? 'demonstração' : sync.modo === 'online' ? (pendentes() ? 'enviando para a central' : 'tudo enviado para a central') : sync.modo === 'offline' ? 'guardando no aparelho' : 'procurando a central'}`;
   function atualizarConexao() {
     const el = document.getElementById('conexao');
     if (el) { el.className = `conexao ${classeConexao()}`; el.innerHTML = `<i></i>${esc(textoConexao())}`; }
+    const st = document.getElementById('status-con');
+    if (st) st.innerHTML = luzesConexao();
     const sub = document.getElementById('subtitulo-topo');
     const v = view();
     if (sub && v && v.tela === 'prancheta') sub.textContent = subtituloDaFolha(dataDaView(v));
@@ -1961,13 +1963,14 @@
   let ultimaConsultaNuvem = 0;
   async function conferirNaNuvem(agora) {
     if (cfg.demo || DEMO_IMG || !cfg.nuvemUrl || !cfg.chave) return;
-    if (!agora && Date.now() - ultimaConsultaNuvem < 10 * 60000) return;
+    if (!agora && Date.now() - ultimaConsultaNuvem < 110000) return;
     ultimaConsultaNuvem = Date.now();
     try {
       const ctrl = new AbortController();
       const t = setTimeout(() => ctrl.abort(), 8000);
       const r = await fetch(`${cfg.nuvemUrl.replace(/\/+$/, '')}/aparelho/${encodeURIComponent(cfg.deviceId)}`, { cache: 'no-store', signal: ctrl.signal });
       clearTimeout(t);
+      marcarNuvem(r.status < 500);
       if (!r.ok) return;
       const d = await r.json();
       // a nuvem pode estar atrasada em relação à central: resposta mais velha que o bloqueio daqui não vale
@@ -1981,7 +1984,36 @@
       if (d.bloqueio) { if (revNuvem > (cfg.revLiberada || 0) && (!cfg.bloqueio || revNuvem >= revAqui)) aplicarBloqueio(d.bloqueio); }
       else if (cfg.bloqueio) { if (sync.modo !== 'online' && revisao > revAqui) liberarAparelho('O administrador liberou este aparelho.', revisao); }
       else if (revisao > (cfg.revLiberada || 0)) { cfg.revLiberada = revisao; salvarCfg(); } // livre: lembra até onde a lista confirma
-    } catch (e) { /* sem internet: confere de novo depois */ }
+    } catch (e) { marcarNuvem(false); /* sem internet: confere de novo depois */ }
+  }
+  /* Luzes do botão Conexão (versão 2.13.5): a central e a nuvem. O aplicativo funciona com as duas desligadas:
+     tudo fica guardado aqui e vai sozinho quando uma delas voltar. */
+  function marcarNuvem(ok) {
+    sync.nuvem = { ok, em: ok ? Date.now() : (sync.nuvem && sync.nuvem.em) || 0 };
+    atualizarConexao();
+  }
+  const centralLigada = () => sync.modo === 'online';
+  const nuvemLigada = () => !!(sync.nuvem && sync.nuvem.ok);
+  // sem a central, a nuvem só leva as anotações depois que o aparelho pegou a chave dela com a central (2.13)
+  const nuvemLeva = () => !centralLigada() && nuvemLigada() && !!cfg.nuvemToken;
+  const faltamNaNuvem = () => Object.values(registros).filter((r) => !r.sincronizado && !r.esperaEntrar && r.naNuvem !== r.atualizadoEm).length;
+  function luzesConexao() {
+    const c = cfg.demo ? '' : centralLigada() ? 'ok' : 'off';
+    const n = cfg.demo || !cfg.nuvemUrl ? '' : nuvemLigada() ? 'ok' : 'off';
+    return `<b class="luzes" aria-hidden="true"><i class="${c}"></i><i class="${n}"></i></b><span>Conexão</span>`;
+  }
+  function verConexao() {
+    const desde = (ms) => (ms ? `último contato ${dataHora(ms)}` : 'ainda sem contato');
+    const c = centralLigada(), n = nuvemLigada(), p = pendentes();
+    const linha = (ok, nome, det) => `<div class="status-linha ${ok ? 'ok' : 'off'}"><i></i><div><b>${nome}: ${ok ? 'ligada' : 'desligada'}</b><small>${esc(det)}</small></div></div>`;
+    abrirModal(`<h3>Conexão deste aparelho</h3>
+      <div class="status-linhas">
+        ${linha(c, 'Central', cfg.demo ? 'demonstração' : desde(cfg.ultimoContato))}
+        ${cfg.nuvemUrl ? linha(n, 'Nuvem (internet)', desde(sync.nuvem && sync.nuvem.em)) : '<div class="status-linha"><i></i><div><b>Nuvem (internet): sem endereço</b><small>Ligue este aparelho uma vez no Wi-Fi da central para ele receber o endereço da nuvem.</small></div></div>'}
+      </div>
+      <p class="dica">${p ? `${contar(p, 'anotação esperando', 'anotações esperando')} a central${nuvemLeva() ? `; ${contar(faltamNaNuvem(), 'falta', 'faltam')} subir para a nuvem` : ''}.` : 'Nenhuma anotação esperando.'} Pode anotar com as duas desligadas: fica guardado aqui e vai sozinho quando uma delas voltar.</p>
+      <div class="acoes-modal"><button class="btn" data-k="conferir">Conferir agora</button><button class="btn primario" data-k="ok">Entendi</button></div>`,
+    (k, b, fechar) => { if (k === 'conferir') { sincronizar(); conferirNaNuvem(true); toast('Conferindo...'); } fechar(); });
   }
 
   /* ---------- Tela do aparelho bloqueado ---------- */
@@ -2926,6 +2958,7 @@
         ${atalhos ? `<div class="atalhos">${atalhos}</div>` : ''}
         <div class="relogio"><b id="relogio">${horaAgora()}</b></div>
         ${atualizacao.nova ? `<button class="tema atualizar" data-a="atualizacao" aria-label="Atualizar o aplicativo para a versão ${esc(atualizacao.nova.versao)}">${ico('instalar')}<span>Atualizar</span></button>` : ''}
+        ${configurado ? `<button class="tema status-con" id="status-con" data-a="status-con" aria-label="Conexão: central e nuvem">${luzesConexao()}</button>` : ''}
         ${configurado && (view() || {}).tela !== 'admin' ? `<button class="tema" data-a="admin" aria-label="Ajustes do aparelho">${ico('ajustes')}<span>Ajustes</span></button>` : ''}
         <button class="tema" data-a="tema" aria-label="${escuro ? 'Mudar para tela clara' : 'Mudar para tela escura'}">${ico(escuro ? 'sol' : 'lua')}<span>${escuro ? 'Claro' : 'Escuro'}</span></button>
       </header>`;
@@ -2964,9 +2997,8 @@
     aplicarFolhas(); // mudança nas folhas que chegou do tablet chefe
     let v = view();
     if (cfg.bloqueio && !DEMO_IMG) v = { tela: 'bloqueado-adm' };
-    else if (foraDaRede() && v.tela !== 'bloqueado') v = { tela: 'bloqueado' };
     const telas = {
-      conectar: telaConectar, preparando: telaPreparando, bloqueado: telaBloqueado, configurar: telaConfigurar, operador: telaOperador,
+      conectar: telaConectar, preparando: telaPreparando, configurar: telaConfigurar, operador: telaOperador,
       inicio: telaInicio, prancheta: telaPrancheta, central: telaCentral, relatorios: telaRelatorios, leitura: telaLeitura, config: telaConfig, admin: telaAdmin, avisos: telaAvisos,
       pessoas: telaPessoas, registro: telaRegistro, graficos: telaGraficos, folhas: telaFolhas,
       aparelhos: telaAparelhos, 'bloqueado-adm': telaBloqueioAdm,
@@ -3216,14 +3248,6 @@
     if (ok) { sync.modo = 'online'; sincronizar(); }
   }
 
-  function telaBloqueado() {
-    return `${topo('Pranchetas digitais', 'Fora da rede da usina', false)}
-      <main><div class="tela-aviso"><div class="grande-ico">${ico('wifi')}</div>
-        <h1>Conecte no Wi-Fi da usina</h1>
-        <p>Este aparelho está há mais de ${C.horasForaDaRede} horas sem falar com a central. As anotações guardadas continuam salvas e serão enviadas quando voltar para a rede.</p>
-        <button class="btn primario largo" data-a="tentar" style="margin-top:20px">${ico('wifi')} Tentar de novo</button>
-      </div></main>`;
-  }
 
   /* =========================================================
    * Tela: onde este aparelho vai ficar
@@ -5411,6 +5435,7 @@
       case 'aparelho-chefe': return editarAparelhoChefe(v, b.dataset.id);
       case 'aparelhos': return ir({ tela: 'aparelhos' });
       case 'aparelho-info': return verAparelho(b.dataset.id);
+      case 'status-con': return verConexao();
       case 'conferir-bloqueio': sincronizar(); conferirNaNuvem(true); return toast('Conferindo...');
       case 'liberar-senha': {
         const blq = cfg.bloqueio;
@@ -5460,7 +5485,6 @@
         toast('Servidor desligado. Conecte este aparelho numa central.');
         pilha = [telaInicial()]; return render(true);
       }
-      case 'tentar': await sincronizar(); if (foraDaRede()) toast('Ainda sem a central. Confira o Wi-Fi.', 'erro'); return render();
       case 'esc-entrar': if (await entrarNoEscritorio()) render(true); return;
       case 'esc-sair': cfg.escritorio = null; salvarCfg(); pilha = [telaInicial()]; return render(true);
       case 'esc-dia': {
@@ -6278,6 +6302,7 @@
       render(); verificarLembrete();
     }
     if (params.get('modal') === 'lembrete-horario') escolherHorarioLembrete('destilaria');
+    if (params.get('modal') === 'conexao') verConexao();
     if (params.get('aviso') && cfg.papel && !ehCentral() && operadorAtual()) {
       enviarAviso(cfg.papel, operadorAtual(), 'Passe no escritório antes de sair, por favor. O encarregado quer falar sobre a troca de turno de amanhã.');
       verificarAvisos();
@@ -6326,7 +6351,8 @@
     if (podeAtualizar() && pluginCentral.telasOk) setTimeout(() => pluginCentral.telasOk().then((r) => { if (r && r.voltou) toast(`A versão ${r.voltou} não abriu direito. Voltei para a anterior.`, 'erro'); }).catch(() => {}), 5000);
     // todos os aparelhos sincronizam a cada 5 segundos
     setInterval(sincronizar, 5000);
-    setInterval(() => { if (foraDaRede() && view().tela !== 'bloqueado' && !modalAberto()) render(); }, 60000);
+    // a luz da nuvem no botão Conexão: o aparelho confere sozinho se alcança a nuvem
+    setInterval(() => conferirNaNuvem(), 120000);
     app.addEventListener('pointerdown', function primeira() { entrarTelaCheia(); app.removeEventListener('pointerdown', primeira); });
     if (!NO_APK && 'serviceWorker' in navigator && window.isSecureContext) navigator.serviceWorker.register('sw.js').catch(() => {});
   }

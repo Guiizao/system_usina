@@ -4,6 +4,14 @@
    Depois do sinal de igual vem JSON puro, porque o servidor do tablet chefe (Java) também lê este arquivo. */
 window.NOVIDADES = [
   {
+    "versao": "2.13.5",
+    "data": "2026-10-15",
+    "itens": [
+      "O aplicativo não trava mais depois de 12 horas sem a central: com a central desligada, em outra rede ou sem internet, continua anotando e guarda tudo no aparelho até uma delas voltar.",
+      "Botão Conexão no alto da tela, com duas luzes: a da central e a da nuvem (internet). Toque nele para ver o estado de cada uma e quantas anotações estão esperando."
+    ]
+  },
+  {
     "versao": "2.13.4",
     "data": "2026-10-12",
     "itens": [

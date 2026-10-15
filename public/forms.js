@@ -165,7 +165,6 @@ window.USINA = {
   // Vazio: as atualizações vêm só da central da usina (o computador passa para os tablets).
   atualizacaoOnline: '',
   // Se o aparelho ficar este tempo sem achar a central, ele trava até voltar para o Wi-Fi da usina
-  horasForaDaRede: 12,
 
   // Listas que o tablet chefe pode mudar em Configurações da usina (estes são os valores iniciais)
   produtosPadrao: ['MASSA', 'FINI', 'OUTRO'],

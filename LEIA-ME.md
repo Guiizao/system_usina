@@ -66,7 +66,6 @@ Tudo em `public/forms.js`:
 | Turnos e hora que troca a folha | `turnos`, `inicioDoDia` |
 | Senha do encarregado | `pinAdmin` |
 | Minutos parado até pedir a senha de novo | `minutosSemMexer` |
-| Horas fora da rede até travar | `horasForaDaRede` |
 | O que cada nível de tablet chefe faz | `niveisDoAparelho` |
 
 Operadores, senhas dos operadores, WhatsApp e e-mail do escritório, tipos de produto e fornecedores do ralo e quais pranchetas aparecem em cada setor são configurados no tablet chefe, em **Usina** (só quem entrou com permissão para isso). Pessoas e senhas do tablet chefe ficam em **Pessoas e permissões** (só o administrador).
@@ -419,6 +418,8 @@ Salva em `../telas`.
 43 verificações automáticas: conexão com código certo e errado, anotação, botões − e +, aviso de valor fora do normal, cópia da dorna anterior, marcar fim, monitoramento, valores padrão, insumos, senha do operador, trava por inatividade, virada de turno, exportação, relatórios e configurações. Mais: queda de rede com envio depois que volta, sincronização entre dois aparelhos e validação do Excel e do XML.
 
 Versão 2 (16/09/2026): avisos de pH e Brix, telas LPHERA / Cal e Saczyme / Alcolina com a soma das dornas da hora, casinha nas abas, rolagem do painel do chefe que não volta mais para o topo, pastas *Usina, tela de relatórios, janela de Excel ou XML, listas do ralo, cadastro protegido por senha e busca do tablet chefe no Wi-Fi. Testado no navegador contra o servidor: anotação, envio, queda de rede, relatórios e Excel/XML.
+
+Versão 2.13.5 (15/10/2026): sem a trava de 12 horas fora da rede (`horasForaDaRede` saiu do forms.js): o aplicativo funciona sempre e guarda tudo no aparelho. Botão Conexão no cabeçote, com a luz da central (`sync.modo`) e a da nuvem (`conferirNaNuvem`, a cada 2 minutos, e a fila de 2.13). Sem a central e com a nuvem, a faixa diz "Sem a central. Enviando pela nuvem". Teste: `testes/conexao2135.mjs`.
 
 Versão 2.13.4 (12/10/2026): turnos de cada setor nas Configurações da usina (tablet chefe nível 2 ou 3, função usina): 3 turnos (forms.js `turnos`) ou 2 de 12 horas (forms.js `turnos12h`, 7h às 19h e 19h às 7h), guardado em `configSistema().turnosSetor[setor] = '12h'`. O turno de cada hora conta no dia de produção (7h às 7h), então o das 19h às 7h fica inteiro. Na virada do turno o operador sai (o lembrete para no celular de quem foi embora). Seguem o turno do setor: a observação de cada turno, o Monitorar, os blocos de turno do papel (Caldeira, Destilaria e Nova Destilaria), o filtro de turnos do Enviar e a API (`turno` de cada linha e `turnos` de cada setor). Teste: `testes/turnos213.mjs`.
 

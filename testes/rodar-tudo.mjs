@@ -43,6 +43,7 @@ import { testarEscritorio } from './escritorio213.mjs';
 import { testarEnvio213 } from './envio213.mjs';
 import { testarLembrete213 } from './lembrete213.mjs';
 import { testarTurnos213 } from './turnos213.mjs';
+import { testarConexao2135 } from './conexao2135.mjs';
 import { testarApkWeb } from './rodar-apk-web.mjs';
 import { centralNode, centralJava, APP } from './servidores.mjs';
 
@@ -207,6 +208,12 @@ try {
     const g = novoGrupo('Turnos de cada setor: 3 ou 2 de 12 horas');
     const c = await centralNode(8259);
     try { await testarTurnos213(nav, c.url, g); } finally { await c.desligar(); }
+    grupos.push(g);
+  }
+  // 4p. versão 2.13.5: sem a trava de 12 horas; o botão Conexão mostra a central e a nuvem
+  {
+    const g = novoGrupo('Sem a central: o aplicativo continua e mostra a conexão');
+    await testarConexao2135(nav, await centralNode(8200), g);
     grupos.push(g);
   }
   // 4f. o aplicativo embaralhado (como vai no APK) continua funcionando igual

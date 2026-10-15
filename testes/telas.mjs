@@ -32,6 +32,7 @@ const TELAS = [
   ['chefe-config-lembrete', '&papel=central&tela=config&lembrete=1'],
   ['chefe-lembrete-horario', '&papel=central&tela=config&lembrete=1&modal=lembrete-horario'],
   ['chefe-config-turnos', '&papel=central&tela=config&turnos=12h'],
+  ['conexao-janela', '&papel=hidrolise&op=Guilherme&modal=conexao'],
   ['nova-12h-monitor', '&papel=central&turnos=12h&tela=prancheta&pid=nova_destilaria&monitor=1'],
   ['nova-12h-operador', '&papel=nova_destilaria&turnos=12h&tela=operador'],
   ['escritorio', '&papel=escritorio'],
