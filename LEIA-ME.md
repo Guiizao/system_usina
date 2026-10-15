@@ -162,6 +162,16 @@ Medido num tablet simulado 4 vezes mais lento que o computador, com a central gu
 - Dois aparelhos criando a mesma linha sem um saber do outro (o chefe corrigiu nos segundos antes de receber): os valores se juntam, nada se perde.
 - **Código embaralhado no APK**: quem abrir o APK não lê o código do jeito que foi escrito (o mapa para entender erros fica só em `apk/saida/mapas`).
 
+## Sem a central, os aparelhos se falam pela nuvem (versão 2.14)
+
+A 2.14 mexe no APK (a central do tablet chefe mudou): instale por cima, primeiro no tablet chefe. Na nuvem, rode o `nuvem/publicar.ps1`: ele cria a tabela `pendentes` antes de subir o Worker.
+
+- **Com a central desligada ou em outra rede** (a outra Starlink, 4G): depois de 2 minutos sem achar a central, o aparelho troca as anotações direto com a nuvem (`POST /aparelho/sync`). Manda o que fez e recebe o que os outros fizeram, então um vê o que o outro anotou mesmo sem a central.
+- **Cada hora de cada folha (ou cada dorna) é uma anotação separada.** O tablet que anotou das 7h às 8h e o celular que anotou o resto do dia se juntam sem um apagar o outro. Na mesma anotação, vale a mais nova, como na central; a que espera alguém entrar não é trocada.
+- **Quando a central volta**, ela puxa tudo da nuvem e passa pelas regras de sempre (quem pode anotar o quê, aparelho bloqueado). O que não podia, ela desfaz: publica a versão dela (ou apaga) e a correção chega nos aparelhos. Pessoas, senhas e configurações só mudam pela central.
+- Na nuvem: as anotações dos aparelhos ficam na tabela `pendentes` (a `fila` antiga fica vazia); a nuvem devolve até 500 por vez. Aplicativos 2.13 continuam usando `/fila`. A API do escritório só mostra o que a central publicou.
+- Divisão com o Codex (15/10/2026): nuvem e as duas centrais com ele; o aplicativo e o teste de ponta a ponta comigo. Pedido e resposta em `.handoff/2026-10-15-nuvem-ponto-de-encontro.md`.
+
 ## Escritório, lembrete, envio por período e fila da nuvem (versão 2.13)
 
 A 2.13 mexe no APK (botão voltar e a central do tablet chefe): instale por cima, primeiro no tablet chefe.
@@ -386,6 +396,7 @@ Leva uns 20 minutos e grava o resultado em `testes/saida/resultado.txt`. Testa:
 5. longo prazo, nas duas centrais: 90 dias de uso da usina inteira (a memória do tablet não enche), dias antigos no BackupUsina, troca de turno e virada das 07:00 no meio da anotação, "Terminou a Nº X", tablet chefe trocado e 700 anotações guardadas sem Wi-Fi;
 6. velocidade: cada toque num tablet 4 vezes mais lento, com 90 dias de uso, tem que responder em menos de 100 ms;
 7. os pedidos do teste de 24/09 (aviso curto, senha do operador no tablet chefe, relatórios, WhatsApp, rolagem, trocar o código), nas duas centrais, e o aplicativo com o código embaralhado como vai no APK;
+7l. a versão 2.14 (precisa do wrangler): a nuvem como ponto de encontro, com a recusa desfeita nas duas centrais, e dois tablets trocando anotações pela nuvem com a central desligada;
 7k. a versão 2.13: as contas do Escritório, o lote e as validades, a etiqueta e a folha de rastreamento igual ao papel; a folha só com a função Escritório e a fila da nuvem, nas duas centrais; e o envio com período, turnos, resumo somado e o Excel com os totais;
 7j. a versão 2.12, nas duas centrais: tablet chefe que não foi liberado não entra, liberar no nível 1, 2 e 3 (o 3 só com a senha do dono), nível 1 só vê, corrige e envia, o dono que não sai de administrador, a recuperação com a senha do programador, o que chega pela sincronização sem permissão (folhas do sistema, outras partes da Usina, configuração apagada, aviso) e o conflito de revisão; no aplicativo, a vírgula de um quadro, a troca de °C para °F com os dias antigos na unidade antiga (também na API), quadro escondido do operador, campo novo anotado no setor e o Nº NF liberado para o operador; e as folhas de papel e o XML com campo novo, casas decimais e a unidade de cada dia;
 7i. a versão 2.11, nas duas centrais: o aparelho manda nome, modelo e Android e a central guarda com o endereço; só o administrador bloqueia; bloqueio que pede senha (o aplicativo trava, confere a senha e avisa a central que liberou), trava de vez e apagar; a tela Aparelhos com o + e o aparelho bloqueado consultando a nuvem;
@@ -401,7 +412,7 @@ Leva uns 20 minutos e grava o resultado em `testes/saida/resultado.txt`. Testa:
 
 Os testes usam pastas de dados temporárias: nunca mexem em `dados/`. Só as telas: `node testes/rodar-telas.mjs` (liga uma central de teste sozinho). Só o longo prazo: `node testes/rodar-robustez.mjs`.
 
-O teste para fazer à mão no celular e no tablet está em `Teste-nos-aparelhos-2.10.pdf`, na pasta `Usina`; o que conferir depois de pôr a 2.11 no tablet chefe está na parte 3 do `Nuvem-passo-a-passo.pdf`. Só a 2.12: `node testes/rodar-niveis212.mjs`, `node testes/rodar-pedidos212.mjs` e `node testes/rodar-papel212.mjs`. Só a 2.11: `node testes/rodar-seguranca.mjs` e `node testes/rodar-pedidos211.mjs`. Só a 2.10: `node testes/rodar-pedidos210.mjs`; só pessoas e registro: `node testes/rodar-pessoas.mjs`. Só a nuvem: `node testes/rodar-nuvem.mjs` (precisa do `npm install` em `nuvem`); só a atualização: `node testes/rodar-atualizacao.mjs`; só a 2.6: `node testes/rodar-pedidos26.mjs`; só a 2.5: `node testes/rodar-pedidos25.mjs`.
+O teste para fazer à mão no celular e no tablet está em `Teste-nos-aparelhos-2.10.pdf`, na pasta `Usina`; o que conferir depois de pôr a 2.11 no tablet chefe está na parte 3 do `Nuvem-passo-a-passo.pdf`. Só a 2.12: `node testes/rodar-niveis212.mjs`, `node testes/rodar-pedidos212.mjs` e `node testes/rodar-papel212.mjs`. Só a 2.11: `node testes/rodar-seguranca.mjs` e `node testes/rodar-pedidos211.mjs`. Só a 2.10: `node testes/rodar-pedidos210.mjs`; só pessoas e registro: `node testes/rodar-pessoas.mjs`. Só a 2.14: `node testes/hub214.mjs` e `node testes/rodar-hubapp214.mjs`. Só a nuvem: `node testes/rodar-nuvem.mjs` (precisa do `npm install` em `nuvem`); só a atualização: `node testes/rodar-atualizacao.mjs`; só a 2.6: `node testes/rodar-pedidos26.mjs`; só a 2.5: `node testes/rodar-pedidos25.mjs`.
 
 ## Imagens das telas
 
@@ -418,6 +429,8 @@ Salva em `../telas`.
 43 verificações automáticas: conexão com código certo e errado, anotação, botões − e +, aviso de valor fora do normal, cópia da dorna anterior, marcar fim, monitoramento, valores padrão, insumos, senha do operador, trava por inatividade, virada de turno, exportação, relatórios e configurações. Mais: queda de rede com envio depois que volta, sincronização entre dois aparelhos e validação do Excel e do XML.
 
 Versão 2 (16/09/2026): avisos de pH e Brix, telas LPHERA / Cal e Saczyme / Alcolina com a soma das dornas da hora, casinha nas abas, rolagem do painel do chefe que não volta mais para o topo, pastas *Usina, tela de relatórios, janela de Excel ou XML, listas do ralo, cadastro protegido por senha e busca do tablet chefe no Wi-Fi. Testado no navegador contra o servidor: anotação, envio, queda de rede, relatórios e Excel/XML.
+
+Versão 2.14.0 (15/10/2026): sem a central, os aparelhos trocam as anotações pela nuvem (`sincronizarNuvem` no `app.js`, `/aparelho/sync` na nuvem); a central confere e desfaz o que não podia quando volta (`corrigirRecusaNuvem` no `server.js` e no `ServidorCentral.java`). Testes: `testes/hub214.mjs` (a nuvem e a recusa nas duas centrais) e `testes/rodar-hubapp214.mjs` (dois tablets, a central desligada, cada um anota uma dorna e recebe a do outro; as duas centrais puxam da nuvem). Cabeçalho: o botão Conexão da 2.13.5 cortava o nome da tela no celular e no tablet em pé; agora, quando o nome não cabe nem com a letra menor, o `caberTextos` põe a classe `apertado` no `.topo` (botões só com o ícone, Voltar só com a seta, luzes uma em cima da outra). Testes: o toque fecha a notificação que estiver em cima do botão (`navegador.mjs`), porque das 07:05 às 07:59 o tablet chefe avisa "Folha de ontem guardada" e o aviso cobria o Entrar.
 
 Versão 2.13.5 (15/10/2026): sem a trava de 12 horas fora da rede (`horasForaDaRede` saiu do forms.js): o aplicativo funciona sempre e guarda tudo no aparelho. Botão Conexão no cabeçote, com a luz da central (`sync.modo`) e a da nuvem (`conferirNaNuvem`, a cada 2 minutos, e a fila de 2.13). Sem a central e com a nuvem, a faixa diz "Sem a central. Enviando pela nuvem". Teste: `testes/conexao2135.mjs`.
 

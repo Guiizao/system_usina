@@ -30,7 +30,7 @@ import { testarBase44Central, testarPedidos25, testarFuncaoBase44 } from './pedi
 import { testarPedidos26 } from './pedidos26.mjs';
 import { testarApiLeitura } from './api-leitura.mjs';
 import { testarAtualizacao } from './atualizacao.mjs';
-import { testarNuvem } from './nuvem.mjs';
+import { testarNuvem, temWrangler } from './nuvem.mjs';
 import { testarPessoas } from './pessoas.mjs';
 import { testarPedidos210 } from './pedidos210.mjs';
 import { testarSeguranca } from './seguranca.mjs';
@@ -250,6 +250,18 @@ try {
   const gn = novoGrupo('Nuvem das Pranchetas (Cloudflare, rodando no computador)');
   await testarNuvem(gn);
   grupos.push(gn);
+  // 4q. versão 2.14: a nuvem como ponto de encontro. Cada parte roda num processo próprio (tem o próprio wrangler)
+  const gh = novoGrupo('Nuvem como ponto de encontro: aparelhos trocam anotações sem a central (2.14)');
+  for (const [nome, arq] of [['rotas da nuvem e a recusa nas duas centrais', 'hub214.mjs'], ['dois tablets trocando pela nuvem, nas duas centrais', 'rodar-hubapp214.mjs']]) {
+    await teste(gh, nome, async () => {
+      certo(temWrangler(), 'falta rodar npm install em app/nuvem');
+      const r = spawnSync(process.execPath, [path.join(APP, 'testes', arq)], { cwd: APP, encoding: 'utf8', timeout: 900000 });
+      const fim = ((r.stdout || '').match(/\d+ de \d+ testes passaram.*/g) || []).pop() || '';
+      certo(r.status === 0, `${arq}: ${fim || (r.stderr || '').slice(-300)}`);
+      return fim;
+    });
+  }
+  grupos.push(gh);
   // 5. extras
   const g5 = novoGrupo('Leitura de foto, impressão e aplicativo sem rede');
   const c5 = await centralNode(8295);

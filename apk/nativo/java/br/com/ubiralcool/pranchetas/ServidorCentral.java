@@ -1547,7 +1547,7 @@ public class ServidorCentral {
   }
 
   private static void juntarPendente(Map<String, JSONObject> mapa, JSONObject r, long desde) {
-    if (r == null || !publica(r) || r.optLong("seq") <= desde) return;
+    if (r == null || !ehDia(r.optString("data")) || "registro".equals(r.optString("prancheta")) || r.optLong("seq") <= desde) return;
     JSONObject a = mapa.get(r.optString("id"));
     if (a == null || r.optLong("seq") > a.optLong("seq")) mapa.put(r.optString("id"), r);
   }
@@ -1625,6 +1625,31 @@ public class ServidorCentral {
     return n.optString("url").isEmpty() || n.optString("segredo").isEmpty() ? "" : hex(hmac(n.optString("segredo").getBytes(StandardCharsets.UTF_8), "aparelho|" + aparelho));
   }
 
+  /** Desfaz a versão recusada, com horário maior para corrigir quem já a baixou. */
+  private synchronized void corrigirRecusaNuvem(JSONObject r) throws Exception {
+    String data = r.optString("data"), id = r.optString("id");
+    if (!ehDia(data) || "registro".equals(r.optString("prancheta"))) return;
+    JSONObject atual = registros.optJSONObject(id);
+    if (atual == null && arquivado(data)) {
+      JSONArray dia = lerDiaArquivado(data);
+      for (int i = 0; i < dia.length(); i++) {
+        JSONObject salvo = dia.optJSONObject(i);
+        if (salvo != null && id.equals(salvo.optString("id"))) { atual = salvo; break; }
+      }
+    }
+    JSONObject correcao = atual == null
+      ? new JSONObject().put("id", id).put("data", data).put("prancheta", r.optString("prancheta")).put("chave", r.optString("chave")).put("valores", new JSONObject()).put("apagado", true)
+      : new JSONObject(atual.toString());
+    correcao.put("atualizadoEm", Math.max(System.currentTimeMillis(), Math.max(correcao.optLong("atualizadoEm"), r.optLong("atualizadoEm"))) + 1)
+      .put("seq", ++seq).put("recebidoEm", System.currentTimeMillis());
+    correcao.remove("sincronizado");
+    registros.put(id, correcao);
+    if (arquivado(data)) {
+      if (juntarNoArquivo(data, Collections.singletonList(correcao)) < 0) throw new IOException("Não foi possível gravar a correção arquivada");
+      nuvem().put("arquivosEnviados", false);
+    } else backupDoDia(data);
+  }
+
   /** Confirma só a versão lida, sem apagar um envio mais novo que chegou no meio. */
   private void puxarFilaNuvem(String url, String segredo) throws Exception {
     Object[] r = pedirNuvem(url, segredo, "fila", null);
@@ -1644,6 +1669,7 @@ public class ServidorCentral {
         JSONObject recusa = recusas.optJSONObject(k);
         registrar("nuvem", "Fila recusada: " + recusa.optString("id") + " (" + recusa.optString("motivo") + ")", "", nomeDoAparelho(aparelho), null);
       }
+      if (recusas.length() > 0) corrigirRecusaNuvem(registro);
       itens.put(new JSONObject().put("aparelho", aparelho).put("id", registro.optString("id")).put("atualizadoEm", atualizadoEm));
     }
     if (itens.length() > 0) {

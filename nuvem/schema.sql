@@ -32,12 +32,14 @@ CREATE TABLE IF NOT EXISTS info (
   valor TEXT
 );
 
--- 2.13: pendências dos aparelhos; só a central as promove para registros.
-CREATE TABLE IF NOT EXISTS fila (
+-- 2.14: ponto de encontro; a central continua conferindo cada pendência.
+CREATE TABLE IF NOT EXISTS pendentes (
   aparelho TEXT NOT NULL,
   id TEXT NOT NULL,
   atualizadoEm INTEGER NOT NULL,
   geracao TEXT NOT NULL DEFAULT '',
+  ordem INTEGER NOT NULL,
   json TEXT NOT NULL,
   PRIMARY KEY (aparelho, id)
 );
+CREATE INDEX IF NOT EXISTS pendentes_ordem ON pendentes (ordem);

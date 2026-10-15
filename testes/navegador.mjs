@@ -111,6 +111,10 @@ export async function abrirNavegador({ porta = 9340 + Math.floor(Math.random() *
         const busca = `(() => { const lista = [...document.querySelectorAll(${JSON.stringify(seletor)})].filter((e) => e.offsetParent !== null || getComputedStyle(e).position === 'fixed')${texto ? `.filter((e) => e.textContent.replace(/\\s+/g, ' ').includes(${JSON.stringify(texto)}))` : ''}; return lista[${indice}] || null; })()`;
         await a.esperar(busca, esperarMs, `achar ${seletor}${texto ? ' "' + texto + '"' : ''}`);
         const caixa = await a.avaliar(`(() => { const e = ${busca}; e.scrollIntoView({ block: 'center', inline: 'center' }); const b = e.getBoundingClientRect(); return { x: b.left + b.width / 2, y: b.top + b.height / 2 }; })()`);
+        // notificação (#toast) por cima do botão, como a "Folha de ontem guardada" do tablet chefe entre 07:05 e 07:59:
+        // a pessoa fecha a notificação e toca de novo no botão
+        const coberto = `(() => { const e = ${busca}; const p = document.elementFromPoint(${caixa.x}, ${caixa.y}); return !e.closest('#toast') && !!(p && p.closest('#toast')); })()`;
+        if (await a.avaliar(coberto)) { await a.avaliar('document.getElementById("toast").click()'); await dormir(350); }
         await dormir(60);
         for (const type of ['mousePressed', 'mouseReleased']) {
           await cdp('Input.dispatchMouseEvent', { type, x: caixa.x, y: caixa.y, button: 'left', clickCount: 1 }, sessionId);

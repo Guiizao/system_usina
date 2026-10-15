@@ -135,6 +135,17 @@ svg.ico { width: 1.25em; height: 1.25em; flex: none; stroke: currentColor; fill:
 .status-con .luzes i { width: 13px; height: 13px; border-radius: 50%; background: var(--linha); box-shadow: 0 0 0 2px rgba(255, 255, 255, .25); }
 .status-con .luzes i.ok { background: var(--verde); }
 .status-con .luzes i.off { background: var(--ambar); }
+/* cabeçalho apertado (caberTextos): o nome da tela vem primeiro; os botões ficam só com o ícone, o Voltar só com a
+   seta e as duas luzes da Conexão uma em cima da outra */
+.topo.apertado .tema span, .topo.apertado .atalho span, .topo.apertado .voltar span { display: none; }
+.topo.apertado .voltar { padding: 0 10px; }
+.topo.apertado .tema { min-width: 56px; }
+.topo.apertado .status-con { min-width: 40px; padding: 0 6px; }
+.topo.apertado .status-con .luzes { flex-direction: column; gap: 5px; height: auto; }
+:root[data-dispositivo="celular"] .topo.apertado { gap: 4px; }
+:root[data-dispositivo="celular"] .topo.apertado .tema { min-width: 44px; }
+:root[data-dispositivo="celular"] .topo.apertado .status-con { padding: 0 5px; }
+:root[data-dispositivo="celular"] .topo.apertado .status-con .luzes i { width: 11px; height: 11px; }
 .status-linhas { display: grid; gap: 10px; margin: 12px 0; }
 .status-linha { display: grid; grid-template-columns: 16px 1fr; gap: 12px; align-items: start; padding: 10px 12px; border: 1px solid var(--linha); border-radius: 8px; }
 .status-linha > i { width: 16px; height: 16px; margin-top: 4px; border-radius: 50%; background: var(--linha); }

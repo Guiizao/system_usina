@@ -4,6 +4,15 @@
    Depois do sinal de igual vem JSON puro, porque o servidor do tablet chefe (Java) também lê este arquivo. */
 window.NOVIDADES = [
   {
+    "versao": "2.14.0",
+    "data": "2026-10-15",
+    "itens": [
+      "Com a central desligada ou em outra rede (a outra Starlink), os aparelhos trocam as anotações pela nuvem: um vê na hora o que o outro anotou. Cada hora de cada folha é uma anotação: o que um aparelho fez se junta com o que o outro fez no resto do dia.",
+      "Quando a central volta, ela puxa tudo da nuvem e confere as regras de sempre (quem pode anotar o quê, aparelho bloqueado). O que não podia, ela desfaz.",
+      "Nome da tela inteiro no alto: quando ele não cabe (celular e tablet em pé), os botões de cima ficam só com o ícone e o Voltar só com a seta."
+    ]
+  },
+  {
     "versao": "2.13.5",
     "data": "2026-10-15",
     "itens": [

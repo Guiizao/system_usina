@@ -92,14 +92,16 @@ export async function testarPedidos24(nav, ligar, porta, grupo) {
       await semNotificacao(esc);
       await esc.tocar('[data-a="relatorios"]');
       await esc.esperar('document.querySelector(".relatorio-dia")', 10000, 'relatório do dia');
-      igual(await esc.avaliar('document.querySelectorAll(".relatorio-dia").length'), 1, 'relatórios de hoje');
+      // das 07:05 às 07:59 o tablet chefe guarda sozinho a folha de ontem, e ontem aparece na lista também
+      const deHoje = '[...document.querySelectorAll(".relatorio-dia")].filter((e) => e.innerText.includes("(hoje)")).length';
+      igual(await esc.avaliar(deHoje), 1, 'relatórios de hoje');
       await esc.tocar('[data-a="gerar-hoje"]');
       await esc.esperar('document.body.innerText.includes("Excel guardado em RelatoriosUsina")', 15000, 'Excel guardado');
       certo(fs.readdirSync(path.join(c.pastaRelatorios, hoje())).some((n) => n.endsWith('.xlsx')), 'sem o Excel na pasta');
-      await esc.tocar('[data-a="relatorio-apagar"]'); await esc.tocar('[data-k="sim"]');
+      await esc.tocar(`[data-a="relatorio-apagar"][data-data="${hoje()}"]`); await esc.tocar('[data-k="sim"]');
       await esc.esperar('document.body.innerText.includes("ainda sem Excel guardado")', 10000, 'arquivo apagado');
       certo(!fs.existsSync(path.join(c.pastaRelatorios, hoje())) || !fs.readdirSync(path.join(c.pastaRelatorios, hoje())).length, 'o arquivo continua na pasta');
-      igual(await esc.avaliar('document.querySelectorAll(".relatorio-dia").length'), 1, 'o dia continua na lista');
+      igual(await esc.avaliar(deHoje), 1, 'o dia continua na lista');
     });
 
     await teste(grupo, 'WhatsApp: resumo organizado por setor, com os totais dos insumos, só dos setores escolhidos', async () => {

@@ -3,7 +3,7 @@
 (function () {
   'use strict';
   const C = window.USINA;
-  const VERSAO = '2.13.5'; // aparece nos ajustes e vai junto com cada envio para a central
+  const VERSAO = '2.14.0'; // aparece nos ajustes e vai junto com cada envio para a central
   const AUTORIA = '© 2026 Guilherme. Todos os direitos reservados. Uso somente com autorização do autor.';
   const params = new URLSearchParams(location.search);
   const DEMO_IMG = params.has('demo'); // usado só para gerar imagens de apresentação
@@ -688,7 +688,7 @@
         // conectou numa central nova (tablet chefe trocado ou reinstalado): manda de novo o que este aparelho guarda,
         // para a central não começar vazia
         const outraCentral = !!cfg.geracao;
-        cfg.geracao = resp1.geracao; cfg.ultimoSeq = 0;
+        cfg.geracao = resp1.geracao; cfg.ultimoSeq = 0; cfg.nuvemSeq = null; cfg.nuvemOrdem = 0;
         if (outraCentral) { Object.values(registros).forEach((r) => { if (!envio.includes(r)) r.sincronizado = false; }); salvarRegistros(); }
         salvarCfg();
       }
@@ -762,7 +762,7 @@
       sync.modo = 'offline';
       sync.falhas = (sync.falhas || 0) + 1;
       conferirNaNuvem();
-      mandarParaNuvem();
+      sincronizarNuvem();
       // no aplicativo: depois de umas falhas seguidas, procura o tablet chefe no Wi-Fi (no máximo a cada 3 minutos)
       if (NO_APK && sync.falhas >= 3 && Date.now() - (sync.ultimaBusca || 0) > 180000) { sync.ultimaBusca = Date.now(); setTimeout(reencontrarCentral, 0); }
     } finally {
@@ -773,6 +773,48 @@
   /* Longe da central (outra rede, 4G), versão 2.13: depois de 2 minutos sem achar a central, o que ainda não subiu vai
      para a fila da nuvem. A central puxa a fila e confere tudo como se o aparelho tivesse sincronizado (a mais nova vale).
      A anotação continua esperando a central: quando ela voltar, sobe direto também (repetida não muda nada). */
+  /* Sem a central (desligada ou em outra rede), versão 2.14: o aparelho troca as anotações direto com a nuvem.
+     Manda o que falta e puxa o que os outros fizeram: o que a central publicou (pelo seq dela, que a nuvem guarda igual)
+     e o que os outros aparelhos longe da central mandaram (pela ordem da nuvem). A mais nova vale, como na central, e o
+     que espera alguém entrar não é trocado. Quando a central volta, ela confere tudo e desfaz o que não podia.
+     Nuvem ainda sem a rota nova (publicar.ps1 não rodou): usa a fila da 2.13. */
+  async function sincronizarNuvem() {
+    if (cfg.demo || !cfg.nuvemUrl || !cfg.nuvemToken || sync.enviandoNuvem) return;
+    if (Date.now() - (cfg.ultimoContato || 0) < 2 * 60000 || Date.now() - (sync.nuvemEm || 0) < 20000) return;
+    if (sync.nuvemAntiga) return mandarParaNuvem();
+    sync.enviandoNuvem = true; sync.nuvemEm = Date.now();
+    let mudou = false;
+    try {
+      if (cfg.nuvemSeq == null) cfg.nuvemSeq = cfg.ultimoSeq || 0; // começa de onde parou com a central
+      for (let volta = 0; volta < 6; volta++) {
+        const lista = Object.values(registros).filter((r) => !r.sincronizado && !r.esperaEntrar && r.naNuvem !== r.atualizadoEm).slice(0, 200);
+        const corpo = lista.map(({ sincronizado, naNuvem, esperaEntrar, ...r }) => (r.data === 'config' ? Object.assign(r, { base: r.rev || 0 }) : r));
+        const r = await fetch(`${cfg.nuvemUrl.replace(/\/+$/, '')}/aparelho/sync`, {
+          method: 'POST', cache: 'no-store',
+          headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + cfg.nuvemToken, 'X-Aparelho': cfg.deviceId },
+          body: JSON.stringify({ registros: corpo, geracao: cfg.geracao || '', desdeSeq: cfg.nuvemSeq || 0, desdeOrdem: cfg.nuvemOrdem || 0, desdeDia: primeiroDiaGuardado() }),
+        });
+        marcarNuvem(r.status < 500);
+        if (r.status === 404) { sync.nuvemAntiga = true; sync.enviandoNuvem = false; sync.nuvemEm = 0; return mandarParaNuvem(); }
+        if (r.status === 423) { conferirNaNuvem(true); return; } // bloqueado: a nuvem diz como
+        if (!r.ok) return; // 409: a nuvem é de outra central (zerada ou trocada); espera falar com a central
+        const d = await r.json();
+        lista.forEach((x) => { const local = registros[x.id]; if (local && local.atualizadoEm === x.atualizadoEm) local.naNuvem = x.atualizadoEm; });
+        for (const rec of d.registros || []) {
+          const local = registros[rec.id];
+          if (!local || (!local.esperaEntrar && rec.atualizadoEm > local.atualizadoEm)) { registros[rec.id] = Object.assign({}, rec, { sincronizado: true }); mudou = true; }
+        }
+        cfg.nuvemSeq = Math.max(cfg.nuvemSeq || 0, Number(d.seq) || 0);
+        cfg.nuvemOrdem = Math.max(cfg.nuvemOrdem || 0, Number(d.ordem) || 0);
+        salvarRegistros(); salvarCfg();
+        if (lista.length && !sync.avisouNuvem) { sync.avisouNuvem = true; toast('Sem a central: as anotações vão pela nuvem e as dos outros chegam por ela.', 'ok'); }
+        if (!d.mais) break;
+      }
+      if (mudou) { podar(); salvarRegistros(); }
+    } catch (e) { marcarNuvem(false); /* sem internet: tenta de novo depois */ } finally { sync.enviandoNuvem = false; }
+    if (mudou && ['central', 'inicio', 'prancheta', 'aparelhos'].includes(view().tela)) { if (podeRedesenhar()) render(); else redesenharDepois = true; }
+    atualizarConexao();
+  }
   async function mandarParaNuvem() {
     if (cfg.demo || !cfg.nuvemUrl || !cfg.nuvemToken || sync.enviandoNuvem) return;
     if (Date.now() - (cfg.ultimoContato || 0) < 2 * 60000 || Date.now() - (sync.nuvemEm || 0) < 60000) return;
@@ -2953,7 +2995,7 @@
     const escuro = cfg.tema === 'escuro';
     const configurado = cfg.papel && (cfg.chave || cfg.demo);
     return `<header class="topo">
-        ${podeVoltar ? `<button class="voltar" data-a="voltar">${ico('voltar')} Voltar</button>` : '<img class="logo" src="icons/logo.png" alt="Ubirálcool">'}
+        ${podeVoltar ? `<button class="voltar" data-a="voltar">${ico('voltar')}<span>Voltar</span></button>` : '<img class="logo" src="icons/logo.png" alt="Ubirálcool">'}
         <div class="titulo ${String(titulo).length > 17 ? 'longo' : ''}"><div class="titulo-linha"><b>${esc(titulo)}</b><em class="turno-topo" id="turno-topo">${esc(turnoAtual().nome)}</em></div>${subtitulo ? `<span id="subtitulo-topo">${esc(subtitulo)}</span>` : ''}</div>
         ${atalhos ? `<div class="atalhos">${atalhos}</div>` : ''}
         <div class="relogio"><b id="relogio">${horaAgora()}</b></div>
@@ -6089,7 +6131,9 @@
     }
     return el.scrollWidth <= el.clientWidth + 1 && el.scrollHeight <= el.clientHeight + 1;
   };
-  function caberTextos(raiz = document) {
+  function caberTextos(raiz = document, apertado = false) {
+    const topo = raiz.classList && raiz.classList.contains('topo') ? raiz : raiz.querySelector('.topo');
+    if (topo && !apertado) topo.classList.remove('apertado');
     // o selo do turno fica do lado do nome da tela só se o nome couber inteiro; senão ele some (o nome vem primeiro)
     raiz.querySelectorAll('.topo .titulo-linha').forEach((l) => {
       const selo = l.querySelector('.turno-topo'); const nome = l.querySelector('b');
@@ -6119,6 +6163,15 @@
       // nome do quadro com o volume do lado que nem na letra mínima cabe: "Folga Nº 2" vira "Folga 2"
       if (!cabe(el) && el.matches('.campo .rot') && el.querySelector('.rot-n')) el.closest('.campo').classList.add('apertado');
     });
+    // nem com a letra menor o nome da tela coube (o botão Conexão tirou lugar): os botões do alto ficam só com o ícone
+    // e o Voltar só com a seta, e o nome é medido de novo. Não coube = passou da largura (aqui sem a folga de 1 px do
+    // cabe(): com o zoom, 1 px a mais já corta a última letra), sobrou uma linha escondida (os 2 px da perna do "p"
+    // não contam) ou o nome curto quebrou em duas linhas ("Matéria-/prima").
+    const nome = topo && topo.querySelector('.titulo b');
+    const linhas = (el) => { const r = document.createRange(); r.selectNodeContents(el); return new Set([...r.getClientRects()].map((x) => Math.round(x.top))).size; };
+    const naoCabe = nome && nome.clientWidth > 0 && (nome.scrollWidth > nome.clientWidth || nome.scrollHeight > nome.clientHeight + 6
+      || (!nome.closest('.titulo.longo') && linhas(nome) > 1));
+    if (!apertado && naoCabe) { topo.classList.add('apertado'); caberTextos(topo, true); }
   }
   /* Ajusta a letra no próximo quadro da tela. Com "partes", só dentro delas (ao teclar, só o quadro e o teclado);
      sem, a tela inteira. */

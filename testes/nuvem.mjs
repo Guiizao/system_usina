@@ -31,7 +31,7 @@ const sha = (b) => crypto.createHash('sha256').update(b).digest('hex');
 export const temWrangler = () => fs.existsSync(WRANGLER);
 
 /** Liga a nuvem aqui no computador (wrangler dev), com o banco numa pasta temporária. */
-async function ligarNuvem(porta) {
+export async function ligarNuvem(porta) {
   const banco = pastaTemporaria('nuvem-banco');
   const publico = pastaTemporaria('nuvem-publico');
   fs.cpSync(path.join(NUVEM, 'publico'), publico, { recursive: true });
@@ -272,7 +272,8 @@ export async function testarNuvem(grupo, sqlite = false) {
           await c.api('/api/pessoas', { acao: 'salvar', pessoa: { nome: 'Consulta fila', nivel: 'consulta', pin: '3333' } });
           await remoto.pedir('/api/pessoas', { corpo: { acao: 'verificar', pin: '3333' } });
           await mandar([{ ...rast, atualizadoEm: t + 401, valores: { pressao: '999' } }]); await puxar();
-          igual((await registros()).find((x) => x.id === rast.id).atualizadoEm, t + 400);
+          certo((await registros()).find((x) => x.id === rast.id).atualizadoEm > t + 401, 'recusa publica correção mais nova');
+          igual((await registros()).find((x) => x.id === rast.id).valores.pressao, rast.valores.pressao);
           igual((await c.api('/api/aparelhos', { acao: 'bloquear', id: remoto.aparelho, modo: 'trava' })).ok, true);
           await mandar([{ ...r, atualizadoEm: t + 402, valores: { pressao: '999' } }]); await puxar();
           igual((await registros()).find((x) => x.id === r.id).valores.pressao, '7');

@@ -331,6 +331,21 @@ function tokenNuvem(aparelho) {
   const n = config.nuvem;
   return n.url && n.segredo ? crypto.createHmac('sha256', n.segredo).update('aparelho|' + aparelho).digest('hex') : '';
 }
+/** Desfaz uma versão recusada que outros aparelhos já podem ter recebido pela nuvem. */
+function corrigirRecusaNuvem(r) {
+  if (!ehDia(r.data) || r.prancheta === 'registro') return;
+  const atual = db.registros[r.id] || (arquivado(r.data) ? lerDiaArquivado(r.data).find((x) => x.id === r.id) : null);
+  const correcao = Object.assign({}, atual || { id: r.id, data: r.data, prancheta: r.prancheta, chave: r.chave, valores: {}, apagado: true }, {
+    atualizadoEm: Math.max(Date.now(), Number(atual && atual.atualizadoEm) || 0, r.atualizadoEm) + 1,
+    seq: ++db.seq, recebidoEm: Date.now(),
+  });
+  delete correcao.sincronizado;
+  db.registros[r.id] = correcao;
+  if (arquivado(r.data)) {
+    juntarNoArquivo(r.data, [correcao]);
+    config.nuvem.arquivosEnviados = false;
+  } else backupDoDia(r.data);
+}
 /** Confirma a versão lida; um envio mais novo durante o processamento continua na fila. */
 async function puxarFilaNuvem() {
   const r = await pedirNuvem('fila');
@@ -341,6 +356,7 @@ async function puxarFilaNuvem() {
     const recusas = resultado.recusados || [];
     if (resultado.erro || resultado.zerar) recusas.push({ id: item.registro.id, motivo: resultado.erro || 'geracao' });
     for (const recusa of recusas) registrar('nuvem', `Fila recusada: ${recusa.id} (${recusa.motivo})`, { aparelho: nomeDoAparelho(item.aparelho) });
+    if (recusas.length) corrigirRecusaNuvem(item.registro);
     itens.push({ aparelho: item.aparelho, id: item.registro.id, atualizadoEm: item.registro.atualizadoEm });
   }
   if (itens.length) {
@@ -353,7 +369,7 @@ const erroDaNuvem = (r) => r.erro || (r.status === 401 ? 'A nuvem recusou a senh
 /** O que falta mandar: o que mudou depois do último envio (e, na primeira vez, também os dias do BackupUsina). */
 function pendentesNuvem(n) {
   const mapa = new Map();
-  const juntar = (r) => { if (leitura.publica(r) && r.seq > (n.seq || 0)) { const a = mapa.get(r.id); if (!a || r.seq > a.seq) mapa.set(r.id, r); } };
+  const juntar = (r) => { if (ehDia(r.data) && r.prancheta !== 'registro' && r.seq > (n.seq || 0)) { const a = mapa.get(r.id); if (!a || r.seq > a.seq) mapa.set(r.id, r); } };
   if (!n.arquivosEnviados) {
     fs.readdirSync(PASTAS.backup).forEach((f) => { const m = f.match(/^(\d{4}-\d{2}-\d{2})\.json$/); if (m && arquivado(m[1])) lerDiaArquivado(m[1]).forEach(juntar); });
   }
