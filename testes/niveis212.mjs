@@ -74,7 +74,10 @@ export async function testarNiveis(ligar, porta, grupo) {
     });
 
     await teste(grupo, 'nível 1: corrige o que o setor anotou e põe a linha que faltou; Vinho e Fermentação não', async () => {
-      await p(setor, '/api/sync', { aparelho: setor.aparelho, papel: 'hidrolise', registros: [reg(`${hoje}|hid_anexo1|1`, { brix: '17' })] });
+      // A Hidrólise tem seu próprio aparelho; o fixture de setor abaixo é do Ralo.
+      await c.reiniciar(); // nova janela de pareamento para o aparelho da Hidrólise
+      const hidrolise = await conectarTeste(c.url, c.codigo());
+      await p(hidrolise, '/api/sync', { aparelho: hidrolise.aparelho, papel: 'hidrolise', registros: [reg(`${hoje}|hid_anexo1|1`, { brix: '17' })] });
       const r = await sync(n1, [reg(`${hoje}|hid_anexo1|2`, { brix: '15' }), reg(`${hoje}|hid_anexo1|1`, { brix: '18' }), reg(`${hoje}|med_dornas|fermentacao`, { d7: '1.2' })]);
       igual(r.status, 200);
       igual(JSON.stringify(r.recusados.map((x) => [x.id, x.motivo])), JSON.stringify([[`${hoje}|med_dornas|fermentacao`, 'sem_permissao']]), 'só o Vinho recusado');

@@ -564,6 +564,18 @@ function funcoesNoAparelho(aparelho) {
   return s;
 }
 const podeNoAparelho = (aparelho, f) => funcoesNoAparelho(aparelho).has(f);
+/** O que o tablet chefe faz sozinho, sem depender de quem está dentro (o relatório das 07:05 e os totais do Base44):
+    o que o nível e o limite do próprio aparelho deixam. Às 07:05 o turno virou e normalmente não há ninguém dentro. */
+function podeAparelhoSozinho(aparelho, f) {
+  const nivel = nivelDoAparelho(aparelho);
+  if (!nivel) return false;
+  if (nivel === 3) return true;
+  const cfg = db.registros['config|sistema|geral'];
+  const niveis = cfg && !cfg.apagado && cfg.valores && cfg.valores.niveisChefe;
+  const permitidas = niveis && Array.isArray(niveis[nivel]) ? niveis[nivel] : nivel === 1 ? FUNCOES_DO_NIVEL_1 : FUNCOES_PADRAO.filter((x) => x !== 'conexao');
+  const teto = tetoDoAparelho(aparelho);
+  return permitidas.includes(f) && (!teto || teto.includes(f));
+}
 const negar = (res, f) => json(res, 403, { erro: 'Quem está neste aparelho não pode fazer isso', semPermissao: f });
 // tablet de setor: quem digitou a senha nos ajustes fica liberado por 10 minutos (para a central aceitar o que ele mudar)
 const liberadosNoSetor = {};
@@ -575,6 +587,27 @@ function funcoesNoSetor(aparelho) {
   if (!l || Date.now() > l.ate) return new Set();
   const s = funcoesDaPessoa(config.pessoas.find((p) => p.id === l.pessoaId && p.ativo !== false));
   return new Set([...s].filter((f) => FUNCOES_NO_SETOR.includes(f)));
+}
+/** Setor vem da conexão, nunca de r.setor. O histórico permite escoar a fila anterior à troca. */
+function guardarSetor(aparelho, papel) {
+  if (nivelDoAparelho(aparelho)) return;
+  const setores = formsLidas().setores.filter((s) => !s.soChefe);
+  const mapa = config.setoresAparelhos || (config.setoresAparelhos = {});
+  const salvo = mapa[aparelho];
+  const declarado = papel || (!salvo && config.aparelhosVistos[aparelho]?.papel);
+  if (!setores.some((s) => s.id === declarado) || salvo?.atual === declarado) return;
+  const f = funcoesNoSetor(aparelho);
+  if (salvo && !f.has('ajustes') && !f.has('usina')) return;
+  const anteriores = { ...(salvo?.anteriores || {}) };
+  if (salvo) anteriores[salvo.atual] = Date.now();
+  mapa[aparelho] = { atual: declarado, anteriores };
+  salvarConfig();
+}
+function podeFolhaNoSetor(aparelho, r) {
+  const setor = formsLidas().setores.find((s) => !s.soChefe && s.pranchetas.includes(r.prancheta));
+  if (!setor) return true;
+  const salvo = config.setoresAparelhos?.[aparelho];
+  return !!salvo && (salvo.atual === setor.id || (Number.isFinite(r.atualizadoEm) && r.atualizadoEm > 0 && r.atualizadoEm <= (salvo.anteriores[setor.id] || 0)));
 }
 const nomeDoNivel = (n) => ({ 1: 'nível 1 (vê, corrige e envia)', 2: 'nível 2', 3: 'nível 3 (do dono)' }[n] || 'sem nível');
 /** O que vai para o aplicativo mostrar só o que pode: o nível do aparelho, se é o dono e as funções que valem aqui. */
@@ -977,6 +1010,32 @@ function arquivoEstatico(res, pathname) {
   });
 }
 
+// O escritório usa o login cifrado já existente. O cookie só dá leitura por 30 minutos.
+const COOKIE_RELATORIOS = 'usina_relatorios';
+function cookieRelatorios(aparelho, acao) {
+  if (!['entrar', 'quem', 'sair'].includes(acao)) return '';
+  const s = config.sessoes[aparelho];
+  const permitido = acao !== 'sair' && podeNoAparelho(aparelho, 'relatorios');
+  const payload = permitido ? Buffer.from(JSON.stringify({ aparelho, pessoaId: s.pessoaId, em: s.em, ate: Date.now() + 30 * 60000 })).toString('hex') : '';
+  const token = permitido ? payload + '.' + hmac(config.chave, 'relatorios|' + payload).toString('hex') : '';
+  return COOKIE_RELATORIOS + '=' + token + '; Path=/relatorios; HttpOnly; SameSite=Strict; Max-Age=' + (permitido ? 1800 : 0);
+}
+function autorizarRelatorios(req, res) {
+  res.setHeader('Cache-Control', 'no-store');
+  const token = (req.headers.cookie || '').split(';').map((x) => x.trim()).find((x) => x.startsWith(COOKIE_RELATORIOS + '='))?.slice(COOKIE_RELATORIOS.length + 1) || '';
+  if (/^[a-f0-9]{2,2048}\.[a-f0-9]{64}$/.test(token)) {
+    const [payload, assinatura] = token.split('.');
+    if (mesmoSegredo(hmac(config.chave, 'relatorios|' + payload).toString('hex'), assinatura)) {
+      try {
+        const t = JSON.parse(Buffer.from(payload, 'hex').toString('utf8')), s = config.sessoes[t.aparelho];
+        if (t.ate > Date.now() && s && s.pessoaId === t.pessoaId && s.em === t.em && !config.bloqueios[t.aparelho] && podeNoAparelho(t.aparelho, 'relatorios')) return true;
+      } catch (e) { /* cookie inválido */ }
+    }
+  }
+  res.writeHead(401, { 'Content-Type': 'text/plain; charset=utf-8' });
+  res.end('Abra / neste navegador, conecte este computador como tablet chefe e entre com a senha de quem tem Relatórios. Depois volte a /relatorios.');
+  return false;
+}
 function paginaRelatorios(res, p) {
   const raiz = PASTAS.relatorios;
   const partes = p.split('/').filter(Boolean); // relatorios[/data[/arquivo]]
@@ -1100,6 +1159,10 @@ const servidor = http.createServer(async (req, res) => {
       } else {
         await rotaProtegida({ method: cab.m === 'POST' ? 'POST' : 'GET', corpoPronto: texto.slice(nl + 1), aparelho }, falso, new URL('/' + caminho, 'http://localhost'), ip);
       }
+      if (falso.status === 200 && caminho.split('?')[0] === 'api/pessoas') {
+        const cookie = cookieRelatorios(aparelho, JSON.parse(texto.slice(nl + 1)).acao);
+        if (cookie) res.setHeader('Set-Cookie', cookie);
+      }
       res.writeHead(200, { 'Content-Type': 'application/octet-stream', 'Cache-Control': 'no-store' });
       return res.end(selar(chave, `${falso.status}\n${falso.corpo}`, Buffer.concat([Buffer.from('resposta|'), iv])));
     }
@@ -1109,7 +1172,10 @@ const servidor = http.createServer(async (req, res) => {
     if (req.method !== 'GET') { res.writeHead(405); return res.end(); }
 
     // Página do escritório com os relatórios já prontos, por dia
-    if (p === '/relatorios' || p.startsWith('/relatorios/')) return paginaRelatorios(res, p);
+    if (p === '/relatorios' || p.startsWith('/relatorios/')) {
+      if (autorizarRelatorios(req, res)) return paginaRelatorios(res, p);
+      return;
+    }
 
     return arquivoEstatico(res, p);
   } catch (e) {
@@ -1121,6 +1187,7 @@ const servidor = http.createServer(async (req, res) => {
 function sincronizar(corpo, aparelho, ip) {
   const bloqueio = config.bloqueios[aparelho];
   if (bloqueio) return { erro: 'bloqueado', bloqueio: bloqueioPublico(bloqueio), geracao: config.geracao };
+  guardarSetor(aparelho, corpo.papel);
   if (corpo.aparelho) {
     corpo.aparelho = aparelho; // a identidade da lista também vem do pedido cifrado
     const antes = aparelhos[corpo.aparelho];
@@ -1166,6 +1233,7 @@ function sincronizar(corpo, aparelho, ip) {
       // aviso só sai do tablet chefe
       recusados.push({ id: r.id, motivo: 'sem_permissao' }); continue;
     }
+    if (!nivelAqui && r.data !== 'config' && !podeFolhaNoSetor(aparelho, r)) { recusados.push({ id: r.id, motivo: 'sem_permissao' }); continue; }
     // tablet de setor não muda os campos que são só do escritório (NF, lote, validade...), nem de dia antigo
     if (!nivelAqui && r.valores) {
       const soEscritorio = camposSoDoEscritorio(r.prancheta);
@@ -1476,8 +1544,8 @@ async function rotaProtegida(req, res, url, ip) {
           return json(res, 200, estadoBase44(true));
         }
         if (corpo.acao === 'enviar') {
-          // os totais do dia saem só do tablet chefe liberado (ele manda sozinho, mesmo sem ninguém dentro)
-          if (!nivelDoAparelho(req.aparelho)) return negar(res, 'relatorios');
+          // os totais saem do tablet chefe liberado, sozinhos: vale o que o nível e o limite do aparelho deixam
+          if (!podeNoAparelho(req.aparelho, 'integracoes') && !podeAparelhoSozinho(req.aparelho, 'integracoes')) return negar(res, 'integracoes');
           if (!b.url) return json(res, 400, { erro: 'O endereço do Base44 não foi cadastrado' });
           if (!ehDia(corpo.data) || !corpo.dados || typeof corpo.dados !== 'object') return json(res, 400, { erro: 'dados inválidos' });
           const antes = (b.enviados || {})[corpo.data];
@@ -1526,8 +1594,8 @@ async function rotaProtegida(req, res, url, ip) {
 
       // O tablet chefe manda o Excel e o XML do dia para ficarem guardados aqui
       if (p === '/api/relatorio' && req.method === 'POST') {
-        // só o tablet chefe liberado guarda a folha do dia (sozinho às 07:05, mesmo sem ninguém dentro, ou pela tela)
-        if (!nivelDoAparelho(req.aparelho)) return negar(res, 'relatorios');
+        // a folha do dia: sozinha às 07:05 (sem ninguém dentro) ou pela tela; vale o que o nível e o limite do aparelho deixam
+        if (!podeNoAparelho(req.aparelho, 'relatorios') && !podeAparelhoSozinho(req.aparelho, 'relatorios')) return negar(res, 'relatorios');
         const corpo = JSON.parse(await lerCorpo(req, 30 * 1024 * 1024));
         if (!/^\d{4}-\d{2}-\d{2}$/.test(corpo.data || '')) return json(res, 400, { erro: 'data inválida' });
         const nome = path.basename(String(corpo.nome || '')).replace(/[^\w.\-]/g, '_');
