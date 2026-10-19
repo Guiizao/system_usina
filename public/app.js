@@ -6329,8 +6329,10 @@
    * Relógio: troca de folha às 07:00 e de turno
    * ========================================================= */
   /** Todo dia, pouco depois das 07:00, o tablet chefe guarda o Excel e o XML do dia que fechou. */
+  let fechamentoTentado = 0;
   function fechamentoDoDia(dataHoje) {
     if (!ehCentral() || cfg.demo || !cfg.chave || sync.modo !== 'online') return;
+    if (Date.now() - fechamentoTentado < 60000) return; // não deu: tenta de novo daqui a um minuto (até as 07:59)
     const agora = new Date();
     if (agora.getHours() !== C.inicioDoDia || agora.getMinutes() < 5) return;
     const ontem = somarDias(dataHoje, -1);
@@ -6338,7 +6340,10 @@
     cfg.ultimoFechamento = ontem; salvarCfg();
     const todos = setores().map((s) => s.id);
     guardarNaCentral(ontem, [gerarArquivo('xlsx', ontem, todos), gerarArquivo('xml', ontem, todos)])
-      .then((ok) => { if (ok) toast(`Folha de ${fmtData(ontem)} guardada em RelatoriosUsina`); });
+      .then((ok) => {
+        if (ok) return toast(`Folha de ${fmtData(ontem)} guardada em RelatoriosUsina`);
+        fechamentoTentado = Date.now(); cfg.ultimoFechamento = null; salvarCfg();
+      });
   }
 
   let ultimaData = dataProducao(), ultimoTurno = turnoAtual().id, ultimaHora = new Date().getHours();

@@ -639,6 +639,7 @@ public class ServidorCentral {
         return;
       }
 
+      if (("/relatorios".equals(caminho) || caminho.startsWith("/relatorios/")) && !autorizarRelatorios(cabecalhos, saida)) return;
       if ("/relatorios".equals(caminho) || "/relatorios/".equals(caminho)) { paginaRelatorios(saida); return; }
 
       if (caminho.startsWith("/relatorios/")) {
@@ -677,8 +678,8 @@ public class ServidorCentral {
         if ("/api/base44".equals(caminho) && "POST".equals(metodo)) {
           String acaoBase44 = acaoDoPedido(corpo);
           if ("configurar".equals(acaoBase44) && !podeNoAparelho(aparelho, "integracoes")) { negar(saida, "integracoes"); return; }
-          // os totais do dia saem só do tablet chefe liberado (ele manda sozinho, mesmo sem ninguém dentro)
-          if ("enviar".equals(acaoBase44) && nivelDoAparelho(aparelho) == 0) { negar(saida, "relatorios"); return; }
+          // Envio automático e manual exigem a função da sessão atual.
+          if ("enviar".equals(acaoBase44) && !podeNoAparelho(aparelho, "integracoes") && !podeAparelhoSozinho(aparelho, "integracoes")) { negar(saida, "integracoes"); return; }
           apiBase44(corpo, saida);
           return;
         }
@@ -698,8 +699,8 @@ public class ServidorCentral {
           return;
         }
         if ("/api/relatorio".equals(caminho) && "POST".equals(metodo)) {
-          // só o tablet chefe liberado guarda a folha do dia (sozinho às 07:05, mesmo sem ninguém dentro, ou pela tela)
-          if (nivelDoAparelho(aparelho) == 0) { negar(saida, "relatorios"); return; }
+          // Também às 07:05: sem pessoa com Relatórios, aguarda nova tentativa.
+          if (!podeNoAparelho(aparelho, "relatorios") && !podeAparelhoSozinho(aparelho, "relatorios")) { negar(saida, "relatorios"); return; }
           apiRelatorio(corpo, saida);
           return;
         }
@@ -773,6 +774,7 @@ public class ServidorCentral {
   private synchronized JSONObject sincronizar(JSONObject pedido, String ip, String idCifrado) throws Exception {
     JSONObject bloqueio = bloqueios().optJSONObject(idCifrado);
     if (bloqueio != null) return new JSONObject().put("erro", "bloqueado").put("bloqueio", bloqueioPublico(bloqueio)).put("geracao", getGeracao());
+    guardarSetor(idCifrado, pedido.optString("papel"));
     String aparelho = pedido.optString("aparelho").isEmpty() ? "" : idCifrado;
     JSONObject antesDoAparelho = aparelho.isEmpty() ? null : aparelhos.get(aparelho);
     if (!aparelho.isEmpty()) {
@@ -840,6 +842,9 @@ public class ServidorCentral {
           // aviso só sai do tablet chefe
           recusados.put(new JSONObject().put("id", r.optString("id")).put("motivo", "sem_permissao"));
           continue;
+        }
+        if (nivelAqui == 0 && !"config".equals(data) && !podeFolhaNoSetor(idCifrado, r)) {
+          recusados.put(new JSONObject().put("id", r.optString("id")).put("motivo", "sem_permissao")); continue;
         }
         // tablet de setor não muda os campos que são só do escritório (NF, lote, validade...), nem de dia antigo
         if (nivelAqui == 0 && r.optJSONObject("valores") != null) {
@@ -1064,6 +1069,39 @@ public class ServidorCentral {
   }
 
   /** Página simples para abrir no navegador do escritório: os relatórios guardados, por dia. */
+  // O escritório usa o login cifrado já existente. O cookie só dá leitura por 30 minutos.
+  private static final String COOKIE_RELATORIOS = "usina_relatorios";
+  private synchronized String cookieRelatorios(String aparelho, String acao) throws Exception {
+    if (!Arrays.asList("entrar", "quem", "sair").contains(acao)) return "";
+    JSONObject s = objetoDaConfig("sessoes").optJSONObject(aparelho);
+    boolean permitido = !"sair".equals(acao) && podeNoAparelho(aparelho, "relatorios");
+    String payload = permitido ? hex(new JSONObject().put("aparelho", aparelho).put("pessoaId", s.getString("pessoaId")).put("em", s.getLong("em"))
+        .put("ate", System.currentTimeMillis() + 30 * 60000L).toString().getBytes(StandardCharsets.UTF_8)) : "";
+    String token = permitido ? payload + "." + hex(hmac(getChave().getBytes(StandardCharsets.UTF_8), "relatorios|" + payload)) : "";
+    return COOKIE_RELATORIOS + "=" + token + "; Path=/relatorios; HttpOnly; SameSite=Strict; Max-Age=" + (permitido ? 1800 : 0);
+  }
+
+  private synchronized boolean autorizarRelatorios(Map<String, String> cabecalhos, OutputStream saida) throws Exception {
+    String token = "";
+    for (String parte : cabecalhos.getOrDefault("cookie", "").split(";")) {
+      if (parte.trim().startsWith(COOKIE_RELATORIOS + "=")) { token = parte.trim().substring(COOKIE_RELATORIOS.length() + 1); break; }
+    }
+    if (token.matches("[a-f0-9]{2,2048}\\.[a-f0-9]{64}")) {
+      String[] partes = token.split("\\.");
+      if (MessageDigest.isEqual(hmac(getChave().getBytes(StandardCharsets.UTF_8), "relatorios|" + partes[0]), deHex(partes[1]))) {
+        try {
+          JSONObject t = new JSONObject(new String(deHex(partes[0]), StandardCharsets.UTF_8));
+          String aparelho = t.optString("aparelho");
+          JSONObject s = objetoDaConfig("sessoes").optJSONObject(aparelho);
+          if (t.optLong("ate") > System.currentTimeMillis() && s != null && s.optString("pessoaId").equals(t.optString("pessoaId")) && s.optLong("em") == t.optLong("em")
+              && !bloqueios().has(aparelho) && podeNoAparelho(aparelho, "relatorios")) return true;
+        } catch (Exception ignorado) { /* cookie inválido */ }
+      }
+    }
+    enviarTexto(saida, 401, "Abra / neste navegador, conecte este computador como tablet chefe e entre com a senha de quem tem Relatórios. Depois volte a /relatorios.");
+    return false;
+  }
+
   private void paginaRelatorios(OutputStream saida) throws IOException {
     StringBuilder linhas = new StringBuilder();
     File[] pastas = pastaRelatorios.listFiles();
@@ -1371,7 +1409,12 @@ public class ServidorCentral {
     for (int i = 0; i + 3 < bruto.length; i++) if (bruto[i] == '\r' && bruto[i + 1] == '\n' && bruto[i + 2] == '\r' && bruto[i + 3] == '\n') { fimCab = i + 4; break; }
     String situacao = new String(bruto, 0, fimLinha, StandardCharsets.UTF_8).split(" ")[1];
     byte[] plano = juntar((situacao + "\n").getBytes(StandardCharsets.UTF_8), Arrays.copyOfRange(bruto, fimCab, bruto.length));
-    enviar(saida, 200, "application/octet-stream", selar(chave, plano, juntar("resposta|".getBytes(StandardCharsets.UTF_8), iv)), null, false);
+    String cookie = "200".equals(situacao) && "api/pessoas".equals(c.split("\\?")[0])
+        ? cookieRelatorios(quem, new JSONObject(texto.substring(nl + 1)).optString("acao")) : "";
+    byte[] resposta = selar(chave, plano, juntar("resposta|".getBytes(StandardCharsets.UTF_8), iv));
+    String cabResposta = cabecalho(200, "application/octet-stream", resposta.length, null).toString();
+    if (!cookie.isEmpty()) cabResposta = cabResposta.replace("Connection: close", "Set-Cookie: " + cookie + "\r\nConnection: close");
+    saida.write(cabResposta.getBytes(StandardCharsets.UTF_8)); saida.write(resposta); saida.flush();
   }
 
   /** Pedido gravado por alguém e mandado de novo é recusado: vale só por 5 minutos e cada um só uma vez. */
@@ -2418,6 +2461,27 @@ public class ServidorCentral {
 
   private boolean podeNoAparelho(String aparelho, String funcao) throws Exception { return funcoesNoAparelho(aparelho).contains(funcao); }
 
+  /** O que o tablet chefe faz sozinho, sem depender de quem está dentro (o relatório das 07:05 e os totais do Base44):
+      o que o nível e o limite do próprio aparelho deixam. Às 07:05 o turno virou e normalmente não há ninguém dentro. */
+  private synchronized boolean podeAparelhoSozinho(String aparelho, String f) throws Exception {
+    int nivel = nivelDoAparelho(aparelho);
+    if (nivel == 0) return false;
+    if (nivel == 3) return true;
+    JSONObject cfg = registros.optJSONObject("config|sistema|geral");
+    JSONObject valores = cfg == null || cfg.optBoolean("apagado") ? null : cfg.optJSONObject("valores");
+    JSONObject niveis = valores == null ? null : valores.optJSONObject("niveisChefe");
+    JSONArray permitidas = niveis == null ? null : niveis.optJSONArray(String.valueOf(nivel));
+    boolean deixa = false;
+    if (permitidas != null) { for (int i = 0; i < permitidas.length(); i++) if (f.equals(permitidas.optString(i))) deixa = true; }
+    else deixa = nivel == 1 ? FUNCOES_DO_NIVEL_1.contains(f) : FUNCOES_PADRAO.contains(f) && !"conexao".equals(f);
+    if (!deixa) return false;
+    Object teto = tetoDoAparelho(aparelho);
+    if (!(teto instanceof JSONArray)) return true;
+    JSONArray t = (JSONArray) teto;
+    for (int i = 0; i < t.length(); i++) if (f.equals(t.optString(i))) return true;
+    return false;
+  }
+
   private void negar(OutputStream saida, String funcao) throws Exception {
     enviarJson(saida, 403, new JSONObject().put("erro", "Quem está neste aparelho não pode fazer isso").put("semPermissao", funcao));
   }
@@ -2430,6 +2494,40 @@ public class ServidorCentral {
     Set<String> s = p != null && ativa(p) ? funcoesDaPessoa(p) : new HashSet<>();
     s.retainAll(FUNCOES_NO_SETOR);
     return s;
+  }
+
+  /** Mapa de autorização fixo, como as folhas só do chefe; nuvemForms vem de aparelhos e não dá permissão. */
+  private static String setorDaFolha(String folha) {
+    if ("caldeira".equals(folha)) return "caldeira";
+    if ("ins_materia_prima".equals(folha)) return "ralo";
+    if (Arrays.asList("hid_anexo1", "hid_anexo2", "juntas_lphera_cal", "juntas_saczyme_alcolina").contains(folha)) return "hidrolise";
+    if (Arrays.asList("destilaria", "ins_lactrol", "ins_ureia").contains(folha)) return "destilaria";
+    if ("nova_destilaria".equals(folha)) return "nova_destilaria";
+    return "";
+  }
+
+  /** Setor vem da conexão, nunca de r.setor. O histórico permite escoar a fila anterior à troca. */
+  private void guardarSetor(String aparelho, String papel) throws Exception {
+    if (nivelDoAparelho(aparelho) > 0) return;
+    JSONObject mapa = objetoDaConfig("setoresAparelhos"), salvo = mapa.optJSONObject(aparelho);
+    JSONObject visto = objetoDaConfig("aparelhosVistos").optJSONObject(aparelho);
+    String declarado = papel.isEmpty() && salvo == null && visto != null ? visto.optString("papel") : papel;
+    if (!Arrays.asList("caldeira", "ralo", "hidrolise", "destilaria", "nova_destilaria").contains(declarado) || (salvo != null && declarado.equals(salvo.optString("atual")))) return;
+    Set<String> f = funcoesNoSetor(aparelho);
+    if (salvo != null && !f.contains("ajustes") && !f.contains("usina")) return;
+    JSONObject anteriores = salvo == null ? new JSONObject() : new JSONObject(salvo.getJSONObject("anteriores").toString());
+    if (salvo != null) anteriores.put(salvo.getString("atual"), System.currentTimeMillis());
+    mapa.put(aparelho, new JSONObject().put("atual", declarado).put("anteriores", anteriores));
+    salvarConfig();
+  }
+
+  private boolean podeFolhaNoSetor(String aparelho, JSONObject r) throws Exception {
+    String setor = setorDaFolha(r.optString("prancheta"));
+    if (setor.isEmpty()) return true;
+    JSONObject salvo = objetoDaConfig("setoresAparelhos").optJSONObject(aparelho);
+    Object em = r.opt("atualizadoEm");
+    double atualizado = em instanceof Number ? ((Number) em).doubleValue() : 0;
+    return salvo != null && (setor.equals(salvo.optString("atual")) || (atualizado > 0 && atualizado <= salvo.getJSONObject("anteriores").optLong(setor, 0)));
   }
 
   private static String nomeDoNivel(int n) {
