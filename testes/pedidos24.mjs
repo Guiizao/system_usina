@@ -157,6 +157,18 @@ export async function testarPedidos24(nav, ligar, porta, grupo) {
     });
 
     await teste(grupo, 'trocar o código desconecta os outros aparelhos; quem trocou continua conectado', async () => {
+      // 2.15: no nível 2 o Trocar código não aparece (sem a função Conexão); o dono passa este tablet para o nível 3
+      await semNotificacao(esc);
+      certo(!(await esc.existe('[data-a="novo-codigo"]')), 'o nível 2 vê o Trocar código');
+      const id = await esc.avaliar('JSON.parse(localStorage.getItem("usina.cfg")).deviceId');
+      await esc.tocar('.ir-para [data-a="pessoas"]');
+      await esc.tocar(`[data-a="aparelho-chefe"][data-id="${id}"]`, null, { esperarMs: 15000 });
+      await esc.tocar('[data-k="nv:3"]'); await esc.tocar('.modal [data-k="ok"]');
+      await esc.esperar('!JSON.parse(localStorage.getItem("usina.cfg")).pessoa', 10000, 'sair ao mudar o nível');
+      await semNotificacao(esc);
+      await esc.tocar('[data-a="voltar"]');
+      await entrarComoChefe(esc);
+      await semNotificacao(esc);
       await esc.tocar('[data-a="novo-codigo"]'); await esc.tocar('[data-k="sim"]');
       await tab.esperar('document.querySelector("[data-quadro=\\"codigo\\"]")', 20000, 'o tablet pedir o código novo');
       await dormir(6000);

@@ -162,6 +162,19 @@ Medido num tablet simulado 4 vezes mais lento que o computador, com a central gu
 - Dois aparelhos criando a mesma linha sem um saber do outro (o chefe corrigiu nos segundos antes de receber): os valores se juntam, nada se perde.
 - **Código embaralhado no APK**: quem abrir o APK não lê o código do jeito que foi escrito (o mapa para entender erros fica só em `apk/saida/mapas`).
 
+## Produção: permissões, escritório no tablet chefe e telas (versão 2.15)
+
+A 2.15 mexe no APK (a central do tablet chefe mudou): instale por cima, primeiro no tablet chefe. Pedido do Guilherme no áudio de 18/10/2026.
+
+- **Escritório dentro do tablet chefe**: os cálculos da produção, o rastreamento de lotes e a etiqueta viram um bloco do painel (`blocoEscritorio` no `app.js`), para quem tem a função Escritório. Não existe mais o aparelho "Escritório" na escolha da função: o que era Escritório vira tablet chefe ao abrir (a central pede para liberar na primeira senha). A central continua aceitando as rotas da 2.13.
+- **Uma senha por turno**: quem entra no tablet chefe fica até o fim do turno (`cfg.pessoaTurno`); acabaram os 30 minutos parado (o operador do setor continua com os 30 minutos).
+- **Cada um vê o que pode**: com alguém dentro, o que a pessoa (ou o nível, ou o limite do aparelho) não deixa fazer some da tela: atalhos do alto, Compartilhar, Escritório, QR code e Trocar código (só com Conexão). Sem ninguém dentro, os botões aparecem e pedem a senha (menos o QR). Sem Corrigir, o setor abre só para consultar (Monitorar, sem o botão de anotar).
+- **Níveis configuráveis**: o dono escolhe o que o nível 1 e o 2 podem (Pessoas e permissões > Tablets chefe > O que cada nível pode fazer), guardado em `configSistema().niveisChefe`. Sem escolha: nível 1 = corrigir, relatórios e escritório; nível 2 = tudo menos conectar tablets e trocar o código. O limite do aparelho vale também para o administrador nos níveis 1 e 2.
+- **Código protegido**: se um tablet chefe que não é nível 3 troca o código, os aparelhos nível 3 (o do dono) continuam conectados e recebem o aviso "O código de conexão foi trocado": Manter o novo ou Voltar ao anterior (`/api/codigo-trocado`). Enquanto o dono não decide, outra troca é recusada. Sem nenhum aparelho nível 3, a troca vale como antes.
+- **Telas**: painel com Ir para e Aparelhos agora; gráficos do mesmo tamanho (sem anotação, a caixa fica igual com o aviso no meio) e 4 horas no eixo dos pequenos; o início do setor cresce com a altura do tablet; as configurações em colunas que se encaixam; o cabeçalho e os textos ajustáveis sem a folga de 1 px (com o zoom ela cortava a última letra). No computador (mouse) o zoom é 1 e a tela usa a largura toda (até 1880 px), com mais setores e até 6 gráficos.
+- **Teste das telas**: 15 tamanhos (os 10 de antes, o Galaxy Tab S9+ deitado e em pé, a tela dividida em metade e em dois terços, e o monitor Full HD `pcGrande`). Demonstração com permissão limitada: `&funcoes=relatorios,escritorio`.
+- **Centrais (Codex)**: gravação por arquivo temporário (não corrompe se faltar luz no meio), a lista de aparelhos usa a identidade cifrada, a configuração validada não volta pelo relógio. Teste: `testes/producao215.mjs`. Pedido e resposta em `.handoff/2026-10-18-producao-215-central.md`.
+
 ## Sem a central, os aparelhos se falam pela nuvem (versão 2.14)
 
 A 2.14 mexe no APK (a central do tablet chefe mudou): instale por cima, primeiro no tablet chefe. Na nuvem, rode o `nuvem/publicar.ps1`: ele cria a tabela `pendentes` antes de subir o Worker.
@@ -412,7 +425,7 @@ Leva uns 20 minutos e grava o resultado em `testes/saida/resultado.txt`. Testa:
 
 Os testes usam pastas de dados temporárias: nunca mexem em `dados/`. Só as telas: `node testes/rodar-telas.mjs` (liga uma central de teste sozinho). Só o longo prazo: `node testes/rodar-robustez.mjs`.
 
-O teste para fazer à mão no celular e no tablet está em `Teste-nos-aparelhos-2.10.pdf`, na pasta `Usina`; o que conferir depois de pôr a 2.11 no tablet chefe está na parte 3 do `Nuvem-passo-a-passo.pdf`. Só a 2.12: `node testes/rodar-niveis212.mjs`, `node testes/rodar-pedidos212.mjs` e `node testes/rodar-papel212.mjs`. Só a 2.11: `node testes/rodar-seguranca.mjs` e `node testes/rodar-pedidos211.mjs`. Só a 2.10: `node testes/rodar-pedidos210.mjs`; só pessoas e registro: `node testes/rodar-pessoas.mjs`. Só a 2.14: `node testes/hub214.mjs` e `node testes/rodar-hubapp214.mjs`. Só a nuvem: `node testes/rodar-nuvem.mjs` (precisa do `npm install` em `nuvem`); só a atualização: `node testes/rodar-atualizacao.mjs`; só a 2.6: `node testes/rodar-pedidos26.mjs`; só a 2.5: `node testes/rodar-pedidos25.mjs`.
+O teste para fazer à mão no celular e no tablet está em `Teste-nos-aparelhos-2.10.pdf`, na pasta `Usina`; o que conferir depois de pôr a 2.11 no tablet chefe está na parte 3 do `Nuvem-passo-a-passo.pdf`. Só a 2.12: `node testes/rodar-niveis212.mjs`, `node testes/rodar-pedidos212.mjs` e `node testes/rodar-papel212.mjs`. Só a 2.11: `node testes/rodar-seguranca.mjs` e `node testes/rodar-pedidos211.mjs`. Só a 2.10: `node testes/rodar-pedidos210.mjs`; só pessoas e registro: `node testes/rodar-pessoas.mjs`. Só a 2.15: `node testes/rodar-producao215.mjs` (as duas centrais) e, nas telas, `node testes/rodar-telas.mjs s9,s9EmPe,s9Metade,s9DoisTercos,pcGrande`. Só a 2.14: `node testes/hub214.mjs` e `node testes/rodar-hubapp214.mjs`. Só a nuvem: `node testes/rodar-nuvem.mjs` (precisa do `npm install` em `nuvem`); só a atualização: `node testes/rodar-atualizacao.mjs`; só a 2.6: `node testes/rodar-pedidos26.mjs`; só a 2.5: `node testes/rodar-pedidos25.mjs`.
 
 ## Imagens das telas
 

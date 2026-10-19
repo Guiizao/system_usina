@@ -19,7 +19,7 @@ Troca as pranchetas de papel da usina por tablets no Wi-Fi. A raiz não tem `pac
 | O quê | Comando |
 |---|---|
 | Ligar a central (porta 8080) | `node server.js` |
-| Só as telas, em 10 tamanhos (computador, 3 tablets e 3 celulares, em pé e deitados) | `node testes/rodar-telas.mjs` |
+| Só as telas, em 15 tamanhos (computador e Full HD, tablets, Tab S9+, tela dividida e celulares, em pé e deitados) | `node testes/rodar-telas.mjs` |
 | Só a versão 2.12 | `node testes/rodar-niveis212.mjs` e `node testes/rodar-papel212.mjs` |
 | Tudo (cerca de 20 minutos) | `node testes/rodar-tudo.mjs`, resultado em `testes/saida/resultado.txt` |
 | Gerar o APK | `powershell -ExecutionPolicy Bypass -File apk\gerar-apk.ps1` |
@@ -36,7 +36,7 @@ Troca as pranchetas de papel da usina por tablets no Wi-Fi. A raiz não tem `pac
 
 Tablets de setor, tablet chefe e celular, com tema escuro no turno da noite. O teste de telas do projeto vale no lugar dos seis tamanhos padrão.
 
-Caixa, tela ou página nova (ou mudada): rode o teste das telas e abra as fotos dela em `testes/saida/telas/<tamanho>/`, no computador, nos 3 tablets e nos 3 celulares. O número sozinho não basta: o teste acha texto cortado e rolagem para o lado, mas não acha caixa feia nem texto espremido. Confira também se a tela nova aparece de verdade na foto.
+Caixa, tela ou página nova (ou mudada): rode o teste das telas e abra as fotos dela em `testes/saida/telas/<tamanho>/`, no computador, nos tablets (inclusive o S9+ e a tela dividida) e nos celulares. O número sozinho não basta: o teste acha texto cortado e rolagem para o lado, mas não acha caixa feia nem texto espremido. Confira também se a tela nova aparece de verdade na foto.
 
 ## Trabalho com o Codex
 

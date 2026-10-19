@@ -271,7 +271,7 @@ try {
 } finally { await nav.fechar(); }
 
 // 6. telas (roda separado, com a própria central)
-const g6 = novoGrupo('Todas as telas em 10 tamanhos (computador, celulares, celular deitado, tablets pequenos, tablets e tablet em pé)');
+const g6 = novoGrupo('Todas as telas em 15 tamanhos (computador e Full HD, celulares, celular deitado, tablets, Tab S9+ e tela dividida)');
 const c6 = await centralNode(8296);
 try {
   spawnSync(process.execPath, [path.join(APP, 'testes', 'telas.mjs'), c6.url], { stdio: 'inherit' });
