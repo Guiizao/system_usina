@@ -149,6 +149,56 @@ export async function testarProducao(ligar, porta, grupo) {
         igual((await sync(dono)).status, 200, 'aparelho continua conectado');
       }
     });
+    const falharConfig = async (acao) => {
+      const arquivo = path.join(c.pastaServidor, 'config.json');
+      const antes = fs.readFileSync(arquivo);
+      const lista = await p(dono, '/api/pessoas', { acao: 'lista' });
+      const sessao = await p(chefe, '/api/pessoas', { acao: 'quem' });
+      fs.mkdirSync(arquivo + '.tmp');
+      try {
+        igual((await acao()).status, 400, 'falha devolvida ao aparelho');
+        certo(fs.readFileSync(arquivo).equals(antes), 'config anterior preservada');
+        igual(await p(dono, '/api/pessoas', { acao: 'lista' }), lista, 'pessoas e permissões desfeitas');
+        igual(await p(chefe, '/api/pessoas', { acao: 'quem' }), sessao, 'sessão desfeita');
+      } finally { fs.rmdirSync(arquivo + '.tmp'); }
+    };
+    await teste(grupo, 'falha em pessoas desfaz cadastro, edição e sessões em memória', async () => {
+      await falharConfig(() => p(dono, '/api/pessoas', { acao: 'salvar', pessoa: { nome: 'Não gravada', nivel: 'consulta', pin: '5555' } }));
+      const pessoa = cfgDisco().pessoas.find((x) => x.nome === 'Administradora de teste');
+      await falharConfig(() => p(dono, '/api/pessoas', { acao: 'salvar', pessoa: { ...pessoa, nome: 'Não editada', ativo: false } }));
+      await falharConfig(() => p(chefe, '/api/pessoas', { acao: 'sair' }));
+      await falharConfig(() => p(chefe, '/api/pessoas', { acao: 'entrar', pin: '4444' }));
+      await falharConfig(() => p(dono, '/api/pessoas', { acao: 'aparelho', id: chefe.aparelho, nome: 'Não renomeado', teto: [], nivel: 1 }));
+      await falharConfig(() => p(chefe, '/api/chefes', { acao: 'liberar', pin: SENHA_ENCARREGADO, nivel: 1 }));
+    });
+    await teste(grupo, 'falha em bloqueio e desbloqueio mantém revisão, bloqueio e sessão anteriores', async () => {
+      await sync(chefe);
+      await falharConfig(() => p(dono, '/api/aparelhos', { acao: 'bloquear', id: chefe.aparelho, modo: 'trava' }));
+      igual((await sync(chefe)).status, 200, 'bloqueio recusado não ficou em memória');
+      igual((await p(dono, '/api/aparelhos', { acao: 'bloquear', id: setor.aparelho, modo: 'senha', codigo: '5678' })).status, 200);
+      const antes = cfgDisco().bloqueios[setor.aparelho];
+      await falharConfig(() => p(dono, '/api/aparelhos', { acao: 'desbloquear', id: setor.aparelho }));
+      igual((await sync(setor)).status, 423);
+      await falharConfig(() => p(setor, '/api/liberar', { codigo: '5678', rev: antes.rev, geracao: cfgDisco().geracao }));
+      igual((await sync(setor)).status, 423);
+      certo(JSON.stringify(cfgDisco().bloqueios[setor.aparelho]) === JSON.stringify(antes), 'bloqueio anterior preservado');
+      igual((await p(dono, '/api/aparelhos', { acao: 'desbloquear', id: setor.aparelho })).status, 200);
+      await c.reiniciar();
+      igual((await sync(chefe)).status, 200);
+    });
+    await teste(grupo, 'falha ao guardar a cópia anterior não substitui config, banco ou backup', async () => {
+      for (const nome of ['config.json', 'registros.json']) {
+        const arquivo = path.join(c.pastaServidor, nome);
+        const antes = fs.readFileSync(arquivo), bak = fs.readFileSync(arquivo + '.bak');
+        fs.mkdirSync(arquivo + '.bak.tmp');
+        try {
+          const r = nome === 'config.json' ? await p(dono, '/api/novo-codigo', {}) : await sync(dono, [reg(new Date().toISOString().slice(0, 10) + '|caldeira|falha-backup', { valor: 'recusado' })]);
+          igual(r.status, 400);
+          certo(fs.readFileSync(arquivo).equals(antes) && fs.readFileSync(arquivo + '.bak').equals(bak), 'principal e backup preservados');
+        } finally { fs.rmdirSync(arquivo + '.bak.tmp'); }
+        igual((await sync(dono)).status, 200);
+      }
+    });
     await teste(grupo, 'troca delegada mantém os dois níveis 3 e desconecta os demais pela chave antiga', async () => {
       await configurar(dono, { 1: padrao[1], 2: todas });
       codigoAntes = c.codigo(); chaveAntes = c.chave();
@@ -222,5 +272,51 @@ export async function testarProducao(ligar, porta, grupo) {
       certo(textos.includes('trocou o código') && textos.includes('manteve o novo código') && textos.includes('restaurou o código'), 'três eventos registrados');
       certo(!textos.includes(chaveAntes) && !textos.includes(codigoAntes) && !textos.includes(c.chave()), 'sem segredos no registro');
     });
+    for (const nome of ['config.json', 'registros.json']) {
+      await teste(grupo, nome + ': gravação conserva versão anterior boa em .bak e partida recupera sem perder identidade ou histórico', async () => {
+        const arquivo = path.join(c.pastaServidor, nome);
+        const id = new Date().toISOString().slice(0, 10) + '|caldeira|recuperar';
+        await sync(dono, [reg(id, { valor: 'preservado' })]);
+        // Duas gravações garantem que a cópia anterior já contém o registro e a sessão.
+        const antes = fs.readFileSync(arquivo);
+        if (nome === 'config.json') await p(dono, '/api/pessoas', { acao: 'aparelho', id: dono.aparelho, nome: 'Dono recuperado' });
+        else await sync(dono, [reg(id, { valor: 'mais recente' })]);
+        certo(fs.existsSync(arquivo + '.bak'), 'cópia anterior criada');
+        certo(fs.readFileSync(arquivo + '.bak').equals(antes), 'cópia é a versão anterior exata');
+        await c.desligar();
+        const cfg = cfgDisco();
+        const backup = JSON.parse(fs.readFileSync(arquivo + '.bak', 'utf8'));
+        fs.writeFileSync(arquivo, '{interrompido');
+        await c.reiniciar();
+        certo(['chave', 'codigo', 'geracao'].every((k) => cfgDisco()[k] === cfg[k]), 'identidade preservada sem expor segredos');
+        const banco = JSON.parse(fs.readFileSync(path.join(c.pastaServidor, 'registros.json'), 'utf8'));
+        certo(banco.registros[id], 'histórico preservado');
+        if (nome === 'registros.json') igual(banco.registros[id], backup.registros[id]);
+        certo(Object.values(banco.registros).some((r) => r.valores?.texto?.includes(nome + ' recuperado da cópia .bak')), 'recuperação registrada antes de aceitar pedidos');
+        igual((await sync(dono)).status, 200, 'aparelho existente ainda conectado');
+        await c.reiniciar();
+        igual((await sync(dono)).status, 200, 'recuperação sobrevive ao segundo reinício');
+      });
+      for (const copia of ['ausente', 'ilegível']) await teste(grupo, nome + ': sem cópia boa (' + copia + '), preserva ilegível antes de recomeçar e registra', async () => {
+        await c.desligar();
+        const arquivo = path.join(c.pastaServidor, nome);
+        const existentes = new Set(fs.readdirSync(c.pastaServidor));
+        fs.writeFileSync(arquivo, '{original interrompido');
+        if (copia === 'ausente') fs.rmSync(arquivo + '.bak', { force: true });
+        else fs.writeFileSync(arquivo + '.bak', '{cópia interrompida');
+        await c.reiniciar();
+        const guardados = fs.readdirSync(c.pastaServidor).filter((n) => !existentes.has(n) && n.startsWith(nome + '.ilegivel-'));
+        igual(guardados.length, 1, 'original guardado sem sobrescrever outro');
+        igual(fs.readFileSync(path.join(c.pastaServidor, guardados[0]), 'utf8'), '{original interrompido');
+        const banco = JSON.parse(fs.readFileSync(path.join(c.pastaServidor, 'registros.json'), 'utf8'));
+        const textos = Object.values(banco.registros).filter((r) => r.prancheta === 'registro').map((r) => r.valores.texto).join('\n');
+        certo(textos.includes(nome + ' sem cópia legível'), 'reinício registrado');
+        certo(!textos.includes(c.chave()) && !textos.includes(c.codigo()), 'registro sem segredos');
+        if (nome === 'registros.json') certo(Object.values(banco.registros).every((r) => r.prancheta === 'registro'), 'banco novo só contém auditoria');
+        dono = await conectarTeste(c.url, c.codigo());
+        await entrar(dono, 3);
+        igual((await sync(dono)).status, 200);
+      });
+    }
   } finally { await c.desligar(); }
 }

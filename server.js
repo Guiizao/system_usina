@@ -100,14 +100,48 @@ const errouProgramador = (aparelho) => { (tentativasProgramador[aparelho] = tent
 
 // ---------- configuração: chave da rede e código de conexão ----------
 const novoCodigo = () => String(crypto.randomInt(0, 1000000)).padStart(6, '0');
-let config;
-try { config = JSON.parse(fs.readFileSync(CONFIG, 'utf8')); } catch (e) {
-  config = { nome: 'Rede Ubirálcool', chave: crypto.randomBytes(18).toString('hex'), codigo: novoCodigo() };
-  fs.writeFileSync(CONFIG, JSON.stringify(config, null, 2));
+const recuperacoes = [];
+function lerCentral(arquivo, dados = fs.readFileSync(arquivo, 'utf8')) {
+  const valor = JSON.parse(dados);
+  const objeto = (v) => v && typeof v === 'object' && !Array.isArray(v);
+  if (!objeto(valor) || (arquivo === CONFIG
+    ? typeof valor.chave !== 'string' || !valor.chave
+    : !Number.isInteger(valor.seq) || valor.seq < 0 || !objeto(valor.registros))) throw new Error('Arquivo da central inválido');
+  return valor;
 }
+function salvarCentral(arquivo, dados) {
+  fs.writeFileSync(arquivo + '.tmp', dados);
+  // a versão anterior vira a .bak sem ser lida (o banco tem alguns MB e grava a cada sincronização)
+  if (fs.existsSync(arquivo)) {
+    fs.copyFileSync(arquivo, arquivo + '.bak.tmp');
+    fs.renameSync(arquivo + '.bak.tmp', arquivo + '.bak');
+  }
+  fs.renameSync(arquivo + '.tmp', arquivo);
+}
+function carregarCentral(arquivo) {
+  if (!fs.existsSync(arquivo)) return null;
+  try { return lerCentral(arquivo); } catch (e) { /* tenta a cópia anterior */ }
+  let copia = null;
+  try { copia = lerCentral(arquivo, fs.readFileSync(arquivo + '.bak', 'utf8')); } catch (e) { /* preserva os ilegíveis */ }
+  const sufixo = '.ilegivel-' + new Date().toISOString().replace(/[:.]/g, '-') + '-' + crypto.randomBytes(4).toString('hex');
+  // Sem conseguir preservar o original, interrompe a partida em vez de sobrescrevê-lo.
+  fs.renameSync(arquivo, arquivo + sufixo);
+  if (copia) salvarCentral(arquivo, JSON.stringify(copia));
+  else if (fs.existsSync(arquivo + '.bak')) fs.renameSync(arquivo + '.bak', arquivo + '.bak' + sufixo);
+  recuperacoes.push(path.basename(arquivo) + (copia ? ' recuperado da cópia .bak; original ilegível preservado.' : ' sem cópia legível; ilegível preservado e arquivo reiniciado.'));
+  return copia;
+}
+let config = carregarCentral(CONFIG) || { nome: 'Rede Ubirálcool', chave: crypto.randomBytes(18).toString('hex'), codigo: novoCodigo() };
+let configGravada = JSON.stringify(config);
 const salvarConfig = (nova = config) => {
-  fs.writeFileSync(CONFIG + '.tmp', JSON.stringify(nova, null, 2));
-  fs.renameSync(CONFIG + '.tmp', CONFIG);
+  try {
+    const dados = JSON.stringify(nova, null, 2);
+    salvarCentral(CONFIG, dados);
+    configGravada = dados;
+  } catch (e) {
+    config = JSON.parse(configGravada);
+    throw new Error('Não foi possível gravar a configuração');
+  }
 };
 // "geração" dos dados: muda quando o escritório zera as anotações de teste; os tablets veem e limpam o que têm
 if (!config.geracao) { config.geracao = crypto.randomBytes(6).toString('hex'); salvarConfig(); }
@@ -796,18 +830,13 @@ function postarBase44(dados) {
 }
 
 // ---------- banco de dados simples em arquivo JSON ----------
-let db = { seq: 0, registros: {} };
-try { db = JSON.parse(fs.readFileSync(ARQUIVO, 'utf8')); } catch (e) { /* primeira vez */ }
+let db = carregarCentral(ARQUIVO) || { seq: 0, registros: {} };
 const aparelhos = {}; // id -> { papel, operador, vistoEm, ip }
 
 let gravarTimer = null;
 function gravarDisco(agora = false) {
   clearTimeout(gravarTimer);
-  const gravar = () => {
-    const tmp = ARQUIVO + '.tmp';
-    fs.writeFileSync(tmp, JSON.stringify(db));
-    fs.renameSync(tmp, ARQUIVO);
-  };
+  const gravar = () => salvarCentral(ARQUIVO, JSON.stringify(db));
   if (agora) gravar(); else gravarTimer = setTimeout(gravar, 500);
 }
 // backup: um arquivo por dia de produção
@@ -1266,6 +1295,7 @@ async function rotaProtegida(req, res, url, ip) {
           const nomeAntes = nomeDoAparelho(id);
           if (typeof corpo.nome === 'string') a.nome = corpo.nome.trim().slice(0, 40);
           if ('teto' in corpo) a.teto = Array.isArray(corpo.teto) ? corpo.teto.filter((x) => /^[a-z_]{2,30}$/.test(x)) : null;
+          let mudancaDeNivel = '';
           // nível (versão 2.12): quem libera tablets chefe muda entre 1 e 2; o nível 3 (e tirar do 3) só o dono;
           // o próprio aparelho só o dono muda. Quem estava dentro sai (a regra nova vale na hora).
           if ('nivel' in corpo) {
@@ -1277,11 +1307,12 @@ async function rotaProtegida(req, res, url, ip) {
             if (novoNivel !== nivelAntes) {
               if (novoNivel) a.nivel = novoNivel; else delete a.nivel;
               delete config.sessoes[id];
-              registrar('configuracao', `${quem.nome} mudou o ${nomeAntes} de ${nomeDoNivel(nivelAntes)} para ${nomeDoNivel(novoNivel)}`, { quem: quem.nome, aparelho: aqui });
+              mudancaDeNivel = `${quem.nome} mudou o ${nomeAntes} de ${nomeDoNivel(nivelAntes)} para ${nomeDoNivel(novoNivel)}`;
             }
           }
           config.aparelhosChefe[id] = a;
           salvarConfig();
+          if (mudancaDeNivel) registrar('configuracao', mudancaDeNivel, { quem: quem.nome, aparelho: aqui });
           registrar('configuracao', `${quem.nome} mudou o que o ${nomeAntes} pode fazer${a.nome && a.nome !== nomeAntes ? ` (agora se chama ${a.nome})` : ''}`, { quem: quem.nome, aparelho: aqui });
           return lista();
         }
@@ -1595,6 +1626,8 @@ async function rotaProtegida(req, res, url, ip) {
   }
 }
 
+for (const texto of recuperacoes) registrar('sistema', texto);
+if (recuperacoes.length) gravarDisco(true);
 arquivarDiasAntigos();
 setInterval(arquivarDiasAntigos, 3600 * 1000).unref();
 // nuvem: manda o que mudou logo depois de ligar e a cada minuto (e 5 s depois de chegar anotação nova)

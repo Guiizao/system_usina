@@ -83,6 +83,8 @@ public class ServidorCentral {
   private volatile boolean rodando = false;
 
   private JSONObject config;
+  private String configGravada = "{}";
+  private final List<String> recuperacoes = new ArrayList<>();
   private JSONObject registros = new JSONObject();
   private long seq = 0;
   private final Map<String, JSONObject> aparelhos = new HashMap<>();
@@ -178,6 +180,9 @@ public class ServidorCentral {
     criarPastas();
     carregarConfig();
     carregarRegistros();
+    for (String texto : recuperacoes) registrar("sistema", texto, "", "", null);
+    if (!recuperacoes.isEmpty() && !salvarRegistros()) throw new IOException("Não foi possível registrar a recuperação da central");
+    recuperacoes.clear();
     arquivarDiasAntigos();
     socketServidor = new ServerSocket();
     socketServidor.setReuseAddress(true);
@@ -263,19 +268,42 @@ public class ServidorCentral {
   /* Guardar e ler do disco                                              */
   /* ------------------------------------------------------------------ */
 
-  private void carregarConfig() {
-    File arquivo = new File(pastaServidor, "config.json");
-    try {
-      config = new JSONObject(new String(lerArquivo(arquivo), StandardCharsets.UTF_8));
-      if (config.optString("chave", "").isEmpty()) throw new IOException("sem chave");
-    } catch (Exception e) {
-      config = new JSONObject();
-      try {
-        config.put("chave", sorteiaChave());
-        config.put("codigo", sorteiaCodigo());
-        salvarArquivo(arquivo, config.toString().getBytes(StandardCharsets.UTF_8));
-      } catch (Exception erro) { /* segue com a config em memória */ }
+  private JSONObject lerCentral(File arquivo, byte[] dados) throws Exception {
+    JSONObject valor = new JSONObject(new String(dados, StandardCharsets.UTF_8));
+    if ("config.json".equals(arquivo.getName())) {
+      if (!(valor.opt("chave") instanceof String) || valor.optString("chave").isEmpty()) throw new IOException("Arquivo da central inválido");
+    } else {
+      Object numero = valor.opt("seq");
+      if (!(numero instanceof Number) || ((Number) numero).doubleValue() < 0
+          || ((Number) numero).doubleValue() != ((Number) numero).longValue()
+          || valor.optJSONObject("registros") == null) throw new IOException("Arquivo da central inválido");
     }
+    return valor;
+  }
+
+  private JSONObject carregarCentral(File arquivo) throws Exception {
+    if (!arquivo.exists()) return null;
+    try { return lerCentral(arquivo, lerArquivo(arquivo)); } catch (Exception e) { /* tenta a cópia anterior */ }
+    File bak = new File(arquivo.getPath() + ".bak");
+    JSONObject copia = null;
+    try { copia = lerCentral(arquivo, lerArquivo(bak)); } catch (Exception e) { /* preserva os ilegíveis */ }
+    String sufixo = ".ilegivel-" + System.currentTimeMillis() + "-" + sorteiaChave().substring(0, 8);
+    // Sem conseguir preservar o original, interrompe a partida em vez de sobrescrevê-lo.
+    if (!arquivo.renameTo(new File(arquivo.getPath() + sufixo))) throw new IOException("Não foi possível preservar o arquivo ilegível");
+    if (copia != null) salvarArquivo(arquivo, copia.toString().getBytes(StandardCharsets.UTF_8));
+    else if (bak.exists() && !bak.renameTo(new File(bak.getPath() + sufixo))) throw new IOException("Não foi possível preservar a cópia ilegível");
+    recuperacoes.add(arquivo.getName() + (copia != null ? " recuperado da cópia .bak; original ilegível preservado." : " sem cópia legível; ilegível preservado e arquivo reiniciado."));
+    return copia;
+  }
+
+  private void carregarConfig() throws Exception {
+    File arquivo = new File(pastaServidor, "config.json");
+    config = carregarCentral(arquivo);
+    if (config == null) {
+      config = new JSONObject().put("chave", sorteiaChave()).put("codigo", sorteiaCodigo());
+      salvarArquivo(arquivo, config.toString().getBytes(StandardCharsets.UTF_8));
+    }
+    configGravada = config.toString();
     // par de chaves da central: o aparelho que conecta combina com ela um segredo que quem espia o Wi-Fi não calcula
     try {
       if (!config.optString("par", "").matches("[0-9a-f]{64}")) {
@@ -300,19 +328,18 @@ public class ServidorCentral {
     } catch (Exception e) { /* segue sem migrar */ }
   }
 
-  private synchronized void salvarConfig() {
-    try { salvarArquivo(new File(pastaServidor, "config.json"), config.toString().getBytes(StandardCharsets.UTF_8)); } catch (Exception e) { /* fica na memória */ }
+  private synchronized void salvarConfig() throws Exception {
+    try { salvarArquivo(new File(pastaServidor, "config.json"), config.toString().getBytes(StandardCharsets.UTF_8)); }
+    catch (Exception e) {
+      config = new JSONObject(configGravada);
+      throw new IOException("Não foi possível gravar a configuração", e);
+    }
   }
 
-  private void carregarRegistros() {
-    try {
-      JSONObject salvo = new JSONObject(new String(lerArquivo(new File(pastaServidor, "registros.json")), StandardCharsets.UTF_8));
-      seq = salvo.optLong("seq", 0);
-      registros = salvo.optJSONObject("registros") != null ? salvo.getJSONObject("registros") : new JSONObject();
-    } catch (Exception e) {
-      seq = 0;
-      registros = new JSONObject();
-    }
+  private void carregarRegistros() throws Exception {
+    JSONObject salvo = carregarCentral(new File(pastaServidor, "registros.json"));
+    seq = salvo == null ? 0 : salvo.getLong("seq");
+    registros = salvo == null ? new JSONObject() : salvo.getJSONObject("registros");
   }
 
   private synchronized boolean salvarRegistros() {
@@ -437,9 +464,13 @@ public class ServidorCentral {
   private void salvarArquivo(File arquivo, byte[] dados) throws IOException {
     File tmp = new File(arquivo.getPath() + ".tmp");
     try (FileOutputStream saida = new FileOutputStream(tmp)) { saida.write(dados); }
+    boolean central = arquivo.equals(new File(pastaServidor, "config.json")) || arquivo.equals(new File(pastaServidor, "registros.json"));
+    // a versão anterior vira a .bak sem ser conferida: um arquivo ruim no disco não impede gravar o que está na memória
+    if (central && arquivo.exists()) salvarArquivo(new File(arquivo.getPath() + ".bak"), lerArquivo(arquivo));
     // rename do Android substitui o destino sem apagar antes; disponível desde a API 21.
     try { android.system.Os.rename(tmp.getPath(), arquivo.getPath()); }
     catch (android.system.ErrnoException e) { throw new IOException("Não foi possível gravar o arquivo", e); }
+    if (central && "config.json".equals(arquivo.getName())) configGravada = new String(dados, StandardCharsets.UTF_8);
   }
 
   private String shaDoApk = null;
@@ -2225,6 +2256,7 @@ public class ServidorCentral {
             a.put("teto", limpo);
           }
         }
+        String mudancaDeNivel = "";
         // nível (versão 2.12): quem libera tablets chefe muda entre 1 e 2; o nível 3 (e tirar do 3) só o dono;
         // o próprio aparelho só o dono muda. Quem estava dentro sai (a regra nova vale na hora).
         if (pedido.has("nivel")) {
@@ -2236,11 +2268,12 @@ public class ServidorCentral {
           if (novoNivel != nivelAntes) {
             if (novoNivel > 0) a.put("nivel", novoNivel); else a.remove("nivel");
             objetoDaConfig("sessoes").remove(id);
-            registrar("configuracao", quem.optString("nome") + " mudou o " + nomeAntes + " de " + nomeDoNivel(nivelAntes) + " para " + nomeDoNivel(novoNivel), quem.optString("nome"), aqui, null);
+            mudancaDeNivel = quem.optString("nome") + " mudou o " + nomeAntes + " de " + nomeDoNivel(nivelAntes) + " para " + nomeDoNivel(novoNivel);
           }
         }
         todos.put(id, a);
         salvarConfig();
+        if (!mudancaDeNivel.isEmpty()) registrar("configuracao", mudancaDeNivel, quem.optString("nome"), aqui, null);
         String novoNome = a.optString("nome");
         registrar("configuracao", quem.optString("nome") + " mudou o que o " + nomeAntes + " pode fazer" + (!novoNome.isEmpty() && !novoNome.equals(nomeAntes) ? " (agora se chama " + novoNome + ")" : ""), quem.optString("nome"), aqui, null);
       }
