@@ -37,7 +37,7 @@ export async function testarEscritorio(ligar, porta, grupo) {
       await pedir(consulta, '/api/pessoas', { acao: 'entrar', pin: '3333' });
       igual((await sync(consulta, [anotacao()])).recusados[0].motivo, 'sem_permissao');
     });
-    await teste(grupo, 'tablet chefe precisa de sessão com Escritório; nível 1 continua limitado', async () => {
+    await teste(grupo, 'tablet chefe precisa de sessão com Escritório; o nível 1 também faz o Escritório (2.15)', async () => {
       await pedir(chefe, '/api/chefes', { acao: 'liberar', pin: SENHA_ENCARREGADO, nivel: 2 });
       igual((await sync(chefe, [anotacao()])).recusados[0].motivo, 'sem_permissao');
       await pedir(chefe, '/api/pessoas', { acao: 'entrar', pin: '4444' });
@@ -46,7 +46,8 @@ export async function testarEscritorio(ligar, porta, grupo) {
       const n1 = await conectarTeste(c.url, c.codigo());
       await pedir(n1, '/api/chefes', { acao: 'liberar', pin: SENHA_ENCARREGADO, nivel: 1 });
       await pedir(n1, '/api/pessoas', { acao: 'entrar', pin: SENHA_ENCARREGADO });
-      igual((await sync(n1, [anotacao()])).recusados[0].motivo, 'sem_permissao');
+      // 2.15: o escritório virou parte do tablet chefe; o nível 1 tem a função Escritório (o dono pode tirar)
+      igual((await sync(n1, [anotacao()])).aceitos, 1);
     });
     await teste(grupo, 'nome padrão do papel escritorio é Escritório', async () => {
       const lista = await c.api('/api/status');

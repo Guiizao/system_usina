@@ -33,7 +33,13 @@ export const TAMANHOS = {
   tabletEmPe: { largura: 800, altura: 1280, dpr: 2, celular: true },
   tablet10: { largura: 1000, altura: 600, dpr: 2, celular: true },
   motorola: { largura: 393, altura: 852, dpr: 2.75, celular: true },
+  // Galaxy Tab S9+ (12,4"), deitado e em pé, e com a tela dividida com outro app (metade e dois terços)
+  s9: { largura: 1400, altura: 876, dpr: 2, celular: true },
+  s9EmPe: { largura: 876, altura: 1400, dpr: 2, celular: true },
+  s9Metade: { largura: 694, altura: 876, dpr: 2, celular: true },
+  s9DoisTercos: { largura: 930, altura: 876, dpr: 2, celular: true },
   computador: { largura: 1440, altura: 900, dpr: 1, celular: false },
+  pcGrande: { largura: 1920, altura: 1080, dpr: 1, celular: false },
 };
 
 export async function abrirNavegador({ porta = 9340 + Math.floor(Math.random() * 400) } = {}) {

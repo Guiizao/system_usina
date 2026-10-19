@@ -97,7 +97,7 @@ export async function testarPessoas(nav, ligar, porta, grupo) {
       await chefe.esperar('!!document.querySelector("main.config")', 8000, 'Fernando abriu a Usina');
       await chefe.tocar('[data-a="voltar"]');
     });
-    await teste(grupo, 'o que este tablet chefe deixa fazer vale para todos, menos para o administrador', async () => {
+    await teste(grupo, 'o teto do tablet chefe nível 2 vale também para o administrador', async () => {
       const id = await chefe.avaliar('JSON.parse(localStorage.getItem("usina.cfg")).deviceId');
       igual((await p(adm, { acao: 'aparelho', id, nome: 'Tablet do escritório', teto: ['relatorios'] })).aparelhos[id].nome, 'Tablet do escritório');
       await semNotificacao(chefe);
@@ -108,10 +108,13 @@ export async function testarPessoas(nav, ligar, porta, grupo) {
       await semNotificacao(chefe);
       await chefe.tocar('[data-a="pessoa"]'); await chefe.tocar('[data-k="sair"]');
       await entrarComoChefe(chefe);
-      await chefe.tocar('[data-a="config"]');
-      await chefe.esperar('!!document.querySelector("main.config")', 8000, 'o administrador pode tudo');
-      await chefe.tocar('[data-a="voltar"]');
+      // o que a central devolveu na entrada (sem outra conexão com a identidade do tablet chefe)
+      igual(await chefe.avaliar('JSON.parse(localStorage.getItem("usina.cfg")).pessoa.funcoes'), ['relatorios'], 'a central aplica o teto ao administrador');
       await p(adm, { acao: 'aparelho', id, teto: null });
+      // sem o teto: o administrador entra de novo para os próximos testes terem tudo
+      await semNotificacao(chefe);
+      await chefe.tocar('[data-a="pessoa"]'); await chefe.tocar('[data-k="sair"]');
+      await entrarComoChefe(chefe);
     });
     await teste(grupo, 'tablet do setor: os ajustes abrem com a senha de quem pode (Fernando), não com a de Consulta', async () => {
       await conectar(hid, 'hidrolise', 'Felipe');

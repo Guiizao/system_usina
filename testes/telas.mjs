@@ -106,6 +106,11 @@ const TELAS = [
   ['novidades', '&papel=destilaria&op=Mateus&modal=novidades'],
   // versão 2.9: pessoas, permissões e registro do sistema no tablet chefe
   ['chefe-ninguem', '&papel=central&ninguem=1'],
+  // 2.15: pessoa que só vê relatórios e o escritório (sem os setores, o QR e a usina); e a folha só para consultar
+  ['chefe-so-escritorio', '&papel=central&funcoes=relatorios,escritorio'],
+  ['chefe-codigo-trocado', '&papel=central&modal=codigo-trocado'],
+  ['chefe-nivel', '&papel=central&tela=pessoas&modal=nivel'],
+  ['chefe-so-consulta', '&papel=central&funcoes=relatorios&tela=prancheta&pid=hid_anexo1&monitor=1'],
   ['chefe-entrar', '&papel=central&ninguem=1&modal=entrar'],
   ['chefe-menu-pessoa', '&papel=central', async (a) => { await a.tocar('[data-a="pessoa"]'); await dormir(200); }],
   ['chefe-pessoas', '&papel=central&tela=pessoas'],

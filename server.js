@@ -105,7 +105,10 @@ try { config = JSON.parse(fs.readFileSync(CONFIG, 'utf8')); } catch (e) {
   config = { nome: 'Rede Ubirálcool', chave: crypto.randomBytes(18).toString('hex'), codigo: novoCodigo() };
   fs.writeFileSync(CONFIG, JSON.stringify(config, null, 2));
 }
-const salvarConfig = () => fs.writeFileSync(CONFIG, JSON.stringify(config, null, 2));
+const salvarConfig = (nova = config) => {
+  fs.writeFileSync(CONFIG + '.tmp', JSON.stringify(nova, null, 2));
+  fs.renameSync(CONFIG + '.tmp', CONFIG);
+};
 // "geração" dos dados: muda quando o escritório zera as anotações de teste; os tablets veem e limpam o que têm
 if (!config.geracao) { config.geracao = crypto.randomBytes(6).toString('hex'); salvarConfig(); }
 
@@ -478,11 +481,11 @@ const tentativasSenha = {};
      1 = vê, corrige e envia (corrigir e relatórios, sem apagar relatório);
      2 = tudo o que existe, e libera outros tablets chefe;
      3 = tudo, mais as configurações do sistema (só o dono entra nele).
-   O que a pessoa faz num aparelho = funções dela ∩ funções do nível ∩ limite do aparelho (o administrador ignora só o limite).
+   O que a pessoa faz num aparelho = funções dela ∩ funções do nível ∩ limite do aparelho; o nível 3 continua sem teto.
    O dono (config.donoId) é a pessoa criada pela migração da 2.9 (o Guilherme). A identidade do aparelho é a da conexão
    cifrada (req.aparelho), nunca o que vem no pedido. Aparelho tablet chefe novo precisa ser liberado com uma senha. */
-const FUNCOES_PADRAO = ['anotar', 'corrigir', 'avisos', 'relatorios', 'ler_folha', 'usina', 'folhas', 'conexao', 'integracoes', 'ajustes', 'registro', 'chefes'];
-const FUNCOES_DO_NIVEL_1 = ['corrigir', 'relatorios'];
+const FUNCOES_PADRAO = ['anotar', 'corrigir', 'avisos', 'relatorios', 'ler_folha', 'usina', 'folhas', 'conexao', 'integracoes', 'ajustes', 'registro', 'chefes', 'escritorio'];
+const FUNCOES_DO_NIVEL_1 = ['corrigir', 'relatorios', 'escritorio'];
 const funcoesDoForms = () => { try { return formsLidas().funcoes.map((f) => f.id); } catch (e) { return FUNCOES_PADRAO; } };
 const niveisDoForms = () => { try { return formsLidas().niveis || {}; } catch (e) { return {}; } };
 if (!config.donoId) {
@@ -515,10 +518,15 @@ function funcoesNoAparelho(aparelho) {
   const nivel = nivelDoAparelho(aparelho);
   if (!p || !nivel || (nivel === 3 && !ehDono(p))) return new Set();
   const s = funcoesDaPessoa(p);
-  if (nivel === 1) [...s].forEach((f) => { if (!FUNCOES_DO_NIVEL_1.includes(f)) s.delete(f); });
-  if (nivel !== 3) s.delete('sistema');
+  if (nivel !== 3) {
+    const cfg = db.registros['config|sistema|geral'];
+    const niveis = cfg && !cfg.apagado && cfg.valores && cfg.valores.niveisChefe;
+    const permitidas = niveis && Array.isArray(niveis[nivel]) ? niveis[nivel] :
+      (nivel === 1 ? FUNCOES_DO_NIVEL_1 : [...s].filter((f) => f !== 'conexao'));
+    [...s].forEach((f) => { if (f === 'sistema' || !permitidas.includes(f)) s.delete(f); });
+  }
   const teto = tetoDoAparelho(aparelho);
-  if (teto && p.nivel !== 'administrador' && !ehDono(p)) [...s].forEach((f) => { if (!teto.includes(f)) s.delete(f); });
+  if (teto && nivel !== 3) [...s].forEach((f) => { if (!teto.includes(f)) s.delete(f); });
   return s;
 }
 const podeNoAparelho = (aparelho, f) => funcoesNoAparelho(aparelho).has(f);
@@ -616,8 +624,15 @@ function decidirConfig(atual, r, aparelho) {
   for (const k of mudancasDaConfig({ valores: antes }, { valores })) {
     if (k === 'folhas') continue;
     // no tablet de setor só os operadores (ajustes); no tablet chefe, o resto da usina
-    const precisa = !chefe ? (k === 'operadores' ? ['ajustes', 'usina'] : null) : ['usina'];
+    const precisa = k === 'niveisChefe' ? ['sistema'] : !chefe ? (k === 'operadores' ? ['ajustes', 'usina'] : null) : ['usina'];
     if ((!precisa || !precisa.some((f) => funcoes.has(f))) && naoPode(k)) return { aceita: false, motivo: 'sem_permissao' };
+  }
+  if ('niveisChefe' in valores) {
+    const n = valores.niveisChefe;
+    const validas = new Set([...funcoesDoForms(), 'pessoas', 'chefes']);
+    if (!n || typeof n !== 'object' || Array.isArray(n) || Object.keys(n).some((k) => !['1', '2'].includes(k)) ||
+        !['1', '2'].every((k) => Array.isArray(n[k]) && n[k].every((f) => typeof f === 'string' && validas.has(f)) && new Set(n[k]).size === n[k].length))
+      return { aceita: false, motivo: 'invalido' };
   }
   entrada.valores = valores;
   entrada.rev = Number(vivo ? vivo.rev || 0 : 0) + 1;
@@ -625,7 +640,7 @@ function decidirConfig(atual, r, aparelho) {
   if (!mesmoJson(valores, r.valores || {})) entrada.atualizadoEm = Math.max(r.atualizadoEm, vivo ? vivo.atualizadoEm || 0 : 0) + 1;
   return { aceita: true, entrada };
 }
-/** Folhas que só o tablet chefe anota (Vinho e Fermentação): pedem 'anotar'. As dos setores, 'corrigir' ou 'ler_folha'. */
+/** Folhas que só o tablet chefe anota (Vinho e Fermentação): pedem 'anotar'. As dos setores, 'corrigir'. */
 const pranchetasSoDoChefe = () => { try { return formsLidas().setores.filter((s) => s.soChefe).flatMap((s) => s.pranchetas); } catch (e) { return ['med_dornas', 'fermentacao']; } };
 /**
  * Anotação que chegou de um tablet chefe: a mesma função que a tela pede, de quem está dentro dele.
@@ -636,7 +651,7 @@ function motivoNoChefe(aparelho, r) {
   const f = funcoesNoAparelho(aparelho);
   if (r.prancheta === 'avisos') return f.has('avisos') ? '' : 'sem_permissao';
   if (pranchetasSoDoChefe().includes(r.prancheta)) return f.has('anotar') ? '' : 'sem_permissao';
-  return f.has('corrigir') || f.has('ler_folha') ? '' : 'sem_permissao';
+  return f.has('corrigir') ? '' : 'sem_permissao';
 }
 /** Campos do escritório de cada folha de insumo que o operador não preenche (o tablet do setor não muda). */
 function camposSoDoEscritorio(pid) {
@@ -813,7 +828,14 @@ function diasAtras(n) {
 }
 function arquivado(data) { return ehDia(data) && data < diasAtras(DIAS_NA_CENTRAL); }
 function lerDiaArquivado(data) {
-  try { return JSON.parse(fs.readFileSync(arquivoDoDia(data), 'utf8')); } catch (e) { return []; }
+  try {
+    const registros = JSON.parse(fs.readFileSync(arquivoDoDia(data), 'utf8'));
+    if (!Array.isArray(registros)) throw new Error('formato inválido');
+    return registros;
+  } catch (e) {
+    if (e.code === 'ENOENT') return [];
+    throw new Error('Não foi possível ler o dia arquivado');
+  }
 }
 /** Junta anotações num dia que só está no BackupUsina (ex.: o tablet chefe corrigiu uma folha antiga). */
 function juntarNoArquivo(data, novos) {
@@ -821,7 +843,9 @@ function juntarNoArquivo(data, novos) {
   lerDiaArquivado(data).forEach((r) => { mapa[r.id] = r; });
   let n = 0;
   novos.forEach((r) => { const a = mapa[r.id]; if (!a || r.atualizadoEm >= a.atualizadoEm) { mapa[r.id] = r; n += 1; } });
-  fs.writeFileSync(arquivoDoDia(data), JSON.stringify(Object.values(mapa), null, 1));
+  const arquivo = arquivoDoDia(data);
+  fs.writeFileSync(arquivo + '.tmp', JSON.stringify(Object.values(mapa), null, 1));
+  fs.renameSync(arquivo + '.tmp', arquivo);
   return n;
 }
 /** Tira da memória os dias antigos (eles continuam no BackupUsina). */
@@ -1020,9 +1044,13 @@ const servidor = http.createServer(async (req, res) => {
     if (p === '/api/c' && req.method === 'POST') {
       const aparelho = String(url.searchParams.get('a') || '').slice(0, 80);
       const pacote = await lerBytes(req, 40 * 1024 * 1024);
-      const chave = chaveDoAparelho(aparelho);
+      let chave = chaveDoAparelho(aparelho);
       let texto;
-      try { texto = abrir(chave, pacote, Buffer.from('pedido|' + aparelho)).toString('utf8'); } catch (e) { return json(res, 401, { erro: 'Aparelho não conectado à central' }); }
+      try { texto = abrir(chave, pacote, Buffer.from('pedido|' + aparelho)).toString('utf8'); } catch (e) {
+        if (nivelDoAparelho(aparelho) !== 3 || !config.codigoTrocado || !config.chaveAnterior) return json(res, 401, { erro: 'Aparelho não conectado à central' });
+        chave = hmac(config.chaveAnterior, 'aparelho|' + aparelho);
+        try { texto = abrir(chave, pacote, Buffer.from('pedido|' + aparelho)).toString('utf8'); } catch (e) { return json(res, 401, { erro: 'Aparelho não conectado à central' }); }
+      }
       const nl = texto.indexOf('\n');
       const cab = JSON.parse(texto.slice(0, nl));
       const agora = Date.now();
@@ -1065,6 +1093,7 @@ function sincronizar(corpo, aparelho, ip) {
   const bloqueio = config.bloqueios[aparelho];
   if (bloqueio) return { erro: 'bloqueado', bloqueio: bloqueioPublico(bloqueio), geracao: config.geracao };
   if (corpo.aparelho) {
+    corpo.aparelho = aparelho; // a identidade da lista também vem do pedido cifrado
     const antes = aparelhos[corpo.aparelho];
     aparelhos[corpo.aparelho] = { papel: corpo.papel, nome: String(corpo.nome || '').slice(0, 60), operador: corpo.operador, versao: corpo.versao || '', vistoEm: Date.now(), ip, info: infoLimpa(corpo.info) };
     eventosDoAparelho(corpo.aparelho, antes, corpo);
@@ -1074,7 +1103,7 @@ function sincronizar(corpo, aparelho, ip) {
   // Aparelho que acabou de conectar numa central nova (tablet chefe trocado ou reinstalado): aceita o que ele tem.
   if (corpo.geracao && corpo.geracao !== config.geracao) {
     const zerada = (config.geracoesZeradas || []).includes(corpo.geracao);
-    if (zerada || !corpo.novaConexao) return { ok: false, zerar: true, geracao: config.geracao, seq: db.seq, agora: Date.now() };
+    if (zerada || !corpo.novaConexao) return { ok: false, zerar: true, geracao: config.geracao, seq: db.seq, agora: Date.now(), ...(nivelDoAparelho(aparelho) === 3 && config.codigoTrocado ? { codigoTrocado: config.codigoTrocado } : {}) };
   }
   const dias = new Set();
   const antigos = {};
@@ -1126,7 +1155,7 @@ function sincronizar(corpo, aparelho, ip) {
       continue;
     }
     const atual = db.registros[r.id];
-    const entrada = criadasSemSaber(atual, r) ? juntarLinhas(atual, r) : r;
+    const entrada = r.data !== 'config' && criadasSemSaber(atual, r) ? juntarLinhas(atual, r) : r;
     // a configuração já foi conferida pela revisão (o relógio do aparelho não decide)
     if (!atual || entrada !== r || r.atualizadoEm >= atual.atualizadoEm || r.data === 'config') {
       db.seq += 1;
@@ -1138,13 +1167,13 @@ function sincronizar(corpo, aparelho, ip) {
     }
   }
   Object.entries(antigos).forEach(([d, lista]) => { aceitos += juntarNoArquivo(d, lista); });
-  if (aceitos) { gravarDisco(); dias.forEach(backupDoDia); agendarNuvem(); }
+  if (aceitos) { gravarDisco(true); dias.forEach(backupDoDia); agendarNuvem(); }
   // bloqueado enquanto esta sincronização acontecia: responde como bloqueado (o 200 abaixo diz "livre até a revisão")
   const blq = config.bloqueios[aparelho];
   if (blq) return { erro: 'bloqueado', bloqueio: bloqueioPublico(blq), geracao: config.geracao };
   // o endereço da nuvem vai junto: longe da usina, o aparelho pergunta lá se foi bloqueado
   // bloqueiosRev: "não está bloqueado até esta revisão" (resposta atrasada da nuvem com bloqueio mais velho não trava)
-  return { ok: true, aceitos, recusados, revs, seq: db.seq, agora: Date.now(), geracao: config.geracao, nuvem: config.nuvem.url || '', nuvemToken: tokenNuvem(aparelho), bloqueiosRev: config.bloqueiosRev };
+  return { ok: true, aceitos, recusados, revs, seq: db.seq, agora: Date.now(), geracao: config.geracao, nuvem: config.nuvem.url || '', nuvemToken: tokenNuvem(aparelho), bloqueiosRev: config.bloqueiosRev, ...(nivelAqui === 3 && config.codigoTrocado ? { codigoTrocado: config.codigoTrocado } : {}) };
 }
 
 /** As rotas com os dados da usina. Chegam aqui só depois de abrir o pedido embaralhado. */
@@ -1233,7 +1262,7 @@ async function rotaProtegida(req, res, url, ip) {
         if (corpo.acao === 'aparelho') {
           const id = String(corpo.id || '').slice(0, 80);
           if (!id) return json(res, 400, { erro: 'Falta o aparelho' });
-          const a = config.aparelhosChefe[id] || (config.aparelhosChefe[id] = {});
+          const a = { ...(config.aparelhosChefe[id] || {}) };
           const nomeAntes = nomeDoAparelho(id);
           if (typeof corpo.nome === 'string') a.nome = corpo.nome.trim().slice(0, 40);
           if ('teto' in corpo) a.teto = Array.isArray(corpo.teto) ? corpo.teto.filter((x) => /^[a-z_]{2,30}$/.test(x)) : null;
@@ -1251,6 +1280,7 @@ async function rotaProtegida(req, res, url, ip) {
               registrar('configuracao', `${quem.nome} mudou o ${nomeAntes} de ${nomeDoNivel(nivelAntes)} para ${nomeDoNivel(novoNivel)}`, { quem: quem.nome, aparelho: aqui });
             }
           }
+          config.aparelhosChefe[id] = a;
           salvarConfig();
           registrar('configuracao', `${quem.nome} mudou o que o ${nomeAntes} pode fazer${a.nome && a.nome !== nomeAntes ? ` (agora se chama ${a.nome})` : ''}`, { quem: quem.nome, aparelho: aqui });
           return lista();
@@ -1520,14 +1550,44 @@ async function rotaProtegida(req, res, url, ip) {
         return json(res, 200, { ok: true, apagados, geracao: config.geracao, copia: `BackupUsina/antes-de-zerar-${carimbo}.json` });
       }
 
-      // trocar o código também troca a chave: todos os outros aparelhos são desconectados (aparelho perdido ou roubado)
+      // O dono mantém acesso com a chave anterior até decidir sobre a troca de outro aparelho.
       if (p === '/api/novo-codigo' && req.method === 'POST') {
         if (!podeNoAparelho(req.aparelho, 'conexao')) return negar(res, 'conexao');
-        config.codigo = novoCodigo(); config.chave = crypto.randomBytes(18).toString('hex'); salvarConfig();
-        const quemTrocou = pessoaDoAparelho(req.aparelho);
-        registrar('configuracao', `${quemTrocou ? quemTrocou.nome : 'Alguém'} trocou o código de conexão. Os outros aparelhos precisam conectar de novo.`, { quem: quemTrocou ? quemTrocou.nome : '', aparelho: nomeDoAparelho(req.aparelho) });
-        // quem trocou recebe a chave nova dele (a resposta vai embaralhada com a chave antiga)
-        return json(res, 200, { codigo: config.codigo, chave: chaveDoAparelho(req.aparelho).toString('hex') });
+        const protegido = nivelDoAparelho(req.aparelho) !== 3 && Object.values(config.aparelhosChefe || {}).some((a) => a && a.nivel === 3);
+        if (protegido && config.codigoTrocado) return json(res, 409, { erro: 'O dono precisa resolver a troca de código pendente' });
+        const quem = pessoaDoAparelho(req.aparelho).nome;
+        const aparelho = nomeDoAparelho(req.aparelho);
+        const nova = { ...config, codigo: novoCodigo(), chave: crypto.randomBytes(18).toString('hex') };
+        delete nova.codigoTrocado; delete nova.codigoAnterior; delete nova.chaveAnterior;
+        if (protegido) {
+          nova.codigoAnterior = config.codigo; nova.chaveAnterior = config.chave;
+          nova.codigoTrocado = { id: crypto.randomBytes(12).toString('hex'), em: Date.now(), quem, aparelho };
+        }
+        salvarConfig(nova); config = nova;
+        let registroPendente = false;
+        try {
+          registrar('configuracao', `${quem} trocou o código de conexão.${protegido ? ' Aguarda a decisão do dono; os aparelhos nível 3 continuam conectados.' : ' Os outros aparelhos precisam conectar de novo.'}`, { quem, aparelho });
+          gravarDisco(true);
+        } catch (e) { registroPendente = true; }
+        // A chave já foi gravada: mesmo se o registro falhar, o aparelho precisa recebê-la.
+        return json(res, 200, { codigo: config.codigo, chave: chaveDoAparelho(req.aparelho).toString('hex'), ...(registroPendente ? { registroPendente } : {}) });
+      }
+      if (p === '/api/codigo-trocado' && req.method === 'POST') {
+        if (nivelDoAparelho(req.aparelho) !== 3 || !podeNoAparelho(req.aparelho, 'sistema')) return negar(res, 'sistema');
+        const corpo = JSON.parse(await lerCorpo(req, 10000));
+        if (!corpo || typeof corpo.id !== 'string' || !['manter', 'voltar'].includes(corpo.acao)) return json(res, 400, { erro: 'ação inválida' });
+        if (!config.codigoTrocado || corpo.id !== config.codigoTrocado.id) return json(res, 409, { erro: 'Troca de código não está mais pendente' });
+        const nova = { ...config };
+        if (corpo.acao === 'voltar') { nova.codigo = config.codigoAnterior; nova.chave = config.chaveAnterior; }
+        delete nova.codigoTrocado; delete nova.codigoAnterior; delete nova.chaveAnterior;
+        salvarConfig(nova); config = nova;
+        const quem = pessoaDoAparelho(req.aparelho).nome;
+        let registroPendente = false;
+        try {
+          registrar('configuracao', `${quem} ${corpo.acao === 'manter' ? 'manteve o novo código de conexão' : 'restaurou o código de conexão anterior'}.`, { quem, aparelho: nomeDoAparelho(req.aparelho) });
+          gravarDisco(true);
+        } catch (e) { registroPendente = true; }
+        return json(res, 200, { chave: chaveDoAparelho(req.aparelho).toString('hex'), ...(registroPendente ? { registroPendente } : {}) });
       }
       return json(res, 404, { erro: 'rota desconhecida' });
   } catch (e) {

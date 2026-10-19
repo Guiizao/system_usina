@@ -163,7 +163,7 @@ h3.secao-titulo { font-size: 21px; margin: 26px 0 10px; }
 .sub { color: var(--tinta-2); font-size: 18px; margin: -6px 0 16px; max-width: 75ch; }
 
 /* ---------- Listas grandes (setores, pranchetas) ---------- */
-.lista { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 440px), 1fr)); gap: 12px; }
+.lista { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 400px), 1fr)); gap: 12px; }
 .item { display: flex; align-items: center; gap: 18px; width: 100%; min-height: 116px; padding: 16px 20px 16px 16px; background: var(--papel); border: 2px solid var(--linha-clara); border-left: 10px solid var(--linha); border-radius: 10px; }
 .item:active { background: var(--papel-2); }
 .item .desenho { flex: none; width: 64px; height: 64px; display: grid; place-items: center; border-radius: 8px; background: var(--papel-2); color: var(--grafite); }
@@ -173,6 +173,14 @@ h3.secao-titulo { font-size: 21px; margin: 26px 0 10px; }
 .item .texto small { display: block; font-size: 16px; color: var(--tinta-2); margin-top: 2px; }
 .item .situacao { display: block; margin-top: 6px; font-size: 19px; font-weight: 700; color: var(--tinta-2); }
 .item .seta { flex: none; color: var(--tinta-2); }
+/* 2.15: no tablet, os cartões do início crescem com a altura da tela (não sobra meia tela em branco) */
+@media (min-width: 600px) and (min-height: 600px) {
+  .lista .item { min-height: clamp(116px, 26vh, 240px); }
+  .lista .item .desenho { width: clamp(64px, 8vh, 88px); height: clamp(64px, 8vh, 88px); }
+  .lista .item .desenho svg.ico { width: clamp(40px, 5vh, 56px); height: clamp(40px, 5vh, 56px); }
+  .lista .item .texto b { font-size: clamp(26px, 3.2vh, 34px); }
+  .lista .item .situacao { font-size: clamp(19px, 2.3vh, 24px); }
+}
 .item .seta svg.ico { width: 34px; height: 34px; }
 .item.feito { border-left-color: var(--verde); }
 .item.feito .situacao { color: var(--verde-escuro); }
@@ -519,6 +527,9 @@ table.papel td.atencao { background: var(--ambar-fundo); color: var(--ambar-text
 /* ---------- Janelas de escolha (compartilhar, formato) ---------- */
 .modal.largo { max-width: 760px; }
 .acoes-modal.um { grid-template-columns: 1fr; }
+.acoes-modal + .acoes-modal { margin-top: 8px; }
+.acoes-modal + .acoes-modal .btn { min-height: 56px; font-size: 19px; }
+.bloco .sub-titulo { margin: 16px 0 4px; font-size: 18px; }
 .escolhas { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; margin: 12px 0 4px; }
 .escolhas button {
   display: grid; grid-template-columns: 56px 1fr; grid-template-rows: auto auto; column-gap: 12px; align-items: center; text-align: left;
@@ -574,12 +585,28 @@ table.papel td.atencao { background: var(--ambar-fundo); color: var(--ambar-text
 .lateral-chefe { display: flex; flex-direction: column; gap: 12px; }
 .lateral-chefe .bloco { margin: 0; }
 .lateral-chefe h2 { font-size: 20px; }
+/* 2.15: até 6 gráficos no painel só na tela larga (computador); nas outras, 4 */
+@media (max-width: 1399px) { .graficos-painel .grafico-botao:nth-child(n+5) { display: none; } }
+.aparelhos-agora .titulo-secao h2 { margin: 0; }
+.agora-linha { display: flex; align-items: center; gap: 10px; padding: 6px 0; border-top: 1px solid var(--linha-clara); }
+.agora-linha > span:last-child { min-width: 0; }
+.agora-linha b { display: block; font-size: 17px; }
+.agora-linha small { display: block; color: var(--tinta-2); font-size: 15px; }
+/* computador (2.15): a tela grande mostra mais coisa, quase de ponta a ponta */
+:root[data-pc="1"] main.painel-chefe, :root[data-pc="1"] main:not([class]) { max-width: 1880px; }
+:root[data-pc="1"] main.graficos { max-width: 1880px; }
 .grade-acoes { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-top: 10px; }
 .grade-acoes button {
   display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; min-height: 78px; padding: 6px;
   border-radius: 10px; background: var(--papel-2); border: 2px solid var(--linha-clara); font-size: 15px; font-weight: 700; text-align: center;
 }
 .grade-acoes button svg.ico { width: 28px; height: 28px; }
+.grade-acoes.duas { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+/* Escritório dentro do painel do tablet chefe (2.15): o lote e se o rastreamento já foi salvo */
+.escritorio-bloco .lote-linha { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; }
+.escritorio-bloco .lote-linha small { color: var(--tinta-2); }
+.escritorio-bloco .lote-linha b { font-size: 22px; letter-spacing: .5px; }
+.escritorio-bloco .lote-linha .conexao { flex-basis: 100%; }
 .grade-acoes button:active { border-color: var(--verde); background: var(--verde-fundo); }
 .conectar-linha { display: flex; gap: 14px; align-items: center; }
 .conectar .qr { flex: none; background: #fff; padding: 8px; border: 2px solid var(--linha-clara); border-radius: 10px; }
@@ -640,8 +667,10 @@ table.papel td.atencao { background: var(--ambar-fundo); color: var(--ambar-text
 
 /* ---------- Configurações ---------- */
 main.config { max-width: 1500px; }
-.config-grade { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 460px), 1fr)); gap: 12px; align-items: start; margin-bottom: 12px; }
-.config-grade .bloco { margin: 0; }
+/* 2.15: colunas que se encaixam (a caixa curta não deixa buraco embaixo dela ao lado de uma comprida) */
+.config-grade { columns: 460px 3; column-gap: 12px; margin-bottom: 12px; }
+.config-grade > * { break-inside: avoid; }
+.config-grade .bloco { margin: 0 0 12px; }
 .autoria { margin: 18px 0 4px; font-size: 14px; line-height: 1.4; color: var(--tinta-2); text-align: center; }
 .config-grade h2 { display: flex; align-items: center; gap: 10px; font-size: 22px; margin: 0 0 8px; }
 .config-grade h2 small, .config-grade h3 small { font-size: 15px; color: var(--tinta-2); font-weight: 400; }
@@ -793,6 +822,7 @@ main.graficos { max-width: 1200px; }
 .graf-cab b { font-size: 18px; }
 .graf-cab small { color: var(--tinta-2); font-size: 15px; }
 .grafico.vazio .sub { margin: 4px 0; }
+.graf-corpo.graf-vazio { display: flex; align-items: center; justify-content: center; text-align: center; border: 1.5px dashed var(--linha-clara); border-radius: 8px; margin-bottom: 24px; }
 .graf-corpo { display: grid; grid-template-columns: 44px 1fr; height: 190px; }
 .grafico.compacto .graf-corpo { height: 120px; }
 .graf-y { position: relative; }

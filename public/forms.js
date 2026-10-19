@@ -108,8 +108,8 @@ window.USINA = {
   // Níveis do tablet chefe (versão 2.12), do aparelho: a central guarda e confere.
   // O que a pessoa faz no aparelho = funções dela ∩ funções do nível ∩ limite do aparelho.
   niveisDoAparelho: {
-    1: { nome: 'Nível 1', texto: 'Vê, corrige e envia', funcoes: ['corrigir', 'relatorios'] },
-    2: { nome: 'Nível 2', texto: 'Tudo, e libera outros tablets chefe', funcoes: 'todas' },
+    1: { nome: 'Nível 1', texto: 'Vê, corrige, envia e escritório', funcoes: ['corrigir', 'relatorios', 'escritorio'] },
+    2: { nome: 'Nível 2', texto: 'Quase tudo, menos conectar tablets (o dono escolhe)', funcoes: 'todas' },
     3: { nome: 'Nível 3', texto: 'Tudo, mais as configurações do sistema (só o dono)', funcoes: 'todas' },
   },
   niveis: {

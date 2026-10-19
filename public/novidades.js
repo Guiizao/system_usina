@@ -4,6 +4,17 @@
    Depois do sinal de igual vem JSON puro, porque o servidor do tablet chefe (Java) também lê este arquivo. */
 window.NOVIDADES = [
   {
+    "versao": "2.15.0",
+    "data": "2026-10-19",
+    "itens": [
+      "Tablet chefe e escritório numa tela só: os cálculos da produção, o rastreamento de lotes e a etiqueta ficam dentro do painel, para quem tem a função Escritório. O aparelho que era do Escritório vira tablet chefe: na primeira senha, o administrador libera.",
+      "Quem entra com a senha fica até o fim do turno. Não sai mais depois de 30 minutos parado.",
+      "Cada um vê só o que pode: o que a pessoa ou o nível do tablet não deixa fazer some da tela. O dono escolhe o que o nível 1 e o nível 2 podem (Pessoas e permissões). Sem a função Corrigir, as folhas dos setores abrem só para consultar.",
+      "Código de conexão protegido: se outro tablet chefe trocar o código, o aparelho do dono continua conectado e escolhe se mantém o novo ou volta ao de antes.",
+      "Telas arrumadas: painel com Ir para e Aparelhos agora; no computador a tela usa a largura toda, com mais setores e gráficos; gráficos do mesmo tamanho; início do setor e configurações sem espaço sobrando. Conferido também no Galaxy Tab S9+ e com a tela dividida."
+    ]
+  },
+  {
     "versao": "2.14.0",
     "data": "2026-10-15",
     "itens": [

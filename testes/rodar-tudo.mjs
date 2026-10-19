@@ -252,7 +252,8 @@ try {
   grupos.push(gn);
   // 4q. versão 2.14: a nuvem como ponto de encontro. Cada parte roda num processo próprio (tem o próprio wrangler)
   const gh = novoGrupo('Nuvem como ponto de encontro: aparelhos trocam anotações sem a central (2.14)');
-  for (const [nome, arq] of [['rotas da nuvem e a recusa nas duas centrais', 'hub214.mjs'], ['dois tablets trocando pela nuvem, nas duas centrais', 'rodar-hubapp214.mjs']]) {
+  for (const [nome, arq] of [['rotas da nuvem e a recusa nas duas centrais', 'hub214.mjs'], ['dois tablets trocando pela nuvem, nas duas centrais', 'rodar-hubapp214.mjs'],
+    ['2.15: níveis configuráveis, escritório no tablet chefe e código protegido, nas duas centrais', 'rodar-producao215.mjs']]) {
     await teste(gh, nome, async () => {
       certo(temWrangler(), 'falta rodar npm install em app/nuvem');
       const r = spawnSync(process.execPath, [path.join(APP, 'testes', arq)], { cwd: APP, encoding: 'utf8', timeout: 900000 });

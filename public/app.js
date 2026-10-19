@@ -3,7 +3,7 @@
 (function () {
   'use strict';
   const C = window.USINA;
-  const VERSAO = '2.14.0'; // aparece nos ajustes e vai junto com cada envio para a central
+  const VERSAO = '2.15.0'; // aparece nos ajustes e vai junto com cada envio para a central
   const AUTORIA = '© 2026 Guilherme. Todos os direitos reservados. Uso somente com autorização do autor.';
   const params = new URLSearchParams(location.search);
   const DEMO_IMG = params.has('demo'); // usado só para gerar imagens de apresentação
@@ -673,6 +673,7 @@
       }
       if (r1.status === 423) return; // a tela já travou (buscar)
       const resp1 = r1.ok ? await r1.clone().json().catch(() => ({})) : {};
+      if (resp1.codigoTrocado) avisarCodigoTrocado(resp1.codigoTrocado);
       if (r1.ok && resp1.geracao && !resp1.zerar) {
         // a central aceitou: "este aparelho está livre até a revisão X" (da central dela)
         const revCentral = Number(resp1.bloqueiosRev) || 0;
@@ -930,8 +931,7 @@
     }
     if (ehCentral()) {
       if (cfg.pessoa && !cfg.demo) {
-        if (Date.now() - pessoaAtivaEm >= limitePessoa()) sairDoChefe(`ficou ${C.minutosSemMexer || 30} minutos sem mexer`);
-        else if (cfg.pessoaAtivaEm !== pessoaAtivaEm) { cfg.pessoaAtivaEm = pessoaAtivaEm; salvarCfg(); }
+        if (cfg.pessoaTurno !== turnoDaPessoa()) sairDoChefe('o turno acabou');
       }
       return;
     }
@@ -1097,16 +1097,15 @@
    * fez; a central escreve entradas, aparelhos e código. Ele não fica nos tablets: o chefe pede o dia na central.
    * ========================================================= */
   const PID_REGISTRO = 'registro';
-  // quando a pessoa mexeu pela última vez (um toque depois de 30 minutos parado não volta a valer: tem de entrar de novo)
-  let pessoaAtivaEm = Number(cfg.pessoaAtivaEm) || 0;
-  const limitePessoa = () => (C.minutosSemMexer || 30) * 60000;
+  // versão 2.15: quem entra no tablet chefe fica até o fim do turno (pedido do Guilherme: uma senha por turno)
+  const turnoDaPessoa = () => `${dataProducao()}|${turnoAtual().id}`;
   let demoSemPessoa = false; // demonstração do tablet chefe sem ninguém (para conferir a tela)
+  let demoFuncoes = null; // demonstração com uma pessoa que só pode algumas coisas (&funcoes=relatorios,escritorio)
   const pessoaAtual = () => {
-    if (cfg.demo && ehCentral()) return demoSemPessoa ? null : { nome: 'Guilherme', nivel: 'administrador', extras: {}, teto: null, dono: true };
+    if (cfg.demo && ehCentral()) return demoSemPessoa ? null : demoFuncoes ? { nome: 'Lucas', nivel: 'consulta', funcoes: demoFuncoes } : { nome: 'Guilherme', nivel: 'administrador', extras: {}, teto: null, dono: true };
     if (!ehCentral() || !cfg.pessoa) return null;
-    return Date.now() - pessoaAtivaEm < limitePessoa() ? cfg.pessoa : null;
+    return cfg.pessoaTurno === turnoDaPessoa() ? cfg.pessoa : null;
   };
-  document.addEventListener('pointerdown', () => { if (pessoaAtual()) pessoaAtivaEm = Date.now(); }, { passive: true, capture: true });
   /** O que a pessoa pode fazer: o nível, o ajuste do administrador e o que este tablet chefe deixa. */
   function funcoesDe(p) {
     if (!p) return new Set();
@@ -1122,10 +1121,12 @@
     return s;
   }
   const pode = (f) => funcoesDe(pessoaAtual()).has(f);
+  // tablet chefe com alguém dentro que não pode corrigir: as folhas dos setores abrem só para consultar
+  const soConsulta = () => ehCentral() && !!pessoaAtual() && !pode('corrigir');
   const nomeDaFuncao = (f) => ((C.funcoes.find((x) => x.id === f) || {}).nome || 'isso').replace(/ \(.*\)$/, '').toLowerCase();
   /** Antes de uma ação do tablet chefe: confere a permissão (e pede a senha se ninguém entrou). */
   async function exigir(f) {
-    if (pode(f)) { pessoaAtivaEm = Date.now(); return true; }
+    if (pode(f)) return true;
     if (!ehCentral()) return verificarNoSetor(f);
     if (!pessoaAtual()) {
       if (!(await entrarNoChefe())) return false;
@@ -1146,9 +1147,8 @@
       toast(d.erro || 'Senha errada', 'erro');
       return false;
     }
-    pessoaAtivaEm = Date.now();
     if (d.nivel) cfg.nivelChefe = d.nivel;
-    cfg.pessoa = Object.assign({}, d.pessoa, { teto: d.teto || null }, Array.isArray(d.funcoes) ? { funcoes: d.funcoes, dono: !!d.dono } : {}); cfg.pessoaAtivaEm = pessoaAtivaEm; salvarCfg();
+    cfg.pessoa = Object.assign({}, d.pessoa, { teto: d.teto || null }, Array.isArray(d.funcoes) ? { funcoes: d.funcoes, dono: !!d.dono } : {}); cfg.pessoaTurno = turnoDaPessoa(); salvarCfg();
     // o que a central não aceitou por falta de alguém dentro (ou de permissão) vai de novo, agora com esta pessoa
     let guardadas = 0;
     Object.values(registros).forEach((r) => { if (r.esperaEntrar) { delete r.esperaEntrar; guardadas += 1; } });
@@ -1228,6 +1228,27 @@
       cfg.pessoa = Object.assign({}, cfg.pessoa, { funcoes: d.funcoes, dono: !!d.dono }); salvarCfg();
       if (!modalAberto()) render();
     }
+  }
+  /* Versão 2.15: outro tablet chefe trocou o código de conexão. Este aparelho (nível 3, do dono) continuou conectado
+     e escolhe: manter o código novo ou voltar ao anterior. Pergunta uma vez por troca (Depois: pergunta ao abrir de novo). */
+  let codigoTrocadoVisto = '';
+  async function avisarCodigoTrocado(t) {
+    if (!t || !t.id || t.id === codigoTrocadoVisto || modalAberto()) return;
+    codigoTrocadoVisto = t.id;
+    const quando = new Date(t.em).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+    const acao = await abrirModal(`<h3>O código de conexão foi trocado</h3>
+      <p>${esc(t.quem || 'Alguém')} trocou o código no ${esc(t.aparelho || 'tablet chefe')} em ${esc(quando)}. Este aparelho continua conectado.</p>
+      <p class="dica">Manter: os outros aparelhos usam o código novo. Voltar: volta o código de antes, e quem já entrou com o novo conecta de novo.</p>
+      <div class="acoes-modal"><button class="btn" data-k="voltar">Voltar ao anterior</button><button class="btn primario" data-k="manter">Manter o novo</button></div>
+      <div class="acoes-modal um"><button class="btn" data-k="depois">Decidir depois</button></div>`,
+    (k, b, fechar) => fechar(k));
+    if (acao !== 'manter' && acao !== 'voltar') return;
+    const r = await postJson('api/codigo-trocado', { id: t.id, acao }, 10000).catch(() => null);
+    const d = r ? await r.json().catch(() => ({})) : {};
+    if (!r || !r.ok) { codigoTrocadoVisto = ''; return toast(d.erro || 'Não consegui falar com a central', 'erro'); }
+    if (d.chave) { cfg.chave = d.chave; cfg.cifra = 1; salvarCfg(); }
+    sync.statusJson = ''; sincronizar();
+    toast(acao === 'manter' ? 'Código novo mantido' : 'Voltou o código de antes');
   }
   function sairDoChefe(motivo) {
     if (!cfg.pessoa) return;
@@ -1352,16 +1373,54 @@
           </section>
           <section class="bloco">
             <h2>${ico('escritorio')} Tablets chefe</h2>
-            <p class="sub" style="margin:0 0 8px">O nível de cada tablet chefe (1: vê, corrige e envia; 2: tudo; 3: só o dono, com as configurações do sistema) e o que ele deixa fazer, seja quem for.</p>
+            <p class="sub" style="margin:0 0 8px">O nível de cada tablet chefe (o 3 é só do dono) e o que ele deixa fazer, seja quem for.</p>
             ${[...chefes.values()].map((a) => {
               const teto = (l.aparelhos[a.id] || {}).teto;
               return `<div class="linha-config"><span class="escolha-ico">${ico('escritorio')}</span>
                 <div><b>${esc(a.nome || 'Tablet chefe')}${a.id === cfg.deviceId ? ' (este aparelho)' : ''}</b><small>${(l.aparelhos[a.id] || {}).nivel ? `${esc(nomeDoNivelChefe(l.aparelhos[a.id].nivel))} · ` : 'Não liberado · '}${a.online ? `Ligado${a.pessoa ? `, ${esc(a.pessoa)}` : ', ninguém entrou'}` : 'Sem sinal'} · ${Array.isArray(teto) ? `${teto.length} de ${C.funcoes.length} funções` : 'tudo liberado'}${a.id === cfg.deviceId ? ' · este aparelho' : ''}</small></div>
                 <button class="btn pequeno" data-a="aparelho-chefe" data-id="${esc(a.id)}">Mudar</button></div>`;
             }).join('') || '<p class="sub">Nenhum tablet chefe falou com a central ainda.</p>'}
+            ${pode('sistema') ? secaoNiveisChefe() : ''}
           </section>
         </div>
       </main>`;
+  }
+  /* Versão 2.15: o dono escolhe o que cada nível de tablet chefe pode fazer (vale para todos os tablets do nível, junto
+     com o que cada pessoa pode). A central confere. Sem escolha: nível 1 = corrigir, relatórios e escritório; nível 2 =
+     tudo menos conectar tablets e trocar o código. */
+  const funcoesDosNiveis = () => [...C.funcoes, { id: 'pessoas', nome: 'Cadastrar pessoas e senhas' }];
+  function funcoesDoNivel(n) {
+    const salvo = (configSistema().niveisChefe || {})[n];
+    if (Array.isArray(salvo)) return salvo;
+    return n === 1 ? ['corrigir', 'relatorios', 'escritorio'] : funcoesDosNiveis().map((f) => f.id).filter((f) => f !== 'conexao');
+  }
+  function secaoNiveisChefe() {
+    const nomes = (ids) => funcoesDosNiveis().filter((f) => ids.includes(f.id)).map((f) => f.nome.replace(/ \(.*\)$/, '').replace(/:.*$/, '')).join(' · ') || 'Nada';
+    return `<h3 class="sub-titulo">O que cada nível pode fazer</h3>
+      <p class="sub" style="margin:0 0 8px">Vale para todos os tablets chefe do nível. O que ficar desligado some da tela deles. O nível 3 é só o seu e pode tudo.</p>
+      ${[1, 2].map((n) => `<div class="linha-config"><div><b>${esc(nomeDoNivelChefe(n))}</b><small>${esc(nomes(funcoesDoNivel(n)))}</small></div>
+        <button class="btn pequeno" data-a="nivel-chefe" data-n="${n}">Mudar</button></div>`).join('')}`;
+  }
+  async function editarNivelChefe(n) {
+    const marcadas = new Set(funcoesDoNivel(n));
+    const lista = funcoesDosNiveis();
+    const desenhar = (f) => {
+      f.querySelector('#funcoes-nivel').innerHTML = `<div class="chips funcoes">${lista.map((x) => `<button class="chip-liga ${marcadas.has(x.id) ? 'sel' : ''}" data-k="f:${x.id}">${marcadas.has(x.id) ? ico('certo') : ico('fechar')} ${esc(x.nome)}</button>`).join('')}</div>`;
+    };
+    const ok = await abrirModal(`<h3>${esc(nomeDoNivelChefe(n))}: o que pode fazer</h3>
+      <div class="form-pessoa"><p class="dica">Toque para ligar ou desligar. Vale para quem entrar num tablet chefe deste nível.</p><div id="funcoes-nivel"></div></div>
+      <div class="acoes-modal"><button class="btn" data-k="x">Cancelar</button><button class="btn primario" data-k="ok">Salvar</button></div>`,
+    (k, b, fechar, f) => {
+      if (k === 'x') return fechar(false);
+      if (k.startsWith('f:')) { const fn = k.slice(2); if (marcadas.has(fn)) marcadas.delete(fn); else marcadas.add(fn); return desenhar(f); }
+      if (k === 'ok') fechar(true);
+    }, { classe: 'largo com-form', aoAbrir: (f) => desenhar(f) });
+    if (!ok) return;
+    const niveis = { 1: funcoesDoNivel(1), 2: funcoesDoNivel(2) };
+    niveis[n] = lista.map((x) => x.id).filter((id) => marcadas.has(id));
+    salvarConfigSistema({ niveisChefe: niveis });
+    toast(`${nomeDoNivelChefe(n)} salvo. Vale na próxima vez que alguém entrar.`);
+    render();
   }
   async function carregarPessoas(v) {
     if (cfg.demo) {
@@ -1572,7 +1631,7 @@
   function htmlDoGrafico(gr, compacto) {
     const ys = gr.series.flatMap((s) => s.pontos.map((p) => p.y));
     const cab = `<div class="graf-cab"><b>${esc(gr.titulo)}</b>${gr.unidade ? `<small>${esc(gr.unidade)}</small>` : ''}</div>`;
-    if (!ys.length) return `<div class="grafico vazio">${cab}<p class="sub">Nada anotado ainda neste dia.</p></div>`;
+    if (!ys.length) return `<div class="grafico vazio ${compacto ? 'compacto' : ''}">${cab}<div class="graf-corpo graf-vazio"><p class="sub">Nada anotado ainda neste dia.</p></div></div>`;
     const perto = gr.faixas.filter((f) => f.valor >= Math.min(...ys) - (Math.max(...ys) - Math.min(...ys) + 2) && f.valor <= Math.max(...ys) + (Math.max(...ys) - Math.min(...ys) + 2));
     let min = Math.min(...ys, ...perto.map((f) => f.valor)), max = Math.max(...ys, ...perto.map((f) => f.valor));
     if (max - min < 1) { min -= 1; max += 1; }
@@ -1588,7 +1647,7 @@
       + perto.map((f) => `<line x1="0" x2="100" y1="${Y(f.valor).toFixed(2)}" y2="${Y(f.valor).toFixed(2)}" class="graf-faixa ${f.nivel}"/>`).join('')
       + gr.series.filter((s) => s.pontos.length > 1).map((s) => `<polyline class="graf-linha s${s.cor}" points="${s.pontos.map((p) => `${X(p.x).toFixed(2)},${Y(p.y).toFixed(2)}`).join(' ')}"/>`).join('');
     const pontos = gr.series.flatMap((s) => s.pontos.map((p) => `<i class="graf-ponto s${s.cor}" style="left:${X(p.x).toFixed(2)}%;top:${Y(p.y).toFixed(2)}%" title="${esc(`${s.nome} ${p.onde}: ${fmtNum(p.y.toFixed(s.dec))}`)}"></i>`)).join('');
-    const horas = [0, 3, 6, 9, 12, 15, 18, 21].map((i) => `<span style="left:${X(i * 60).toFixed(2)}%">${pad2((C.inicioDoDia + i) % 24)}h</span>`).join('');
+    const horas = (compacto ? [0, 6, 12, 18] : [0, 3, 6, 9, 12, 15, 18, 21]).map((i) => `<span style="left:${X(i * 60).toFixed(2)}%">${pad2((C.inicioDoDia + i) % 24)}h</span>`).join('');
     const legenda = gr.series.map((s) => { const u = s.pontos[s.pontos.length - 1]; return `<span class="graf-leg"><i class="s${s.cor}"></i>${esc(s.nome)}${u ? ` <b>${esc(fmtNum(u.y.toFixed(s.dec)))}</b>${compacto ? '' : ` <small>(${esc(u.onde)})</small>`}` : ''}</span>`; }).join('');
     return `<div class="grafico ${compacto ? 'compacto' : ''}">${cab}
       <div class="graf-corpo"><div class="graf-y">${marcas.map((v) => `<span style="top:${Y(v).toFixed(2)}%">${esc(fmtNum(v.toFixed(dec)))}</span>`).join('')}</div>
@@ -1601,7 +1660,7 @@
     const com = graficosDoDia(data).filter((g) => g.temDados);
     return `<section class="graficos-painel">
       <div class="titulo-secao"><h2>Gráficos do dia</h2><button class="btn pequeno" data-a="graficos">${ico('grafico')} Ver todos</button></div>
-      ${com.length ? `<div class="graficos-grade">${com.slice(0, 4).map((g) => `<button class="grafico-botao" data-a="graficos" data-setor="${g.setor.id}">${htmlDoGrafico(g, true)}</button>`).join('')}</div>`
+      ${com.length ? `<div class="graficos-grade">${com.slice(0, 6).map((g) => `<button class="grafico-botao" data-a="graficos" data-setor="${g.setor.id}">${htmlDoGrafico(g, true)}</button>`).join('')}</div>`
         : '<p class="sub">Os gráficos aparecem quando os setores anotarem Brix, pH e temperaturas.</p>'}
     </section>`;
   }
@@ -3011,7 +3070,7 @@
     const p = ehCentral() ? pessoaAtual() : null;
     return `${!ehCentral() ? `<button class="atalho ${op ? '' : 'alerta'}" data-a="trocar-operador">${ico('pessoa')}<span>${esc(op || 'Seu nome')}</span></button>`
       : `<button class="atalho pessoa-chefe ${p ? '' : 'alerta'}" data-a="pessoa" aria-label="${p ? `${esc(p.nome)}: toque para sair` : 'Entrar com a sua senha'}">${ico('pessoa')}<span>${esc(p ? p.nome : 'Entrar')}</span></button>`}
-      ${v && v.tela === 'prancheta' ? `<button class="atalho ${v.monitor ? 'sel' : ''}" data-a="monitor">${ico('planilha')}<span>${v.monitor ? 'Anotar' : 'Monitorar'}</span></button>` : ''}`;
+      ${v && v.tela === 'prancheta' && !soConsulta() ? `<button class="atalho ${v.monitor ? 'sel' : ''}" data-a="monitor">${ico('planilha')}<span>${v.monitor ? 'Anotar' : 'Monitorar'}</span></button>` : ''}`;
   }
   function aplicarTema() {
     document.documentElement.dataset.tema = cfg.tema === 'escuro' ? 'escuro' : 'claro';
@@ -3310,7 +3369,6 @@
     return `<div class="papeis">
       ${todosSetores.filter((s) => !s.soChefe).map((s) => cartaoPapel(s.id, s.icone, s.nome, pranchetasDo(s.id).map((pid) => prancheta(pid).nome).join(', '), cfg.papel === s.id)).join('')}
       ${cartaoPapel('central', 'escritorio', nomeDoChefe(), detalheDoChefe(), ehCentral())}
-      ${cartaoPapel('escritorio', 'documento', 'Escritório', 'Cálculos da produção, rastreamento de lotes e etiqueta das bombonas', ehEscritorio())}
     </div>`;
   }
   function telaConfigurar() {
@@ -3883,9 +3941,9 @@
         <button class="btn" data-a="monitor-dia" data-n="1" aria-label="Próximo dia" ${data >= diaHoje ? 'disabled' : ''}>${ico('seta')}</button></div>`;
       return `${cabecalho(p.nome, subtituloTopo, false, atalhosOperador())}
         <div class="edicao"><div class="coluna"><div class="barra-trabalho"><div class="linha-monitor">${abasDoSetor(v)}${navDia}</div></div><main>
-          <p class="sub" style="margin:2px 0 10px">${hoje || ehCentral() ? 'Toque em uma linha para abrir e corrigir.' : `Folha de ${fmtData(data)}: só para consultar.`}</p>
+          <p class="sub" style="margin:2px 0 10px">${soConsulta() ? `Folha de ${fmtData(data)}: só para consultar (corrigir pede a função Corrigir).` : hoje || ehCentral() ? 'Toque em uma linha para abrir e corrigir.' : `Folha de ${fmtData(data)}: só para consultar.`}</p>
           ${folha()}</main>
-        <div class="rodape"><button class="btn primario" data-a="monitor">${ico('voltar')} Voltar para anotar</button></div></div></div>`;
+        ${soConsulta() ? '' : `<div class="rodape"><button class="btn primario" data-a="monitor">${ico('voltar')} Voltar para anotar</button></div>`}</div></div>`;
     }
 
     const fixoTopo = `${abasDoSetor(v)}${seletor}${cabecalhoForm ? `<div class="cabecalho-form">${cabecalhoForm}</div>` : ''}`;
@@ -4057,14 +4115,17 @@
   /* =========================================================
    * Tablet chefe: painel
    * ========================================================= */
+  // sem ninguém dentro, o botão aparece e pede a senha; com alguém, só o que ela pode
+  const veNoChefe = (f) => !pessoaAtual() || pode(f);
+  const FUNCOES_DA_USINA = ['usina', 'pessoas', 'registro', 'folhas', 'integracoes', 'conexao', 'chefes', 'sistema', 'ajustes'];
   function atalhosChefe() {
     const abertos = avisosEmAberto().length;
     const p = pessoaAtual();
     return `<button class="atalho pessoa-chefe ${p ? '' : 'alerta'}" data-a="pessoa" aria-label="${p ? `${esc(p.nome)}: toque para sair` : 'Entrar com a sua senha'}">${ico('pessoa')}<span>${esc(p ? p.nome : 'Entrar')}</span></button>
-      <button class="atalho" data-a="avisos" aria-label="Avisos${abertos ? `, ${abertos} esperando` : ''}">${ico('sino')}<span>Avisos</span>${abertos ? `<em class="contador">${abertos}</em>` : ''}</button>
-      <button class="atalho" data-a="ler-folha">${ico('camera')}<span>Ler folha</span></button>
-      <button class="atalho" data-a="relatorios">${ico('pasta')}<span>Relatórios</span></button>
-      <button class="atalho" data-a="config">${ico('pessoas')}<span>Usina</span></button>`;
+      ${veNoChefe('avisos') ? `<button class="atalho" data-a="avisos" aria-label="Avisos${abertos ? `, ${abertos} esperando` : ''}">${ico('sino')}<span>Avisos</span>${abertos ? `<em class="contador">${abertos}</em>` : ''}</button>` : ''}
+      ${veNoChefe('ler_folha') ? `<button class="atalho" data-a="ler-folha">${ico('camera')}<span>Ler folha</span></button>` : ''}
+      ${veNoChefe('relatorios') ? `<button class="atalho" data-a="relatorios">${ico('pasta')}<span>Relatórios</span></button>` : ''}
+      ${FUNCOES_DA_USINA.some(veNoChefe) ? `<button class="atalho" data-a="config">${ico('pessoas')}<span>Usina</span></button>` : ''}`;
   }
   function telaCentral(v) {
     const data = v.data;
@@ -4094,7 +4155,7 @@
 
         <div class="central-grade">
           <section>
-            <h2>Setores</h2>
+            ${veNoChefe('corrigir') || veNoChefe('relatorios') ? `<h2>Setores</h2>
             <div class="setores-grade">${lista.map((s) => {
               const regs = s.pranchetas.flatMap(folhasDe).flatMap((pid) => listar(data, pid)).sort((a, b) => b.atualizadoEm - a.atualizadoEm);
               const resumos = data === hoje ? s.pranchetas.map((pid) => resumoPrancheta(pid, data)) : [];
@@ -4111,12 +4172,13 @@
                 <span class="desenho">${ico(s.icone)}</span>
                 <span class="texto"><b>${esc(s.nome)}</b>${aparelho ? `<span class="conexao ${sinal}"><i></i>${esc(aparelho)}</span>` : ''}
                 <span class="situacao">${esc(situacao)}</span></span><span class="seta">${ico('seta')}</span></button>`;
-            }).join('')}</div>
+            }).join('')}</div>` : ''}
             ${htmlGraficosDoPainel(data)}
           </section>
 
           <aside class="lateral-chefe">
-            <section class="bloco">
+            ${veNoChefe('escritorio') ? blocoEscritorio() : ''}
+            ${veNoChefe('relatorios') ? `<section class="bloco">
               <h2>Compartilhar a folha do dia</h2>
               <button class="btn primario largo" data-a="compartilhar" data-destino="escritorio">${ico('enviar')} Enviar para o escritório</button>
               <div class="grade-acoes">
@@ -4127,8 +4189,10 @@
                 <button data-a="imprimir">${ico('imprimir')}<span>Imprimir</span></button>
                 <button data-a="relatorios">${ico('pasta')}<span>Relatórios</span></button>
               </div>
-            </section>
-            <section class="bloco conectar">
+            </section>` : ''}
+            ${blocoAparelhosAgora()}
+            ${blocoIrPara()}
+            ${cfg.demo || pode('conexao') ? `<section class="bloco conectar">
               <h2>Conectar um tablet</h2>
               ${cfg.demo
                 ? '<p class="sub" style="margin:0">Na usina, aqui aparecem o QR code para baixar o aplicativo e o código de conexão.</p>'
@@ -4137,10 +4201,41 @@
                   <div class="conectar-info"><small>Código de conexão</small>
                   <p class="codigo-grande">${st ? esc(String(st.codigo).replace(/(\d{3})(\d{3})/, '$1 $2')) : '--- ---'}</p>
                   <div class="linha-botoes"><button class="btn pequeno" data-a="qr-grande">Ampliar QR code</button><button class="btn pequeno" data-a="novo-codigo">Trocar código</button></div></div></div>`}
-            </section>
+            </section>` : ''}
           </aside>
         </div>
       </main>`;
+  }
+  /** Escritório dentro do painel (versão 2.15): o lote do dia que fechou e as duas partes, sem trocar de aparelho. */
+  function blocoEscritorio() {
+    const dia = diaFechado();
+    const salvo = rastreioGuardado(dia);
+    return `<section class="bloco escritorio-bloco">
+      <h2>Escritório</h2>
+      <div class="lote-linha"><small>Lote de ${fmtData(somarDias(dia, 1)).slice(0, 5)}</small><b>${esc(window.Rastreamento.lote(C, somarDias(dia, 1)))}</b>
+        <span class="conexao ${salvo ? 'ok' : 'off'}"><i></i>${salvo ? 'Rastreamento salvo' : 'Rastreamento ainda não salvo'}</span></div>
+      <div class="grade-acoes duas">
+        <button data-a="esc-abrir" data-t="esc-calculos" data-dia="${dia}">${ico('grafico')}<span>Cálculos da produção</span></button>
+        <button data-a="esc-abrir" data-t="esc-rastreamento" data-dia="${dia}">${ico('documento')}<span>Rastreamento e etiqueta</span></button>
+      </div>
+    </section>`;
+  }
+  /** Quem está trabalhando agora: cada aparelho, quem usa e se está ligado (a visão geral do escritório). */
+  function blocoAparelhosAgora() {
+    const lista = ((sync.status && sync.status.aparelhos) || []).slice().sort((a, b) => Number(!!b.online) - Number(!!a.online));
+    if (!lista.length) return '';
+    return `<section class="bloco aparelhos-agora"><div class="titulo-secao"><h2>Aparelhos agora</h2><button class="btn pequeno" data-a="aparelhos">Ver todos</button></div>
+      ${lista.slice(0, 8).map((a) => `<div class="agora-linha"><span class="conexao ${a.bloqueio ? 'off' : a.online ? 'ok' : 'off'}"><i></i></span>
+        <span><b>${esc(funcaoDoAparelho(a))}</b><small>${esc(quemUsa(a))} · ${esc(situacaoDoAparelho(a))}</small></span></div>`).join('')}
+      ${lista.length > 8 ? `<p class="sub">E mais ${lista.length - 8}.</p>` : ''}
+    </section>`;
+  }
+  /** Atalhos para as outras telas, só os que a pessoa pode usar. */
+  function blocoIrPara() {
+    const itens = [['graficos', 'grafico', 'Gráficos', ''], ['relatorios', 'pasta', 'Relatórios', 'relatorios'], ['aparelhos', 'wifi', 'Aparelhos', ''],
+      ['pessoas', 'pessoas', 'Pessoas', 'pessoas'], ['registro', 'nota', 'Registro', 'registro'], ['config', 'ajustes', 'Usina', 'usina']]
+      .filter(([, , , f]) => !f || veNoChefe(f));
+    return `<section class="bloco ir-para"><h2>Ir para</h2><div class="grade-acoes">${itens.map(([a, i, t]) => `<button data-a="${a}">${ico(i)}<span>${t}</span></button>`).join('')}</div></section>`;
   }
   function desenharQr() {
     const el = document.getElementById('qr');
@@ -4241,7 +4336,9 @@
    * ========================================================= */
   const PID_RASTREIO = 'rastreamento';
   const MINUTOS_ESCRITORIO = 10;
-  const escritorioAberto = () => cfg.demo || !!(cfg.escritorio && Date.now() < cfg.escritorio.ate);
+  const escritorioAberto = () => cfg.demo || (ehCentral() ? pode('escritorio') : !!(cfg.escritorio && Date.now() < cfg.escritorio.ate));
+  // quem salvou ou imprimiu: no tablet chefe, quem entrou nele
+  const quemNoEscritorio = () => (ehCentral() ? (pessoaAtual() || {}).nome || '' : cfg.escritorio ? cfg.escritorio.nome : '');
   const diaFechado = () => somarDias(dataProducao(), -1);
   const numBr = (n) => (n === '' || n == null || !Number.isFinite(Number(n)) ? '' : Number(n).toLocaleString('pt-BR', { maximumFractionDigits: Math.abs(Number(n)) >= 1000 ? 1 : 2 }));
   const pegarCaminho = (o, c) => c.split('.').reduce((x, k) => (x == null ? undefined : x[k]), o);
@@ -4271,6 +4368,7 @@
   /** Antes de salvar: a central só aceita a folha até 10 minutos depois da senha (renovados a cada folha salva). */
   async function garantirEscritorio() {
     if (cfg.demo) return true;
+    if (ehCentral()) return exigir('escritorio');
     if (cfg.escritorio && Date.now() - (cfg.escritorio.conferidoEm || 0) < 8 * 60000) return true;
     return entrarNoEscritorio();
   }
@@ -4407,7 +4505,7 @@
     if (!(await garantirEscritorio())) return false;
     const x = copia(valoresDaTela(v));
     if (typeof x.operadores === 'string') x.operadores = x.operadores.split(/\s*-\s*|\s*,\s*/).filter(Boolean);
-    x.salvoPor = cfg.escritorio ? cfg.escritorio.nome : ''; x.salvoEm = Date.now();
+    x.salvoPor = quemNoEscritorio(); x.salvoEm = Date.now();
     gravar(v.data, PID_RASTREIO, 'dia', x, { operador: x.salvoPor });
     registrar('anotacao', `${x.salvoPor} salvou o rastreamento de lotes de ${fmtData(x.fechamento)} (lote ${x.lote})`);
     if (cfg.escritorio) cfg.escritorio.conferidoEm = Date.now(); // a central renova os 10 minutos a cada folha aceita
@@ -4504,7 +4602,7 @@
     }, { classe: 'largo', aoAbrir: desenhar });
     if (!ok) return;
     imprimirHtml(`<div class="folha-etiquetas">${Array.from({ length: qtd }, () => etiquetaHtml(x, volume)).join('')}</div>`, `Etiqueta ${x.lote}`);
-    registrar('anotacao', `${cfg.escritorio ? cfg.escritorio.nome : ''} imprimiu ${qtd} etiqueta${qtd > 1 ? 's' : ''} do lote ${x.lote}`);
+    registrar('anotacao', `${quemNoEscritorio()} imprimiu ${qtd} etiqueta${qtd > 1 ? 's' : ''} do lote ${x.lote}`);
   }
 
   function telaRelatorios(v) {
@@ -5475,6 +5573,7 @@
       case 'pessoa-nova': return editarPessoa(v, '');
       case 'pessoa-editar': return editarPessoa(v, b.dataset.id);
       case 'aparelho-chefe': return editarAparelhoChefe(v, b.dataset.id);
+      case 'nivel-chefe': if (!(await exigir('sistema'))) return; return editarNivelChefe(Number(b.dataset.n));
       case 'aparelhos': return ir({ tela: 'aparelhos' });
       case 'aparelho-info': return verAparelho(b.dataset.id);
       case 'status-con': return verConexao();
@@ -5535,7 +5634,12 @@
         buscarDia(d); renovarEscritorio();
         pilha[pilha.length - 1] = Object.assign({}, v, { data: d }); return render();
       }
-      case 'esc-abrir': renovarEscritorio(); buscarDia(v.data); return ir({ tela: b.dataset.t, data: v.data });
+      case 'esc-abrir': {
+        if (ehCentral() && !(await exigir('escritorio'))) return;
+        renovarEscritorio();
+        const dia = b.dataset.dia || v.data;
+        buscarDia(dia); return ir({ tela: b.dataset.t, data: dia });
+      }
       case 'esc-campo': return mudarCampoEsc(v, b.dataset.c, b.dataset.r);
       case 'esc-salvar': return salvarEsc(v);
       case 'esc-recalcular': {
@@ -5597,8 +5701,9 @@
       case 'linha': {
         const chave = /^\d+$/.test(b.dataset.chave) ? Number(b.dataset.chave) : b.dataset.chave;
         if (rascunho && rascunho.chave === chave && !v.monitor) return;
-        // tablet do setor olhando um dia anterior no Monitorar: só consulta
+        // tablet do setor olhando um dia anterior no Monitorar, ou tablet chefe sem a função Corrigir: só consulta
         if (v.monitor && !ehCentral() && dataDaView(v) !== dataProducao()) return;
+        if (soConsulta()) return;
         if (rascunhoSujo()) salvarRascunho(true);
         rascunho = null; ed.alvoId = null;
         pilha[pilha.length - 1] = Object.assign({}, v, { chave, monitor: false });
@@ -5688,7 +5793,7 @@
       }
       case 'dia': return ir(Object.assign({}, v, { data: somarDias(v.data, Number(b.dataset.n)) }), true);
       case 'dia-hoje': return ir(Object.assign({}, v, { data: dataProducao() }), true);
-      case 'abrir-setor': return ir({ tela: 'prancheta', pid: pranchetasDasAbas(b.dataset.id)[0], data: v.data });
+      case 'abrir-setor': return ir({ tela: 'prancheta', pid: pranchetasDasAbas(b.dataset.id)[0], data: v.data, monitor: soConsulta() || undefined });
       case 'compartilhar': return compartilhar(b.dataset.destino, v.data || dataProducao());
       case 'relatorios': return ir({ tela: 'relatorios' });
       case 'avisos': return ir({ tela: 'avisos' });
@@ -6027,8 +6132,9 @@
         return;
       }
       case 'novo-codigo': {
-        if (!(await confirmar('Trocar o código de conexão?', 'Todos os outros aparelhos são desconectados e só voltam com o código novo. Use se um aparelho foi perdido ou roubado.', 'Trocar', true))) return;
+        if (!(await confirmar('Trocar o código de conexão?', 'Os outros aparelhos são desconectados e só voltam com o código novo (o do dono continua e decide se mantém). Use se um aparelho foi perdido ou roubado.', 'Trocar', true))) return;
         const r = await postJson('api/novo-codigo', {}).catch(() => null);
+        if (r && !r.ok) { const d = await r.json().catch(() => ({})); return toast(d.erro || 'A central não trocou o código', 'erro'); }
         if (r && r.ok) {
           const d = await r.json().catch(() => ({}));
           if (d.chave) { cfg.chave = d.chave; cfg.cifra = 1; salvarCfg(); } // este aparelho continua conectado
@@ -6103,7 +6209,11 @@
     const w = window.innerWidth, h = window.innerHeight;
     // referência 1100 x 690: um tablet de 10 polegadas (Tab S6, 1280 x 800) fica com tudo uns 15% maior,
     // e todos os tablets mostram a mesma tela, só maior ou menor conforme o tamanho
-    let z = celular ? 0.94 : Math.max(1, Math.min(w >= h ? Math.min(w / 1100, h / 690) : Math.min(w / 690, h / 1100), 1.8));
+    // computador (o ponteiro principal é o mouse), versão 2.15: sem aumentar; a tela grande mostra mais coisa em vez de
+    // tudo maior. Tablet e celular dizem ponteiro grosso e sem hover (o notebook com tela de toque conta como computador)
+    const pc = !celular && window.matchMedia && matchMedia('(hover: hover) and (pointer: fine)').matches;
+    document.documentElement.dataset.pc = pc ? '1' : '';
+    let z = celular ? 0.94 : pc ? 1 : Math.max(1, Math.min(w >= h ? Math.min(w / 1100, h / 690) : Math.min(w / 690, h / 1100), 1.8));
     z *= { menor: 0.88, normal: 1, maior: 1.14 }[cfg.escala] || 1;
     z = Math.round(z * 100) / 100;
     document.documentElement.style.setProperty('--escala', z);
@@ -6129,7 +6239,8 @@
       const soma = [...el.children].reduce((s, c) => s + c.offsetWidth, 0) + gap * (el.children.length - 1);
       if (soma > el.clientWidth - 2) return false;
     }
-    return el.scrollWidth <= el.clientWidth + 1 && el.scrollHeight <= el.clientHeight + 1;
+    // sem folga na largura: com o zoom da tela, 1 px a mais já corta a última letra ("107,0 °C", "Romenique")
+    return el.scrollWidth <= el.clientWidth && el.scrollHeight <= el.clientHeight + 1;
   };
   function caberTextos(raiz = document, apertado = false) {
     const topo = raiz.classList && raiz.classList.contains('topo') ? raiz : raiz.querySelector('.topo');
@@ -6169,7 +6280,8 @@
     // não contam) ou o nome curto quebrou em duas linhas ("Matéria-/prima").
     const nome = topo && topo.querySelector('.titulo b');
     const linhas = (el) => { const r = document.createRange(); r.selectNodeContents(el); return new Set([...r.getClientRects()].map((x) => Math.round(x.top))).size; };
-    const naoCabe = nome && nome.clientWidth > 0 && (nome.scrollWidth > nome.clientWidth || nome.scrollHeight > nome.clientHeight + 6
+    // (o nome que encolheu até sumir também não coube: largura zero com texto dentro)
+    const naoCabe = nome && nome.getClientRects().length && (nome.scrollWidth > nome.clientWidth || nome.scrollHeight > nome.clientHeight + 6
       || (!nome.closest('.titulo.longo') && linhas(nome) > 1));
     if (!apertado && naoCabe) { topo.classList.add('apertado'); caberTextos(topo, true); }
   }
@@ -6328,6 +6440,7 @@
     if (params.get('modal') === 'atualizacao') oferecerAtualizacao();
     if (params.get('modal') === 'novidades') mostrarNovidades('2.6.0');
     if (params.get('ninguem')) { demoSemPessoa = true; render(true); }
+    if (params.get('funcoes')) { demoFuncoes = params.get('funcoes').split(','); render(true); }
     // aparelhos e bloqueio de exemplo (versão 2.11)
     if (ehCentral()) { sync.status = statusDeExemplo(); render(true); }
     if (params.get('bloqueio')) { cfg.bloqueio = { em: Date.now() - 3600000, modo: params.get('bloqueio'), apagar: params.get('apagar') === '1', sal: '', resumo: '' }; pilha = [{ tela: 'bloqueado-adm' }]; render(true); }
@@ -6356,6 +6469,8 @@
     }
     if (params.get('modal') === 'lembrete-horario') escolherHorarioLembrete('destilaria');
     if (params.get('modal') === 'conexao') verConexao();
+    if (params.get('modal') === 'codigo-trocado') avisarCodigoTrocado({ id: 'demo', em: Date.now() - 40 * 60000, quem: 'Fernando', aparelho: 'Tablet do escritório' });
+    if (params.get('modal') === 'nivel') editarNivelChefe(1);
     if (params.get('aviso') && cfg.papel && !ehCentral() && operadorAtual()) {
       enviarAviso(cfg.papel, operadorAtual(), 'Passe no escritório antes de sair, por favor. O encarregado quer falar sobre a troca de turno de amanhã.');
       verificarAvisos();
@@ -6390,6 +6505,7 @@
     else if (NO_APK && pluginCentral && pluginCentral.estado) pluginCentral.estado().then((r) => { if (r && r.rodando) pluginCentral.parar().catch(() => {}); }).catch(() => {});
     // no aplicativo, quem guarda se a tela cheia está ligada é o Android
     if (NO_APK && pluginCentral && pluginCentral.telaCheia) pluginCentral.telaCheia({}).then((r) => { if (!!r.ligada !== !!cfg.telaCheia) { cfg.telaCheia = !!r.ligada; salvarCfg(); document.documentElement.toggleAttribute('data-cheia', cfg.telaCheia); } }).catch(() => {});
+    if (cfg.papel === 'escritorio') { cfg.papel = 'central'; cfg.escritorio = null; salvarCfg(); }
     podar();
     pilha = [telaInicial()];
     if (cfg.papel && (cfg.chave || cfg.demo) && !ehCentral() && !ehEscritorio() && !operadorAtual()) pilha.push({ tela: 'operador' });
