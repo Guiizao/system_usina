@@ -269,7 +269,8 @@ export async function testarApi(central, grupo) {
     const outro = await conectarTeste(U, antigo, 'teste-outro2');
     // versão 2.12: trocar o código é de quem tem a função conexão, num tablet chefe liberado
     igual((await pedir('/api/novo-codigo', { metodo: 'POST', chave, corpo: {} })).status, 403, 'aparelho que não é tablet chefe não troca');
-    await pedir('/api/chefes', { metodo: 'POST', chave, corpo: { acao: 'liberar', pin: SENHA_ENCARREGADO, nivel: 2 } });
+    // 2.15: por padrão o nível 2 não troca o código (sem a função Conexão); o tablet do dono, nível 3, troca
+    await pedir('/api/chefes', { metodo: 'POST', chave, corpo: { acao: 'liberar', pin: SENHA_ENCARREGADO, nivel: 3 } });
     await pedir('/api/pessoas', { metodo: 'POST', chave, corpo: { acao: 'entrar', pin: SENHA_ENCARREGADO } });
     const r = await pedir('/api/novo-codigo', { metodo: 'POST', chave, corpo: {} });
     igual(r.status, 200); certo(r.json.codigo !== antigo && /^\d{6}$/.test(r.json.codigo), 'código novo');

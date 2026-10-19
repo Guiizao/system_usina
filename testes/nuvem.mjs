@@ -206,6 +206,9 @@ export async function testarNuvem(grupo, sqlite = false) {
 
         await teste(grupo, `${nome}: aparelho bloqueado aparece na nuvem (longe da usina ele pergunta lá) e sai quando desbloqueia`, async () => {
           igual((await c.api('/api/pessoas', { acao: 'entrar', pin: SENHA_ENCARREGADO })).pessoa.nome, 'Guilherme');
+          // 2.15: a lista de aparelhos usa a identidade cifrada (declarar o nome no sync não basta): o aparelho conecta de verdade
+          const bloqueado = await conectarTeste(c.url, c.codigo(), 'teste-nuvem');
+          await bloqueado.pedir('/api/sync', { corpo: { aparelho: 'teste-nuvem', papel: 'caldeira', registros: [] } });
           igual((await c.api('/api/aparelhos', { acao: 'bloquear', id: 'teste-nuvem', modo: 'senha', apagar: true, codigo: '4321' })).ok, true);
           const resp = await esperar(async () => { const d = await (await fetch(nuvem.url + '/aparelho/teste-nuvem')).json(); return d.bloqueio ? d : null; }, 'o bloqueio na nuvem');
           const b = resp.bloqueio;
