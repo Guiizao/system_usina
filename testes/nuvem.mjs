@@ -226,7 +226,8 @@ export async function testarNuvem(grupo, sqlite = false) {
         });
 
         const remoto = await conectarTeste(c.url, c.codigo());
-        const syncRemoto = async (registros = []) => (await remoto.pedir('/api/sync', { corpo: { aparelho: remoto.aparelho, papel: 'escritorio', registros } })).json;
+        // 2.15: o tablet de setor só grava as folhas do setor dele: o aparelho longe da usina é da Caldeira
+        const syncRemoto = async (registros = []) => (await remoto.pedir('/api/sync', { corpo: { aparelho: remoto.aparelho, papel: 'caldeira', registros } })).json;
         const credencial = await syncRemoto();
         const mandar = (registros, extra = {}) => nuvem.pedir('/fila', { aparelho: remoto.aparelho, senha: credencial.nuvemToken, corpo: { registros, geracao: credencial.geracao, ...extra } });
         const puxar = async () => {

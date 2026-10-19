@@ -300,7 +300,9 @@ export async function testarRobustezAparelhos(nav, ligar, porta, grupo) {
 
     await teste(grupo, 'tablet chefe trocado: o tablet do setor conecta na central nova e manda o que tinha', async () => {
       await dormir(900);
-      const antigos = (await regs()).filter((r) => r.data >= diasAtras(1) && r.data !== 'config').length;
+      // 2.15: cada tablet de setor manda só as folhas do setor dele (a central nova recebe cada setor do seu tablet)
+      const daHidrolise = (r) => r.setor === 'hidrolise' && r.data >= diasAtras(1) && r.data !== 'config';
+      const antigos = (await regs()).filter(daHidrolise).length;
       await c.desligar();
       c = await ligar(porta, pastaTemporaria('nova-central'));
       await tab.esperar('document.querySelector("[data-quadro=\\"codigo\\"]")', 30000, 'o tablet pedir o código da central nova');
@@ -309,7 +311,7 @@ export async function testarRobustezAparelhos(nav, ligar, porta, grupo) {
       await tab.tocar('[data-ed="ocultar"]');
       await tab.tocar('[data-a="conectar"]');
       const lista = await esperarCentral((l) => l.some((r) => r.valores && r.valores.brix === '16' && r.operador === 'Felipe') && l, 'a dorna que o tablet salvou chegou na central nova', 40000);
-      const chegaram = lista.filter((r) => r.data >= diasAtras(1) && r.data !== 'config').length;
+      const chegaram = lista.filter(daHidrolise).length;
       certo(chegaram >= Math.min(antigos, 200), `só chegaram ${chegaram} de ${antigos} anotações`);
       return `${chegaram} anotações de volta na central nova`;
     });
@@ -319,15 +321,15 @@ export async function testarRobustezAparelhos(nav, ligar, porta, grupo) {
         const regs = JSON.parse(localStorage.getItem('usina.registros') || '{}');
         const t = Date.now();
         for (let i = 0; i < 700; i++) {
-          const id = '${velho}|ins_materia_prima|x' + i;
-          regs[id] = { id, data: '${velho}', prancheta: 'ins_materia_prima', setor: 'ralo', chave: 'x' + i, valores: { qtd: String(i) }, criadoEm: t, atualizadoEm: t, aparelho: 'ap-teste', apagado: false, sincronizado: false, operador: 'Jair' };
+          const id = '${velho}|ins_lphera|x' + i;
+          regs[id] = { id, data: '${velho}', prancheta: 'ins_lphera', setor: 'hidrolise', chave: 'x' + i, valores: { qtd: String(i) }, criadoEm: t, atualizadoEm: t, aparelho: 'ap-teste', apagado: false, sincronizado: false, operador: 'Jair' };
         }
         localStorage.setItem('usina.registros', JSON.stringify(regs));
         location.reload(); // na mesma hora, antes de o app gravar a memória de novo
       })()`);
       await dormir(800);
       await tab.esperar('document.readyState === "complete" && document.querySelector("#app header")', 20000, 'recarregar');
-      await esperarCentral((l) => l.filter((r) => r.data === velho && r.prancheta === 'ins_materia_prima').length === 700, '700 anotações na central', 60000);
+      await esperarCentral((l) => l.filter((r) => r.data === velho && r.prancheta === 'ins_lphera').length === 700, '700 anotações na central', 60000);
       await tab.recarregar();
       await tab.esperar(`!Object.values(JSON.parse(localStorage.getItem('usina.registros') || '{}')).some((r) => r.data === '${velho}')`, 20000, 'tirar da memória as antigas já enviadas');
     });

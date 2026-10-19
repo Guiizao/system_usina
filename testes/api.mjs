@@ -183,9 +183,15 @@ export async function testarApi(central, grupo) {
     const l = await pedir('/api/relatorios', { chave: chefeRel });
     const dia = l.json.dias.find((d) => d.data === hoje());
     certo(dia && dia.arquivos.some((a) => a.nome === 'Pranchetas_teste.xlsx' && a.tamanho === conteudo.length), 'não está na lista');
-    const pagina = await pedir('/relatorios');
+    // 2.15: a página e os arquivos pedem a entrada de quem tem Relatórios (o cookie vem da entrada cifrada)
+    igual((await pedir('/relatorios')).status, 401, 'página aberta a todos no Wi-Fi');
+    const { corpo: pedidoEntrar, iv } = await Cifra.pedido(chefeRel.chave, chefeRel.aparelho, 'POST', 'api/pessoas', JSON.stringify({ acao: 'entrar', pin: SENHA_ENCARREGADO }), Date.now());
+    const entrada = await fetch(U + '/api/c?a=' + chefeRel.aparelho, { method: 'POST', body: pedidoEntrar });
+    igual((await Cifra.resposta(chefeRel.chave, iv, new Uint8Array(await entrada.arrayBuffer()))).status, 200, 'entrada');
+    const cookie = { Cookie: (entrada.headers.get('set-cookie') || '').split(';')[0] };
+    const pagina = await pedir('/relatorios', { cabecalhos: cookie });
     igual(pagina.status, 200, 'página'); certo(pagina.texto.includes('Pranchetas_teste.xlsx'), 'página sem o arquivo');
-    const baixado = await pedir(`/relatorios/${hoje()}/Pranchetas_teste.xlsx`);
+    const baixado = await pedir(`/relatorios/${hoje()}/Pranchetas_teste.xlsx`, { cabecalhos: cookie });
     igual(baixado.status, 200); igual(baixado.texto, conteudo, 'arquivo baixado');
   });
   await teste(grupo, 'erros dos aparelhos ficam guardados (e cortados se forem enormes)', async () => {
@@ -229,8 +235,9 @@ export async function testarApi(central, grupo) {
   });
   await teste(grupo, 'muitos aparelhos mandando ao mesmo tempo: nada se perde', async () => {
     const antes = (await pedir('/api/registros?desde=0', { chave })).json.registros.length;
-    const envios = Array.from({ length: 20 }, (_, a) => pedir('/api/sync', { metodo: 'POST', chave, corpo: {
-      aparelho: 'carga-' + a, registros: Array.from({ length: 50 }, (_, i) => registro(`c${a}-${i}`, { brix: String(i) }, Date.now(), { id: `${hoje()}|caldeira|c${a}-${i}`, prancheta: 'caldeira' })),
+    // 2.15: a identidade vem da conexão cifrada e o tablet de setor só grava o setor dele: a carga vai pelo tablet chefe
+    const envios = Array.from({ length: 20 }, (_, a) => pedir('/api/sync', { metodo: 'POST', chave: chefeRel, corpo: {
+      aparelho: chefeRel.aparelho, registros: Array.from({ length: 50 }, (_, i) => registro(`c${a}-${i}`, { brix: String(i) }, Date.now(), { id: `${hoje()}|caldeira|c${a}-${i}`, prancheta: 'caldeira', setor: 'caldeira' })),
     } }));
     const respostas = await Promise.all(envios);
     certo(respostas.every((r) => r.status === 200 && r.json.aceitos === 50), 'algum envio falhou');
@@ -243,7 +250,7 @@ export async function testarApi(central, grupo) {
     const diaDoMes = (n) => { const d = new Date(); d.setDate(d.getDate() - n); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
     const t0 = Date.now();
     for (let lote = 0; lote < 15; lote++) {
-      const r = await pedir('/api/sync', { metodo: 'POST', chave, corpo: { aparelho: 'mes', registros: Array.from({ length: 500 }, (_, i) => registro(`m${lote}-${i}`, { phf: '5.0', brix: '17', enzi: '70', produto: 'MASSA' }, Date.now(), { id: `${diaDoMes((i % 28) + 1)}|hid_anexo1|m${lote}-${i}`, data: diaDoMes((i % 28) + 1) })) } });
+      const r = await pedir('/api/sync', { metodo: 'POST', chave: chefeRel, corpo: { aparelho: chefeRel.aparelho, registros: Array.from({ length: 500 }, (_, i) => registro(`m${lote}-${i}`, { phf: '5.0', brix: '17', enzi: '70', produto: 'MASSA' }, Date.now(), { id: `${diaDoMes((i % 28) + 1)}|hid_anexo1|m${lote}-${i}`, data: diaDoMes((i % 28) + 1) })) } });
       igual(r.status, 200, 'lote ' + lote);
     }
     const envio = Date.now() - t0;
