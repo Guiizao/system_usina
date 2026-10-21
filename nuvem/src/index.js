@@ -173,12 +173,13 @@ async function fila(req, env, confirmar, sync = false) {
     (SELECT valor FROM info WHERE chave = 'geracao') AS geracao,
     (SELECT pessoa FROM acessos_nuvem WHERE aparelho = ?) AS pessoa,
     (SELECT json FROM pessoas WHERE id = (SELECT pessoa FROM acessos_nuvem WHERE aparelho = ?)) AS cadastro`).bind(aparelho, aparelho, aparelho).first();
-  if (acesso.bloqueio) return responder(423, { erro: 'bloqueado' });
   if (acesso.pessoa && !acesso.cadastro) return responder(401, { erro: 'Pessoa desativada' });
   const recusados = acesso.pessoa ? lista.map((r) => ({ id: r.id, motivo: 'somente_leitura' })) : [];
   if (sync) {
     if (['desdeSeq', 'desdeOrdem'].some((k) => corpo[k] !== undefined && (!Number.isSafeInteger(corpo[k]) || corpo[k] < 0))
       || (corpo.desdeDia !== undefined && !leitura.ehDia(corpo.desdeDia))) return responder(400, { erro: 'Cursor inválido' });
+    // só o sync recusa aparelho bloqueado: a /fila (2.13) aceita, e a central recusa e publica a correção
+    if (acesso.bloqueio) return responder(423, { erro: 'bloqueado' });
     if (corpo.geracao && acesso.geracao && corpo.geracao !== acesso.geracao) return responder(409, { geracao: acesso.geracao });
   }
   if (lista.length && !acesso.pessoa) await gravarPendentes(env, aparelho, corpo.geracao || '', lista);
