@@ -28,6 +28,8 @@
       [13, '6', '', '02', ''], [14, '6', '', '03', ''], [15, '6', '', '01', ''], [16, '6', '', '02', '']]
       .forEach((l) => ex('caldeira', l[0], { pressao: l[1], temp_agua: l[2], descarga_fundo: l[3], descarga_garrafa: l[4] }, l[0] < 16 ? 'Alberto' : 'Diego'));
     ex('caldeira', 'obs1', { texto: 'DESCARGA DE GARRAFA FEITA AS 07:00' }, 'Alberto');
+    [[7, '5.5', '95.5'], [8, '6.2', '100.5'], [9, '6.0', '98.0']]
+      .forEach(([h, pressao, temp_agua]) => ex('caldeira_2', h, { pressao, temp_agua, descarga_fundo: '02' }, 'Lucas'));
     // volume de vinho (os números da planilha do escritório) e as dornas de fermentação
     const med = (grupo, valores) => { const g = grupoDaMedicao(grupo); g.dornas.forEach((d) => { const vol = volumeDe(d, valores[d.id + '_folga'], g); if (vol != null) valores[d.id + '_vol'] = vol.toFixed(emM3(g) ? 3 : 2); }); ex(PID_MEDICAO, grupo, Object.assign({ hora: '07:30' }, valores), 'Mateus'); };
     med('sac', { sac1_folga: '0.15', sac1_brix: '18', sac2_folga: '0.2', sac2_brix: '18', sac4_folga: '0.14', sac4_brix: '19' });

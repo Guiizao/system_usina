@@ -6,16 +6,17 @@ window.USINA.setores.push({
       nome: 'Caldeira',
       icone: 'chama',
       operadores: ['Alberto', 'Diego', 'Lucas'],
-      pranchetas: ['caldeira'],
+      pranchetas: ['caldeira', 'caldeira_2'],
 });
 
-Object.assign(window.USINA.pranchetas, {
+// A definição é única; cada caldeira recebe seus próprios campos e grupos.
+[['caldeira', 1], ['caldeira_2', 2]].forEach(([id, numero]) => {
     /* ---------------- CALDEIRA ---------------- */
-    caldeira: {
+    window.USINA.pranchetas[id] = {
       tipo: 'grade',
-      nome: 'Controle Diário da Caldeira',
+      nome: `Caldeira ${numero}`,
       codigo: 'Controle Diário',
-      titulo: 'Controle Diário da Caldeira',
+      titulo: `Controle Diário da Caldeira ${numero}`,
       papel: { modelo: 'caldeira' },
       responsavel: 'Jônatas Tavares Pedrão - Eng. Químico, Produção e Seg. do Trabalho',
       itens: [
@@ -34,5 +35,5 @@ Object.assign(window.USINA.pranchetas, {
         { titulo: 'Descargas', campos: ['descarga_fundo', 'descarga_garrafa'] },
         { titulo: 'Cinza', campos: ['retirada_cinza'] },
       ],
-    },
+    };
 });

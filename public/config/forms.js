@@ -131,8 +131,10 @@ window.USINA = {
     { prancheta: 'nova_destilaria', titulo: 'Nova Destilaria: vapor', campos: ['vapor'] },
     { prancheta: 'destilaria', titulo: 'Destilaria: vapor', campos: ['vapor'] },
     { prancheta: 'destilaria', titulo: 'Destilaria: INPM', campos: ['inpm'] },
-    { prancheta: 'caldeira', titulo: 'Caldeira: pressão', campos: ['pressao'] },
-    { prancheta: 'caldeira', titulo: 'Caldeira: temperatura da água', campos: ['temp_agua'] },
+    { prancheta: 'caldeira', titulo: 'Caldeira 1: pressão', campos: ['pressao'] },
+    { prancheta: 'caldeira', titulo: 'Caldeira 1: temperatura da água', campos: ['temp_agua'] },
+    { prancheta: 'caldeira_2', titulo: 'Caldeira 2: pressão', campos: ['pressao'] },
+    { prancheta: 'caldeira_2', titulo: 'Caldeira 2: temperatura da água', campos: ['temp_agua'] },
   ],
 
   // Dados que aparecem no cabeçalho e no rodapé das folhas de papel (Excel, XML e impressão saem iguais)
