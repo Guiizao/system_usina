@@ -27,7 +27,7 @@
   function telaConfigurar() {
     return `${topo('Pranchetas digitais', 'Configuração do aparelho', false)}
       <main><div class="boas-vindas">
-        <header><img src="icons/logo.png" alt="Ubirálcool"><div><h1>Onde este aparelho vai ficar?</h1><p>Toque no setor. Depois só o encarregado muda, com a senha.</p></div></header>
+        <header><div><h1>Onde este aparelho vai ficar?</h1><p>Toque no setor. Depois só o encarregado muda, com a senha.</p></div></header>
         ${gradePapeis()}
       </div></main>`;
   }

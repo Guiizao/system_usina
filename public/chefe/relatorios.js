@@ -14,7 +14,7 @@
     const dias = [...new Set([...(v.diasComDados || []), ...guardados.keys()])].sort().reverse();
     return `${cabecalho('Relatórios', 'Um por dia, com todos os setores', true, `<button class="atalho" data-a="gerar-hoje">${ico('planilha')}<span>Gerar agora</span></button>`)}
       <main>
-        ${cfg.demo ? '<div class="tela-aviso"><h1>Sem servidor na demonstração</h1><p>Na usina, aqui aparece um relatório por dia, com as folhas de todos os setores, para abrir, corrigir e enviar.</p></div>' : ''}
+        ${cfg.demo ? '<p class="sub">Demonstração: os dias anotados neste aparelho. Na usina, o Excel de cada dia fica guardado no servidor.</p>' : ''}
         ${!cfg.demo && !v.carregado ? '<p class="sub">Buscando os relatórios...</p>' : ''}
         ${!cfg.demo && v.carregado && !dias.length ? '<div class="tela-aviso"><div class="grande-ico">' + ico('pasta') + '</div><h1>Nenhum relatório ainda</h1><p>Assim que os setores anotarem, o dia aparece aqui. Às 07:00 o Excel do dia anterior é guardado sozinho.</p></div>' : ''}
         <div class="relatorios">${dias.map((d) => {
@@ -32,7 +32,12 @@
   }
   async function carregarRelatorios() {
     const v = view();
-    if (cfg.demo) { v.carregado = true; return; }
+    // demonstração: os dias anotados neste aparelho (sem servidor, não há arquivo guardado)
+    if (cfg.demo) {
+      v.diasComDados = [...new Set(Object.values(registros).filter((r) => !r.apagado && C.pranchetas[r.prancheta]).map((r) => r.data))];
+      v.carregado = true;
+      return Promise.resolve().then(() => { if (view() === v) render(); });
+    }
     try {
       const r = await buscar('api/relatorios', {}, 8000);
       const dados = r.ok ? await r.json() : { dias: [] };

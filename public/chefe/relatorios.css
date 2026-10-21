@@ -2,10 +2,20 @@
  * © 2026 Guilherme. Todos os direitos reservados. Uso somente com autorização do autor (veja LICENCA.txt). */
 
 /* ---------- Relatórios ---------- */
-.relatorios { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 520px), 1fr)); gap: 12px; align-items: start; }
+.relatorios { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 520px), 1fr)); gap: 12px; }
 .relatorios .bloco { margin: 0; }
 .relatorios h2 { margin: 0 0 8px; font-size: 22px; }
 .relatorios h2 small { font-size: 16px; color: var(--tinta-2); font-weight: 400; margin-left: 6px; }
+
+/* Relatórios: um cartão por dia. 2.16: os cartões da mesma linha têm a mesma altura (o de hoje, sem Excel, tem um
+   botão a menos e ficava menor); os botões ficam no pé, com a mesma largura, e o Apagar ocupa a linha de baixo */
+.relatorio-dia { display: grid; gap: 10px; grid-template-rows: auto 1fr; }
+.relatorio-cab { display: flex; align-items: center; gap: 14px; min-width: 0; }
+.relatorio-cab b { display: block; font-size: 22px; }
+.relatorio-cab small { display: block; font-size: 16px; color: var(--tinta-2); }
+.relatorio-dia .linha-botoes { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr)); gap: 10px; align-content: end; }
+.relatorio-dia .linha-botoes .btn { width: 100%; justify-content: center; }
+.relatorio-dia .linha-botoes .perigo { grid-column: 1 / -1; }
 .arquivo { display: flex; align-items: center; gap: 12px; padding: 8px 0; border-top: 1px solid var(--linha-clara); }
 .arquivo div { flex: 1; min-width: 0; }
 .arquivo b { display: block; font-size: 17px; word-break: break-all; }

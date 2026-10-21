@@ -5,6 +5,7 @@
  * © 2026 Guilherme. Todos os direitos reservados. Uso somente com autorização do autor (veja LICENCA.txt). */
 @import url("design/tipografia.css");
 @import url("design/cores.css");
+@import url("design/base.css");
 @import url("design/medidas.css");
 @import url("design/componentes.css");
 @import url("paginas/prancheta.css");

@@ -1,0 +1,26 @@
+/* Pranchetas Ubirálcool - base: letra do corpo, botões e campos, e o que muda nos componentes no tema escuro
+ * © 2026 Guilherme. Todos os direitos reservados. Uso somente com autorização do autor (veja LICENCA.txt). */
+
+:root[data-tema="escuro"] .topo .logo { background: var(--logo-fundo-noite); }
+:root[data-tema="escuro"] .topo .voltar { background: var(--papel-2); color: var(--tinta); }
+:root[data-tema="escuro"] .item.escuro { background: var(--papel-2); border-color: var(--linha-clara); }
+:root[data-tema="escuro"] .valor-linha .mm { background: var(--papel-2); color: var(--tinta); border: 2px solid var(--linha); }
+:root[data-tema="escuro"] .teclas button.escura { background: var(--papel-2); color: var(--tinta); border-color: var(--linha); }
+/* no escuro, o que está escolhido fica claro, para destacar */
+:root[data-tema="escuro"] .abas button.sel, :root[data-tema="escuro"] .seletor button.sel, :root[data-tema="escuro"] .fichas button.sel { background: var(--tinta); color: var(--papel); border-color: var(--tinta); }
+:root[data-tema="escuro"] #toast { background: var(--papel-2); color: var(--tinta); border: 1px solid var(--linha-clara); }
+
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+html, body { min-height: 100%; }
+body {
+  margin: 0; font-family: var(--fonte); font-size: 19px; line-height: 1.35;
+  color: var(--tinta); background: var(--chao);
+  overscroll-behavior: none; user-select: none; -webkit-user-select: none;
+  font-variant-numeric: tabular-nums;
+}
+button { font: inherit; color: inherit; border: 0; background: none; cursor: pointer; touch-action: manipulation; text-align: inherit; }
+button:focus-visible { outline: 4px solid var(--foco); outline-offset: 2px; }
+button:disabled { opacity: .45; cursor: default; }
+input, textarea { font: inherit; user-select: text; -webkit-user-select: text; color: var(--tinta); }
+[hidden] { display: none !important; }
+svg.ico { width: 1.25em; height: 1.25em; flex: none; stroke: currentColor; fill: none; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; vertical-align: middle; }

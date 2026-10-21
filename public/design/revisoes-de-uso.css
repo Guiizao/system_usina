@@ -62,10 +62,5 @@
 .folha.larga .rolar-folha { display: flex; }
 .abas { position: relative; }
 
-/* Relatórios: um cartão por dia */
-.relatorio-dia { display: grid; gap: 10px; }
-.relatorio-cab { display: flex; align-items: center; gap: 14px; min-width: 0; }
-.relatorio-cab b { display: block; font-size: 22px; }
-.relatorio-cab small { display: block; font-size: 16px; color: var(--tinta-2); }
 /* Envio: escolher os setores */
 .setores-envio { margin: 4px 0 12px; }

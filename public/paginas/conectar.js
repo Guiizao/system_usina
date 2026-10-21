@@ -89,8 +89,9 @@
     if (NO_APK) alvos.push({ id: 'endereco', label: 'Endereço da central', type: 'ip', get: () => conexaoForm.endereco, set: (x) => { conexaoForm.endereco = x; } });
     alvos.push({ id: 'codigo', label: 'Código (6 números)', type: 'num', dec: 0, digitos: 6, semMaisMenos: true, get: () => conexaoForm.codigo, set: (x) => { conexaoForm.codigo = x; } });
     contextoEdicao = 'conectar este aparelho';
-    const conteudo = `<div class="boas-vindas">
-        <header><img src="icons/logo.png" alt="Ubirálcool"><div><h1>Conectar na rede da usina</h1>
+    // 2.16: o logo fica só na barra de cima; o código e os botões na mesma largura; a assinatura no pé da tela
+    const conteudo = `<div class="boas-vindas conectar">
+        <header><div><h1>Conectar na rede da usina</h1>
         <p>O aplicativo só funciona dentro da rede da Ubirálcool. Peça ao escritório o ${NO_APK ? 'endereço e o ' : ''}código que aparece no tablet chefe.</p></div></header>
         ${grupoQuadros(alvos)}
         ${NO_APK && pluginCentral ? `<div class="procura-central ${procura.ativa ? 'ativa' : ''}">
@@ -98,8 +99,8 @@
           <span>${esc(procura.texto || 'O endereço aparece no painel do tablet chefe, embaixo do QR code.')}</span>
           ${procura.ativa ? '' : `<button class="btn" data-a="procurar-central">${ico('wifi')} Procurar sozinho</button>`}
         </div>` : ''}
-        <div class="linha-botoes" style="margin-top:22px">
-          <button class="btn primario" data-a="conectar" style="min-width:300px">${ico('wifi')} Conectar</button>
+        <div class="linha-botoes">
+          <button class="btn primario" data-a="conectar">${ico('wifi')} Conectar</button>
           <button class="btn" data-a="modo-demo">Só demonstração, sem central</button>
         </div>
         ${pluginCentral ? `<div class="bloco destaque-chefe">

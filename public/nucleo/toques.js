@@ -104,7 +104,12 @@
       case 'atualizacao': return oferecerAtualizacao();
       case 'procurar-atualizacao': return procurarAtualizacao(true);
       case 'novidades': return mostrarNovidades();
-      case 'modo-demo': cfg.demo = true; salvarCfg(); ed.alvoId = null; pilha = [telaInicial()]; return render(true);
+      case 'modo-demo': {
+        cfg.demo = true; salvarCfg(); ed.alvoId = null;
+        // 2.16: a demonstração já abre com 5 dias anotados (relatórios, gráficos e totais para ver)
+        if (!Object.keys(registros).length) { preencherExemplo(); Object.values(registros).forEach((r) => { r.sincronizado = true; }); }
+        pilha = [telaInicial()]; return render(true);
+      }
       case 'virar-central': return prepararTabletChefe();
       case 'voltar-conectar': cfg.papel = null; salvarCfg(); pilha = [telaInicial()]; return render(true);
       case 'abrir-painel': pilha = [telaInicial()]; return render(true);

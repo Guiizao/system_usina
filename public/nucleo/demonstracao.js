@@ -6,9 +6,39 @@
   /* =========================================================
    * Dados de exemplo (copiados das fotos e do vídeo das pranchetas)
    * ========================================================= */
-  function preencherExemplo() {
-    const data = dataProducao();
-    const ex = (pid, chave, valores, operador) => { if (!pegar(data, pid, chave)) gravar(data, pid, chave, valores, { operador }); };
+  /** 2.16: a demonstração vem com 5 dias de anotações (hoje e os 4 de antes), para ver relatórios, gráficos e totais. */
+  function preencherExemplo() { for (let d = 4; d >= 0; d--) preencherDia(somarDias(dataProducao(), -d), d); }
+  // nos dias de antes, as medidas mudam um pouco (sempre do mesmo jeito: a demonstração fica igual toda vez que abre)
+  const MEXE = { brix: 1, bhx: 1, phf: 0.1, phf2: 0.1, qtd: 10, pressao: 0.5, temp_agua: 2, producao: 10, carregamento: 20, inpm: 0.2, temp_pe_a: 0.1 };
+  function mexerNoDia(valores, d, n) {
+    if (!d) return valores;
+    const o = Object.assign({}, valores);
+    Object.keys(MEXE).forEach((k, i) => {
+      if (!/^\d+(\.\d+)?$/.test(o[k] || '')) return;
+      const casas = (o[k].split('.')[1] || '').length;
+      o[k] = Math.max(0, Number(o[k]) + MEXE[k] * (((d + n + i) % 3) - 1)).toFixed(casas);
+    });
+    return o;
+  }
+  function preencherDia(data, d) {
+    let n = 0;
+    const ex = (pid, chave, valores, operador) => { n++; if (!pegar(data, pid, chave)) gravar(data, pid, chave, mexerNoDia(valores, d, n), { operador }); };
+    // os dias de antes vêm inteiros: o que a tarde e a noite anotaram (as mesmas linhas, 8 e 16 horas depois)
+    const depois = (hora, mais) => { const [h, m] = hora.split(':').map(Number); return `${String((h + mais) % 24).padStart(2, '0')}:${String(m).padStart(2, '0')}`; };
+    if (d) [8, 16].forEach((mais, t) => [['08:43', '09:00', '3.5', '4', '20', '6.0', '70', '20', 'FINI'], ['09:31', '09:55', '5.1', '', '17', '5.2', '70', '20', 'MASSA'],
+      ['10:35', '10:55', '4.8', '2', '22', '5.0', '70', '22', 'MASSA']].forEach((l, i) => {
+      const chave = 7 + t * 3 + i, op = t ? 'Carlindo' : 'Felipe';
+      ex('hid_anexo1', chave, { inicio: depois(l[0], mais), fim: depois(l[1], mais), phf: l[2], cal: l[3], brix: l[4], phf2: l[5], enzi: l[6], bhx: l[7], produto: l[8] }, op);
+      ex('hid_anexo2', chave, { horario: depois(l[0], mais), sac: '4', phf: l[5], bhx: l[7], enz: '100', anti: '100' }, op);
+      const h = (Number(l[0].slice(0, 2)) + mais) % 24;
+      ex('ins_lphera', h, { qtd: '70', unidade: 'mL' }, op); ex('ins_cal', h, { qtd: l[3] || '2', unidade: 'copos' }, op);
+      ex('ins_saczyme', h, { qtd: '100', unidade: 'mL' }, op); ex('ins_alcolina', h, { qtd: '100', unidade: 'mL' }, op);
+      ex('ins_materia_prima', h, { qtd: '170', unidade: 'kg', produto: l[8] }, 'Jair');
+    }));
+    if (d) [17, 18, 19, 20, 21, 22, 23, 0, 1, 2, 3, 4, 5, 6].forEach((h) => {
+      ex('caldeira', h, { pressao: '6', temp_agua: '40', descarga_fundo: ['01', '02', '03'][h % 3], descarga_garrafa: '' }, h >= 17 && h < 24 ? 'Diego' : 'Lucas');
+      ex('destilaria', h, { temp_pe_a: '107.2', producao: '160', carregamento: '700', vapor: '2', inpm: '93.1' }, 'Mateus');
+    });
     [['08:43', '09:00', '3.5', '4', '20', '6.0', '70', '20', 'FINI', 'Guilherme'], ['09:00', '09:18', '3.5', '4', '21', '6.0', '70', '20', 'FINI', 'Guilherme'],
       ['09:31', '09:55', '5.1', '', '17', '5.2', '70', '20', 'MASSA', 'Guilherme'], ['09:55', '10:14', '5.0', '', '18', '5.1', '70', '19', 'MASSA', 'Guilherme'],
       ['10:35', '10:55', '4.8', '2', '26', '5.0', '70', '22', 'MASSA', 'Guilherme'], ['10:55', '', '5.2', '', '19', '5.2', '70', '18', 'FINI', 'Guilherme']]
@@ -35,7 +65,7 @@
     med('dsc', { dsc2_folga: '0.15', dsc2_brix: '7', dsc10_folga: '0.16', dsc10_brix: '7', dsc11_folga: '4', dsc11_brix: '10' });
     med('tq', { tq_inox1_folga: '1', tq_abast3_folga: '2.1' });
     ex(PID_MEDICAO, 'param', { brix_ralo: '18', hora_ralo: '09:30', brix_hid: '18', hora_hid: '09:30' }, 'Mateus');
-    if (!ciclosPorDorna().size) {
+    if (!d && !ciclosPorDorna().size) {
       const ontem = somarDias(data, -1);
       const ciclo = (dia, n, v, op) => gravar(dia, PID_FERMENTACAO, `${n}-exemplo`, Object.assign({ dorna: n, enche_inicio: '', enche_fim: '', brix_inicial: '', volante: [], esvaziada: null, inicioEm: momentoDe(dia, v.enche_inicio) }, v), { operador: op });
       ciclo(ontem, 7, { enche_inicio: '08:10', enche_fim: '10:40', brix_inicial: '8' }, 'Mateus');

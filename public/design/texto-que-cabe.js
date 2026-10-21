@@ -55,6 +55,7 @@
       // nome do quadro com o volume do lado que nem na letra mínima cabe: "Folga Nº 2" vira "Folga 2"
       if (!cabe(el) && el.matches('.campo .rot') && el.querySelector('.rot-n')) el.closest('.campo').classList.add('apertado');
     });
+    igualarVizinhos(lista);
     // nem com a letra menor o nome da tela coube (o botão Conexão tirou lugar): os botões do alto ficam só com o ícone
     // e o Voltar só com a seta, e o nome é medido de novo. Não coube = passou da largura (aqui sem a folga de 1 px do
     // cabe(): com o zoom, 1 px a mais já corta a última letra), sobrou uma linha escondida (os 2 px da perna do "p"
@@ -65,6 +66,30 @@
     const naoCabe = nome && nome.getClientRects().length && (nome.scrollWidth > nome.clientWidth || nome.scrollHeight > nome.clientHeight + 6
       || (!nome.closest('.titulo.longo') && linhas(nome) > 1));
     if (!apertado && naoCabe) { topo.classList.add('apertado'); caberTextos(topo, true); }
+  }
+  /* 2.16: caixas iguais lado a lado ficam com a mesma letra, a menor delas (um botão da linha não fica com letra maior
+     que o vizinho, um nome de quadro não fica maior que o do lado). Cada par: o que iguala e dentro de onde.
+     O número do quadro iguala só dentro do bloco (o peso do ralo, que é maior, fica no bloco dele). */
+  const VIZINHOS = [
+    ['.campo .rot', '.campos'], ['.campo .val:not(.vazio)', '.campos'], ['.linha-botoes .btn', '.linha-botoes'],
+    ['.acoes-modal .btn', '.acoes-modal'], ['.abas button', '.abas'], ['.seletor button', '.seletor'], ['.rodape .btn', '.rodape'],
+    ['.painel-nav .btn', '.painel-nav'], ['.item .texto b', 'main'], ['.setor-cartao .texto b', 'main'], ['.papel-cartao b', 'main'],
+    ['.escolhas button b', '.escolhas'], ['.chips-escolha button span', '.chips-escolha'], ['.opcoes-painel button', '.opcoes-painel'],
+    ['.opcoes.nomes .nome-op b', '.opcoes'], ['.topo .atalho span', '.topo'], ['.chip', '.chips, .linha-chips'],
+  ];
+  function igualarVizinhos(lista) {
+    VIZINHOS.forEach(([sel, dentro]) => {
+      const caixas = new Set(lista.filter((el) => el.matches(sel)).map((el) => el.closest(dentro) || el.parentElement));
+      caixas.forEach((caixa) => igualarGrupo(caixa, sel));
+    });
+  }
+  function igualarGrupo(caixa, sel) {
+    // junto com os que não foram medidos agora (ao teclar só o quadro é medido; os vizinhos guardam a letra de antes)
+    const grupo = [...caixa.querySelectorAll(sel)].filter((x) => x.clientWidth > 0);
+    if (grupo.length < 2 || !grupo.some((x) => x.style.fontSize)) return;
+    const tam = grupo.map((x) => parseFloat(getComputedStyle(x).fontSize));
+    const menor = Math.min(...tam);
+    grupo.forEach((x, i) => { if (tam[i] > menor + 0.05) x.style.fontSize = menor.toFixed(1) + 'px'; });
   }
   /* Ajusta a letra no próximo quadro da tela. Com "partes", só dentro delas (ao teclar, só o quadro e o teclado);
      sem, a tela inteira. */
