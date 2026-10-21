@@ -886,6 +886,9 @@ function postarBase44(dados) {
 
 // ---------- banco de dados simples em arquivo JSON ----------
 let db = carregarCentral(ARQUIVO) || { seq: 0, registros: {} };
+const envioTurnos = require('./envio-turnos').criar({ config, salvar: salvarConfig, forms: formsEmVigor,
+  registros: (dia) => arquivado(dia) ? lerDiaArquivado(dia) : Object.values(db.registros).filter((r) => r.data === dia),
+  agora: () => process.env.TURNO_AGORA ? Number(process.env.TURNO_AGORA) : Date.now() });
 const aparelhos = {}; // id -> { papel, operador, vistoEm, ip }
 
 let gravarTimer = null;
@@ -1550,6 +1553,18 @@ async function rotaProtegida(req, res, url, ip) {
         return json(res, 400, { erro: 'ação desconhecida' });
       }
 
+      if (p === '/api/turnos' && req.method === 'POST') {
+        if (!podeNoAparelho(req.aparelho, 'integracoes')) return negar(res, 'integracoes');
+        const corpo = JSON.parse(await lerCorpo(req, 2 * 1024 * 1024));
+        if (corpo.acao === 'estado') return json(res, 200, envioTurnos.estado());
+        if (corpo.acao === 'configurar') {
+          try { return json(res, 200, envioTurnos.configurar(corpo)); }
+          catch (e) { return json(res, 400, { erro: e.message }); }
+        }
+        if (corpo.acao === 'enviar') return json(res, 200, await envioTurnos.verificar(true));
+        return json(res, 400, { erro: 'ação desconhecida' });
+      }
+
       // totais do dia para o Base44 (sistema do escritório): o tablet chefe calcula, a central manda pela internet
       if (p === '/api/base44' && req.method === 'POST') {
         const corpo = JSON.parse(await lerCorpo(req, 2 * 1024 * 1024));
@@ -1724,6 +1739,7 @@ setInterval(arquivarDiasAntigos, 3600 * 1000).unref();
 // nuvem: manda o que mudou logo depois de ligar e a cada minuto (e 5 s depois de chegar anotação nova)
 setTimeout(enviarParaNuvem, Number(process.env.NUVEM_ESPERA_MS || 15000)).unref();
 setInterval(enviarParaNuvem, 60 * 1000).unref();
+setInterval(() => envioTurnos.verificar().catch(() => {}), Number(process.env.TURNO_INTERVALO_MS) || 60000).unref();
 // versão nova na internet: olha logo depois de ligar e a cada 6 horas
 setTimeout(buscarAtualizacaoOnline, Number(process.env.ATUALIZACAO_ESPERA_MS || 20000)).unref();
 setInterval(buscarAtualizacaoOnline, 6 * 3600 * 1000).unref();

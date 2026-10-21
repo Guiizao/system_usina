@@ -42,6 +42,10 @@
             <h2>${ico('escritorio')} Totais do dia no Base44</h2>
             ${htmlBase44()}
           </section>
+          ${pode('integracoes') ? `<section class="bloco" id="bloco-turnos">
+            <h2>${ico('enviar')} Totais ao fim do turno</h2>
+            ${htmlEnvioTurnos()}
+          </section>` : ''}
           <section class="bloco" id="bloco-nuvem">
             <h2>${ico('servidor')} Nuvem (internet)</h2>
             ${htmlNuvem()}

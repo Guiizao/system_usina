@@ -28,6 +28,7 @@
     config: 'usina', 'medida-grupo': 'usina', 'medidas-planilha': 'usina', contato: 'usina', 'lista-add': 'usina', 'lista-remove': 'usina',
     'setor-liga': 'usina', 'prancheta-liga': 'usina', 'lembrete-liga': 'usina', 'lembrete-horario': 'usina', 'turnos-setor': 'usina', 'op-add': 'usina', 'op-senha': 'usina', 'op-remove': 'usina',
     'nuvem-url': 'integracoes', 'nuvem-segredo': 'integracoes', 'nuvem-enviar': 'integracoes', 'base44-url': 'integracoes', 'base44-segredo': 'integracoes', 'base44-enviar': 'integracoes',
+    'turnos-url': 'integracoes', 'turnos-segredo': 'integracoes', 'turnos-ligar': 'integracoes', 'turnos-enviar': 'integracoes', 'turnos-atualizar': 'integracoes',
     'novo-codigo': 'conexao',
     graficos: 'relatorios', folhas: 'folhas', 'folha-campo': 'folhas', 'folha-unidades': 'folhas',
   };
@@ -360,7 +361,7 @@
       }
       case 'config': {
         // mexe no número do escritório, operadores e setores de todos os tablets: a permissão foi conferida antes (PRECISA)
-        carregarBase44(); carregarNuvem();
+        carregarBase44(); carregarNuvem(); carregarEnvioTurnos();
         return ir({ tela: 'config' });
       }
       case 'nuvem-url': {
@@ -386,6 +387,8 @@
         toast(nuvemInfo.erro ? 'Não foi: ' + nuvemInfo.erro : nuvemInfo.faltam ? `Mandou. Faltam ${nuvemInfo.faltam}` : 'Tudo na nuvem', nuvemInfo.erro ? 'erro' : 'ok');
         return render();
       }
+      case 'turnos-url': case 'turnos-segredo': case 'turnos-ligar': case 'turnos-enviar': case 'turnos-atualizar':
+        return acaoEnvioTurnos(a, b);
       case 'base44-url': {
         const atual = (base44Info && base44Info.url) || '';
         const valor = await textoLivre({ titulo: 'Endereço no Base44', dica: 'Quem montou o sistema do escritório copia do Base44 (a função receberTotaisPranchetas). Começa com https://. Deixe em branco para parar de enviar.', valor: atual, tipo: 'url', max: 300 });
