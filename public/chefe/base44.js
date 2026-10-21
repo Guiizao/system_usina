@@ -14,7 +14,10 @@
   function htmlEnvioTurnos() {
     const b = turnosInfo || { enviados: {} };
     const quando = (ms) => new Date(ms).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
-    return `<p class="sub">Ao terminar cada turno, a central manda os totais acumulados do dia para o sistema do Evandro. Usa os horários de cada setor e tenta de novo a cada 10 minutos se houver erro. Corrigiu uma folha dos últimos 7 dias, manda de novo.</p>
+    const explica = '<p class="sub">Ao terminar cada turno, a central manda os totais acumulados do dia para o sistema do Evandro. Usa os horários de cada setor e tenta de novo a cada 10 minutos se houver erro. Corrigiu uma folha dos últimos 7 dias, manda de novo.</p>';
+    // como as outras seções: na demonstração, uma linha só (sem central, não há o que cadastrar)
+    if (cfg.demo && !turnosInfo) return explica + '<p class="sub" style="margin:0">Na demonstração não há central para mandar os totais do turno.</p>';
+    return `${explica}
       <div class="linha-config"><div><b>Endereço de destino</b><small>${esc(b.url ? enderecoCurto(b.url) : 'não cadastrado')}</small></div><button class="btn pequeno" data-a="turnos-url">${b.url ? 'Trocar' : 'Cadastrar'}</button></div>
       <div class="linha-config"><div><b>Segredo</b><small>${b.temSegredo ? 'cadastrado (não aparece aqui)' : 'não cadastrado'}</small></div><button class="btn pequeno" data-a="turnos-segredo">${b.temSegredo ? 'Trocar' : 'Cadastrar'}</button></div>
       <div class="linha-config"><div><b>Envio automático</b><small>${b.ligado ? `Ligado desde ${fmtData(b.desde)}` : 'Desligado'}</small></div><button class="btn pequeno" data-a="turnos-ligar" aria-pressed="${!!b.ligado}">${b.ligado ? 'Desligar' : 'Ligar'}</button></div>
