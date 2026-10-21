@@ -32,7 +32,7 @@ export async function testarConfiguracao(grupo) {
     const ph = a1.find((c) => c.id === 'phf').avisos; const brix = a1.find((c) => c.id === 'brix').avisos;
     certo(ph.some((x) => x.quando === '<' && x.valor === 5 && x.nivel === 'alerta'), 'pH < 5');
     certo(ph.some((x) => x.quando === '>=' && x.valor === 7), 'pH >= 7');
-    certo(brix.some((x) => x.quando === '>=' && x.valor === 25), 'Brix 25 ou mais (2.16)');
+    certo(brix.some((x) => x.quando === '>' && x.valor === 25), 'Brix acima de 25 (2.16.1)');
   });
   await teste(grupo, 'forms.js: telas juntas e sugestões apontam para folhas que existem', async () => {
     for (const [pid, p] of Object.entries(C.pranchetas)) {

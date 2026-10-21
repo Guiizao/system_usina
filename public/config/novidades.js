@@ -4,6 +4,20 @@
    Depois do sinal de igual vem JSON puro, porque o servidor do tablet chefe (Java) também lê este arquivo. */
 window.NOVIDADES = [
   {
+    "versao": "2.16.1",
+    "data": "2026-10-21",
+    "itens": [
+      "Mais segurança no acesso pela nuvem: quem entra pelo computador só vê. Trocar a senha da pessoa, desativar ou tirar Relatórios e Escritório desconecta na hora.",
+      "Só entra pela nuvem quem tem Relatórios ou Escritório.",
+      "O envio dos totais ao fim do turno só aceita endereço https:// fora da rede da usina.",
+      "Brix e BHX avisam acima de 25 (26 já avisa; 25 não).",
+      "Caixas de digitar com letra visível no tema da noite e cantos arredondados em todas as telas.",
+      "Botões e cartões sem caixa sozinha na última linha: até 4 numa linha só; 6 ficam 3 e 3; 8 ficam 4 e 4.",
+      "Folhas e avisos: dá para pôr aviso em qualquer quadro de qualquer setor (ex.: temperatura da destilaria) com o texto curto que aparece do lado do número.",
+      "Usina: as seções que mandam os totais avisam que não precisa preencher (o sistema do Evandro busca pela API)."
+    ]
+  },
+  {
     "versao": "2.16.0",
     "data": "2026-10-21",
     "itens": [

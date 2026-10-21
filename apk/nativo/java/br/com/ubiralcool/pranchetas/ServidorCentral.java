@@ -1594,6 +1594,16 @@ public class ServidorCentral {
     }
     return f;
   }
+  private void validarEnderecoTurnos(String url) {
+    URL u;
+    try {
+      u = new URL(url);
+      if (!("http".equals(u.getProtocol()) || "https".equals(u.getProtocol())) || u.getHost().isEmpty() || u.getUserInfo() != null || u.getRef() != null || url.matches(".*\\s.*")) throw new Exception();
+    } catch (Exception e) { throw new IllegalArgumentException("Endereço inválido"); }
+    if ("http".equals(u.getProtocol()) && (u.getHost().matches("(?i)([0-9]+|0x[0-9a-f]+)")
+        || !u.getHost().matches("(?i)localhost|127\\.\\d+\\.\\d+\\.\\d+|10\\.\\d+\\.\\d+\\.\\d+|192\\.168\\.\\d+\\.\\d+|172\\.(1[6-9]|2\\d|3[01])\\.\\d+\\.\\d+|\\[::1\\]|[^.:]+|.+\\.local")))
+      throw new IllegalArgumentException("Pela internet, o endereço começa com https:// (com http o segredo iria aberto)");
+  }
   private void apiTurnos(byte[] corpo, OutputStream saida) throws Exception {
     JSONObject p = new JSONObject(new String(corpo, StandardCharsets.UTF_8));
     String acao = p.optString("acao");
@@ -1607,10 +1617,7 @@ public class ServidorCentral {
             (p.has("segredo") && (!(p.opt("segredo") instanceof String) || !p.optString("segredo").matches("[ -~]{0,200}"))) ||
             (p.has("ligado") && !(p.opt("ligado") instanceof Boolean))) throw new IllegalArgumentException("Configuração inválida");
         String url = p.has("url") ? p.optString("url").trim() : b.optString("url");
-        if (!url.isEmpty()) {
-          try { URL u = new URL(url); if (!("http".equals(u.getProtocol()) || "https".equals(u.getProtocol())) || u.getHost().isEmpty() || u.getUserInfo() != null || u.getRef() != null || url.matches(".*\\s.*")) throw new Exception(); }
-          catch (Exception e) { throw new IllegalArgumentException("Endereço inválido"); }
-        }
+        if (!url.isEmpty()) validarEnderecoTurnos(url);
         boolean ligado = p.has("ligado") ? p.optBoolean("ligado") : b.optBoolean("ligado");
         if (ligado && url.isEmpty()) throw new IllegalArgumentException("Cadastre o endereço primeiro");
         JSONObject f = p.optJSONObject("forms");
@@ -1726,6 +1733,9 @@ public class ServidorCentral {
           if (!manual && antes != null && !antes.optBoolean("ok") && agora - antes.optLong("em") < 600000L) continue;
           url = b.optString("url"); segredo = b.optString("segredo");
         }
+        // Revalida também configurações anteriores à exigência de HTTPS, antes de abrir a conexão.
+        try { validarEnderecoTurnos(url); }
+        catch (IllegalArgumentException erro) { return new JSONObject().put("ok", false).put("erro", erro.getMessage()).put("quantidade", quantidade); }
         int status = 0; HttpURLConnection con = null;
         try {
           con = (HttpURLConnection) new URL(url).openConnection(); con.setInstanceFollowRedirects(false);

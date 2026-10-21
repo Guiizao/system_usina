@@ -236,11 +236,19 @@
      e o que os outros aparelhos longe da central mandaram (pela ordem da nuvem). A mais nova vale, como na central, e o
      que espera alguém entrar não é trocado. Quando a central volta, ela confere tudo e desfaz o que não podia.
      Nuvem ainda sem a rota nova (publicar.ps1 não rodou): usa a fila da 2.13. */
+  function enderecoNuvemSeguro(endereco) {
+    try {
+      const u = new URL(endereco);
+      return !u.username && !u.password && !u.search && !u.hash
+        && (u.protocol === 'https:' || (u.protocol === 'http:' && ['127.0.0.1', 'localhost'].includes(u.hostname)));
+    } catch { return false; }
+  }
   async function sincronizarNuvem() {
-    if (cfg.demo || !cfg.nuvemUrl || !cfg.nuvemToken || sync.enviandoNuvem) return;
+    if (cfg.demo || !enderecoNuvemSeguro(cfg.nuvemUrl) || !cfg.nuvemToken || sync.enviandoNuvem) return;
     if (Date.now() - (cfg.ultimoContato || 0) < 2 * 60000 || Date.now() - (sync.nuvemEm || 0) < 20000) return;
     if (sync.nuvemAntiga) return mandarParaNuvem();
     sync.enviandoNuvem = true; sync.nuvemEm = Date.now();
+    const token = cfg.nuvemToken, url = cfg.nuvemUrl;
     let mudou = false;
     try {
       if (cfg.nuvemSeq == null) cfg.nuvemSeq = cfg.ultimoSeq || 0; // começa de onde parou com a central
@@ -248,15 +256,19 @@
         const lista = Object.values(registros).filter((r) => !r.sincronizado && !r.esperaEntrar && r.naNuvem !== r.atualizadoEm).slice(0, 200);
         const corpo = lista.map(({ sincronizado, naNuvem, esperaEntrar, ...r }) => (r.data === 'config' ? Object.assign(r, { base: r.rev || 0 }) : r));
         const r = await fetch(`${cfg.nuvemUrl.replace(/\/+$/, '')}/aparelho/sync`, {
-          method: 'POST', cache: 'no-store',
+          method: 'POST', cache: 'no-store', redirect: 'error',
           headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + cfg.nuvemToken, 'X-Aparelho': cfg.deviceId },
           body: JSON.stringify({ registros: corpo, geracao: cfg.geracao || '', desdeSeq: cfg.nuvemSeq || 0, desdeOrdem: cfg.nuvemOrdem || 0, desdeDia: primeiroDiaGuardado() }),
         });
+        if (cfg.nuvemToken !== token || cfg.nuvemUrl !== url) return;
         marcarNuvem(r.status < 500);
         if (r.status === 404) { sync.nuvemAntiga = true; sync.enviandoNuvem = false; sync.nuvemEm = 0; return mandarParaNuvem(); }
         if (r.status === 423) { conferirNaNuvem(true); return; } // bloqueado: a nuvem diz como
+        // 2.16: pela nuvem, a senha mudou, a pessoa foi desativada ou perdeu Relatórios e Escritório: entra de novo
+        if (r.status === 401 && cfg.soNuvem) { sairDaNuvem(); toast('O acesso pela nuvem acabou (a senha mudou ou a permissão foi tirada). Entre de novo.', 'erro'); return; }
         if (!r.ok) return; // 409: a nuvem é de outra central (zerada ou trocada); espera falar com a central
         const d = await r.json();
+        if (cfg.nuvemToken !== token || cfg.nuvemUrl !== url) return;
         versaoNaSincronizacao(d.telas); // 2.16: sem a central, quem avisa da versão nova é a nuvem
         lista.forEach((x) => { const local = registros[x.id]; if (local && local.atualizadoEm === x.atualizadoEm) local.naNuvem = x.atualizadoEm; });
         for (const rec of d.registros || []) {
@@ -275,19 +287,22 @@
     atualizarConexao();
   }
   async function mandarParaNuvem() {
-    if (cfg.demo || !cfg.nuvemUrl || !cfg.nuvemToken || sync.enviandoNuvem) return;
+    if (cfg.demo || !enderecoNuvemSeguro(cfg.nuvemUrl) || !cfg.nuvemToken || sync.enviandoNuvem) return;
     if (Date.now() - (cfg.ultimoContato || 0) < 2 * 60000 || Date.now() - (sync.nuvemEm || 0) < 60000) return;
     const lista = Object.values(registros).filter((r) => !r.sincronizado && !r.esperaEntrar && r.naNuvem !== r.atualizadoEm).slice(0, 200);
     if (!lista.length) return;
     sync.enviandoNuvem = true; sync.nuvemEm = Date.now();
+    const token = cfg.nuvemToken, url = cfg.nuvemUrl;
     try {
       const corpo = lista.map(({ sincronizado, naNuvem, esperaEntrar, ...r }) => (r.data === 'config' ? Object.assign(r, { base: r.rev || 0 }) : r));
       const r = await fetch(`${cfg.nuvemUrl.replace(/\/+$/, '')}/fila`, {
-        method: 'POST', cache: 'no-store',
+        method: 'POST', cache: 'no-store', redirect: 'error',
         headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + cfg.nuvemToken, 'X-Aparelho': cfg.deviceId },
         body: JSON.stringify({ registros: corpo, geracao: cfg.geracao || '' }),
       });
+      if (cfg.nuvemToken !== token || cfg.nuvemUrl !== url) return;
       marcarNuvem(r.status < 500);
+      if (r.status === 401 && cfg.soNuvem) { sairDaNuvem(); return; }
       if (!r.ok) return;
       lista.forEach((x) => { const local = registros[x.id]; if (local && local.atualizadoEm === x.atualizadoEm) local.naNuvem = x.atualizadoEm; });
       salvarRegistros();

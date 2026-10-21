@@ -18,15 +18,22 @@ const TIPOS = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; ch
 /** As telas do programa num endereço só deste computador (127.0.0.1, porta escolhida pelo Windows): nada fica aberto na rede. */
 function servirTelas() {
   return new Promise((resolve, reject) => {
+    const publicoReal = fs.realpathSync(publico);
     const servidor = http.createServer((req, res) => {
-      let rel = decodeURIComponent(new URL(req.url, 'http://x').pathname);
+      // endereço com % quebrado (ex.: /%E0%A4%A) não pode derrubar o programa
+      let rel;
+      try { rel = decodeURIComponent(new URL(req.url, 'http://x').pathname); } catch { res.writeHead(400); return res.end(); }
       if (rel === '/') rel = '/index.html';
       const alvo = path.normalize(path.join(publico, rel));
       if (!alvo.startsWith(publico + path.sep)) { res.writeHead(403); return res.end(); }
-      fs.readFile(alvo, (erro, dados) => {
+      fs.realpath(alvo, (erro, real) => {
         if (erro) { res.writeHead(404); return res.end('Não encontrado'); }
-        res.writeHead(200, { 'Content-Type': TIPOS[path.extname(alvo)] || 'application/octet-stream', 'Cache-Control': 'no-cache' });
-        res.end(dados);
+        if (!real.startsWith(publicoReal + path.sep)) { res.writeHead(403); return res.end(); }
+        fs.readFile(real, (erro, dados) => {
+          if (erro) { res.writeHead(404); return res.end('Não encontrado'); }
+          res.writeHead(200, { 'Content-Type': TIPOS[path.extname(alvo)] || 'application/octet-stream', 'Cache-Control': 'no-cache' });
+          res.end(dados);
+        });
       });
     });
     servidor.once('error', reject);
@@ -58,8 +65,12 @@ async function ligar() {
   janela.setMenu(null);
   // registro da janela (fica com o programa): ajuda a achar tela branca, erro de página ou travamento
   const registro = (...x) => { try { fs.appendFileSync(path.join(app.getPath('userData'), 'janela.log'), new Date().toISOString() + ' ' + x.join(' ') + '\n'); } catch { /* sem registro, segue */ } };
-  janela.webContents.on('console-message', (e) => registro('console', e.level, e.message, (e.sourceId || '') + ':' + (e.lineNumber || '')));
-  janela.webContents.on('did-fail-load', (e, codigo, desc, url) => registro('não carregou', codigo, desc, url));
+  // Mensagens e endereços podem carregar senha ou chave: o registro guarda o texto (é ele que acha a causa de uma tela
+  // branca) sem o valor depois de senha=/token=/chave=..., sem ?parâmetros e #fragmentos e sem sequência longa de chave.
+  const limpo = (s) => String(s || '').replace(/\b(senha|pin|token|chave|segredo|password|authorization|bearer)\b\s*[=:]?\s*\S+/gi, '$1=…')
+    .replace(/[?#]\S*/g, '?…').replace(/[A-Za-z0-9_+/=-]{24,}/g, '…').slice(0, 300);
+  janela.webContents.on('console-message', (e) => registro('console', Number(e.level) || 0, limpo(e.message), limpo(e.sourceId) + ':' + (Number(e.lineNumber) || 0)));
+  janela.webContents.on('did-fail-load', (e, codigo, desc, url) => registro('não carregou', Number(codigo) || 0, /^ERR_[A-Z_]+$/.test(desc) ? desc : '', limpo(url)));
   janela.on('unresponsive', () => registro('a janela parou de responder'));
   // a página caiu: anota e abre de novo (até 3 vezes, para não ficar em volta)
   let quedas = 0;

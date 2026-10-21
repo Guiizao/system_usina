@@ -8,7 +8,8 @@ import net from 'node:net';
 import { spawn } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { createRequire } from 'node:module';
-import { novoGrupo, teste, certo, resumo } from './teste.mjs';
+import { novoGrupo, teste, certo, igual, resumo } from './teste.mjs';
+import { testarWindowsSeguranca216 } from './seguranca216.mjs';
 
 const require = createRequire(import.meta.url);
 const APP = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -22,11 +23,15 @@ async function esperar(fn, descricao, ms = 25000) {
 const portaOcupada = (porta) => new Promise((r) => { const s = net.connect(porta, '127.0.0.1'); s.once('connect', () => { s.destroy(); r(true); }); s.once('error', () => r(false)); });
 
 export async function testarWindows216(g) {
+  await testarWindowsSeguranca216(g);
   const exe = path.join(APP, 'windows', 'node_modules', 'electron', 'dist', 'electron.exe');
   await teste(g, 'versão encontrada nas pastas do public/', async () => {
     certo(/^\d+\.\d+\.\d+$/.test(lerVersao(path.join(APP, 'public'))), 'versão real inválida');
   });
   if (!fs.existsSync(exe)) { console.log('  PULADO: windows/node_modules/electron não está instalado.'); return; }
+  // abre a janela do programa na tela deste computador: só com --janela (pedido do Guilherme: o teste do painel é pela
+  // nuvem, no navegador, em testes/painel-nuvem216.mjs)
+  if (!process.argv.includes('--janela')) { console.log('  PULADO: a janela do programa (node testes/windows216.mjs --janela).'); return; }
   const dados = fs.mkdtempSync(path.join(os.tmpdir(), 'pranchetas-windows216-'));
   const abrir = () => spawn(exe, [path.join(APP, 'windows', 'main.js'), `--user-data-dir=${dados}`], { stdio: 'ignore' });
   const primeira = abrir();
@@ -38,6 +43,9 @@ export async function testarWindows216(g) {
       const html = await (await fetch(endereco + '/?nuvem=1')).text();
       certo(html.includes('entrar-pela-nuvem.js') || html.includes('app.js'), 'as telas não vieram');
       certo((await fetch(endereco + '/../server.js')).status !== 200, 'entregou arquivo fora das telas');
+      certo((await fetch(endereco + '/..%5Cserver.js')).status !== 200, 'entregou arquivo fora das telas (barra invertida)');
+      igual((await fetch(endereco + '/%E0%A4%A')).status, 400, '% quebrado');
+      igual((await fetch(endereco + '/index.html')).status, 200, 'o programa continua de pé depois do % quebrado');
       certo(!/a página caiu/.test(fs.readFileSync(log, 'utf8')), 'a página caiu: ' + fs.readFileSync(log, 'utf8').slice(-300));
     });
     await teste(g, 'sem central: a porta 8080 continua livre', async () => {
@@ -59,5 +67,5 @@ export async function testarWindows216(g) {
 if (import.meta.url === pathToFileURL(process.argv[1]).href) {
   const g = novoGrupo('Aplicativo Windows 2.16');
   await testarWindows216(g);
-  resumo([g]);
+  const r = resumo([g]); console.log(JSON.stringify(r)); process.exitCode = r.falharam ? 1 : 0;
 }

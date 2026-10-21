@@ -96,17 +96,18 @@
       if (v) { v.classList.toggle('sel', !est.oculto); v.innerHTML = `${est.oculto ? ico('fechar') : ico('certo')} ${est.oculto ? 'O operador não vê este quadro' : 'O operador vê e anota este quadro'}`; }
     };
     const avisos = copia(c.avisos || []);
-    const linhaAviso = (a, i) => `<div class="aviso-editar" data-texto="${esc(a.texto || '')}" data-curto="${esc(a.curto || '')}">
+    const linhaAviso = (a, i) => `<div class="aviso-editar">
         <select class="av-quando">${QUANDO.map(([q, t]) => `<option value="${q}" ${a.quando === q ? 'selected' : ''}>${t}</option>`).join('')}</select>
         <input class="av-valor" inputmode="decimal" value="${esc(a.valor == null ? '' : fmtNum(String(a.valor)))}" aria-label="Valor">
         <select class="av-nivel"><option value="alerta" ${a.nivel !== 'atencao' ? 'selected' : ''}>Aviso vermelho</option><option value="atencao" ${a.nivel === 'atencao' ? 'selected' : ''}>Atenção (amarelo)</option></select>
         <input class="av-texto" maxlength="80" value="${esc(a.texto || '')}" placeholder="O que aparece (ex.: pH baixo: coloque cal)" aria-label="Texto do aviso">
+        <input class="av-curto" maxlength="20" value="${esc(a.curto || '')}" placeholder="Do lado do número (ex.: Temp. alta)" aria-label="Texto curto, do lado do número">
         <button class="btn pequeno" data-k="av-x:${i}" aria-label="Tirar este aviso">${ico('lixeira')}</button></div>`;
     const lerAvisos = (f) => [...f.querySelectorAll('.aviso-editar')].map((d) => ({
       quando: d.querySelector('.av-quando').value, valor: numeroDe(d.querySelector('.av-valor').value),
       nivel: d.querySelector('.av-nivel').value, texto: d.querySelector('.av-texto').value.trim(),
-      // o texto curto (do lado do número) continua o mesmo enquanto o texto não muda
-      curto: d.querySelector('.av-texto').value.trim() === d.dataset.texto && d.dataset.curto ? d.dataset.curto : '',
+      // 2.16.1: o texto curto (a etiqueta do lado do número, como "Brix alto"); em branco, o começo do texto
+      curto: d.querySelector('.av-curto').value.trim() || d.querySelector('.av-texto').value.trim().split(':')[0].slice(0, 20).trim(),
     }));
     const desenharAvisos = (f) => { f.querySelector('#avisos-campo').innerHTML = avisos.map(linhaAviso).join('') || '<p class="sub">Sem aviso neste quadro.</p>'; };
     const mudado = !!((configSistema().folhas || {})[pid] || {})[id];

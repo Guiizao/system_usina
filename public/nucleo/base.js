@@ -4,7 +4,7 @@
 'use strict';
 
   const C = window.USINA;
-  const VERSAO = '2.16.0'; // aparece nos ajustes e vai junto com cada envio para a central
+  const VERSAO = '2.16.1'; // aparece nos ajustes e vai junto com cada envio para a central
   const AUTORIA = '© 2026 Guilherme. Todos os direitos reservados. Uso somente com autorização do autor.';
   const params = new URLSearchParams(location.search);
   const DEMO_IMG = params.has('demo'); // usado só para gerar imagens de apresentação

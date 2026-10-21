@@ -8,15 +8,20 @@
     if (!pode('integracoes')) return;
     try {
       const r = await postJson('api/turnos', { acao: 'estado' }, 8000);
-      if (r.ok) { turnosInfo = await r.json(); if (view().tela === 'config' && podeRedesenhar()) render(); }
+      if (r.ok) { turnosInfo = await r.json(); if (view().tela === 'config') { if (podeRedesenhar()) render(); else redesenharDepois = true; } }
     } catch (e) { /* a tela informa que não foi possível carregar */ }
   }
+  // 2.16.1 (21/10): o sistema do Evandro só busca pela API (GET /api/v1/totais). Sem nada cadastrado, as seções que mandam
+  // os totais dizem que não precisa preencher e mostram só o botão (para outro sistema que peça para a central mandar)
+  const naoPrecisa = (acao) => `<p class="sub" style="margin:0 0 8px">Não precisa preencher: o sistema do Evandro busca os totais sozinho pela API da nuvem. Use só se outro sistema pedir para a central mandar.</p>
+    <button class="btn pequeno" data-a="${acao}">Cadastrar um endereço</button>`;
   function htmlEnvioTurnos() {
     const b = turnosInfo || { enviados: {} };
     const quando = (ms) => new Date(ms).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
     const explica = '<p class="sub">Ao terminar cada turno, a central manda os totais acumulados do dia para o sistema do Evandro. Usa os horários de cada setor e tenta de novo a cada 10 minutos se houver erro. Corrigiu uma folha dos últimos 7 dias, manda de novo.</p>';
     // como as outras seções: na demonstração, uma linha só (sem central, não há o que cadastrar)
     if (cfg.demo && !turnosInfo) return explica + '<p class="sub" style="margin:0">Na demonstração não há central para mandar os totais do turno.</p>';
+    if (turnosInfo && !b.url && !b.ligado) return naoPrecisa('turnos-url');
     return `${explica}
       <div class="linha-config"><div><b>Endereço de destino</b><small>${esc(b.url ? enderecoCurto(b.url) : 'não cadastrado')}</small></div><button class="btn pequeno" data-a="turnos-url">${b.url ? 'Trocar' : 'Cadastrar'}</button></div>
       <div class="linha-config"><div><b>Segredo</b><small>${b.temSegredo ? 'cadastrado (não aparece aqui)' : 'não cadastrado'}</small></div><button class="btn pequeno" data-a="turnos-segredo">${b.temSegredo ? 'Trocar' : 'Cadastrar'}</button></div>
@@ -133,7 +138,7 @@
   async function carregarNuvem() {
     try {
       const r = await postJson('api/nuvem', { acao: 'estado' }, 8000);
-      if (r.ok) { nuvemInfo = await r.json(); if (view().tela === 'config' && podeRedesenhar()) render(); }
+      if (r.ok) { nuvemInfo = await r.json(); if (view().tela === 'config') { if (podeRedesenhar()) render(); else redesenharDepois = true; } }
     } catch (e) { /* mostra o que veio na sincronização */ }
   }
   function htmlNuvem() {
@@ -159,7 +164,7 @@
   async function carregarBase44() {
     try {
       const r = await postJson('api/base44', { acao: 'estado' }, 8000);
-      if (r.ok) { base44Info = await r.json(); if (sync.status) sync.status.base44 = Object.assign({}, base44Info); if (view().tela === 'config' && podeRedesenhar()) render(); }
+      if (r.ok) { base44Info = await r.json(); if (sync.status) sync.status.base44 = Object.assign({}, base44Info); if (view().tela === 'config') { if (podeRedesenhar()) render(); else redesenharDepois = true; } }
     } catch (e) { /* mostra o que veio na sincronização */ }
   }
   /** O endereço inteiro não cabe no celular: mostra o começo e o fim do nome do site (o inteiro aparece ao tocar em Trocar). */
@@ -173,6 +178,7 @@
     const b = Object.assign({ enviados: {} }, base44Info, sync.status && sync.status.base44);
     if (base44Info) b.url = base44Info.url;
     if (cfg.demo && !base44Info) return '<p class="sub" style="margin:0">Na demonstração não há central para mandar os totais.</p>';
+    if (base44Info && !b.url && !b.ligado && !b.temSegredo) return naoPrecisa('base44-url');
     const hoje = dataProducao();
     const quando = (ms) => new Date(ms).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }).replace(',', ' às');
     const dias = [];
