@@ -17,10 +17,13 @@
 .chips-escolha button span { overflow-wrap: normal; }
 .chips-escolha button svg.ico { flex: none; width: 24px; height: 24px; color: var(--tinta-2); }
 .chips-escolha button.sel { border: 3px solid var(--verde); background: var(--verde-fundo); color: var(--verde-escuro); }
+/* a etiqueta "trabalhando" desce para baixo do nome quando a caixa é estreita (as caixas agora têm a mesma largura) */
+.chips-escolha button { flex-wrap: wrap; row-gap: 2px; }
 .chips-escolha .trabalhando { flex: none; font-size: 13px; padding: 3px 8px; border-radius: 999px; background: var(--verde); color: var(--branco); white-space: nowrap; }
 #aviso-texto { display: block; width: 100%; min-height: 112px; padding: 12px 14px; border-radius: 12px; border: 2px solid var(--linha); background: var(--papel); color: var(--tinta); font: inherit; font-size: 22px; line-height: 1.35; resize: vertical; }
 #aviso-texto:focus { outline: 3px solid var(--foco); outline-offset: 1px; }
-.frases { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0 4px; }
+.frases { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 220px), 1fr)); gap: 8px; margin: 10px 0 4px; }
+.frases .btn { white-space: normal; min-width: 0; }
 .aviso-previa { margin: 8px 0 12px; font-size: 17px; line-height: 1.35; color: var(--tinta-2); }
 .lista-avisos { display: grid; gap: 10px; }
 .aviso-item { display: grid; gap: 6px; padding: 12px 14px; border-radius: 12px; border: 2px solid var(--linha-clara); border-left: 8px solid var(--linha); background: var(--papel); }

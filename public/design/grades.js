@@ -12,7 +12,7 @@
    * ========================================================= */
   const GRADES = [
     ['.grade-acoes', 96, 4], ['.escolhas', 200, 4], ['.opcoes:not(.nomes)', 150, 4], ['.opcoes.nomes', 220, 4],
-    ['.papeis', 180, 4], ['.turnos', 200, 4], ['.setores-grade', 260, 4], ['.chips-escolha', 170, 4],
+    ['.papeis', 180, 4], ['.turnos', 200, 4], ['.setores-grade', 260, 4], ['.chips-escolha', 170, 4], ['.frases', 220, 4],
     ['.relatorio-dia .linha-botoes', 150, 4], ['.boas-vindas.conectar .linha-botoes', 220, 3],
   ];
   /** Quantas colunas: o máximo que cabe (até o limite), com as linhas o mais iguais possível. */
