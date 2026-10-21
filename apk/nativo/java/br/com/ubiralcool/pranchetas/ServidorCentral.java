@@ -2519,7 +2519,7 @@ public class ServidorCentral {
 
   /** Mapa de autorização fixo, como as folhas só do chefe; nuvemForms vem de aparelhos e não dá permissão. */
   private static String setorDaFolha(String folha) {
-    if ("caldeira".equals(folha)) return "caldeira";
+    if (Arrays.asList("caldeira", "caldeira_2").contains(folha)) return "caldeira";
     if ("ins_materia_prima".equals(folha)) return "ralo";
     if (Arrays.asList("hid_anexo1", "hid_anexo2", "juntas_lphera_cal", "juntas_saczyme_alcolina").contains(folha)) return "hidrolise";
     if (Arrays.asList("destilaria", "ins_lactrol", "ins_ureia").contains(folha)) return "destilaria";
