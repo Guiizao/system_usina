@@ -3,9 +3,11 @@
 
 /* ---------- Painel do tablet chefe ---------- */
 .barra-dia { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
-.nav-data { display: flex; align-items: center; gap: 10px; }
+/* 2.16: a navegação do dia ocupa a linha: a seta da esquerda e a da direita nas pontas, a data no meio;
+   os três números dividem a largura em partes iguais (sem sobrar espaço do lado) */
+.nav-data { display: flex; align-items: center; gap: 10px; flex: 1 1 420px; }
 .nav-data .btn { min-width: 60px; min-height: 60px; padding: 0 14px; }
-.nav-data .data-grande { display: flex; flex-direction: column; padding: 0 6px; }
+.nav-data .data-grande { display: flex; flex-direction: column; padding: 0 6px; flex: 1; min-width: 0; align-items: center; text-align: center; }
 .nav-data .data-grande b { font-size: 28px; line-height: 1.1; }
 .nav-data .data-grande span { font-size: 15px; color: var(--tinta-2); }
 /* Monitorar (versão 2.13): o dia fica no canto direito da barra das abas */
@@ -16,8 +18,8 @@
 .nav-monitor .data-grande { align-items: center; }
 .nav-monitor .data-grande b { font-size: 22px; }
 .nav-monitor .data-grande span { font-size: 13px; }
-.numeros { display: flex; gap: 10px; }
-.numeros div { min-width: 120px; background: var(--papel); border: 2px solid var(--linha-clara); border-radius: 10px; padding: 8px 14px; }
+.numeros { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 10px; flex: 1 1 360px; }
+.numeros div { min-width: 0; background: var(--papel); border: 2px solid var(--linha-clara); border-radius: 10px; padding: 8px 14px; }
 .numeros div.atencao { border-color: var(--ambar); background: var(--ambar-fundo); color: var(--ambar-texto); }
 .numeros b { display: block; font-size: 30px; line-height: 1.1; }
 .numeros span { font-size: 15px; color: var(--tinta-2); }

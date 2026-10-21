@@ -23,4 +23,7 @@ button:focus-visible { outline: 4px solid var(--foco); outline-offset: 2px; }
 button:disabled { opacity: .45; cursor: default; }
 input, textarea { font: inherit; user-select: text; -webkit-user-select: text; color: var(--tinta); }
 [hidden] { display: none !important; }
+/* 2.16: nenhuma barra de rolagem de navegador em tela nenhuma: rola com o dedo, a roda do mouse e o teclado */
+* { scrollbar-width: none; }
+*::-webkit-scrollbar { display: none; width: 0; height: 0; }
 svg.ico { width: 1.25em; height: 1.25em; flex: none; stroke: currentColor; fill: none; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; vertical-align: middle; }
