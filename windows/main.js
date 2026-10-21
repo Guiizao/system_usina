@@ -75,6 +75,13 @@ async function ligar() {
     show: false, icon: icone, autoHideMenuBar: true,
     webPreferences: { contextIsolation: true, nodeIntegration: false, sandbox: true } });
   janela.setMenu(null);
+  // registro da janela (Documentos não; fica com o programa): ajuda a achar tela branca, erro de página ou travamento
+  const registro = (...x) => { try { fs.appendFileSync(path.join(app.getPath('userData'), 'janela.log'), new Date().toISOString() + ' ' + x.join(' ') + '\n'); } catch { /* sem registro, segue */ } };
+  janela.webContents.on('console-message', (e) => registro('console', e.level, e.message, (e.sourceId || '') + ':' + (e.lineNumber || '')));
+  janela.webContents.on('render-process-gone', (e, d) => registro('a página caiu', JSON.stringify(d)));
+  janela.webContents.on('did-fail-load', (e, codigo, desc, url) => registro('não carregou', codigo, desc, url));
+  janela.on('unresponsive', () => registro('a janela parou de responder'));
+  registro('abrindo', endereco);
   janela.on('close', (evento) => { if (!saindo) { evento.preventDefault(); janela.hide(); } });
   janela.webContents.setWindowOpenHandler(({ url }) => {
     if (local(url)) janela.loadURL(url).catch(falhar); else externo(url);
@@ -108,7 +115,10 @@ async function ligar() {
     { label: 'Sair', click: () => app.quit() },
   ]));
   bandeja.on('double-click', abrir);
-  await janela.loadURL(endereco + '/');
+  // a janela conecta sozinha na central daqui (2.16): o código vai no endereço, só para esta janela, e sai dele na hora
+  let codigo = '';
+  try { codigo = JSON.parse(fs.readFileSync(path.join(process.env.PASTA_DADOS, 'ServidorUsina', 'config.json'), 'utf8')).codigo || ''; } catch { /* sem o código, a tela pede */ }
+  await janela.loadURL(endereco + '/' + (/^\d{6}$/.test(codigo) ? '?codigo=' + codigo : ''));
   abrir();
 }
 

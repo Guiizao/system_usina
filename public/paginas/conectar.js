@@ -112,6 +112,18 @@
       </div>`;
     return `${cabecalho('Pranchetas digitais', 'Primeiro acesso', false)}${telaEdicao(conteudo)}`;
   }
+  /** Aplicativo do Windows (2.16): a central roda dentro do programa, que abre a janela com o código dela no endereço
+      (?codigo=). A janela conecta sozinha, sem ninguém digitar, e já oferece o Painel do escritório (que pede a liberação
+      de quem pode liberar tablet chefe). O código sai do endereço na hora. */
+  async function conectarNoComputador() {
+    const codigo = params.get('codigo');
+    if (!codigo) return;
+    history.replaceState(null, '', location.pathname);
+    if (cfg.chave || !/^\d{6}$/.test(codigo)) return;
+    conexaoForm.codigo = codigo;
+    await conectar();
+    if (cfg.chave && !cfg.papel) { const b = document.querySelector('[data-a="papel"][data-id="central"]'); if (b) b.click(); }
+  }
   async function conectar() {
     const endereco = NO_APK ? conexaoForm.endereco.trim() : '';
     if (NO_APK && !/^\d{1,3}(\.\d{1,3}){3}(:\d+)?$/.test(endereco)) return toast('Endereço incompleto. Exemplo: 192.168.1.113', 'erro');
