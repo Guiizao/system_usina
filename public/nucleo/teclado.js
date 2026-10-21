@@ -31,6 +31,17 @@
     atualizarEdicao(antes && antes !== id ? [antes, id] : [id]);
   }
   const passoDo = (a) => a.passo || Math.pow(10, -(a.dec || 0));
+  /** 2.16: apagar pergunta antes (Sim ou Não). No ralo, com o visor vazio, a lixeira tira o último bag somado. */
+  async function limparComPergunta(a) {
+    const ultima = vazio(a.get()) && a.ultimaParcela ? a.ultimaParcela() : '';
+    if (ultima) {
+      if (await confirmar(`Tirar o último bag (${fmtCampo(a, ultima)}${a.getUnidade ? ' ' + a.getUnidade() : ''})?`, 'Ele sai da soma desta hora.', 'Sim, tirar', true)) { a.tirarUltima(); atualizarEdicao([a.id]); }
+      return;
+    }
+    if (!vazio(a.get()) && !(await confirmar(`Apagar ${a.label.toLowerCase()}?`, 'O quadro fica vazio.', 'Sim, apagar', true))) return;
+    ed.texto = ''; a.set(''); ed.substituir = false;
+    atualizarEdicao([a.id]);
+  }
 
   function tecla(k) {
     const a = alvoAtual();
@@ -48,7 +59,14 @@
     if (k.startsWith('u:')) { a.setUnidade(k.slice(2)); return atualizarEdicao([a.id]); }
     if (k.startsWith('o:')) { a.set(a.opcoes[Number(k.slice(2))]); atualizarEdicao([a.id]); return setTimeout(() => tecla('prox'), 180); }
     if (k === 'marcar') { a.set(vazio(a.get()) ? 'OK' : ''); return atualizarEdicao([a.id]); }
-    if (k === 'limpar') { ed.texto = ''; a.set(''); ed.substituir = false; return atualizarEdicao([a.id]); }
+    if (k === 'limpar') return limparComPergunta(a);
+    if (k === 'somar') {
+      if (!a.somar()) return;
+      ed.texto = ''; ed.substituir = false; a.recemSomado = true;
+      atualizarEdicao([a.id]);
+      setTimeout(() => { a.recemSomado = false; }, 600);
+      return;
+    }
 
     let s = ed.substituir && (/^[\d,.]$/.test(k) || k.length === 1) && k !== '+' && k !== '-' ? '' : ed.texto;
     ed.substituir = false;
@@ -119,7 +137,7 @@
     const limparNoCab = !ed.letras && (a.type === 'ip' || (a.type === 'num' && (a.dec || 0) > 0));
     const avisoCab = a.type === 'num' || a.type === 'time' ? (a.type === 'time' && ed.texto.length === 4 && !(Number(ed.texto.slice(0, 2)) < 24 && Number(ed.texto.slice(2)) < 60) ? [{ nivel: 'alerta', curto: 'Hora inválida' }] : avisosDe(a, a.get())) : [];
     const cab = `<div class="painel-cab"><div><small>Anotando agora</small><b class="${avisoCab.some((x) => x.nivel === 'alerta') ? 'fora' : avisoCab.length ? 'atencao' : ''}">${esc(a.label)}${avisoCab.length ? `<em class="tag-aviso">${ico('alerta')}${esc(avisoCab[0].curto)}</em>` : ''}</b><span>${esc(contextoEdicao)}</span></div>
-      <div class="painel-cab-botoes">${limparNoCab ? '<button class="btn" data-ed="limpar">Limpar</button>' : ''}<button class="btn" data-ed="ocultar">${ico('teclado')} Ocultar</button></div></div>`;
+      <div class="painel-cab-botoes">${limparNoCab ? `<button class="btn" data-ed="limpar" aria-label="Limpar" title="Limpar">${ico('lixeira')}</button>` : ''}<button class="btn" data-ed="ocultar">${ico('teclado')} Ocultar</button></div></div>`;
     const nav = `<div class="painel-nav"><button class="btn" data-ed="ant" ${i === 0 ? 'disabled' : ''}>${ico('voltar')} Anterior</button>
       <button class="btn primario" data-ed="prox">${ultimo ? `${ico('certo')} Concluir` : `Próximo ${ico('seta')}`}</button></div>`;
 
@@ -163,12 +181,12 @@
       ${a.dica ? `<p class="dica-painel">${esc(a.dica)}</p>` : ''}
       ${a.sugestao ? `<p class="dica-painel">${esc(a.sugestao)}</p>` : ''}
       ${a.type === 'time' ? `<div class="fichas"><button class="largo" data-ed="agora">${ico('relogio')} Agora, ${horaAgora()}</button></div>` : ''}
-      ${a.unidades && a.unidades.length > 1 ? `<div class="fichas">${a.unidades.map((u) => `<button data-ed="u:${u}" class="${u === unidade ? 'sel' : ''}">${u}</button>`).join('')}</div>` : ''}
+      ${a.unidades && a.unidades.length > 1 ? `<div class="fichas">${a.unidades.map((u) => `<button data-ed="u:${u}" class="${u === unidade ? 'sel' : ''}">${u}</button>`).join('')}${a.somar ? `<button class="btn somar-bag" data-ed="somar">${ico('mais')} Outro bag</button>` : ''}</div>` : ''}
       ${teclas}${nav}`;
   }
 
   function quadro(a, curto) {
-    const v = a.get();
+    const v = a.total ? a.total() : a.get();
     const ativo = a.id === ed.alvoId && !ed.oculto;
     const nivel = nivelDe(a, v);
     const avisos = avisosDe(a, v);
@@ -180,6 +198,9 @@
     else if (a.type === 'text' || a.type === 'choice') mostra = `<span class="val texto">${esc(v)}</span>`;
     // o aviso (pH baixo, Brix alto) fica do lado do número, curto: a caixa não muda de tamanho
     else mostra = `<span class="val">${esc(fmtCampo(a, v))}${u ? `<small>${esc(u)}</small>` : ''}</span>`;
+    // ralo (2.16): os bags que já foram somados, pequenos, em cima do total; o último acabou de subir
+    const parcelas = a.parcelas ? a.parcelas() : [];
+    if (parcelas.length) mostra = `<span class="parcelas">${parcelas.map((x, i) => `<b class="${a.recemSomado && i === parcelas.length - 1 ? 'nova' : ''}">${esc(fmtCampo(a, x))}</b>`).join('<i>+</i>')}<i>+</i></span>` + mostra;
     // nome curto ("B") só vale com o título do bloco à vista ("Colunas"); com os títulos escondidos (tela baixa), vai o nome inteiro
     const rotulo = curto && a.labelCurto && a.labelCurto !== a.label
       ? `<span class="rot-curto">${esc(a.labelCurto).replace(/ Nº (\d+)$/, '<span class="rot-n"> Nº</span> $1')}</span><span class="rot-longo">${esc(a.label)}</span>` : esc(a.label);

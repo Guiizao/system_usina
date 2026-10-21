@@ -2,6 +2,13 @@
  * © 2026 Guilherme. Todos os direitos reservados. Uso somente com autorização do autor (veja LICENCA.txt). */
 
 /* ---------- Tela de anotação: prancheta (70%) + teclado (30%) ---------- */
+/* Ralo (2.16): os bags já somados ficam pequenos em cima do total; o que acabou de somar sobe de leve */
+.campo .parcelas { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 6px; font-size: 22px; color: var(--tinta-2); font-variant-numeric: tabular-nums; }
+.campo .parcelas i { font-style: normal; opacity: .7; }
+.campo .parcelas b.nova { animation: bagSobe var(--mov-janela, .24s) var(--suave, ease-out) both; }
+@keyframes bagSobe { from { opacity: 0; transform: translateY(26px) scale(1.8); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .campo .parcelas b.nova { animation: none; } }
+.fichas .somar-bag { margin-left: auto; white-space: nowrap; border: 2px solid var(--verde); color: var(--verde-escuro); font-weight: 700; }
 .edicao { flex: 1 1 auto; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr); }
 .edicao .coluna { min-width: 0; min-height: 0; display: flex; flex-direction: column; }
 .barra-trabalho { flex: none; padding: 10px 18px 0; display: flex; flex-direction: column; }

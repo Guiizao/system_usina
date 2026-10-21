@@ -15,6 +15,8 @@ Object.assign(window.USINA.pranchetas, {
     // O fornecedor é opcional (a lista vem do tablet chefe). NF, lote e validade são do escritório.
     ins_materia_prima: Object.assign(insumo('MATÉRIA-PRIMA', 'Matéria-prima', ['kg', 'g']), {
       rotuloQtd: 'Peso do bag',
+      // 2.16: vários bags na mesma hora: "+ Outro bag" soma (setores/ralo/regras.js)
+      somaPesagens: true,
       camposOperador: [
         { id: 'produto', label: 'Tipo de produto', type: 'choice', opcoes: 'produtos', dica: 'Produto que está sendo batido.' },
         { id: 'fornecedor', label: 'Fornecedor', type: 'choice', opcoes: 'fornecedores', opcional: true, dica: 'Se souber de quem veio.' },

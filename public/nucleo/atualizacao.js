@@ -56,10 +56,31 @@
       atualizacao.procurando = false;
     }
   }
-  /** Achou versão nova: abre a janela uma vez. Se alguém estiver anotando, espera (tenta de novo a cada minuto). */
+  /** 2.16: a central (ou a nuvem) diz a versão mais nova em toda sincronização, a cada 5 s. Mais nova que a deste
+      aparelho: procura na hora, sem esperar os 30 minutos. */
+  let versaoDaCentral = '';
+  function versaoNaSincronizacao(info) {
+    const v = info && info.versao;
+    if (!v || v === versaoDaCentral) return;
+    versaoDaCentral = v;
+    if (numeroDaVersao(v) > numeroDaVersao(VERSAO)) procurarAtualizacao();
+  }
+  /** 2.16: a rápida (só as telas, sem janela do Android) instala sozinha quando ninguém mexe no aparelho há um minuto:
+      sem senha e sem ir de aparelho em aparelho. O rascunho e o operador continuam depois de abrir de novo. */
+  async function instalarSozinho(n) {
+    if (atualizacao.instalando || modalAberto() || Date.now() - ultimaAtividade < 60000) return;
+    atualizacao.instalando = true;
+    toast(`Atualizando o aplicativo para a versão ${n.versao}...`);
+    try { await pluginCentral.atualizarTelas({ base: n.base, versao: n.versao }); } // abre de novo sozinho
+    catch (e) { atualizacao.instalando = false; }
+  }
+  /** Achou versão nova: a rápida instala sozinha; a do APK abre a janela uma vez (o Android pergunta se pode instalar).
+      Se alguém estiver anotando, espera (tenta de novo a cada minuto). */
   function avisarAtualizacao() {
     const n = atualizacao.nova;
-    if (!n || atualizacao.avisada === n.versao || !podeRedesenhar()) return;
+    if (!n || !podeRedesenhar()) return;
+    if (n.tipo === 'telas') return instalarSozinho(n);
+    if (atualizacao.avisada === n.versao) return;
     atualizacao.avisada = n.versao;
     oferecerAtualizacao();
   }

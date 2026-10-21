@@ -129,6 +129,7 @@
       if (r1.status === 423) return; // a tela já travou (buscar)
       const resp1 = r1.ok ? await r1.clone().json().catch(() => ({})) : {};
       if (resp1.codigoTrocado) avisarCodigoTrocado(resp1.codigoTrocado);
+      versaoNaSincronizacao(resp1.atualizacao); // 2.16: versão nova chega em segundos
       if (r1.ok && resp1.geracao && !resp1.zerar) {
         // a central aceitou: "este aparelho está livre até a revisão X" (da central dela)
         const revCentral = Number(resp1.bloqueiosRev) || 0;
@@ -255,6 +256,7 @@
         if (r.status === 423) { conferirNaNuvem(true); return; } // bloqueado: a nuvem diz como
         if (!r.ok) return; // 409: a nuvem é de outra central (zerada ou trocada); espera falar com a central
         const d = await r.json();
+        versaoNaSincronizacao(d.telas); // 2.16: sem a central, quem avisa da versão nova é a nuvem
         lista.forEach((x) => { const local = registros[x.id]; if (local && local.atualizadoEm === x.atualizadoEm) local.naNuvem = x.atualizadoEm; });
         for (const rec of d.registros || []) {
           const local = registros[rec.id];
