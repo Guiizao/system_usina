@@ -33,7 +33,8 @@
 
   async function entrarPelaNuvem() {
     const url = nuvemForm.url.replace(/\/+$/, '');
-    if (!/^https:\/\/[^\s/]+/.test(url)) return toast('Confira o endereço da nuvem (começa com https://)', 'erro');
+    // https, ou a nuvem de teste neste mesmo computador (http://127.0.0.1)
+    if (!/^(https:\/\/[^\s/]+|http:\/\/(127\.0\.0\.1|localhost)(:\d+)?)/.test(url)) return toast('Confira o endereço da nuvem (começa com https://)', 'erro');
     const pin = await pedirSenhaModal('Sua senha', 'A mesma que você usa no tablet chefe.');
     if (!pin) return;
     let r, d = {};

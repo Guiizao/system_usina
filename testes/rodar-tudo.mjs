@@ -49,6 +49,7 @@ import { testarApkWeb } from './rodar-apk-web.mjs';
 import { testarTotais216 } from './totais216.mjs';
 import { testarTurno216 } from './turno216.mjs';
 import { testarNuvemEntrar216 } from './nuvem-entrar216.mjs';
+import { testarPainelNuvem216 } from './painel-nuvem216.mjs';
 import { centralNode, centralJava, APP } from './servidores.mjs';
 
 const SAIDA = path.join(APP, 'testes', 'saida');
@@ -77,6 +78,9 @@ grupos.push(gw);
 
 const gn216 = novoGrupo('Entrada pela nuvem 2.16 (SQLite, Node e Java)');
 await testarNuvemEntrar216(gn216);
+const gp216 = novoGrupo('Painel do PC pela nuvem 2.16');
+await testarPainelNuvem216(gp216);
+grupos.push(gp216);
 grupos.push(gn216);
 
 // 2. configuração
