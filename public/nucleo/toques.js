@@ -102,6 +102,7 @@
       case 'graficos': return ir({ tela: 'graficos', data: v.data || dataProducao(), setor: b.dataset.setor || '' });
       case 'graficos-dia': { const d = somarDias(v.data, Number(b.dataset.n)); if (d > dataProducao()) return; pilha[pilha.length - 1] = Object.assign({}, v, { data: d }); return render(true); }
       case 'graficos-setor': v.setor = b.dataset.setor || ''; return render();
+      case 'graficos-modo': v.semana = b.dataset.modo === 'semana'; return render(true);
       case 'folhas': return ir({ tela: 'folhas' });
       case 'folha-campo': return editarCampoDaFolha(b.dataset.pid, b.dataset.id);
       case 'folha-unidades': return editarUnidadesDaFolha(b.dataset.pid);
