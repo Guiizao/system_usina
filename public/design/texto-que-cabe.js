@@ -11,7 +11,7 @@
     '.opcoes.nomes .nome-op b', '.campo .rot', '.campo .val', '.item .texto b', '.setor-cartao .texto b', '.papel-cartao b',
     '.abas button', '.seletor button', '.rodape .btn', '.painel-nav .btn', '.chip', '.topo .titulo b', '.topo .titulo span', '.topo .atalho span',
     '.chips-escolha button span', '.escolhas button b', '.cabecalho-form .aviso', '.cabecalho-form .btn', '.opcoes-painel button',
-    '.linha-botoes .btn', '.acoes-modal .btn', '.btn.largo', '.aviso-item-cab b', '.aparelho b', '.data-grande b', '.boas-vindas h1',
+    '.linha-botoes .btn', '.acoes-modal .btn', '.btn.largo', '.aviso-item-cab b', '.aparelho b', '.data-grande b', '.boas-vindas h1', '.visor',
   ].join(', ');
   const cabe = (el) => {
     // nome do quadro com o selo do lado (aviso ou volume): precisa sobrar um pouco, senão a última letra do selo encosta na borda
@@ -19,6 +19,13 @@
       const gap = parseFloat(getComputedStyle(el).columnGap) || 0;
       const soma = [...el.children].reduce((s, c) => s + c.offsetWidth, 0) + gap * (el.children.length - 1);
       if (soma > el.clientWidth - 2) return false;
+    }
+    // visor do teclado: o número encosta na direita e o que passa some pela esquerda (o scrollWidth não vê): mede o texto
+    if (el.matches('.visor')) {
+      const r = document.createRange(); r.selectNodeContents(el);
+      const est = getComputedStyle(el);
+      const escala = el.offsetWidth ? el.getBoundingClientRect().width / el.offsetWidth : 1; // com o zoom, o texto vem medido na tela
+      return r.getBoundingClientRect().width <= (el.clientWidth - parseFloat(est.paddingLeft) - parseFloat(est.paddingRight)) * escala + 1;
     }
     // sem folga na largura: com o zoom da tela, 1 px a mais já corta a última letra ("107,0 °C", "Romenique")
     return el.scrollWidth <= el.clientWidth && el.scrollHeight <= el.clientHeight + 1;

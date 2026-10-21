@@ -56,7 +56,10 @@
 .painel-cab span { display: block; font-size: 16px; color: var(--tinta-2); }
 .painel-cab .btn { min-height: 50px; font-size: 16px; padding: 0 12px; flex: none; }
 
-.valor-linha { display: grid; grid-template-columns: 76px minmax(0, 1fr) 76px; gap: 8px; align-items: stretch; }
+/* 2.16: no painel estreito (tela dividida) os botões − e + afinam, e o Ocultar fica só com o desenho */
+.edicao .painel { container-type: inline-size; }
+.valor-linha { display: grid; grid-template-columns: clamp(52px, 20%, 76px) minmax(0, 1fr) clamp(52px, 20%, 76px); gap: 8px; align-items: stretch; }
+@container (max-width: 360px) { .painel-cab-botoes .btn span { display: none; } }
 .valor-linha.sem-mm { grid-template-columns: minmax(0, 1fr); }
 .valor-linha .mm { border-radius: 8px; background: var(--grafite); color: var(--branco); font-size: 46px; font-weight: 700; line-height: 1; text-align: center; min-height: 88px; }
 .valor-linha .mm:active { background: var(--preto); }

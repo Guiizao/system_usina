@@ -9,6 +9,7 @@ main:has(> .boas-vindas.conectar) { display: flex; flex-direction: column; }
 .boas-vindas.conectar .linha-botoes { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr)); gap: 12px; margin-top: 22px; }
 .boas-vindas.conectar .linha-botoes .btn { width: 100%; justify-content: center; }
 .boas-vindas.conectar .autoria { margin-top: auto; padding-top: 24px; }
+.boas-vindas.conectar > header { margin-top: auto; } /* o formulário fica no meio da altura (sobra igual em cima e embaixo) */
 
 /* Procurar o tablet chefe no Wi-Fi (tela de conectar) */
 .procura-central { display: flex; align-items: center; gap: 14px; margin-top: 14px; padding: 12px 16px; border: 2px dashed var(--linha-clara); border-radius: 10px; color: var(--tinta-2); font-size: 19px; }

@@ -139,7 +139,7 @@
     const limparNoCab = !ed.letras && (a.type === 'ip' || (a.type === 'num' && (a.dec || 0) > 0));
     const avisoCab = a.type === 'num' || a.type === 'time' ? (a.type === 'time' && ed.texto.length === 4 && !(Number(ed.texto.slice(0, 2)) < 24 && Number(ed.texto.slice(2)) < 60) ? [{ nivel: 'alerta', curto: 'Hora inválida' }] : avisosDe(a, a.get())) : [];
     const cab = `<div class="painel-cab"><div><small>Anotando agora</small><b class="${avisoCab.some((x) => x.nivel === 'alerta') ? 'fora' : avisoCab.length ? 'atencao' : ''}">${esc(a.label)}${avisoCab.length ? `<em class="tag-aviso">${ico('alerta')}${esc(avisoCab[0].curto)}</em>` : ''}</b><span>${esc(contextoEdicao)}</span></div>
-      <div class="painel-cab-botoes">${limparNoCab ? `<button class="btn" data-ed="limpar" aria-label="Limpar" title="Limpar">${ico('lixeira')}</button>` : ''}<button class="btn" data-ed="ocultar">${ico('teclado')} Ocultar</button></div></div>`;
+      <div class="painel-cab-botoes">${limparNoCab ? `<button class="btn" data-ed="limpar" aria-label="Limpar" title="Limpar">${ico('lixeira')}</button>` : ''}<button class="btn" data-ed="ocultar" aria-label="Ocultar o teclado">${ico('teclado')} <span>Ocultar</span></button></div></div>`;
     const nav = `<div class="painel-nav"><button class="btn" data-ed="ant" ${i === 0 ? 'disabled' : ''}>${ico('voltar')} Anterior</button>
       <button class="btn primario" data-ed="prox">${ultimo ? `${ico('certo')} Concluir` : `Próximo ${ico('seta')}`}</button></div>`;
 

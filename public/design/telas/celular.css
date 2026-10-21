@@ -56,6 +56,7 @@
 :root[data-dispositivo="celular"] .item .situacao { font-size: 15px; }
 :root[data-dispositivo="celular"] .opcoes.nomes button { min-height: 76px; font-size: 22px; }
 :root[data-dispositivo="celular"] .barra-dia { flex-direction: column; align-items: stretch; }
+:root[data-dispositivo="celular"] .barra-dia > * { flex: none; } /* em coluna, a largura mínima da linha não vira altura */
 :root[data-dispositivo="celular"] .numeros div { min-width: 0; flex: 1; padding: 6px 10px; }
 :root[data-dispositivo="celular"] .numeros b { font-size: 24px; }
 :root[data-dispositivo="celular"] .nav-data .data-grande b { font-size: 21px; }
