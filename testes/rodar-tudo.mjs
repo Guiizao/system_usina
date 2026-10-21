@@ -54,7 +54,7 @@ const grupos = [];
 
 // 1. código
 const g1 = novoGrupo('Código sem erro de escrita');
-const js = ['server.js', ...fs.readdirSync(path.join(APP, 'public')).filter((n) => n.endsWith('.js')).map((n) => 'public/' + n), ...fs.readdirSync(path.join(APP, 'testes')).filter((n) => n.endsWith('.mjs')).map((n) => 'testes/' + n)];
+const js = ['server.js', 'carregar-usina.js', ...fs.readdirSync(path.join(APP, 'public'), { recursive: true }).filter((n) => n.endsWith('.js') && !/^lib[\\/]/.test(n)).map((n) => 'public/' + n.replace(/\\/g, '/')), ...fs.readdirSync(path.join(APP, 'testes')).filter((n) => n.endsWith('.mjs')).map((n) => 'testes/' + n)];
 for (const f of js) await teste(g1, f, async () => { execFileSync(process.execPath, ['--check', path.join(APP, f)], { stdio: 'pipe' }); });
 await teste(g1, 'scripts de treino do leitor (Python)', async () => {
   for (const f of fs.readdirSync(path.join(APP, 'treino-leitor')).filter((n) => n.endsWith('.py'))) {

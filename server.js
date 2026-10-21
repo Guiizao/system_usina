@@ -188,15 +188,11 @@ const TOKEN_LEITURA = process.env.TOKEN_LEITURA || config.tokenLeitura;
 const leitura = require('./api-leitura');
 let apiLeituraPronta = null;
 const medidasDoEscritorio = () => { const c = db.registros['config|sistema|geral']; return c && !c.apagado && c.valores ? c.valores.medicao || null : null; };
-/** As definições das pranchetas (o mesmo forms.js do aplicativo). */
-function carregarPranchetas() {
-  const contexto = { window: {} };
-  require('vm').runInNewContext(fs.readFileSync(path.join(PUBLICO, 'forms.js'), 'utf8'), contexto);
-  return contexto.window.USINA;
-}
+/** As definições das pranchetas (2.16: o config/forms.js e as folhas de cada setor, como o aplicativo monta). */
+const carregarPranchetas = () => require('./carregar-usina').carregarUsina(PUBLICO);
 // versão 2.12: a API (e a cópia da nuvem) usa a folha em vigor: o forms.js com o que o tablet chefe mudou (folhas.js)
 let Folhas = null;
-try { Folhas = require(path.join(PUBLICO, 'folhas.js')); } catch (e) { Folhas = require(path.join(__dirname, 'public', 'folhas.js')); }
+try { Folhas = require(path.join(PUBLICO, 'config', 'folhas.js')); } catch (e) { Folhas = require(path.join(__dirname, 'public', 'config', 'folhas.js')); }
 const folhasDaConfig = () => { const cs = db.registros['config|sistema|geral']; return cs && !cs.apagado && cs.valores ? cs.valores.folhas || {} : {}; };
 // os turnos de cada setor (2.13.4) vão junto: a API diz o turno de cada linha pelo setor dela
 const turnosDaConfig = () => { const cs = db.registros['config|sistema|geral']; return cs && !cs.apagado && cs.valores ? cs.valores.turnosSetor || {} : {}; };

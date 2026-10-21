@@ -204,7 +204,7 @@ export async function testarApi(central, grupo) {
   });
   await teste(grupo, 'arquivos do aplicativo: página, script, página de baixar e 404', async () => {
     const pag = await pedir('/'); igual(pag.status, 200); certo(/text\/html/.test(pag.headers.get('content-type')), 'tipo da página');
-    const js = await pedir('/app.js'); igual(js.status, 200); certo(/javascript/.test(js.headers.get('content-type')), 'tipo do script');
+    const js = await pedir('/config/forms.js'); igual(js.status, 200); certo(/javascript/.test(js.headers.get('content-type')), 'tipo do script');
     igual((await pedir('/baixar')).status, 200, 'baixar');
     igual((await pedir('/nao-existe.js')).status, 404, '404');
   });

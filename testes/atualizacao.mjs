@@ -22,11 +22,11 @@ import { centralNode, centralJava, pastaTemporaria, APP } from './servidores.mjs
 import { conectarTeste } from './cifra.mjs';
 
 const sha = (b) => crypto.createHash('sha256').update(b).digest('hex');
-const VERSAO = /const VERSAO = '([\d.]+)'/.exec(fs.readFileSync(path.join(APP, 'public', 'app.js'), 'utf8'))[1];
+const VERSAO = /const VERSAO = '([\d.]+)'/.exec(fs.readFileSync(path.join(APP, 'public', 'nucleo', 'base.js'), 'utf8'))[1];
 const JDK = path.join(os.homedir(), 'android-build', 'jdk', 'bin');
 function novidades() {
   const ctx = { window: {} };
-  vm.runInNewContext(fs.readFileSync(path.join(APP, 'public', 'novidades.js'), 'utf8'), ctx);
+  vm.runInNewContext(fs.readFileSync(path.join(APP, 'public', 'config', 'novidades.js'), 'utf8'), ctx);
   return ctx.window.NOVIDADES;
 }
 

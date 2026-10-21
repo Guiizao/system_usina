@@ -3,19 +3,19 @@
 import fs from 'node:fs';
 import vm from 'node:vm';
 import { createRequire } from 'node:module';
-import { teste, certo, igual } from './teste.mjs';
+import { teste, certo, igual, usinaNoContexto, caminhoNovo } from './teste.mjs';
 
 const require = createRequire(import.meta.url);
-const Folhas = require('../public/folhas.js');
+const Folhas = require('../public/config/folhas.js');
 const Leitura = require('../api-leitura.js');
 const ONTEM = '2026-10-05';
 const HOJE = '2026-10-06';
 const fmtNum = (v) => String(v).replace('.', ',');
-const fonte = (nome) => fs.readFileSync(new URL('../public/' + nome, import.meta.url), 'utf8');
+const fonte = (nome) => fs.readFileSync(new URL('../public/' + caminhoNovo(nome), import.meta.url), 'utf8');
 
 function formsDoApp() {
   const ctx = { window: {} };
-  vm.runInNewContext(fonte('forms.js'), ctx);
+  usinaNoContexto(ctx);
   return JSON.parse(JSON.stringify(ctx.window.USINA));
 }
 

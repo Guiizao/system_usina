@@ -5,16 +5,16 @@ import path from 'node:path';
 import vm from 'node:vm';
 import { execFileSync } from 'node:child_process';
 import { TAMANHOS, dormir } from './navegador.mjs';
-import { teste, certo, igual } from './teste.mjs';
+import { teste, certo, igual, usinaNoContexto } from './teste.mjs';
 import { APP } from './servidores.mjs';
 
 const SAIDA = path.join(APP, 'testes', 'saida');
 
 export async function testarConfiguracao(grupo) {
   const contexto = { window: {} };
-  vm.runInNewContext(fs.readFileSync(path.join(APP, 'public', 'forms.js'), 'utf8'), contexto);
+  usinaNoContexto(contexto);
   const C = contexto.window.USINA;
-  const modelos = fs.readFileSync(path.join(APP, 'public', 'modelos.js'), 'utf8');
+  const modelos = fs.readFileSync(path.join(APP, 'public', 'bibliotecas', 'modelos.js'), 'utf8');
   await teste(grupo, 'forms.js: todo setor aponta para pranchetas que existem', async () => {
     for (const s of C.setores) for (const pid of s.pranchetas) certo(C.pranchetas[pid], `${s.nome}: prancheta ${pid} não existe`);
   });

@@ -12,14 +12,14 @@
  */
 import fs from 'node:fs';
 import vm from 'node:vm';
-import { teste, certo, igual, SENHA_ENCARREGADO } from './teste.mjs';
+import { teste, certo, igual, SENHA_ENCARREGADO, usinaNoContexto } from './teste.mjs';
 import { pastaTemporaria, SENHA_PROGRAMADOR_TESTE } from './servidores.mjs';
 import { conectarTeste } from './cifra.mjs';
 
 /** As folhas como o aplicativo do tablet chefe manda para a central (a central do tablet só conhece por elas). */
 function formsDoApp() {
   const ctx = { window: {} };
-  vm.runInNewContext(fs.readFileSync(new URL('../public/forms.js', import.meta.url), 'utf8'), ctx);
+  usinaNoContexto(ctx);
   return JSON.parse(JSON.stringify(ctx.window.USINA));
 }
 const diaProducao = (diasAntes = 0) => { const d = new Date(Date.now() - 7 * 3600000 - diasAntes * 86400000); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
