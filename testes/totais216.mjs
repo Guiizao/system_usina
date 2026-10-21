@@ -5,7 +5,7 @@ import vm from 'node:vm';
 import crypto from 'node:crypto';
 import { pathToFileURL } from 'node:url';
 import leitura from '../api-leitura.js';
-import { teste, certo, igual, novoGrupo, resumo } from './teste.mjs';
+import { teste, certo, igual, novoGrupo, resumo, usinaNoContexto } from './teste.mjs';
 import { APP, centralNode, centralJava, pastaTemporaria } from './servidores.mjs';
 import { ligarNuvem } from './nuvem.mjs';
 import { chaveDeTeste } from './atualizacao.mjs';
@@ -16,7 +16,7 @@ const seguinte = new Date(Date.parse(dia) + 86400000).toISOString().slice(0, 10)
 const terceiro = new Date(Date.parse(dia) + 2 * 86400000).toISOString().slice(0, 10);
 function forms() {
   const ctx = { window: {} };
-  vm.runInNewContext(fs.readFileSync(path.join(APP, 'public/forms.js'), 'utf8'), ctx);
+  usinaNoContexto(ctx);
   return JSON.parse(JSON.stringify(ctx.window.USINA));
 }
 function registros(data) {

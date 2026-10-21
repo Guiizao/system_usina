@@ -6,7 +6,7 @@ import vm from 'node:vm';
 import { createRequire } from 'node:module';
 import { teste, certo, igual, usinaNoContexto, caminhoNovo } from './teste.mjs';
 
-const require = createRequire(import.meta.url), R = require('../public/rastreamento.js');
+const require = createRequire(import.meta.url), R = require('../public/bibliotecas/rastreamento.js');
 const DIA = '2026-10-07';
 const fonte = (nome) => fs.readFileSync(new URL('../public/' + caminhoNovo(nome), import.meta.url), 'utf8');
 const fmtNum = (v) => String(v).replace('.', ',');
