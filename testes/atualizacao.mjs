@@ -60,7 +60,7 @@ export function telasDeTeste(texto = 'versão de teste') {
 /** Monta o pacote das telas com o mesmo programa do gerar-apk.ps1 (versao-do-apk.js telas), com a chave de teste. */
 export function montarPacote(origem, destino, chave, versao, apkMinimo) {
   execFileSync(process.execPath, [path.join(APP, 'apk', 'versao-do-apk.js'), 'telas', origem, destino], {
-    env: Object.assign({}, process.env, { PRANCHETAS_CHAVE_TELAS: chave.privada, PRANCHETAS_CHAVE_PUBLICA: chave.publicaArquivo, PRANCHETAS_VERSAO: versao, APK_MINIMO: apkMinimo }), stdio: 'pipe',
+    env: Object.assign({}, process.env, { PRANCHETAS_CHAVE_TELAS: chave.privada, PRANCHETAS_CHAVE_PUBLICA: chave.publicaArquivo, PRANCHETAS_VERSAO: versao, APK_MINIMO: apkMinimo }), stdio: 'inherit',
   });
   return JSON.parse(fs.readFileSync(path.join(destino, 'pacote.json'), 'utf8'));
 }

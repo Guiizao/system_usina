@@ -7,6 +7,7 @@ compatibility_date = "2026-09-01"
 # versao.json e pranchetas.apk: arquivos estáticos (até 25 MB cada, de graça e sem cartão)
 [assets]
 directory = "./publico"
+binding = "ASSETS"
 
 [[d1_databases]]
 binding = "DB"
