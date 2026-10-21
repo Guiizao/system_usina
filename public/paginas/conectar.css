@@ -1,0 +1,9 @@
+/* Pranchetas Ubirálcool - tela de conectar
+ * © 2026 Guilherme. Todos os direitos reservados. Uso somente com autorização do autor (veja LICENCA.txt). */
+
+/* Procurar o tablet chefe no Wi-Fi (tela de conectar) */
+.procura-central { display: flex; align-items: center; gap: 14px; margin-top: 14px; padding: 12px 16px; border: 2px dashed var(--linha-clara); border-radius: 10px; color: var(--tinta-2); font-size: 19px; }
+.procura-central > svg { width: 30px; height: 30px; flex: none; }
+.procura-central span { flex: 1; }
+.procura-central .btn { flex: none; }
+.procura-central.ativa { border-style: solid; border-color: var(--ambar); }

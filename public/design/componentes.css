@@ -1,0 +1,120 @@
+/* Pranchetas Ubirálcool - barra de cima, listas e botões
+ * © 2026 Guilherme. Todos os direitos reservados. Uso somente com autorização do autor (veja LICENCA.txt). */
+
+/* ---------- Barra superior ---------- */
+.topo {
+  flex: none; z-index: 30; height: var(--topo);
+  display: flex; align-items: center; gap: 14px; padding: 0 20px;
+  background: var(--grafite); color: var(--branco);
+}
+.topo .logo { width: 52px; height: 52px; border-radius: 8px; background: var(--branco); padding: 4px; flex: none; }
+.topo .voltar { flex: none; display: flex; align-items: center; gap: 6px; height: 60px; padding: 0 18px 0 10px; border-radius: 10px; background: var(--branco); color: var(--tinta); font-size: 20px; font-weight: 700; }
+.topo .voltar svg.ico { width: 30px; height: 30px; stroke-width: 2.6; }
+.topo .titulo { flex: 1; min-width: 0; }
+.topo .titulo b { display: block; font-size: 26px; line-height: 1.15; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.topo .titulo span { display: block; font-size: 16px; color: var(--topo-texto-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.topo .relogio { flex: none; text-align: right; }
+.topo .relogio b { display: block; font-size: 34px; line-height: 1; }
+.topo .relogio span { font-size: 15px; color: var(--topo-texto-2); }
+/* Atalhos dentro da barra de cima: operador, monitoramento e ajustes */
+.topo .atalhos { display: flex; gap: 8px; flex: none; }
+.topo .atalho {
+  display: flex; align-items: center; gap: 8px; height: 62px; padding: 0 16px; border-radius: 10px;
+  background: var(--topo-botao); color: var(--branco); border: 2px solid var(--topo-botao-borda);
+  font-size: 18px; font-weight: 700; max-width: 220px;
+}
+.topo .atalho span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.topo .atalho svg.ico { width: 26px; height: 26px; }
+.topo .atalho:active { background: var(--topo-botao-toque); }
+.topo .atalho.sel { background: var(--branco); color: var(--grafite); border-color: var(--branco); }
+.topo .atalho.alerta { background: var(--ambar); color: var(--ambar-tinta); border-color: var(--ambar); }
+@media (max-width: 1150px) { .topo .atalho span { display: none; } .topo .atalho { padding: 0 12px; } }
+@media (max-width: 900px) { .topo .titulo span { display: none; } }
+
+.topo .tema {
+  flex: none; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
+  min-width: 74px; height: 62px; padding: 0 10px; border-radius: 10px;
+  background: var(--topo-botao); color: var(--branco); border: 2px solid var(--topo-botao-borda);
+}
+.topo .tema svg.ico { width: 26px; height: 26px; }
+.topo .tema span { font-size: 13px; font-weight: 700; }
+.topo .tema:active { background: var(--topo-botao-toque); }
+
+.faixa { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 20px; padding: 8px 20px; background: var(--papel); border-bottom: 2px solid var(--linha-clara); }
+.faixa .data { font-size: 20px; font-weight: 700; }
+.faixa .espaco { flex: 1; }
+.conexao { display: inline-flex; align-items: center; gap: 8px; font-size: 16px; color: var(--tinta-2); }
+.conexao i { width: 12px; height: 12px; border-radius: 2px; background: var(--linha); }
+.conexao.ok i { background: var(--verde); }
+.conexao.off { color: var(--ambar-texto); font-weight: 700; }
+.conexao.off i { background: var(--ambar); }
+/* botão Conexão (2.13.5): luz da central e luz da nuvem */
+.status-con .luzes { display: flex; align-items: center; justify-content: center; gap: 6px; height: 24px; }
+.status-con .luzes i { width: 13px; height: 13px; border-radius: 50%; background: var(--linha); box-shadow: 0 0 0 2px var(--topo-botao-borda); }
+.status-con .luzes i.ok { background: var(--verde); }
+.status-con .luzes i.off { background: var(--ambar); }
+/* cabeçalho apertado (caberTextos): o nome da tela vem primeiro; os botões ficam só com o ícone, o Voltar só com a
+   seta e as duas luzes da Conexão uma em cima da outra */
+.topo.apertado .tema span, .topo.apertado .atalho span, .topo.apertado .voltar span { display: none; }
+.topo.apertado .voltar { padding: 0 10px; }
+.topo.apertado .tema { min-width: 56px; }
+.topo.apertado .status-con { min-width: 40px; padding: 0 6px; }
+.topo.apertado .status-con .luzes { flex-direction: column; gap: 5px; height: auto; }
+:root[data-dispositivo="celular"] .topo.apertado { gap: 4px; }
+:root[data-dispositivo="celular"] .topo.apertado .tema { min-width: 44px; }
+:root[data-dispositivo="celular"] .topo.apertado .status-con { padding: 0 5px; }
+:root[data-dispositivo="celular"] .topo.apertado .status-con .luzes i { width: 11px; height: 11px; }
+.status-linhas { display: grid; gap: 10px; margin: 12px 0; }
+.status-linha { display: grid; grid-template-columns: 16px 1fr; gap: 12px; align-items: start; padding: 10px 12px; border: 1px solid var(--linha); border-radius: 8px; }
+.status-linha > i { width: 16px; height: 16px; margin-top: 4px; border-radius: 50%; background: var(--linha); }
+.status-linha.ok > i { background: var(--verde); }
+.status-linha.off > i { background: var(--ambar); }
+.status-linha b { display: block; font-size: 18px; }
+.status-linha small { display: block; color: var(--tinta-2); }
+.chip { display: inline-flex; align-items: center; gap: 8px; min-height: 52px; padding: 0 16px; border: 2px solid var(--linha); border-radius: 10px; background: var(--papel); font-size: 18px; }
+.chip.icone-so { padding: 0 14px; }
+.chip.alerta { border-color: var(--ambar); background: var(--ambar-fundo); color: var(--ambar-texto); font-weight: 700; }
+
+main { flex: 1 1 auto; min-height: 0; overflow-y: auto; overflow-x: hidden; width: 100%; max-width: 1600px; margin: 0 auto; padding: 14px 18px 18px; }
+h2 { font-size: 26px; margin: 4px 0 14px; }
+h3.secao-titulo { font-size: 21px; margin: 26px 0 10px; }
+.sub { color: var(--tinta-2); font-size: 18px; margin: -6px 0 16px; max-width: 75ch; }
+
+/* ---------- Listas grandes (setores, pranchetas) ---------- */
+.lista { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 400px), 1fr)); gap: 12px; }
+.item { display: flex; align-items: center; gap: 18px; width: 100%; min-height: 116px; padding: 16px 20px 16px 16px; background: var(--papel); border: 2px solid var(--linha-clara); border-left: 10px solid var(--linha); border-radius: 10px; }
+.item:active { background: var(--papel-2); }
+.item .desenho { flex: none; width: 64px; height: 64px; display: grid; place-items: center; border-radius: 8px; background: var(--papel-2); color: var(--grafite); }
+.item .desenho svg.ico { width: 40px; height: 40px; stroke-width: 1.8; }
+.item .texto { flex: 1; min-width: 0; }
+.item .texto b { display: block; font-size: 26px; line-height: 1.15; }
+.item .texto small { display: block; font-size: 16px; color: var(--tinta-2); margin-top: 2px; }
+.item .situacao { display: block; margin-top: 6px; font-size: 19px; font-weight: 700; color: var(--tinta-2); }
+.item .seta { flex: none; color: var(--tinta-2); }
+/* 2.15: no tablet, os cartões do início crescem com a altura da tela (não sobra meia tela em branco) */
+@media (min-width: 600px) and (min-height: 600px) {
+  .lista .item { min-height: clamp(116px, 26vh, 240px); }
+  .lista .item .desenho { width: clamp(64px, 8vh, 88px); height: clamp(64px, 8vh, 88px); }
+  .lista .item .desenho svg.ico { width: clamp(40px, 5vh, 56px); height: clamp(40px, 5vh, 56px); }
+  .lista .item .texto b { font-size: clamp(26px, 3.2vh, 34px); }
+  .lista .item .situacao { font-size: clamp(19px, 2.3vh, 24px); }
+}
+.item .seta svg.ico { width: 34px; height: 34px; }
+.item.feito { border-left-color: var(--verde); }
+.item.feito .situacao { color: var(--verde-escuro); }
+.item.pendente { border-color: var(--ambar); border-left-color: var(--ambar); background: var(--ambar-fundo); }
+.item.pendente .situacao { color: var(--ambar-texto); }
+.item.escuro { background: var(--grafite); color: var(--branco); border-color: var(--grafite); border-left-color: var(--verde); }
+.item.escuro small, .item.escuro .situacao, .item.escuro .seta { color: var(--topo-texto-2); }
+.item.escuro .desenho { background: var(--grafite-2); color: var(--branco); }
+
+/* ---------- Botões ---------- */
+.btn { display: inline-flex; align-items: center; justify-content: center; gap: 12px; min-height: 68px; padding: 0 24px; border-radius: 12px; background: var(--papel); border: 2px solid var(--linha); font-size: 21px; font-weight: 700; text-align: center; }
+.btn:active { background: var(--papel-2); }
+.btn.primario { background: var(--verde); border-color: var(--verde); color: var(--branco); }
+.btn.primario:active { background: var(--verde-escuro); }
+.btn.atencao { background: var(--ambar-fundo); border-color: var(--ambar); color: var(--ambar-texto); }
+.btn.perigo { color: var(--vermelho); border-color: var(--vermelho-borda); }
+.btn.pequeno { min-height: 54px; font-size: 18px; padding: 0 18px; }
+.btn.largo { width: 100%; min-height: 84px; font-size: 24px; }
+.linha-botoes { display: flex; flex-wrap: wrap; gap: 12px; margin: 14px 0; }

@@ -1,0 +1,42 @@
+/* Pranchetas Ubirálcool - avisos que o tablet chefe manda
+ * © 2026 Guilherme. Todos os direitos reservados. Uso somente com autorização do autor (veja LICENCA.txt). */
+
+/* Botão Avisos no tablet chefe, com quantos ainda não foram lidos */
+.topo .atalho .contador { font-style: normal; flex: none; min-width: 26px; height: 26px; padding: 0 7px; border-radius: 999px; display: grid; place-items: center; background: var(--ambar); color: var(--ambar-tinta); font-size: 15px; font-weight: 700; }
+:root[data-dispositivo="celular"] .topo .atalho .contador { min-width: 20px; height: 20px; font-size: 12.5px; padding: 0 5px; margin-left: -4px; }
+
+/* Tela de avisos do tablet chefe */
+.avisos-grade { display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px; align-items: start; }
+@media (min-width: 1000px) { .avisos-grade { grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); } }
+.avisos-grade .bloco { margin: 0; }
+.avisos-grade h2 { display: flex; align-items: center; gap: 10px; font-size: 24px; margin: 0 0 6px; }
+.novo-aviso h3 { margin: 14px 0 8px; font-size: 18px; color: var(--tinta-2); }
+.chips-escolha { display: flex; flex-wrap: wrap; gap: 8px; }
+.chips-escolha button { display: inline-flex; align-items: center; gap: 8px; min-height: 56px; padding: 0 16px; border-radius: 12px; background: var(--papel); border: 2px solid var(--linha); color: var(--tinta); font-size: 18px; font-weight: 700; }
+.chips-escolha button span { overflow-wrap: normal; }
+.chips-escolha button svg.ico { flex: none; width: 24px; height: 24px; color: var(--tinta-2); }
+.chips-escolha button.sel { border: 3px solid var(--verde); background: var(--verde-fundo); color: var(--verde-escuro); }
+.chips-escolha .trabalhando { flex: none; font-size: 13px; padding: 3px 8px; border-radius: 999px; background: var(--verde); color: var(--branco); white-space: nowrap; }
+#aviso-texto { display: block; width: 100%; min-height: 112px; padding: 12px 14px; border-radius: 12px; border: 2px solid var(--linha); background: var(--papel); color: var(--tinta); font: inherit; font-size: 22px; line-height: 1.35; resize: vertical; }
+#aviso-texto:focus { outline: 3px solid var(--foco); outline-offset: 1px; }
+.frases { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0 4px; }
+.aviso-previa { margin: 8px 0 12px; font-size: 17px; line-height: 1.35; color: var(--tinta-2); }
+.lista-avisos { display: grid; gap: 10px; }
+.aviso-item { display: grid; gap: 6px; padding: 12px 14px; border-radius: 12px; border: 2px solid var(--linha-clara); border-left: 8px solid var(--linha); background: var(--papel); }
+.aviso-item.esperando { border-left-color: var(--ambar); }
+.aviso-item.na-tela { border-left-color: var(--foco); }
+.aviso-item.lido { border-left-color: var(--verde); }
+.aviso-item.cancelado { opacity: .7; }
+.aviso-item-cab { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 10px; }
+.aviso-item-cab b { font-size: 19px; }
+.aviso-item-cab span { font-size: 15px; color: var(--tinta-2); }
+.aviso-item p { margin: 0; font-size: 18px; line-height: 1.35; overflow-wrap: break-word; }
+.aviso-item-pe { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; }
+.selo { display: inline-block; padding: 4px 10px; border-radius: 999px; font-size: 15px; font-weight: 700; background: var(--papel-2); color: var(--tinta-2); }
+.selo.esperando { background: var(--ambar-fundo); color: var(--ambar-texto); }
+.selo.na-tela { background: var(--azul-sel); color: var(--azul-tinta); }
+.selo.lido { background: var(--verde-fundo); color: var(--verde-escuro); }
+:root[data-tema="escuro"] .selo.na-tela { background: var(--azul-noite); color: var(--azul-noite-tinta); }
+:root[data-dispositivo="celular"] .chips-escolha button { min-height: 50px; padding: 0 12px; font-size: 16px; }
+:root[data-dispositivo="celular"] #aviso-texto { font-size: 18px; min-height: 96px; }
+:root[data-dispositivo="celular"] .avisos-grade h2 { font-size: 20px; }

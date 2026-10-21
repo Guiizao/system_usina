@@ -1,0 +1,89 @@
+/* Pranchetas Ubirálcool - celular
+ * © 2026 Guilherme. Todos os direitos reservados. Uso somente com autorização do autor (veja LICENCA.txt). */
+
+/* ---------- Celular: um pouco menor e mais compacto ---------- */
+:root[data-dispositivo="celular"] { --topo: 58px; }
+:root[data-dispositivo="celular"] body { font-size: 16px; }
+:root[data-dispositivo="celular"] main { padding: 10px; }
+:root[data-dispositivo="celular"] h2 { font-size: 20px; margin-bottom: 10px; }
+:root[data-dispositivo="celular"] .sub { font-size: 15px; }
+:root[data-dispositivo="celular"] .topo { padding: 0 8px; gap: 6px; }
+:root[data-dispositivo="celular"] .topo .logo { display: none; }
+:root[data-dispositivo="celular"] .topo .titulo b { font-size: 17px; }
+:root[data-dispositivo="celular"] .topo .titulo span { display: none; }
+:root[data-dispositivo="celular"] .topo .relogio b { font-size: 19px; }
+:root[data-dispositivo="celular"] .topo .relogio span { font-size: 11px; }
+:root[data-dispositivo="celular"] .topo .atalho, :root[data-dispositivo="celular"] .topo .tema { height: 44px; min-width: 44px; padding: 0 9px; }
+:root[data-dispositivo="celular"] .topo .atalho span, :root[data-dispositivo="celular"] .topo .tema span { display: none; }
+:root[data-dispositivo="celular"] .topo .atalho svg.ico, :root[data-dispositivo="celular"] .topo .tema svg.ico { width: 22px; height: 22px; }
+:root[data-dispositivo="celular"] .topo .voltar { height: 44px; font-size: 15px; padding: 0 10px 0 4px; }
+:root[data-dispositivo="celular"] .faixa { padding: 6px 10px; gap: 6px 10px; }
+:root[data-dispositivo="celular"] .faixa .data { font-size: 16px; }
+:root[data-dispositivo="celular"] .chip { min-height: 42px; padding: 0 10px; font-size: 15px; }
+:root[data-dispositivo="celular"] .barra-trabalho { padding: 8px 10px 0; }
+:root[data-dispositivo="celular"] .abas button { min-height: 42px; padding: 0 12px; font-size: 15px; }
+:root[data-dispositivo="celular"] .abas button.casa span { display: none; }
+:root[data-dispositivo="celular"] .seletor button { min-width: 58px; min-height: 52px; font-size: 17px; padding: 0 6px; }
+:root[data-dispositivo="celular"] .seletor button small { font-size: 11px; }
+:root[data-dispositivo="celular"] .seletor button.nova { font-size: 15px; padding: 0 10px; }
+:root[data-dispositivo="celular"] .cabecalho-form { flex-wrap: wrap; overflow: visible; }
+:root[data-dispositivo="celular"] .aviso { font-size: 14px; padding: 5px 10px; }
+:root[data-dispositivo="celular"] .grupos { grid-template-columns: minmax(0, 1fr); gap: 8px; }
+:root[data-dispositivo="celular"] .grupo { padding: 6px 8px 8px; }
+:root[data-dispositivo="celular"] .grupo h3 { font-size: 14px; margin-bottom: 4px; }
+:root[data-dispositivo="celular"] .campo { min-height: 80px; padding: 6px 10px; }
+:root[data-dispositivo="celular"] .grupo .campo { min-height: 80px; }
+:root[data-dispositivo="celular"] .campo .rot { font-size: 14px; }
+:root[data-dispositivo="celular"] .campo .val, :root[data-dispositivo="celular"] .grupo .campo .val { font-size: 28px; }
+:root[data-dispositivo="celular"] .campo .val.vazio { font-size: 14px; }
+:root[data-dispositivo="celular"] .campo .val.texto { font-size: 18px; }
+:root[data-dispositivo="celular"] .campo .aviso-campo { font-size: 12px; }
+:root[data-dispositivo="celular"] .rodape { padding: 8px 10px; }
+:root[data-dispositivo="celular"] .rodape .btn { min-height: 60px; font-size: 19px; }
+:root[data-dispositivo="celular"] .painel-cab b { font-size: 18px; }
+:root[data-dispositivo="celular"] .painel-cab small, :root[data-dispositivo="celular"] .painel-cab span { font-size: 13px; }
+:root[data-dispositivo="celular"] .painel-cab .btn { min-height: 42px; font-size: 14px; }
+:root[data-dispositivo="celular"] .valor-linha { grid-template-columns: 56px minmax(0, 1fr) 56px; }
+:root[data-dispositivo="celular"] .valor-linha .mm { min-height: 60px; font-size: 34px; }
+:root[data-dispositivo="celular"] .visor { min-height: 60px; font-size: 38px; }
+:root[data-dispositivo="celular"] .teclas { grid-auto-rows: minmax(46px, 1fr); gap: 6px; }
+:root[data-dispositivo="celular"] .teclas button { font-size: 26px; }
+:root[data-dispositivo="celular"] .dica-painel, :root[data-dispositivo="celular"] .alerta-texto { font-size: 14px; }
+:root[data-dispositivo="celular"] .painel-nav .btn { min-height: 52px; font-size: 17px; }
+:root[data-dispositivo="celular"] .item { min-height: 84px; padding: 10px; gap: 10px; }
+:root[data-dispositivo="celular"] .item .desenho { width: 44px; height: 44px; }
+:root[data-dispositivo="celular"] .item .texto b { font-size: 19px; }
+:root[data-dispositivo="celular"] .item .situacao { font-size: 15px; }
+:root[data-dispositivo="celular"] .opcoes.nomes button { min-height: 76px; font-size: 22px; }
+:root[data-dispositivo="celular"] .barra-dia { flex-direction: column; align-items: stretch; }
+:root[data-dispositivo="celular"] .numeros div { min-width: 0; flex: 1; padding: 6px 10px; }
+:root[data-dispositivo="celular"] .numeros b { font-size: 24px; }
+:root[data-dispositivo="celular"] .nav-data .data-grande b { font-size: 21px; }
+:root[data-dispositivo="celular"] .nav-data .data-grande span { font-size: 12px; }
+:root[data-dispositivo="celular"] .setor-cartao { min-height: 84px; }
+:root[data-dispositivo="celular"] .conectar-linha { flex-direction: column; }
+:root[data-dispositivo="celular"] .escolhas { grid-template-columns: minmax(0, 1fr); }
+:root[data-dispositivo="celular"] .escolhas button { min-height: 76px; }
+:root[data-dispositivo="celular"] .modal h3 { font-size: 22px; }
+:root[data-dispositivo="celular"] .papeis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+:root[data-dispositivo="celular"] .papel-cartao { min-height: 120px; padding: 10px; }
+:root[data-dispositivo="celular"] .papel-cartao b { font-size: 17px; }
+:root[data-dispositivo="celular"] .destaque-chefe { flex-direction: column; align-items: stretch; }
+:root[data-dispositivo="celular"] .boas-vindas header img { width: 64px; }
+:root[data-dispositivo="celular"] .boas-vindas h1 { font-size: 24px; }
+:root[data-dispositivo="celular"] .boas-vindas header p { font-size: 16px; }
+:root[data-dispositivo="celular"] .config-grade { grid-template-columns: minmax(0, 1fr); }
+:root[data-dispositivo="celular"] .pessoas > div { flex-wrap: wrap; }
+/* Barra de cima no celular: o título pode ir em duas linhas em vez de cortar.
+   A hora já aparece na barra do próprio celular; só volta quando a tela cheia esconde essa barra. */
+:root[data-dispositivo="celular"] .topo .titulo b { font-size: 16px; line-height: 1.15; white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: normal; }
+:root[data-dispositivo="celular"]:not([data-cheia]) .topo .relogio { display: none; }
+:root[data-dispositivo="celular"] .topo .relogio span { display: none; }
+:root[data-dispositivo="celular"] .seletor button small { font-size: 13px; }
+:root[data-dispositivo="celular"] .campo .aviso-campo { font-size: 13.5px; }
+:root[data-dispositivo="celular"] .nav-data { flex-wrap: nowrap; gap: 8px; }
+:root[data-dispositivo="celular"] .nav-data .btn { flex: none; min-width: 50px; min-height: 54px; padding: 0 8px; }
+:root[data-dispositivo="celular"] .nav-data .data-grande { flex: 1; min-width: 0; align-items: center; text-align: center; }
+:root[data-dispositivo="celular"] .nav-data .data-grande span { font-size: 13.5px; }
+:root[data-dispositivo="celular"] #toast { font-size: 17px; padding: 12px 18px 12px 12px; gap: 12px; border-radius: 16px; }
+:root[data-dispositivo="celular"] #toast > svg.ico { width: 36px; height: 36px; padding: 7px; }

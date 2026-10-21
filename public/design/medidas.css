@@ -1,0 +1,9 @@
+/* Pranchetas Ubirálcool - medidas gerais e a escala da tela
+ * © 2026 Guilherme. Todos os direitos reservados. Uso somente com autorização do autor (veja LICENCA.txt). */
+
+:root {
+  --topo: 72px;
+}
+
+/* A escala (zoom) deixa todos os tablets com a mesma cara. A altura divide pela escala para caber certinho. */
+#app { height: calc(100dvh / var(--escala, 1)); display: flex; flex-direction: column; overflow: hidden; }

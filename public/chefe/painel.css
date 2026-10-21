@@ -1,0 +1,74 @@
+/* Pranchetas Ubirálcool - painel do tablet chefe
+ * © 2026 Guilherme. Todos os direitos reservados. Uso somente com autorização do autor (veja LICENCA.txt). */
+
+/* ---------- Painel do tablet chefe ---------- */
+.barra-dia { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
+.nav-data { display: flex; align-items: center; gap: 10px; }
+.nav-data .btn { min-width: 60px; min-height: 60px; padding: 0 14px; }
+.nav-data .data-grande { display: flex; flex-direction: column; padding: 0 6px; }
+.nav-data .data-grande b { font-size: 28px; line-height: 1.1; }
+.nav-data .data-grande span { font-size: 15px; color: var(--tinta-2); }
+/* Monitorar (versão 2.13): o dia fica no canto direito da barra das abas */
+.linha-monitor { display: flex; align-items: flex-start; gap: 12px; }
+.linha-monitor .abas { flex: 1 1 auto; min-width: 0; }
+.nav-monitor { flex: none; gap: 6px; padding-bottom: 8px; }
+.nav-monitor .btn { min-width: 48px; min-height: 48px; padding: 0 10px; }
+.nav-monitor .data-grande { align-items: center; }
+.nav-monitor .data-grande b { font-size: 22px; }
+.nav-monitor .data-grande span { font-size: 13px; }
+.numeros { display: flex; gap: 10px; }
+.numeros div { min-width: 120px; background: var(--papel); border: 2px solid var(--linha-clara); border-radius: 10px; padding: 8px 14px; }
+.numeros div.atencao { border-color: var(--ambar); background: var(--ambar-fundo); color: var(--ambar-texto); }
+.numeros b { display: block; font-size: 30px; line-height: 1.1; }
+.numeros span { font-size: 15px; color: var(--tinta-2); }
+.central-grade { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; align-items: start; }
+@media (min-width: 1000px) { .central-grade { grid-template-columns: minmax(0, 1.9fr) minmax(330px, 1fr); } }
+.central-grade h2 { margin: 0 0 10px; font-size: 22px; }
+.setores-grade { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr)); gap: 10px; }
+.setor-cartao {
+  display: flex; align-items: center; gap: 14px; width: 100%; min-height: 104px; padding: 12px 14px;
+  background: var(--papel); border: 2px solid var(--linha-clara); border-left: 8px solid var(--linha); border-radius: 10px;
+}
+.setor-cartao .desenho { flex: none; width: 52px; height: 52px; display: grid; place-items: center; border-radius: 8px; background: var(--papel-2); }
+.setor-cartao .desenho svg.ico { width: 32px; height: 32px; stroke-width: 1.8; }
+.setor-cartao .texto { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.setor-cartao .texto b { font-size: 21px; line-height: 1.15; }
+.setor-cartao .conexao { font-size: 14px; }
+.setor-cartao .situacao { font-size: 16px; font-weight: 700; color: var(--tinta-2); }
+.setor-cartao .seta svg.ico { width: 28px; height: 28px; color: var(--tinta-2); }
+.setor-cartao.feito { border-left-color: var(--verde); }
+.setor-cartao.feito .situacao { color: var(--verde-escuro); }
+.setor-cartao.pendente { border-color: var(--ambar); border-left-color: var(--ambar); background: var(--ambar-fundo); }
+.setor-cartao.pendente .situacao { color: var(--ambar-texto); }
+.lateral-chefe { display: flex; flex-direction: column; gap: 12px; }
+.lateral-chefe .bloco { margin: 0; }
+.lateral-chefe h2 { font-size: 20px; }
+/* 2.15: até 6 gráficos no painel só na tela larga (computador); nas outras, 4 */
+@media (max-width: 1399px) { .graficos-painel .grafico-botao:nth-child(n+5) { display: none; } }
+.aparelhos-agora .titulo-secao h2 { margin: 0; }
+.agora-linha { display: flex; align-items: center; gap: 10px; padding: 6px 0; border-top: 1px solid var(--linha-clara); }
+.agora-linha > span:last-child { min-width: 0; }
+.agora-linha b { display: block; font-size: 17px; }
+.agora-linha small { display: block; color: var(--tinta-2); font-size: 15px; }
+/* computador (2.15): a tela grande mostra mais coisa, quase de ponta a ponta */
+:root[data-pc="1"] main.painel-chefe, :root[data-pc="1"] main:not([class]) { max-width: 1880px; }
+:root[data-pc="1"] main.graficos { max-width: 1880px; }
+.grade-acoes { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-top: 10px; }
+.grade-acoes button {
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; min-height: 78px; padding: 6px;
+  border-radius: 10px; background: var(--papel-2); border: 2px solid var(--linha-clara); font-size: 15px; font-weight: 700; text-align: center;
+}
+.grade-acoes button svg.ico { width: 28px; height: 28px; }
+.grade-acoes.duas { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+/* Escritório dentro do painel do tablet chefe (2.15): o lote e se o rastreamento já foi salvo */
+.escritorio-bloco .lote-linha { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; }
+.escritorio-bloco .lote-linha small { color: var(--tinta-2); }
+.escritorio-bloco .lote-linha b { font-size: 22px; letter-spacing: .5px; }
+.escritorio-bloco .lote-linha .conexao { flex-basis: 100%; }
+.grade-acoes button:active { border-color: var(--verde); background: var(--verde-fundo); }
+.conectar-linha { display: flex; gap: 14px; align-items: center; }
+.conectar .qr { flex: none; background: var(--branco); padding: 8px; border: 2px solid var(--linha-clara); border-radius: 10px; }
+.conectar .qr svg { display: block; width: 128px; height: 128px; }
+.conectar .passo-num { margin: 0; font-size: 15px; color: var(--tinta-2); }
+.conectar .endereco { margin: 2px 0 10px; font-size: 17px; font-weight: 700; word-break: break-all; }
+.codigo-grande { font-size: 44px; font-weight: 700; letter-spacing: 4px; margin: 0 0 6px; line-height: 1.1; }

@@ -1,0 +1,52 @@
+/* Pranchetas Ubirálcool - preparar o servidor e escolher a função do aparelho
+ * © 2026 Guilherme. Todos os direitos reservados. Uso somente com autorização do autor (veja LICENCA.txt). */
+
+/* ---------- Tela de preparo do servidor ---------- */
+.preparo { max-width: 860px; margin: 10px auto; }
+.preparo-cab { display: flex; align-items: center; gap: 18px; margin-bottom: 14px; }
+.preparo-cab > div:nth-child(2) { flex: 1; min-width: 0; }
+.preparo-botoes { display: flex; gap: 10px; flex: none; }
+.preparo-botoes .btn { min-height: 72px; font-size: 21px; }
+:root[data-dispositivo="celular"] .preparo-cab { flex-wrap: wrap; }
+:root[data-dispositivo="celular"] .preparo-botoes { width: 100%; }
+:root[data-dispositivo="celular"] .preparo-botoes .btn { flex: 1; min-height: 56px; font-size: 17px; }
+.preparo-cab h1 { margin: 0; font-size: 32px; }
+.preparo-cab p { margin: 4px 0 0; font-size: 19px; color: var(--tinta-2); }
+.preparo-ico { flex: none; width: 84px; height: 84px; border-radius: 50%; display: grid; place-items: center; background: var(--papel); border: 3px solid var(--linha); }
+.preparo-ico svg.ico { width: 44px; height: 44px; }
+.preparo-ico.ok { border-color: var(--verde); color: var(--verde); background: var(--verde-fundo); }
+.preparo-ico.erro { border-color: var(--vermelho); color: var(--vermelho); background: var(--vermelho-fundo); }
+.preparo-ico.girando { border-top-color: var(--verde); animation: girar 1s linear infinite; }
+.preparo-ico.girando svg.ico { animation: girar 1s linear infinite reverse; }
+@keyframes girar { to { transform: rotate(360deg); } }
+.passos-preparo { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.passos-preparo li { display: flex; align-items: center; gap: 14px; padding: 9px 16px; border-radius: 10px; background: var(--papel); border: 2px solid var(--linha-clara); }
+.passos-preparo .marca { flex: none; width: 36px; height: 36px; border-radius: 50%; display: grid; place-items: center; background: var(--papel-2); }
+.passos-preparo .marca svg.ico { width: 22px; height: 22px; stroke-width: 3; }
+.passos-preparo li.ok .marca { background: var(--verde); color: var(--branco); }
+.passos-preparo li.erro { border-color: var(--vermelho); background: var(--vermelho-fundo); }
+.passos-preparo li.erro .marca { background: var(--vermelho); color: var(--branco); }
+.passos-preparo li.fazendo { border-color: var(--verde); }
+.passos-preparo b { display: block; font-size: 19px; }
+.passos-preparo small { display: block; font-size: 15px; color: var(--tinta-2); margin-top: 2px; word-break: break-word; }
+.giro { display: block; width: 22px; height: 22px; border-radius: 50%; border: 3px solid var(--linha-clara); border-top-color: var(--verde); animation: girar .8s linear infinite; }
+@media (prefers-reduced-motion: reduce) { .preparo-ico.girando, .preparo-ico.girando svg.ico, .giro { animation: none; } }
+.destaque-chefe { display: flex; align-items: center; gap: 16px; margin-top: 22px; }
+.destaque-chefe div { flex: 1; }
+.destaque-chefe b { font-size: 20px; }
+.destaque-chefe p { margin: 4px 0 0; color: var(--tinta-2); font-size: 16px; }
+
+/* ---------- Escolher a função do aparelho ---------- */
+.papeis { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 220px), 1fr)); gap: 10px; }
+.papel-cartao {
+  position: relative; display: flex; flex-direction: column; align-items: flex-start; gap: 6px; min-height: 150px; padding: 14px;
+  border-radius: 12px; background: var(--papel); border: 2px solid var(--linha-clara); text-align: left;
+}
+.papel-cartao b { font-size: 20px; line-height: 1.15; }
+.papel-cartao small { font-size: 14px; color: var(--tinta-2); line-height: 1.25; }
+.papel-cartao em { font-style: normal; display: inline-flex; align-items: center; gap: 6px; margin-top: auto; font-size: 14px; font-weight: 700; color: var(--verde-escuro); }
+.papel-cartao em svg.ico { width: 18px; height: 18px; }
+.papel-cartao.sel { border: 3px solid var(--verde); background: var(--verde-fundo); }
+.papel-cartao:active { border-color: var(--verde); }
+.papel-atual { display: flex; align-items: center; gap: 12px; margin: 0 0 10px; }
+.papel-atual b { font-size: 24px; }

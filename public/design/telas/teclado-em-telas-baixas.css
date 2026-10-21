@@ -1,0 +1,20 @@
+/* Pranchetas Ubirálcool - teclado em telas baixas
+ * © 2026 Guilherme. Todos os direitos reservados. Uso somente com autorização do autor (veja LICENCA.txt). */
+
+/* Painel do teclado: botões do cabeçalho e telas baixas */
+.painel-cab-botoes { display: flex; gap: 8px; flex: none; }
+.painel-cab-botoes .btn { min-height: 50px; font-size: 16px; padding: 0 12px; }
+.painel > * { flex: none; }
+.painel > .teclas, .painel > .opcoes-painel { flex: 1 1 auto; }
+@media (orientation: landscape) and (max-height: 680px) {
+  .valor-linha .mm { min-height: 70px; font-size: 38px; }
+  .visor { min-height: 70px; font-size: 44px; }
+  .painel-nav .btn { min-height: 58px; font-size: 19px; }
+  .painel-cab small { font-size: 13px; }
+  .painel-cab b { font-size: 20px; }
+  .fichas button { min-height: 46px; }
+  .edicao.com-painel .painel { gap: 8px; padding: 10px 12px; }
+}
+:root[data-dispositivo="celular"] .valor-linha.sem-mm { grid-template-columns: minmax(0, 1fr); }
+:root[data-dispositivo="celular"] .visor.texto { font-size: 20px; min-height: 56px; max-height: 84px; overflow: auto; align-items: flex-start; }
+:root[data-dispositivo="celular"] .painel-cab-botoes .btn { min-height: 42px; font-size: 14px; padding: 0 10px; }

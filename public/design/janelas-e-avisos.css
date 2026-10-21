@@ -1,0 +1,154 @@
+/* Pranchetas Ubirálcool - janelas, notificação, painéis e avisos do processo
+ * © 2026 Guilherme. Todos os direitos reservados. Uso somente com autorização do autor (veja LICENCA.txt). */
+
+/* ---------- Janelas (senha, escolhas, confirmação) ---------- */
+.fundo-modal { position: fixed; inset: 0; z-index: 100; background: var(--veu-janela); display: flex; align-items: flex-end; justify-content: center; animation: surgir .12s ease-out; }
+@keyframes surgir { from { opacity: 0; } to { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .fundo-modal { animation: none; } }
+.modal { width: 100%; max-width: 560px; max-height: 100%; overflow: auto; background: var(--papel); border-radius: 16px 16px 0 0; padding: 20px; padding-bottom: max(20px, env(safe-area-inset-bottom)); }
+@media (min-width: 700px) { .fundo-modal { align-items: center; padding: 16px; } .modal { border-radius: 16px; } }
+.modal h3 { margin: 0 0 4px; font-size: 28px; line-height: 1.15; }
+.modal .dica { color: var(--tinta-2); font-size: 18px; margin: 0 0 10px; }
+.modal .visor { margin: 10px 0 12px; }
+.modal .teclas { grid-auto-rows: 72px; }
+.acoes-modal { display: grid; grid-template-columns: 1fr 1.7fr; gap: 10px; margin-top: 12px; }
+.acoes-modal .btn { min-height: 76px; font-size: 23px; }
+.opcoes { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 12px; margin: 10px 0; }
+.opcoes button { display: flex; align-items: center; justify-content: center; gap: 10px; text-align: center; min-height: 96px; padding: 8px; border-radius: 10px; background: var(--papel); border: 2px solid var(--linha); font-size: 24px; font-weight: 700; }
+.opcoes button.sel { border: 4px solid var(--verde); background: var(--verde-fundo); color: var(--verde-escuro); }
+.opcoes.nomes { grid-template-columns: repeat(auto-fill, minmax(min(100%, 250px), 1fr)); }
+.opcoes.nomes button { min-height: 116px; font-size: 30px; justify-content: flex-start; padding: 0 22px; }
+.opcoes.nomes button svg.ico { width: 38px; height: 38px; color: var(--tinta-2); }
+.modal input[type=text] { width: 100%; min-height: 68px; padding: 12px 16px; border-radius: 10px; border: 2px solid var(--linha); font-size: 24px; }
+
+/* Notificação: cartão no alto da tela, centralizado, como as notificações do próprio celular.
+   left e right fixos com margem automática: a largura acompanha o texto sem ficar presa na metade da tela. */
+#toast {
+  position: fixed; z-index: 200; top: calc(env(safe-area-inset-top, 0px) + 10px); left: 12px; right: 12px; margin: 0 auto;
+  width: fit-content; min-width: min(340px, calc(100% - 24px)); max-width: min(640px, calc(100% - 24px));
+  display: flex; align-items: center; gap: 14px; padding: 14px 22px 14px 14px; border-radius: 18px;
+  background: var(--grafite); color: var(--branco); font-size: 21px; font-weight: 700; line-height: 1.3; text-align: left;
+  box-shadow: 0 12px 32px var(--sombra-forte); animation: descer .22s ease-out;
+}
+#toast > svg.ico { flex: none; width: 42px; height: 42px; padding: 8px; border-radius: 50%; background: var(--verde); color: var(--branco); stroke-width: 2.6; }
+#toast.erro > svg.ico { background: var(--ambar); color: var(--ambar-tinta); }
+#toast > span { flex: 1; min-width: 0; overflow-wrap: break-word; }
+@keyframes descer { from { opacity: 0; transform: translateY(-16px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { #toast { animation: none; } }
+
+/* ---------- Painéis gerais ---------- */
+.bloco { background: var(--papel); border: 2px solid var(--linha-clara); border-radius: 10px; padding: 18px; margin-bottom: 14px; }
+.bloco h2 { margin-top: 0; }
+.kv { display: grid; grid-template-columns: max-content 1fr; gap: 8px 18px; font-size: 19px; margin: 0; align-items: center; }
+.kv dt { color: var(--tinta-2); }
+.kv dd { margin: 0; font-weight: 700; }
+.nav-data { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.nav-data .btn { min-width: 68px; padding: 0 16px; }
+.nav-data .data-grande { font-size: 30px; font-weight: 700; padding: 0 6px; }
+.abas { flex: none; display: flex; gap: 8px; overflow-x: auto; padding-bottom: 8px; scrollbar-width: none; }
+.abas::-webkit-scrollbar, .seletor::-webkit-scrollbar { display: none; }
+.abas button { flex: none; min-height: 52px; padding: 0 20px; border-radius: 10px; background: var(--papel); border: 2px solid var(--linha); font-size: 19px; font-weight: 700; }
+.abas button.sel { background: var(--grafite); color: var(--branco); border-color: var(--grafite); }
+
+.boas-vindas { max-width: 1200px; margin: 0 auto; padding: 16px 0; }
+.boas-vindas header { display: flex; align-items: center; gap: 20px; margin-bottom: 24px; }
+.boas-vindas header img { width: 110px; background: var(--branco); border-radius: 12px; padding: 8px; }
+.boas-vindas h1 { font-size: 38px; margin: 0; line-height: 1.1; }
+.boas-vindas header p { margin: 6px 0 0; font-size: 21px; color: var(--tinta-2); }
+.tela-aviso { max-width: 720px; margin: 40px auto; text-align: center; }
+.tela-aviso .grande-ico svg.ico { width: 96px; height: 96px; stroke-width: 1.6; color: var(--ambar-texto); }
+.tela-aviso h1 { font-size: 36px; margin: 10px 0; }
+.tela-aviso p { font-size: 22px; color: var(--tinta-2); }
+
+@media (max-width: 600px) {
+  :root { --topo: 62px; }
+  .topo { gap: 8px; }
+  .topo .titulo b { font-size: 18px; }
+  .topo .relogio b { font-size: 22px; }
+  .topo .relogio span { font-size: 12px; }
+  .topo .tema { min-width: 50px; height: 50px; padding: 0 8px; }
+  .topo .tema span { display: none; }
+  .topo .atalho { height: 50px; padding: 0 10px; }
+  .topo .atalhos { gap: 6px; }
+  .cabecalho-form { flex-wrap: wrap; overflow: visible; }
+  body { font-size: 18px; }
+  main { padding: 12px; }
+  .topo { padding: 0 10px; gap: 10px; }
+  .topo .logo { display: none; }
+  .topo .voltar { height: 52px; padding: 0 10px 0 4px; font-size: 17px; }
+  .topo .titulo b { font-size: 20px; }
+  .topo .titulo span { font-size: 14px; }
+  .topo .relogio b { font-size: 26px; }
+  .faixa { padding: 8px 12px; gap: 8px 12px; }
+  .faixa .data { font-size: 18px; }
+  .chip { min-height: 48px; font-size: 16px; }
+  .item { min-height: 96px; gap: 12px; padding: 12px; }
+  .item .desenho { width: 48px; height: 48px; }
+  .item .desenho svg.ico { width: 30px; height: 30px; }
+  .item .texto b { font-size: 21px; }
+  .campos { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  .campo { min-height: 104px; padding: 10px 12px; }
+  .campo .val { font-size: 34px; }
+  .cabecalho-form h2 { font-size: 26px; }
+  .seletor button { min-width: 70px; min-height: 64px; font-size: 20px; }
+  .rodape { padding: 10px 12px; }
+  .rodape .btn { font-size: 21px; min-height: 70px; }
+  .valor-linha { grid-template-columns: 64px minmax(0, 1fr) 64px; }
+  .valor-linha .mm { min-height: 72px; font-size: 40px; }
+  .visor { min-height: 72px; font-size: 44px; }
+  .painel-cab b { font-size: 20px; }
+  .teclas { grid-auto-rows: minmax(48px, 1fr); }
+  .teclas button { font-size: 30px; }
+  .teclas.letras { grid-template-columns: repeat(6, 1fr); grid-auto-rows: minmax(46px, 1fr); }
+  .visor.texto { font-size: 22px; min-height: 60px; max-height: 96px; overflow: auto; }
+  .teclas.letras button { font-size: 22px; }
+  .painel-nav .btn { min-height: 58px; font-size: 19px; }
+  .numeros b { font-size: 28px; }
+  .boas-vindas h1 { font-size: 28px; }
+  .boas-vindas header img { width: 72px; }
+}
+
+/* =========================================================================
+ * Versão 2: avisos do processo, painel do chefe, compartilhar,
+ * preparo do servidor, configurações e celular
+ * ========================================================================= */
+
+/* ---------- Avisos do processo (amarelo = ficar de olho, vermelho = fazer algo) ---------- */
+.campo.atencao { border: 3px solid var(--ambar); background: var(--ambar-fundo); }
+.campo.atencao .rot, .campo.atencao .val { color: var(--ambar-texto); }
+.campo .aviso-campo { display: block; margin-top: 4px; font-size: 14px; font-weight: 700; line-height: 1.2; }
+.campo.fora .aviso-campo { color: var(--vermelho); }
+.campo.atencao .aviso-campo { color: var(--ambar-texto); }
+.visor.atencao { border-color: var(--ambar); background: var(--ambar-fundo); color: var(--ambar-texto); }
+.alerta-texto.atencao { color: var(--ambar-texto); background: var(--ambar-fundo); }
+.aviso.atencao { border-color: var(--ambar); background: var(--ambar-fundo); color: var(--ambar-texto); font-weight: 700; }
+table.papel td.atencao { background: var(--ambar-fundo); color: var(--ambar-texto); font-weight: 700; }
+.grupo .par.n3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+/* Nome do operador e o selo "sem senha": o nome quebra só entre palavras e o selo nunca quebra */
+.opcoes.nomes button .nome-op { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: flex-start; gap: 6px; text-align: left; line-height: 1.15; }
+.opcoes.nomes button .nome-op b { max-width: 100%; white-space: nowrap; overflow: hidden; }
+.sem-senha { flex: none; padding: 5px 12px; border-radius: 999px; background: var(--ambar-fundo); color: var(--ambar-texto); border: 1px solid var(--ambar); font-size: 16px; font-weight: 700; line-height: 1.2; white-space: nowrap; }
+:root[data-dispositivo="celular"] .sem-senha { font-size: 14px; padding: 4px 10px; }
+
+/* ---------- Casinha nas abas ---------- */
+.abas button.casa { display: inline-flex; align-items: center; gap: 8px; background: var(--papel-2); }
+.abas button.casa svg.ico { width: 24px; height: 24px; }
+
+/* ---------- Janelas de escolha (compartilhar, formato) ---------- */
+.modal.largo { max-width: 760px; }
+.acoes-modal.um { grid-template-columns: 1fr; }
+.acoes-modal + .acoes-modal { margin-top: 8px; }
+.acoes-modal + .acoes-modal .btn { min-height: 56px; font-size: 19px; }
+.bloco .sub-titulo { margin: 16px 0 4px; font-size: 18px; }
+.escolhas { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; margin: 12px 0 4px; }
+.escolhas button {
+  display: grid; grid-template-columns: 56px 1fr; grid-template-rows: auto auto; column-gap: 12px; align-items: center; text-align: left;
+  min-height: 96px; padding: 14px; border-radius: 12px; background: var(--papel); border: 2px solid var(--linha);
+}
+.escolhas button:active { border-color: var(--verde); background: var(--verde-fundo); }
+.escolhas button .escolha-ico { grid-row: span 2; }
+.escolhas button b { font-size: 22px; }
+.escolhas button small { font-size: 15px; color: var(--tinta-2); line-height: 1.25; }
+.escolha-ico { width: 56px; height: 56px; display: grid; place-items: center; border-radius: 10px; background: var(--papel-2); color: var(--grafite); flex: none; }
+.escolha-ico svg.ico { width: 32px; height: 32px; stroke-width: 1.9; }
+:root[data-tema="escuro"] .escolha-ico { color: var(--tinta); }

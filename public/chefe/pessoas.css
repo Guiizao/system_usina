@@ -1,0 +1,37 @@
+/* Pranchetas Ubirálcool - pessoas e registro do sistema
+ * © 2026 Guilherme. Todos os direitos reservados. Uso somente com autorização do autor (veja LICENCA.txt). */
+
+/* Pessoas do escritório e registro do sistema (versão 2.9) */
+.topo .atalho.pessoa-chefe span { max-width: 9em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.topo:has(.atalhos > :nth-child(5)) .atalho:not(.pessoa-chefe) span { display: none; }
+.topo:has(.atalhos > :nth-child(5)) .atalho:not(.pessoa-chefe) { padding: 0 12px; }
+.form-pessoa { display: grid; gap: 10px; margin: 6px 0 8px; }
+.form-pessoa label { display: grid; gap: 4px; font-weight: 700; font-size: 17px; }
+.form-pessoa label small { font-weight: 400; color: var(--tinta-2); }
+.form-pessoa input { min-height: 48px; font-size: 19px; padding: 0 12px; border-radius: 10px; border: 2px solid var(--linha); background: var(--papel); color: var(--tinta); }
+.chips.funcoes { max-height: 34vh; overflow: auto; }
+.chips.funcoes .chip-liga { min-height: 42px; font-size: 15px; padding: 0 12px; text-align: left; }
+.linha-config.desligado { opacity: .6; }
+.tela-pessoas .linha-config small { word-break: normal; overflow-wrap: break-word; }
+/* janela de pessoa e de tablet chefe: o formulário rola e Cancelar e Salvar ficam sempre à vista */
+.modal.com-form { display: flex; flex-direction: column; }
+.modal.com-form > .form-pessoa { flex: 1 1 auto; min-height: 0; overflow: auto; align-content: start; }
+.modal.com-form > h3, .modal.com-form > .dica, .modal.com-form > .acoes-modal { flex: none; }
+.modal.com-form .chips.funcoes { max-height: none; overflow: visible; }
+@media (orientation: landscape) and (max-height: 640px) {
+  .modal.com-form .form-pessoa { grid-template-columns: 1fr 1fr; column-gap: 12px; align-items: end; }
+  .modal.com-form .form-pessoa > :not(label), .modal.com-form .form-pessoa > label:only-of-type { grid-column: 1 / -1; }
+}
+main.registro { max-width: 1100px; }
+.filtros-registro { margin: 0 0 10px; flex-wrap: wrap; }
+.lista-registro { display: grid; gap: 6px; }
+.reg-linha { display: grid; grid-template-columns: 64px 1fr; gap: 10px; padding: 10px 12px; border-radius: 10px; background: var(--papel); border: 2px solid var(--linha-clara); border-left-width: 6px; }
+.reg-linha.reg-anotacao { border-left-color: var(--verde-escuro); }
+.reg-linha.reg-entrada { border-left-color: var(--azul-registro); }
+.reg-linha.reg-aparelho { border-left-color: var(--ambar); }
+.reg-linha.reg-configuracao { border-left-color: var(--vermelho); }
+.reg-hora { font-size: 19px; }
+.reg-texto p { margin: 0; font-size: 17px; line-height: 1.3; }
+.reg-texto small { color: var(--tinta-2); font-size: 14px; }
+.reg-texto ul { margin: 4px 0 0; padding-left: 18px; font-size: 15px; }
+.reg-texto s { color: var(--tinta-2); }

@@ -1,0 +1,22 @@
+/* Pranchetas Ubirálcool - atualização do aplicativo
+ * © 2026 Guilherme. Todos os direitos reservados. Uso somente com autorização do autor (veja LICENCA.txt). */
+
+/* Atualização do aplicativo (versão 2.7): botão no alto e lista de novidades */
+.topo .tema.atualizar { background: var(--ambar); color: var(--ambar-tinta); border-color: var(--ambar); }
+.topo .tema.atualizar:active { filter: brightness(.92); }
+/* a janela das novidades: só a lista rola, o título e os botões ficam sempre à vista (celular deitado) */
+.modal.com-novidades { display: flex; flex-direction: column; }
+.modal.com-novidades > * { flex: none; }
+.modal.com-novidades > .novidades-lista { flex: 0 1 auto; min-height: 64px; }
+.novidades-lista { max-height: 55vh; overflow: auto; margin: 0 0 10px; }
+/* painel do escritório (4 atalhos) com o botão Atualizar: Ajustes e Claro/Escuro ficam só com o desenho */
+.topo:has(.tema.atualizar):has(.atalhos > :nth-child(4)) .tema:not(.atualizar) { min-width: 54px; }
+.topo:has(.tema.atualizar):has(.atalhos > :nth-child(4)) .tema:not(.atualizar) span { display: none; }
+.novidades-lista h4 { margin: 12px 0 4px; font-size: 19px; }
+.novidades-lista ul { margin: 0; padding-left: 24px; }
+.novidades-lista li { font-size: 19px; line-height: 1.35; margin: 0 0 8px; color: var(--tinta); }
+:root[data-dispositivo="celular"] .novidades-lista li { font-size: 16px; }
+.passo-atualizacao { font-weight: 700; }
+.barra-progresso { height: 16px; border-radius: 8px; background: var(--linha-clara); overflow: hidden; margin: 4px 0 8px; flex: none; }
+.barra-progresso > i { display: block; height: 100%; width: 0; background: var(--verde-escuro); transition: width .2s; }
+.barra-progresso[hidden] { display: none; }

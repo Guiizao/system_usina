@@ -1,0 +1,42 @@
+/* Pranchetas Ubirálcool - impressão das folhas iguais ao papel
+ * © 2026 Guilherme. Todos os direitos reservados. Uso somente com autorização do autor (veja LICENCA.txt). */
+
+/* ---------- Impressão das folhas iguais ao papel ---------- */
+#impressao { display: none; }
+.grade-imp { width: 100%; border-collapse: collapse; table-layout: fixed; font-family: Arial, Helvetica, sans-serif; color: #000; background: #fff; }
+.grade-imp td { padding: 1px 3px; overflow: hidden; line-height: 1.15; white-space: nowrap; }
+.grade-imp td.b { border: .6pt solid #000; }
+.grade-imp td.n { font-weight: 700; }
+.grade-imp td.al { text-align: left; } .grade-imp td.ac { text-align: center; } .grade-imp td.ar { text-align: right; }
+.grade-imp td.vt { vertical-align: top; } .grade-imp td.vc { vertical-align: middle; } .grade-imp td.vb { vertical-align: bottom; }
+.grade-imp td.q { white-space: normal; }
+.logo-imp { display: block; margin: 0 auto; max-height: 17mm; max-width: 100%; }
+/* ver as folhas na tela (imagens de apresentação) */
+body.ver-folhas { zoom: 1 !important; background: #9aa19c; }
+body.ver-folhas #app { display: none; }
+body.ver-folhas #impressao { display: grid; gap: 24px; padding: 24px; justify-content: center; }
+body.ver-folhas .folha-imp { background: #fff; padding: 10mm; box-shadow: 0 4px 18px rgba(0, 0, 0, .25); width: 210mm; }
+body.ver-folhas .folha-imp.paisagem { width: 297mm; }
+@media print {
+  @page { size: A4 portrait; margin: 8mm; }
+  @page paisagem { size: A4 landscape; margin: 8mm; }
+  @page retrato { size: A4 portrait; margin: 8mm; }
+  .folha-imp.retrato { page: retrato; }
+  body.imprimindo { zoom: 1 !important; background: #fff !important; color: #000; }
+  body.imprimindo #app, body.imprimindo #modal-root, body.imprimindo #toast { display: none !important; }
+  body.imprimindo #impressao { display: block; }
+  .folha-imp { break-after: page; page-break-after: always; }
+  .folha-imp.paisagem { page: paisagem; }
+  .folha-imp:last-child { break-after: auto; page-break-after: auto; }
+  body.ver-folhas { background: #fff !important; }
+  body.ver-folhas #impressao { display: block; padding: 0; }
+  body.ver-folhas .folha-imp, body.ver-folhas .folha-imp.paisagem { box-shadow: none; padding: 0; width: auto; }
+}
+
+@media print {
+  .topo, .faixa, .rodape, .painel, .seletor, .abas, .nav-data, .linha-botoes, .nao-imprimir { display: none !important; }
+  body, main { background: #fff; padding: 0; }
+  .folha { border: 0; }
+  table.papel { font-size: 11px; }
+  table.papel th, table.papel td { padding: 3px; border-color: #000; }
+}

@@ -1,0 +1,42 @@
+/* Pranchetas Ubirálcool - Base44 e interruptores
+ * © 2026 Guilherme. Todos os direitos reservados. Uso somente com autorização do autor (veja LICENCA.txt). */
+
+/* Base44: um dia por linha, com a situação do envio */
+#bloco-base44 .linha-config small { word-break: normal; }
+.base44-dia b { font-size: 18px; }
+.base44-dia b .dia-semana { display: inline; font-size: 15px; font-weight: 400; }
+.base44-dia.ok small { color: var(--verde-escuro); }
+.base44-dia.erro small { color: var(--vermelho); }
+.base44-dia b .dia-semana, .base44-dia.ok b .dia-semana, .base44-dia.erro b .dia-semana { color: var(--tinta-2); }
+.segredo-grande { font-size: 26px; font-weight: 700; letter-spacing: 1px; text-align: center; word-break: break-all; padding: 14px; border: 2px dashed var(--linha); border-radius: 10px; }
+.chips { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.chip-item { display: inline-flex; align-items: center; gap: 4px; min-height: 48px; padding: 0 6px 0 14px; border-radius: 24px; background: var(--papel-2); border: 2px solid var(--linha-clara); font-size: 17px; font-weight: 700; }
+.chip-item button { width: 38px; height: 38px; border-radius: 50%; display: grid; place-items: center; color: var(--tinta-2); }
+.chip-item button svg.ico { width: 18px; height: 18px; }
+.chip-item button:active { background: var(--vermelho-fundo); color: var(--vermelho); }
+.chip-liga { display: inline-flex; align-items: center; gap: 8px; min-height: 50px; padding: 0 16px; border-radius: 10px; background: var(--papel-2); border: 2px dashed var(--linha); font-size: 17px; font-weight: 700; color: var(--tinta-2); }
+.chip-liga svg.ico { width: 18px; height: 18px; }
+.chip-liga.sel { border: 2px solid var(--verde); background: var(--verde-fundo); color: var(--verde-escuro); }
+.setor-config-cab { display: flex; align-items: center; gap: 12px; margin-bottom: 6px; }
+.setor-config-cab .desenho { width: 46px; height: 46px; display: grid; place-items: center; border-radius: 8px; background: var(--papel-2); }
+.setor-config-cab .desenho svg.ico { width: 28px; height: 28px; }
+.setor-config-cab h2 { flex: 1; margin: 0; }
+.setor-config.desligado { opacity: .75; }
+.interruptor { display: inline-flex; align-items: center; gap: 10px; min-height: 50px; padding: 0 14px 0 8px; border-radius: 26px; background: var(--papel-2); border: 2px solid var(--linha); font-size: 16px; font-weight: 700; }
+.interruptor i { position: relative; width: 52px; height: 30px; border-radius: 15px; background: var(--linha); transition: background .15s; }
+.interruptor i::after { content: ""; position: absolute; top: 3px; left: 3px; width: 24px; height: 24px; border-radius: 50%; background: var(--branco); transition: left .15s; }
+.interruptor.ligado { border-color: var(--verde); color: var(--verde-escuro); }
+.interruptor.ligado i { background: var(--verde); }
+.interruptor.ligado i::after { left: 25px; }
+@media (prefers-reduced-motion: reduce) { .interruptor i, .interruptor i::after { transition: none; } }
+.pessoas { display: grid; gap: 6px; }
+.pessoas > div { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 6px 8px 6px 12px; border-radius: 8px; background: var(--papel-2); }
+.pessoas .nome { display: flex; align-items: center; gap: 8px; min-width: 0; font-size: 18px; }
+.pessoas .nome small { font-size: 14px; color: var(--tinta-2); margin-left: 4px; }
+.pessoas .nome small.sem-senha { color: var(--ambar-texto); }
+.pessoas .acoes { display: flex; gap: 6px; flex: none; }
+.pessoas .acoes .btn { min-height: 46px; padding: 0 12px; }
+.pessoas .vazio { color: var(--tinta-2); justify-content: flex-start; }
+.segmentos { display: flex; gap: 6px; padding: 4px; border-radius: 12px; background: var(--papel-2); border: 2px solid var(--linha-clara); }
+.segmentos button { flex: 1; display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 52px; border-radius: 9px; font-size: 18px; font-weight: 700; color: var(--tinta-2); }
+.segmentos button.sel { background: var(--grafite); color: var(--branco); }

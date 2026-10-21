@@ -1,0 +1,30 @@
+/* Pranchetas Ubirálcool - ler folha de papel
+ * © 2026 Guilherme. Todos os direitos reservados. Uso somente com autorização do autor (veja LICENCA.txt). */
+
+/* ---------- Ler folha de papel ---------- */
+.foto-leitura { display: block; max-width: 100%; max-height: 42vh; margin: 12px auto; border-radius: 10px; border: 2px solid var(--linha-clara); }
+main.leitura { padding-bottom: 12px; }
+.aviso-leitura { display: flex; gap: 12px; align-items: center; padding: 12px 16px; border-radius: 10px; margin-bottom: 12px; font-size: 18px; }
+.aviso-leitura svg.ico { width: 28px; height: 28px; flex: none; }
+.aviso-leitura.duvida { background: var(--ambar-fundo); color: var(--ambar-texto); border: 2px solid var(--ambar); }
+.aviso-leitura.ok { background: var(--verde-fundo); color: var(--verde-escuro); border: 2px solid var(--verde); }
+.tabela-leitura { overflow: auto; border: 2px solid var(--linha-clara); border-radius: 10px; background: var(--papel); }
+.tabela-leitura table { border-collapse: collapse; min-width: 100%; }
+.tabela-leitura th { position: sticky; top: 0; z-index: 1; background: var(--papel-2); font-size: 15px; padding: 8px 6px; border-bottom: 2px solid var(--linha); white-space: nowrap; }
+.tabela-leitura td { border-bottom: 1px solid var(--linha-clara); padding: 4px; vertical-align: middle; text-align: center; }
+.tabela-leitura td.chave b { font-size: 20px; }
+.tabela-leitura td.chave small { display: block; font-size: 12px; color: var(--ambar-texto); font-weight: 700; }
+.tabela-leitura tr.fora td:not(.inc) { opacity: .45; }
+.marca-linha { width: 44px; height: 44px; border-radius: 8px; border: 2px solid var(--linha); background: var(--papel); display: grid; place-items: center; }
+.marca-linha.sel { background: var(--verde); border-color: var(--verde); color: var(--branco); }
+.cel-leitura { display: flex; flex-direction: column; align-items: stretch; gap: 2px; min-width: 86px; width: 100%; padding: 4px; border-radius: 8px; border: 2px solid transparent; }
+.cel-leitura img { height: 30px; width: 100%; object-fit: contain; object-position: left center; background: var(--branco); border-radius: 4px; }
+.cel-leitura b { font-size: 20px; min-height: 26px; }
+.cel-leitura.duvida { background: var(--ambar-fundo); border-color: var(--ambar); color: var(--ambar-texto); }
+.cel-leitura.vazia b { color: var(--tinta-2); }
+.celula-grande { display: block; width: 100%; max-height: 140px; object-fit: contain; background: var(--branco); border-radius: 8px; border: 2px solid var(--linha-clara); margin: 8px 0; }
+.modal #txt-leitura { width: 100%; font-size: 26px; padding: 12px; border-radius: 8px; border: 2px solid var(--linha); margin: 8px 0; text-transform: uppercase; background: var(--papel); }
+.lista-folhas { max-height: 56vh; overflow: auto; }
+.escolhas button.sel { border-color: var(--verde); background: var(--verde-fundo); }
+:root[data-dispositivo="celular"] .cel-leitura { min-width: 64px; }
+:root[data-dispositivo="celular"] .cel-leitura b { font-size: 16px; }

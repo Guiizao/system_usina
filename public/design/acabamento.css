@@ -1,0 +1,39 @@
+/* Pranchetas Ubirálcool - acabamento: texto que não cabe, etapas da dorna e ícones
+ * © 2026 Guilherme. Todos os direitos reservados. Uso somente com autorização do autor (veja LICENCA.txt). */
+
+/* =====================================================================
+   Versão 2.2: texto que cabe, etapas da dorna, animações e ícones
+   ===================================================================== */
+/* Nada quebra palavra no meio: o que não couber diminui a letra (caberTextos no app.js) */
+.campo .rot, .abas button, .seletor button, .chip, .rodape .btn, .painel-nav .btn, .item .texto b, .setor-cartao .texto b,
+.papel-cartao b, .cabecalho-form .aviso, .linha-botoes .btn, .acoes-modal .btn, .opcoes-painel button { overflow-wrap: normal; word-break: normal; }
+.campo .rot, .rodape .btn, .painel-nav .btn, .abas button, .seletor button, .acoes-modal .btn { white-space: nowrap; overflow: hidden; }
+.campo .rot { display: flex; align-items: center; gap: 4px; min-width: 0; }
+.rodape .btn, .painel-nav .btn, .linha-botoes .btn { min-width: 0; }
+.item .texto b, .setor-cartao .texto b, .papel-cartao b { overflow: hidden; }
+.campo { min-width: 0; overflow: hidden; }
+
+/* Etapas da dorna: enchendo (amarelo), enviando (azul), anotada (verde) */
+.seletor button.enviando { border: 3px solid var(--foco); background: var(--ativo-fundo); color: var(--foco); }
+.aviso.info { border-color: var(--foco); background: var(--ativo-fundo); color: var(--foco); font-weight: 700; }
+:root[data-tema="escuro"] .seletor button.enviando, :root[data-tema="escuro"] .aviso.info { background: var(--azul-noite); color: var(--azul-noite-tinta); border-color: var(--azul-noite-borda); }
+.rodape .btn:not(.primario) { flex: 0 1 34%; }
+
+/* Tela de conectar: no celular, o texto da busca fica numa linha e o botão embaixo */
+.procura-central { flex-wrap: wrap; }
+.procura-central span { flex: 1 1 240px; min-width: 0; }
+:root[data-dispositivo="celular"] .procura-central { gap: 10px 12px; font-size: 16px; padding: 10px 12px; }
+:root[data-dispositivo="celular"] .procura-central .btn { flex: 1 1 100%; min-height: 54px; }
+:root[data-dispositivo="celular"] .boas-vindas .linha-botoes .btn { flex: 1 1 100%; min-width: 0 !important; }
+
+/* Ícones do tamanho do texto ao lado (antes alguns tinham tamanho fixo e ficavam grandes no celular) */
+.opcoes.nomes button svg.ico { width: 1.25em; height: 1.25em; }
+.procura-central > svg.ico { width: 1.6em; height: 1.6em; }
+.btn svg.ico, .chip svg.ico, .aviso svg.ico { width: 1.2em; height: 1.2em; }
+.abas button.casa svg.ico { width: 1.25em; height: 1.25em; }
+.item .seta svg.ico, .setor-cartao .seta svg.ico { width: 1.4em; height: 1.4em; }
+:root[data-dispositivo="celular"] .item .desenho svg.ico { width: 28px; height: 28px; }
+:root[data-dispositivo="celular"] .escolha-ico { width: 46px; height: 46px; }
+:root[data-dispositivo="celular"] .escolha-ico svg.ico { width: 26px; height: 26px; }
+:root[data-dispositivo="celular"] .setor-cartao .desenho { width: 44px; height: 44px; }
+:root[data-dispositivo="celular"] .setor-cartao .desenho svg.ico { width: 26px; height: 26px; }

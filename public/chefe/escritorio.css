@@ -1,0 +1,60 @@
+/* Pranchetas Ubirálcool - escritório e etiqueta
+ * © 2026 Guilherme. Todos os direitos reservados. Uso somente com autorização do autor (veja LICENCA.txt). */
+
+/* ---------- Escritório (versão 2.13): cálculos, rastreamento de lotes e etiqueta ---------- */
+main.escritorio { max-width: 1100px; margin: 0 auto; width: 100%; display: grid; gap: 14px; align-content: start; }
+main.escritorio .bloco h2 { display: flex; align-items: center; gap: 8px; margin: 0 0 6px; }
+main.escritorio .bloco h2 svg.ico { width: 26px; height: 26px; }
+main.escritorio .bloco h3 { margin: 14px 0 6px; font-size: 17px; }
+.lote-dia { display: grid; text-align: right; }
+.lote-dia small { font-size: 14px; color: var(--tinta-2); }
+.lote-dia b { font-family: var(--fonte-num, inherit); font-size: 28px; letter-spacing: .5px; }
+.linha-esc .num-esc { flex: none; font-size: 28px; font-weight: 700; text-align: right; min-width: 120px; white-space: nowrap; }
+.linha-esc .num-esc small { font-size: 15px; font-weight: 400; color: var(--tinta-2); }
+.linha-esc.resultado { background: var(--verde-fundo); border-radius: 8px; padding-inline: 10px; }
+.linha-esc.resultado .num-esc { color: var(--verde); }
+.linha-config.linha-esc small { word-break: normal; }
+.linha-esc small.falta { color: var(--tinta); font-weight: 700; }
+.tabela-esc { width: 100%; border-collapse: collapse; font-size: 16px; }
+.tabela-esc th, .tabela-esc td { border: 1px solid var(--linha-clara); padding: 4px 6px; text-align: left; vertical-align: middle; }
+.tabela-esc th { background: var(--papel-2); font-size: 14px; white-space: nowrap; }
+.tabela-esc td small { color: var(--tinta-2); font-size: 13px; }
+.cel-esc { width: 100%; min-width: 64px; min-height: 44px; padding: 4px 8px; border-radius: 6px; border: 1px dashed transparent; background: none; text-align: left; font-weight: 700; color: var(--tinta); }
+.cel-esc:hover, .cel-esc:focus-visible { border-color: var(--linha); }
+.cel-esc.vazia { color: var(--tinta-2); font-weight: 400; }
+.cel-esc.digitada { background: var(--azul-sel, #e3eefc); }
+.duas-tabelas { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr)); gap: 12px; }
+.qtd-etiquetas { display: flex; align-items: center; gap: 12px; margin: 10px 0; font-size: 18px; }
+.qtd-etiquetas b { font-size: 28px; min-width: 40px; text-align: center; }
+.et-previa { overflow: auto; max-height: 46vh; border: 1px solid var(--linha-clara); border-radius: 8px; background: var(--branco); padding: 8px; }
+.et-previa .etiqueta { zoom: .62; }
+@media (orientation: landscape) and (max-height: 500px) { .et-previa { display: none; } }
+@media (max-width: 760px) { .et-previa .etiqueta { zoom: .4; } }
+@media (max-width: 420px) { .et-previa .etiqueta { zoom: .36; } }
+/* a etiqueta: 190 × 95 mm, duas por folha A4 (igual ao adesivo de 01/10/2026) */
+.etiqueta { width: 190mm; height: 95mm; box-sizing: border-box; display: grid; grid-template-columns: 31% 38% 31%; border: .4mm solid var(--preto); background: var(--branco); color: var(--preto);
+  font-family: Arial, Helvetica, sans-serif; font-size: 2.6mm; line-height: 1.25; break-inside: avoid; page-break-inside: avoid; margin: 0 auto 6mm; }
+.etiqueta p { margin: 0 0 1.4mm; }
+.etiqueta > div { padding: 2mm 2.4mm; border-right: .3mm solid var(--preto); display: flex; flex-direction: column; overflow: hidden; }
+.etiqueta > div:last-child { border-right: 0; }
+.et-marca { display: flex; align-items: center; gap: 2mm; margin-bottom: 1.5mm; }
+.et-marca img { height: 11mm; }
+.et-marca b { display: block; font-size: 4mm; color: #1b7a3e; }
+.et-marca small { font-size: 2.2mm; letter-spacing: .3mm; }
+.et-pictos { display: flex; gap: 2mm; margin-bottom: 1.5mm; }
+.et-pictos .picto { width: 11mm; height: 11mm; }
+.et-prec { font-size: 2.15mm; }
+.et-ficha { font-size: 2.2mm; border-top: .3mm solid var(--preto); padding-top: 1mm; }
+.et-peso { margin-top: auto; border-top: .3mm solid var(--preto); padding-top: 1mm; display: grid; text-align: center; }
+.et-peso b { font-size: 3.1mm; }
+.et-empresa { text-align: center; font-size: 2.4mm; }
+.et-produto { text-align: center; font-weight: 700; font-size: 2.6mm; }
+.et-onu { text-align: center; font-size: 11mm; font-weight: 900; letter-spacing: .5mm; margin: 1mm 0; }
+.et-dados { font-size: 2.6mm; }
+.et-lote { margin-top: auto; border: .3mm solid var(--preto); border-radius: 1mm; padding: 1.2mm 2mm; display: grid; }
+.et-lote b { font-size: 4.2mm; }
+.et-lote small { font-size: 2.4mm; }
+.et-perigo { font-size: 5mm; font-weight: 900; text-align: center; margin: 1mm 0; }
+.et-placa { width: 34mm; height: 34mm; margin: auto auto 0; display: block; }
+.folha-etiquetas { width: 190mm; margin: 0 auto; }
+@media print { body.imprimindo .folha-etiquetas { width: auto; } }

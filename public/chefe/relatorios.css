@@ -1,0 +1,12 @@
+/* Pranchetas Ubirálcool - relatórios
+ * © 2026 Guilherme. Todos os direitos reservados. Uso somente com autorização do autor (veja LICENCA.txt). */
+
+/* ---------- Relatórios ---------- */
+.relatorios { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 520px), 1fr)); gap: 12px; align-items: start; }
+.relatorios .bloco { margin: 0; }
+.relatorios h2 { margin: 0 0 8px; font-size: 22px; }
+.relatorios h2 small { font-size: 16px; color: var(--tinta-2); font-weight: 400; margin-left: 6px; }
+.arquivo { display: flex; align-items: center; gap: 12px; padding: 8px 0; border-top: 1px solid var(--linha-clara); }
+.arquivo div { flex: 1; min-width: 0; }
+.arquivo b { display: block; font-size: 17px; word-break: break-all; }
+.arquivo small { font-size: 14px; color: var(--tinta-2); }

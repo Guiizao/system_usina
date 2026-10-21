@@ -1,0 +1,42 @@
+/* Pranchetas Ubirálcool - gráficos do dia
+ * © 2026 Guilherme. Todos os direitos reservados. Uso somente com autorização do autor (veja LICENCA.txt). */
+
+/* ---------- Gráficos do dia (versão 2.10) ---------- */
+.graficos-painel { margin-top: 16px; }
+.titulo-secao { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 8px; }
+.titulo-secao h2 { margin: 0; }
+.graficos-grade { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 10px; }
+.grafico-botao { display: block; width: 100%; padding: 0; text-align: left; border: 0; background: none; color: inherit; font: inherit; }
+main.graficos { max-width: 1200px; }
+.graficos-lista { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 460px), 1fr)); gap: 12px; }
+.grafico { background: var(--papel); border: 2px solid var(--linha-clara); border-radius: 12px; padding: 10px 12px 8px; }
+.graf-cab { display: flex; align-items: baseline; gap: 8px; margin-bottom: 6px; }
+.graf-cab b { font-size: 18px; }
+.graf-cab small { color: var(--tinta-2); font-size: 15px; }
+.grafico.vazio .sub { margin: 4px 0; }
+.graf-corpo.graf-vazio { display: flex; align-items: center; justify-content: center; text-align: center; border: 1.5px dashed var(--linha-clara); border-radius: 8px; margin-bottom: 24px; }
+.graf-corpo { display: grid; grid-template-columns: 44px 1fr; height: 190px; }
+.grafico.compacto .graf-corpo { height: 120px; }
+.graf-y { position: relative; }
+.graf-y span { position: absolute; right: 6px; transform: translateY(-50%); font-size: 13px; color: var(--tinta-2); white-space: nowrap; }
+.graf-area { position: relative; border-left: 1.5px solid var(--linha); border-bottom: 1.5px solid var(--linha); }
+.graf-area svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
+.graf-grade { stroke: var(--linha-clara); stroke-width: 1; vector-effect: non-scaling-stroke; }
+.graf-faixa { stroke-width: 1.5; stroke-dasharray: 6 4; vector-effect: non-scaling-stroke; }
+.graf-faixa.alerta { stroke: var(--vermelho); }
+.graf-faixa.atencao { stroke: var(--ambar); }
+.graf-linha { fill: none; stroke-width: 2.5; stroke-linejoin: round; vector-effect: non-scaling-stroke; }
+.graf-linha.s1, .graf-ponto.s1, .graf-leg i.s1 { stroke: var(--serie-1); background: var(--serie-1); }
+.graf-linha.s2, .graf-ponto.s2, .graf-leg i.s2 { stroke: var(--serie-2); background: var(--serie-2); }
+.graf-linha.s3, .graf-ponto.s3, .graf-leg i.s3 { stroke: var(--serie-3); background: var(--serie-3); }
+.graf-linha.s4, .graf-ponto.s4, .graf-leg i.s4 { stroke: var(--serie-4); background: var(--serie-4); }
+.graf-ponto { position: absolute; width: 9px; height: 9px; border-radius: 50%; transform: translate(-50%, -50%); border: 1.5px solid var(--papel); }
+.graf-x { position: relative; height: 20px; margin-left: 44px; }
+.graf-x span { position: absolute; top: 3px; transform: translateX(-50%); font-size: 13px; color: var(--tinta-2); }
+.graf-x span:first-child { transform: none; }
+.graf-legenda { display: flex; flex-wrap: wrap; gap: 4px 14px; margin-top: 4px; font-size: 15px; }
+.graf-leg { display: inline-flex; align-items: center; gap: 6px; }
+.graf-leg i { width: 14px; height: 4px; border-radius: 2px; display: inline-block; }
+.graf-leg.limite i { height: 0; border-top: 2px dashed var(--vermelho); background: none; }
+.graf-leg.limite.atencao i { border-top-color: var(--ambar); }
+.graf-leg small { color: var(--tinta-2); }
