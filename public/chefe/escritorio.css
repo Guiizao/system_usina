@@ -2,6 +2,8 @@
  * © 2026 Guilherme. Todos os direitos reservados. Uso somente com autorização do autor (veja LICENCA.txt). */
 
 /* ---------- Escritório (versão 2.13): cálculos, rastreamento de lotes e etiqueta ---------- */
+/* 2.16: as duas partes dividem a largura (sem a terceira coluna vazia da escolha de função) */
+@media (min-width: 760px) { main.escritorio .papeis { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 main.escritorio { max-width: 1100px; margin: 0 auto; width: 100%; display: grid; gap: 14px; align-content: start; }
 main.escritorio .bloco h2 { display: flex; align-items: center; gap: 8px; margin: 0 0 6px; }
 main.escritorio .bloco h2 svg.ico { width: 26px; height: 26px; }
