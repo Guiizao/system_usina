@@ -8,7 +8,7 @@ import { fileURLToPath } from 'node:url';
 import { teste, certo, igual } from './teste.mjs';
 
 const require = createRequire(import.meta.url);
-export const Cifra = require(path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'public', 'cifra.js'));
+export const Cifra = require(path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'public', 'bibliotecas', 'cifra.js'));
 
 /** X25519 do Node (OpenSSL), para conferir a versão escrita em JavaScript. */
 function x25519Node(escalar, u) {

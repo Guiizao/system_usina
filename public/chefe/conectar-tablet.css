@@ -1,0 +1,14 @@
+/* Pranchetas Ubirálcool - conectar um tablet (QR code)
+ * © 2026 Guilherme. Todos os direitos reservados. Uso somente com autorização do autor (veja LICENCA.txt). */
+
+/* Conectar um tablet: compacto no painel, QR grande no popup */
+.conectar button.qr { cursor: pointer; }
+.conectar-info small { display: block; font-size: 15px; color: var(--tinta-2); }
+.conectar-info .linha-botoes { gap: 8px; flex-wrap: wrap; }
+.qr-modal { display: grid; grid-template-columns: auto 1fr; gap: 22px; align-items: center; margin-top: 12px; }
+.qr-modal .qr-grande { background: var(--branco); padding: 10px; border-radius: 12px; border: 2px solid var(--linha-clara); }
+.qr-modal .qr-grande svg { display: block; width: 300px; height: 300px; }
+.passos-conectar { margin: 0; padding-left: 26px; display: grid; gap: 14px; font-size: 20px; }
+.passos-conectar .endereco { display: block; font-size: 24px; font-weight: 700; margin-top: 4px; }
+.passos-conectar .codigo-grande { display: block; margin-top: 4px; }
+@media (max-width: 700px) { .qr-modal { grid-template-columns: 1fr; justify-items: center; } .qr-modal .qr-grande svg { width: 240px; height: 240px; } }

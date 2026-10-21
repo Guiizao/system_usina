@@ -204,7 +204,7 @@ export async function testarApi(central, grupo) {
   });
   await teste(grupo, 'arquivos do aplicativo: página, script, página de baixar e 404', async () => {
     const pag = await pedir('/'); igual(pag.status, 200); certo(/text\/html/.test(pag.headers.get('content-type')), 'tipo da página');
-    const js = await pedir('/app.js'); igual(js.status, 200); certo(/javascript/.test(js.headers.get('content-type')), 'tipo do script');
+    const js = await pedir('/config/forms.js'); igual(js.status, 200); certo(/javascript/.test(js.headers.get('content-type')), 'tipo do script');
     igual((await pedir('/baixar')).status, 200, 'baixar');
     igual((await pedir('/nao-existe.js')).status, 404, '404');
   });
@@ -260,6 +260,29 @@ export async function testarApi(central, grupo) {
     certo(r.json.registros.length > 8000, 'faltou anotação');
     certo(busca < 8000, 'busca lenta: ' + busca + ' ms');
     return `envio ${envio} ms, busca de tudo ${busca} ms, ${(r.texto.length / 1048576).toFixed(1)} MB`;
+  });
+  await teste(grupo, '2.16: tablet da caldeira grava nas duas; outro setor não cria nem altera nelas', async () => {
+    // a central deixa 6 conexões por minuto do mesmo IP: este grupo já conectou outros, então espera a vez
+    const conectar = async (id) => { for (let i = 0; i < 4; i++) { const c = await conectarTeste(U, central.codigo(), id); if (c.pedir) return c; if (c.status !== 429) throw new Error(id + ': ' + JSON.stringify(c)); await dormir(20000); } throw new Error(id + ': limite de conexões'); };
+    const cal = await conectar('teste-caldeiras216');
+    const outro = await conectar('teste-ralo216');
+    const regs = ['caldeira', 'caldeira_2'].map((pid, i) => registro('7', { pressao: String(5 + i) }, Date.now(), {
+      id: `${hoje()}|${pid}|7`, prancheta: pid, setor: 'caldeira', aparelho: cal.aparelho,
+    }));
+    const salvo = await cal.pedir('/api/sync', { corpo: { aparelho: cal.aparelho, papel: 'caldeira', registros: regs } });
+    igual(salvo.status, 200); igual(salvo.json.aceitos, 2); igual(salvo.json.recusados || [], []);
+    const invasoes = regs.flatMap((r) => [
+      { ...r, aparelho: outro.aparelho, atualizadoEm: r.atualizadoEm + 100, valores: { pressao: '99' } },
+      { ...r, id: `${hoje()}|${r.prancheta}|8`, chave: '8', aparelho: outro.aparelho },
+    ]);
+    const negado = await outro.pedir('/api/sync', { corpo: { aparelho: outro.aparelho, papel: 'ralo', registros: invasoes } });
+    igual(negado.status, 200); igual(negado.json.aceitos, 0);
+    igual(negado.json.recusados.map((r) => r.motivo), Array(4).fill('sem_permissao'));
+    const lidos = (await cal.pedir('/api/registros?desde=0')).json.registros;
+    for (const r of regs) {
+      igual(lidos.find((x) => x.id === r.id).valores, r.valores, r.prancheta + ': preservada');
+      certo(!lidos.some((x) => x.id === `${hoje()}|${r.prancheta}|8`), 'não criou em ' + r.prancheta);
+    }
   });
   await teste(grupo, 'central reiniciada: nada se perde e o código continua o mesmo', async () => {
     const codigo = central.codigo(); const seq = (await pedir('/api/status', { chave })).json.seq;

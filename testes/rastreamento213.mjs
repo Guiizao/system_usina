@@ -4,16 +4,16 @@ import os from 'node:os';
 import path from 'node:path';
 import vm from 'node:vm';
 import { createRequire } from 'node:module';
-import { teste, certo, igual } from './teste.mjs';
+import { teste, certo, igual, usinaNoContexto, caminhoNovo } from './teste.mjs';
 
-const require = createRequire(import.meta.url), R = require('../public/rastreamento.js');
+const require = createRequire(import.meta.url), R = require('../public/bibliotecas/rastreamento.js');
 const DIA = '2026-10-07';
-const fonte = (nome) => fs.readFileSync(new URL('../public/' + nome, import.meta.url), 'utf8');
+const fonte = (nome) => fs.readFileSync(new URL('../public/' + caminhoNovo(nome), import.meta.url), 'utf8');
 const fmtNum = (v) => String(v).replace('.', ',');
 const fmtData = (v) => v.split('-').reverse().join('/');
 const reg = (prancheta, chave, valores, extra = {}) => ({ prancheta, chave, valores, data: DIA, operador: 'Bruno', ...extra });
 const perto = (n, esperado) => certo(Math.abs(n - esperado) < 0.000001, `${n} difere de ${esperado}`);
-function forms() { const c = { window: {} }; vm.runInNewContext(fonte('forms.js'), c); return JSON.parse(JSON.stringify(c.window.USINA)); }
+function forms() { const c = { window: {} }; usinaNoContexto(c); return JSON.parse(JSON.stringify(c.window.USINA)); }
 function exemplo(C) {
   const registros = [
     reg('ins_materia_prima', '7', { qtd: '15000', unidade: 'kg', produto: 'Milho', fornecedor: 'Fornecedor A', nf: '123' }),

@@ -1,0 +1,204 @@
+/* Pranchetas Ubirálcool - a prancheta: quadros, teclado e folha
+ * © 2026 Guilherme. Todos os direitos reservados. Uso somente com autorização do autor (veja LICENCA.txt). */
+
+/* ---------- Tela de anotação: prancheta (70%) + teclado (30%) ---------- */
+/* Ralo (2.16): os bags já somados ficam pequenos em cima do total; o que acabou de somar sobe de leve */
+.campo .parcelas { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 6px; font-size: 22px; color: var(--tinta-2); font-variant-numeric: tabular-nums; }
+.campo .parcelas i { font-style: normal; opacity: .7; }
+.campo .parcelas b.nova { animation: bagSobe var(--mov-janela, .24s) var(--suave, ease-out) both; }
+@keyframes bagSobe { from { opacity: 0; transform: translateY(26px) scale(1.8); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .campo .parcelas b.nova { animation: none; } }
+.cabecalho-form .caixinhas { display: inline-flex; gap: 8px; }
+.cabecalho-form .caixinha { width: 52px; height: 52px; padding: 0; display: grid; place-items: center; }
+.cabecalho-form .caixinha svg.ico { width: 26px; height: 26px; }
+.edicao { flex: 1 1 auto; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr); }
+.edicao .coluna { min-width: 0; min-height: 0; display: flex; flex-direction: column; }
+.barra-trabalho { flex: none; padding: 10px 18px 0; display: flex; flex-direction: column; }
+.edicao main { display: flex; flex-direction: column; padding-top: 8px; }
+.edicao main .grupos { flex: 1 1 auto; align-content: start; }
+
+.rodape { flex: none; z-index: 15; display: flex; gap: 12px; padding: 12px 20px; background: var(--papel); border-top: 2px solid var(--linha-clara); }
+.rodape .btn { flex: 1; min-height: 80px; font-size: 25px; }
+
+.painel { display: none; }
+.edicao.com-painel .painel {
+  display: flex; flex-direction: column; gap: 10px;
+  background: var(--papel); border-left: 3px solid var(--grafite); padding: 14px;
+  position: static; height: 100%; min-height: 0; overflow: auto; z-index: 25;
+}
+/* Tablet ou celular deitado: prancheta | teclado do lado */
+@media (min-width: 640px) and (orientation: landscape) {
+  :root { --painel-w: clamp(320px, 32vw, 520px); }
+  .edicao.com-painel { grid-template-columns: minmax(0, 1fr) var(--painel-w); }
+}
+/* Em pé (tablet ou celular): teclado encosta embaixo, com a altura do que tem dentro */
+@media (max-width: 639px), (orientation: portrait) {
+  :root {
+    --painel-max: calc(74dvh / var(--escala, 1));
+    --tecla-h: clamp(46px, calc(5dvh / var(--escala, 1)), 76px);
+  }
+  .edicao.modo-letras { --painel-max: calc(86dvh / var(--escala, 1)); }
+  .edicao.com-painel { grid-template-rows: minmax(0, 1fr) auto; }
+  .edicao.com-painel .painel {
+    width: auto; z-index: 40; height: auto; max-height: var(--painel-max);
+    border-left: 0; border-top: 3px solid var(--grafite);
+    box-shadow: 0 -6px 18px var(--sombra-leve); padding: 10px 12px max(10px, env(safe-area-inset-bottom));
+  }
+  .edicao.com-painel .painel > .teclas { flex: none; grid-auto-rows: var(--tecla-h); }
+  .edicao.com-painel .painel > .teclas.letras { grid-auto-rows: calc(var(--tecla-h) * .9); }
+  .edicao.com-painel .rodape { display: none; }
+}
+
+.painel-cab { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+.painel-cab div { min-width: 0; }
+.painel-cab small { display: block; font-size: 15px; color: var(--tinta-2); }
+.painel-cab b { display: block; font-size: 24px; line-height: 1.1; }
+.painel-cab span { display: block; font-size: 16px; color: var(--tinta-2); }
+.painel-cab .btn { min-height: 50px; font-size: 16px; padding: 0 12px; flex: none; }
+
+/* 2.16: no painel estreito (tela dividida) os botões − e + afinam, e o Ocultar fica só com o desenho */
+.edicao .painel { container-type: inline-size; }
+.valor-linha { display: grid; grid-template-columns: clamp(52px, 20%, 76px) minmax(0, 1fr) clamp(52px, 20%, 76px); gap: 8px; align-items: stretch; }
+@container (max-width: 360px) { .painel-cab-botoes .btn span { display: none; } }
+.valor-linha.sem-mm { grid-template-columns: minmax(0, 1fr); }
+.valor-linha .mm { border-radius: 8px; background: var(--grafite); color: var(--branco); font-size: 46px; font-weight: 700; line-height: 1; text-align: center; min-height: 88px; }
+.valor-linha .mm:active { background: var(--preto); }
+.visor {
+  display: flex; align-items: baseline; justify-content: flex-end; gap: 8px; min-width: 0; overflow: hidden;
+  min-height: 88px; padding: 8px 14px; border-radius: 8px; background: var(--papel); border: 3px solid var(--grafite);
+  font-size: 54px; font-weight: 700; line-height: 1.2; white-space: nowrap;
+}
+.visor small { font-size: 22px; color: var(--tinta-2); font-weight: 400; }
+.visor .marcado { background: var(--azul-sel); border-radius: 4px; padding: 0 4px; }
+.visor .cursor { display: inline-block; width: 3px; height: .9em; background: var(--tinta); margin-left: 2px; animation: piscar 1s steps(1) infinite; }
+@keyframes piscar { 50% { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .visor .cursor { animation: none; } }
+.visor .apagado { color: var(--linha); }
+.visor.longo { font-size: 40px; }
+.visor.texto { justify-content: flex-start; font-size: 30px; white-space: normal; word-break: break-word; }
+.visor.fora { border-color: var(--vermelho); background: var(--vermelho-fundo); color: var(--vermelho); }
+.alerta-texto { display: flex; gap: 10px; align-items: center; color: var(--vermelho); background: var(--vermelho-fundo); padding: 8px 12px; border-radius: 8px; font-weight: 700; font-size: 17px; }
+.dica-painel { font-size: 16px; color: var(--tinta-2); margin: 0; }
+
+.fichas { display: flex; flex-wrap: wrap; gap: 8px; }
+.fichas button { min-height: 54px; min-width: 64px; padding: 0 14px; border-radius: 8px; background: var(--papel); border: 2px solid var(--linha); font-size: 21px; font-weight: 700; text-align: center; }
+.fichas button.sel { background: var(--grafite); border-color: var(--grafite); color: var(--branco); }
+.fichas button.largo { flex: 1; display: inline-flex; align-items: center; justify-content: center; gap: 8px; }
+
+.teclas { flex: 1 1 auto; display: grid; gap: 8px; grid-template-columns: repeat(3, 1fr); grid-auto-rows: minmax(46px, 1fr); }
+.teclas.letras { grid-template-columns: repeat(5, 1fr); grid-auto-rows: minmax(48px, 1fr); }
+.teclas button { border-radius: 8px; background: var(--papel-2); border: 2px solid var(--linha-clara); font-size: 36px; font-weight: 700; text-align: center; display: flex; align-items: center; justify-content: center; }
+.teclas.letras button { font-size: 26px; }
+.teclas button:active { background: var(--verde-fundo); border-color: var(--verde); }
+.teclas button.menor { font-size: 19px; }
+.teclas button.escura { background: var(--grafite); color: var(--branco); border-color: var(--grafite); font-size: 20px; }
+.teclas button svg.ico { width: 36px; height: 36px; }
+.teclas .span2 { grid-column: span 2; }
+.teclas .span3 { grid-column: span 3; }
+.opcoes-painel { flex: 1; display: grid; gap: 10px; grid-auto-rows: minmax(84px, auto); align-content: start; }
+.opcoes-painel button { border-radius: 10px; background: var(--papel); border: 2px solid var(--linha); font-size: 30px; font-weight: 700; display: flex; align-items: center; justify-content: center; gap: 10px; }
+.opcoes-painel button.sel { border: 4px solid var(--verde); background: var(--verde-fundo); color: var(--verde-escuro); }
+.painel-nav { display: grid; grid-template-columns: 1fr 1.6fr; gap: 8px; }
+/* lembrete de anotar a cada hora (versão 2.13): faixa no alto, laranja; passou das :30, vermelha e piscando */
+.lembrete { position: fixed; z-index: 60; left: 50%; transform: translateX(-50%); top: calc(var(--topo, 72px) + 8px); width: min(760px, calc((100vw - 24px) / var(--escala, 1)));
+  display: flex; flex-wrap: wrap; align-items: center; gap: 10px 12px; padding: 10px 12px 10px 16px; border-radius: 10px; background: var(--ambar-fundo, #fbefcf); color: var(--tinta);
+  border: 3px solid var(--ambar, #9a6a00); box-shadow: 0 6px 18px var(--sombra); font-size: 19px; }
+.lembrete[hidden] { display: none; }
+/* o texto fica com quase toda a sobra; sem espaço, o botão desce sozinho e ocupa a linha inteira */
+.lembrete span { flex: 99 1 220px; min-width: 0; }
+.lembrete b { display: block; font-size: 21px; }
+.lembrete .btn { flex: 1 0 auto; min-height: 56px; }
+.lembrete svg.ico { width: 30px; height: 30px; flex: none; }
+.lembrete.urgente { background: var(--vermelho-fundo); border-color: var(--vermelho); color: var(--vermelho); animation: piscarLembrete 1s steps(2) infinite; }
+@keyframes piscarLembrete { 50% { border-color: transparent; } }
+@media (prefers-reduced-motion: reduce) { .lembrete.urgente { animation: none; } }
+.lembrete-config, .turnos-config { margin-top: 12px; flex-wrap: wrap; }
+.linha-config.lembrete-config > div, .linha-config.turnos-config > div { flex: 1 1 220px; }
+/* liga e desliga com o horário do lado: mudam de linha juntos */
+.lembrete-controles { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.linha-config.lembrete-config small, .linha-config.turnos-config small { word-break: normal; }
+.linha-horario { display: flex; flex-wrap: wrap; gap: 12px 20px; margin: 14px 0 6px; }
+.linha-horario label { display: flex; align-items: center; gap: 10px; font-size: 19px; font-weight: 700; }
+.linha-horario select { min-height: 54px; font-size: 20px; padding: 0 10px; border-radius: 8px; border: 2px solid var(--linha); background: var(--papel); color: var(--tinta); }
+/* painel que não cabe na tela (versão 2.13): sem a dica e com o visor menor; se ainda não couber, teclas menores. Nunca rola. */
+.painel.apertado .dica-painel { display: none; }
+.painel.apertado .visor { min-height: 64px; font-size: 40px; padding-block: 4px; align-items: center; }
+.painel.muito-apertado { gap: 6px; }
+.painel.muito-apertado .teclas { grid-auto-rows: minmax(34px, 1fr); gap: 6px; }
+.painel.muito-apertado .painel-nav .btn { min-height: 50px; }
+.painel-nav .btn { min-height: 70px; font-size: 22px; padding: 0 10px; }
+
+/* ---------- Seletor de linha (dornas / horas) ---------- */
+.seletor { flex: none; display: flex; gap: 8px; overflow-x: auto; padding: 2px 2px 8px; scrollbar-width: none; }
+.seletor button {
+  flex: none; min-width: 80px; min-height: 66px; padding: 0 10px; border-radius: 10px;
+  background: var(--papel); border: 2px dashed var(--linha);
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
+  font-size: 24px; font-weight: 700; text-align: center;
+}
+.seletor button small { font-size: 14px; font-weight: 700; }
+.seletor button.feita { border-style: solid; border-color: var(--verde); color: var(--verde-escuro); }
+.seletor button.atual { border: 3px solid var(--ambar); background: var(--ambar-fundo); color: var(--ambar-texto); }
+.seletor button.nova { border: 3px solid var(--verde); color: var(--verde-escuro); flex-direction: row; gap: 6px; font-size: 21px; padding: 0 16px; }
+.seletor button.sel { background: var(--grafite); border: 3px solid var(--grafite); color: var(--branco); }
+
+.cabecalho-form { display: flex; align-items: center; gap: 8px 12px; margin: 0 0 8px; overflow-x: auto; scrollbar-width: none; }
+.cabecalho-form::-webkit-scrollbar { display: none; }
+.cabecalho-form .aviso, .cabecalho-form .btn { flex: none; white-space: nowrap; }
+.cabecalho-form h2 { margin: 0; font-size: 32px; }
+.aviso { display: inline-flex; align-items: center; gap: 8px; padding: 6px 12px; border-radius: 8px; background: var(--papel); border: 2px solid var(--linha-clara); font-size: 16px; color: var(--tinta-2); }
+.aviso.ok { border-color: var(--verde-borda); background: var(--verde-fundo); color: var(--verde-escuro); font-weight: 700; }
+
+/* ---------- Quadros de anotação ---------- */
+/* Blocos de quadros: o que anda junto fica junto */
+.grupos { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 268px), 1fr)); gap: 10px; align-items: start; }
+.grupo { background: var(--papel-2); border: 2px solid var(--linha-clara); border-radius: 12px; padding: 8px 10px 10px; }
+.grupo h3 { margin: 0 0 6px; font-size: 17px; font-weight: 700; color: var(--tinta-2); }
+.grupo .par { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.grupo .par.um { grid-template-columns: 1fr; }
+.grupo .campo { min-height: 92px; padding: 8px 10px; }
+.grupo .campo .val { font-size: 36px; white-space: nowrap; overflow: hidden; }
+.grupo .campo .val.texto { white-space: normal; overflow-wrap: normal; }
+.grupo .campo .rot svg.ico { width: 20px; height: 20px; color: var(--vermelho); }
+.grupo .campo .rot { font-size: 17px; }
+.chip.sel { background: var(--grafite); color: var(--branco); border-color: var(--grafite); }
+
+.campos { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 176px), 1fr)); gap: 12px; }
+.campo { position: relative; display: flex; flex-direction: column; align-items: stretch; min-height: 122px; padding: 12px 14px; border-radius: 10px; background: var(--papel); border: 2px dashed var(--linha); }
+.campo .rot { font-size: 18px; font-weight: 700; color: var(--tinta-2); }
+.campo .val { margin-top: auto; font-size: 44px; font-weight: 700; line-height: 1.05; white-space: nowrap; overflow: hidden; }
+.campo .val small { font-size: 19px; color: var(--tinta-2); margin-left: 6px; font-weight: 400; }
+.campo .val.vazio { font-size: 18px; font-weight: 400; color: var(--tinta-2); white-space: nowrap; overflow: hidden; line-height: 1.2; }
+.campo .val.texto { font-size: 26px; overflow-wrap: normal; word-break: normal; }
+.campo.preenchido { border-style: solid; border-color: var(--grafite); }
+.campo.fora { border: 3px solid var(--vermelho); background: var(--vermelho-fundo); }
+.campo.fora .rot, .campo.fora .val { color: var(--vermelho); }
+.campo.ativo { border: 4px solid var(--foco); background: var(--ativo-fundo); box-shadow: 0 0 0 3px var(--azul-sel); }
+.campo .marca { display: inline-flex; align-items: center; gap: 8px; color: var(--verde-escuro); }
+.campo .marca svg.ico { width: 40px; height: 40px; stroke-width: 3; }
+.campo.largo { grid-column: 1 / -1; min-height: 100px; }
+
+/* ---------- Folha estilo papel ---------- */
+.folha { background: var(--papel); border: 2px solid var(--linha-clara); border-radius: 10px; overflow: hidden; }
+.folha-cab { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 4px 16px; padding: 12px 16px; border-bottom: 2px solid var(--linha-clara); }
+.folha-cab b { font-size: 19px; }
+.folha-cab span { color: var(--tinta-2); font-size: 16px; }
+.tabela-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+table.papel { border-collapse: collapse; width: 100%; font-size: 19px; }
+table.papel th, table.papel td { border: 1px solid var(--linha-clara); padding: 11px 10px; text-align: center; white-space: nowrap; }
+table.papel th { background: var(--papel-2); font-size: 16px; font-weight: 700; color: var(--tinta-2); }
+table.papel th.lateral, table.papel td.lateral { position: sticky; left: 0; z-index: 1; background: var(--papel-2); text-align: left; font-weight: 700; color: var(--tinta); }
+table.papel tr.clicavel td, table.papel td.clicavel { cursor: pointer; }
+table.papel tr.clicavel:active td { background: var(--verde-fundo); }
+table.papel tr.sel td, table.papel td.sel, table.papel th.sel { background: var(--azul-sel); }
+table.papel .agora { box-shadow: inset 0 -4px 0 var(--ambar); }
+table.papel td.aberta { color: var(--ambar-texto); font-weight: 700; }
+table.papel td.vazia { color: var(--tinta-2); padding: 30px; white-space: normal; }
+table.papel td.escritorio { color: var(--tinta-2); }
+table.papel td.fora { background: var(--vermelho-fundo); color: var(--vermelho); font-weight: 700; }
+
+.turnos { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; }
+.turno { background: var(--papel); border: 2px solid var(--linha-clara); border-radius: 10px; padding: 12px 16px; }
+.turno h3 { margin: 0 0 4px; font-size: 20px; }
+.turno p { margin: 3px 0; font-size: 17px; }
+.turno p span { color: var(--tinta-2); }

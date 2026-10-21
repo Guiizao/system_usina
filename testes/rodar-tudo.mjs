@@ -44,7 +44,9 @@ import { testarEnvio213 } from './envio213.mjs';
 import { testarLembrete213 } from './lembrete213.mjs';
 import { testarTurnos213 } from './turnos213.mjs';
 import { testarConexao2135 } from './conexao2135.mjs';
+import { testarWindows216 } from './windows216.mjs';
 import { testarApkWeb } from './rodar-apk-web.mjs';
+import { testarTotais216 } from './totais216.mjs';
 import { centralNode, centralJava, APP } from './servidores.mjs';
 
 const SAIDA = path.join(APP, 'testes', 'saida');
@@ -54,7 +56,7 @@ const grupos = [];
 
 // 1. código
 const g1 = novoGrupo('Código sem erro de escrita');
-const js = ['server.js', ...fs.readdirSync(path.join(APP, 'public')).filter((n) => n.endsWith('.js')).map((n) => 'public/' + n), ...fs.readdirSync(path.join(APP, 'testes')).filter((n) => n.endsWith('.mjs')).map((n) => 'testes/' + n)];
+const js = ['server.js', 'carregar-usina.js', ...fs.readdirSync(path.join(APP, 'public'), { recursive: true }).filter((n) => n.endsWith('.js') && !/^lib[\\/]/.test(n)).map((n) => 'public/' + n.replace(/\\/g, '/')), ...fs.readdirSync(path.join(APP, 'testes')).filter((n) => n.endsWith('.mjs')).map((n) => 'testes/' + n)];
 for (const f of js) await teste(g1, f, async () => { execFileSync(process.execPath, ['--check', path.join(APP, f)], { stdio: 'pipe' }); });
 await teste(g1, 'scripts de treino do leitor (Python)', async () => {
   for (const f of fs.readdirSync(path.join(APP, 'treino-leitor')).filter((n) => n.endsWith('.py'))) {
@@ -63,6 +65,10 @@ await teste(g1, 'scripts de treino do leitor (Python)', async () => {
   }
 });
 grupos.push(g1);
+
+const gw = novoGrupo('Aplicativo Windows 2.16');
+await testarWindows216(gw);
+grupos.push(gw);
 
 // 2. configuração
 const g2 = novoGrupo('Configuração das folhas (forms.js)');
@@ -118,6 +124,12 @@ for (const [nome, ligar, porta] of [['computador', centralNode, 8245], ['tablet 
 for (const [nome, ligar, porta] of [['computador', centralNode, 8271], ['tablet chefe', centralJava, 8272]]) {
   const g = novoGrupo('Longo prazo e central nova, direto na central do ' + nome);
   await testarRobustezCentral(ligar, porta, g);
+  grupos.push(g);
+}
+
+{
+  const g = novoGrupo('Totais e atualização 2.16');
+  await testarTotais216(g);
   grupos.push(g);
 }
 

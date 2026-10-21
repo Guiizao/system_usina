@@ -14,7 +14,7 @@ import vm from 'node:vm';
 import crypto from 'node:crypto';
 import { spawn, execFileSync } from 'node:child_process';
 import { dormir } from './navegador.mjs';
-import { teste, certo, igual, SENHA_ENCARREGADO } from './teste.mjs';
+import { teste, certo, igual, SENHA_ENCARREGADO, usinaNoContexto } from './teste.mjs';
 import { centralNode, centralJava, pastaTemporaria, APP } from './servidores.mjs';
 import { diaDeExemplo } from './api-leitura.mjs';
 import { chaveDeTeste, telasDeTeste, montarPacote } from './atualizacao.mjs';
@@ -68,7 +68,7 @@ export async function ligarNuvem(porta) {
 /** As folhas (forms.js) como o aplicativo do tablet chefe manda para a central do tablet. */
 function formsDoApp() {
   const ctx = { window: {} };
-  vm.runInNewContext(fs.readFileSync(path.join(APP, 'public', 'forms.js'), 'utf8'), ctx);
+  usinaNoContexto(ctx);
   return JSON.parse(JSON.stringify(ctx.window.USINA));
 }
 

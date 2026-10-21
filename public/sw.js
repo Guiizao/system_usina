@@ -1,12 +1,18 @@
 /* Pranchetas Digitais - © 2026 Guilherme. Todos os direitos reservados. Uso somente com autorização do autor (veja LICENCA.txt). */
 // Service worker: deixa o app abrir mesmo sem Wi-Fi (quando aberto pelo navegador).
-const CACHE = 'pranchetas-v20';
-const ARQUIVOS = ['./', 'index.html', 'styles.css', 'forms.js', 'folhas.js', 'rastreamento.js', 'xlsx.js', 'modelos.js', 'pdf.js', 'leitor.js', 'qrcode.js', 'cifra.js', 'novidades.js', 'app.js', 'manifest.webmanifest',
+const CACHE = 'pranchetas-v21';
+// 2.16: o aplicativo está em pastas. Os scripts vêm da lista do index.html e os estilos da lista do styles.css,
+// então arquivo novo entra sozinho aqui.
+const FIXOS = ['./', 'index.html', 'styles.css', 'manifest.webmanifest',
   'icons/icon-192.png', 'icons/icon-512.png', 'icons/logo.png', 'fonts/atkinson-hyperlegible-400.woff2', 'fonts/atkinson-hyperlegible-700.woff2',
   'fonts/atkinson-pdf-400.ttf', 'fonts/atkinson-pdf-700.ttf'];
+const listados = async (arquivo, padrao) => [...(await (await fetch(arquivo, { cache: 'no-store' })).text()).matchAll(padrao)].map((m) => m[1]);
 
 self.addEventListener('install', (e) => {
-  e.waitUntil(caches.open(CACHE).then((c) => c.addAll(ARQUIVOS)).then(() => self.skipWaiting()));
+  e.waitUntil(caches.open(CACHE).then(async (c) => {
+    await c.addAll(FIXOS);
+    await c.addAll([...await listados('index.html', /<script src="([^"]+)"/g), ...await listados('styles.css', /@import url\("([^"]+)"\)/g)]);
+  }).then(() => self.skipWaiting()));
 });
 
 self.addEventListener('activate', (e) => {

@@ -15,7 +15,10 @@ import { centralNode, pastaTemporaria, APP } from './servidores.mjs';
 export function copiaEmbaralhada() {
   const destino = pastaTemporaria('www');
   fs.cpSync(path.join(APP, 'public'), destino, { recursive: true });
-  for (const js of ['app.js', 'forms.js', 'modelos.js', 'pdf.js', 'xlsx.js', 'leitor.js', 'cifra.js']) { // qrcode.js (MIT) vai como está
+  // 2.16: as partes do aplicativo viram um app.js só, como no APK
+  execSync(`node juntar-app.js "${destino}"`, { cwd: path.join(APP, 'apk'), stdio: 'pipe' });
+  const todos = fs.readdirSync(destino, { recursive: true }).filter((n) => n.endsWith('.js') && !n.endsWith('qrcode.js') && !/^lib[\\/]/.test(n));
+  for (const js of todos) { // qrcode.js (MIT) e a pasta lib vão como estão
     const arquivo = path.join(destino, js);
     execSync(`npx terser "${arquivo}" --compress --mangle --comments "/Guilherme/" -o "${arquivo}"`, { cwd: path.join(APP, 'apk'), stdio: 'pipe' });
   }

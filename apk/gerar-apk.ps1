@@ -20,17 +20,25 @@ if (Test-Path www) { Remove-Item www -Recurse -Force }
 Copy-Item ..\public www -Recurse
 # baixar.html fica: o tablet chefe mostra essa página para quem lê o QR code
 Remove-Item www\sw.js, www\moldura.html, www\testes.js, www\teste-*.jpg -ErrorAction SilentlyContinue
+# 2.16: no código o aplicativo fica em pastas; no APK as partes voltam a ser um app.js só
+& node (Join-Path $aqui 'juntar-app.js') www
+if ($LASTEXITCODE -ne 0) { throw 'Não consegui juntar as partes do aplicativo' }
 
 # Proteção (versão 2.4): o código vai para o APK embaralhado (nomes trocados, sem comentários nem espaços).
 # Quem abrir o APK não lê o código do jeito que ele foi escrito. O mapa para entender os erros fica só em saida\mapas.
 Log 'Embaralhando o código do aplicativo...'
 New-Item -ItemType Directory -Force saida\mapas | Out-Null
 # (o qrcode.js é uma biblioteca aberta, licença MIT: vai como está, com o aviso do autor dela)
-foreach ($js in 'app.js', 'forms.js', 'folhas.js', 'rastreamento.js', 'modelos.js', 'pdf.js', 'xlsx.js', 'leitor.js', 'cifra.js') {
+# 2.16: todos os .js das pastas (menos o qrcode.js e a pasta lib, que são de outros autores)
+$raizWww = (Resolve-Path www).Path
+$todos = Get-ChildItem www -Recurse -Filter *.js | Where-Object { $_.Name -ne 'qrcode.js' -and $_.FullName -notmatch '\\lib\\' }
+foreach ($item in $todos) {
+  $js = $item.FullName.Substring($raizWww.Length + 1)
   $arquivo = "www\$js"
-  & cmd /c "npx terser `"$arquivo`" --compress --mangle --comments `"/Guilherme/`" --source-map `"filename='$js'`" -o `"$arquivo`"" 2>&1 | Select-Object -Last 2
+  $mapa = $js -replace '[\\/]', '_'
+  & cmd /c "npx terser `"$arquivo`" --compress --mangle --comments `"/Guilherme/`" --source-map `"filename='$mapa'`" -o `"$arquivo`"" 2>&1 | Select-Object -Last 2
   if ($LASTEXITCODE -ne 0) { throw "Não consegui embaralhar $js" }
-  if (Test-Path "$arquivo.map") { Move-Item "$arquivo.map" "saida\mapas\$js.map" -Force }
+  if (Test-Path "$arquivo.map") { Move-Item "$arquivo.map" "saida\mapas\$mapa.map" -Force }
 }
 
 if (-not (Test-Path android)) {

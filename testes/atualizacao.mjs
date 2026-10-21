@@ -22,11 +22,11 @@ import { centralNode, centralJava, pastaTemporaria, APP } from './servidores.mjs
 import { conectarTeste } from './cifra.mjs';
 
 const sha = (b) => crypto.createHash('sha256').update(b).digest('hex');
-const VERSAO = /const VERSAO = '([\d.]+)'/.exec(fs.readFileSync(path.join(APP, 'public', 'app.js'), 'utf8'))[1];
+const VERSAO = /const VERSAO = '([\d.]+)'/.exec(fs.readFileSync(path.join(APP, 'public', 'nucleo', 'base.js'), 'utf8'))[1];
 const JDK = path.join(os.homedir(), 'android-build', 'jdk', 'bin');
 function novidades() {
   const ctx = { window: {} };
-  vm.runInNewContext(fs.readFileSync(path.join(APP, 'public', 'novidades.js'), 'utf8'), ctx);
+  vm.runInNewContext(fs.readFileSync(path.join(APP, 'public', 'config', 'novidades.js'), 'utf8'), ctx);
   return ctx.window.NOVIDADES;
 }
 
@@ -60,7 +60,7 @@ export function telasDeTeste(texto = 'versão de teste') {
 /** Monta o pacote das telas com o mesmo programa do gerar-apk.ps1 (versao-do-apk.js telas), com a chave de teste. */
 export function montarPacote(origem, destino, chave, versao, apkMinimo) {
   execFileSync(process.execPath, [path.join(APP, 'apk', 'versao-do-apk.js'), 'telas', origem, destino], {
-    env: Object.assign({}, process.env, { PRANCHETAS_CHAVE_TELAS: chave.privada, PRANCHETAS_CHAVE_PUBLICA: chave.publicaArquivo, PRANCHETAS_VERSAO: versao, APK_MINIMO: apkMinimo }), stdio: 'pipe',
+    env: Object.assign({}, process.env, { PRANCHETAS_CHAVE_TELAS: chave.privada, PRANCHETAS_CHAVE_PUBLICA: chave.publicaArquivo, PRANCHETAS_VERSAO: versao, APK_MINIMO: apkMinimo }), stdio: 'inherit',
   });
   return JSON.parse(fs.readFileSync(path.join(destino, 'pacote.json'), 'utf8'));
 }
@@ -225,15 +225,23 @@ export async function testarAtualizacao(nav, grupo) {
     await a.avaliar(`localStorage.setItem('usina.cfg', JSON.stringify({ deviceId: ${JSON.stringify(cli.aparelho)}, chave: ${JSON.stringify(cli.chave)}, cifra: 1, central: ${JSON.stringify(c.url)}, papel: 'hidrolise', ultimoContato: Date.now(), versaoVista: ${JSON.stringify(VERSAO)}, op: null }))`);
     await a.ir(c.url + '/');
 
-    await teste(grupo, 'achou versão nova: a janela abre sozinha e a rápida ganha do APK (sem janela do Android)', async () => {
-      await a.esperar(modalTem('Versão nova: 9.5.0'), 35000, 'janela da versão nova');
-      certo(await a.avaliar(modalTem('baixa só o que mudou')), 'devia oferecer a atualização rápida');
-      certo(await a.avaliar('!!document.querySelector(".topo .tema.atualizar")'), 'o botão Atualizar fica no alto');
+    // 2.16: a rápida (só as telas) não abre janela: instala sozinha quando ninguém mexe no aparelho há um minuto
+    await teste(grupo, 'achou versão nova: a rápida ganha do APK e instala sozinha com o aparelho parado (sem janela)', async () => {
+      await a.esperar('!!document.querySelector(".topo .tema.atualizar")', 35000, 'botão Atualizar no alto');
+      certo(await a.avaliar('!document.querySelector(".modal")'), 'a rápida não abre janela');
+      await a.avaliar('ultimaAtividade = 0; avisarAtualizacao(); 1'); // parado há mais de um minuto
+      await a.esperar('(window.__pedidosTelas || []).length === 1', 8000, 'instalou sozinha');
+      const p = await a.avaliar('window.__pedidosTelas[0]');
+      igual(p.base, c.url + '/telas/'); igual(p.versao, '9.5.0');
+      igual(await a.avaliar('window.__pedidosAtualizar.length'), 0, 'não pode ter aberto o instalador do Android');
     });
-    await teste(grupo, 'atualização rápida: barra de progresso e as telas novas vêm da central', async () => {
+    await teste(grupo, 'atualização rápida pelo botão Atualizar: barra de progresso e as telas novas vêm da central', async () => {
+      await a.avaliar('atualizacao.instalando = false; 1');
+      await a.tocar('.topo .tema.atualizar');
+      await a.esperar(modalTem('baixa só o que mudou'), 8000, 'janela da atualização rápida');
       await a.tocar('.modal [data-k="ok"]');
       await a.esperar(modalTem('Abrindo a versão nova'), 8000, 'fim da atualização rápida');
-      const p = await a.avaliar('window.__pedidosTelas[0]');
+      const p = await a.avaliar('window.__pedidosTelas[1]');
       igual(p.base, c.url + '/telas/'); igual(p.versao, '9.5.0');
       igual(await a.avaliar('document.querySelector("#barra-atualizacao > i").style.width'), '100%');
       igual(await a.avaliar('window.__pedidosAtualizar.length'), 0, 'não pode ter aberto o instalador do Android');

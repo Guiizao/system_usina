@@ -52,11 +52,11 @@ Nos ajustes existe "Preencher com dados de exemplo".
 
 ## Onde mudar as coisas
 
-Tudo em `public/forms.js`:
+Desde a 2.16 cada setor tem a sua pasta: `public/setores/<setor>/pranchetas.js` (o setor, as folhas, os campos, os limites e os avisos dele). O resto fica em `public/config/forms.js`. Cores, letras e animações ficam em `public/design/` (veja a seção da 2.16).
 
 | O quê | Onde |
 |---|---|
-| Setores, pranchetas e campos | `setores` e `pranchetas` |
+| Setores, pranchetas e campos | `setores/<setor>/pranchetas.js` |
 | Faixa que acende o aviso vermelho | `min` e `max` de cada campo |
 | Avisos do processo (pH abaixo de 5, Brix acima de 25) | `avisos` de cada campo |
 | Unidades de cada insumo (kg, g, mL, L) | `insumo(..., [unidades])` |
@@ -64,7 +64,7 @@ Tudo em `public/forms.js`:
 | Valor que já vem preenchido | `padrao` |
 | Passo dos botões − e + | `passo` |
 | Turnos e hora que troca a folha | `turnos`, `inicioDoDia` |
-| Senha do encarregado | `pinAdmin` |
+| Senha do encarregado | `pinAdmin` (`config/forms.js`) |
 | Minutos parado até pedir a senha de novo | `minutosSemMexer` |
 | O que cada nível de tablet chefe faz | `niveisDoAparelho` |
 
@@ -161,6 +161,27 @@ Medido num tablet simulado 4 vezes mais lento que o computador, com a central gu
 - **Trocar o código de conexão** desconecta todos os outros aparelhos (aparelho perdido ou roubado): eles só voltam com o código novo.
 - Dois aparelhos criando a mesma linha sem um saber do outro (o chefe corrigiu nos segundos antes de receber): os valores se juntam, nada se perde.
 - **Código embaralhado no APK**: quem abrir o APK não lê o código do jeito que foi escrito (o mapa para entender erros fica só em `apk/saida/mapas`).
+
+## Pastas, duas caldeiras, atualização sozinha e totais na API (versão 2.16)
+
+A 2.16 mexe no APK (as centrais mudaram): instale por cima, primeiro no tablet chefe. Pedidos do Guilherme de 20/10/2026.
+
+- **O aplicativo em pastas** (para achar as coisas no VS Code). Nenhuma linha de código mudou de lugar na ordem: só foi dividida.
+  - `public/design/`: `cores.css` é a paleta (claro e escuro). Toda cor tem um nome ali; mudou o valor, muda em todas as telas. `tipografia.css` (a letra), `medidas.css`, `movimento.css` (`--ritmo: 1`; 2 deixa todas as animações duas vezes mais lentas), `telas/` (ajustes por tamanho de tela), `escala.js` e `texto-que-cabe.js`.
+  - `public/setores/<setor>/`: `pranchetas.js` (as folhas do setor), `regras.js` (o que só aquele setor faz: as dornas da hidrólise e a sacarificação, o volume do vinho, os bags do ralo) e `estilo.css`. Mexer na hidrólise não mexe nos outros setores.
+  - `public/paginas/` (telas de todo aparelho), `public/chefe/` (telas do tablet chefe e do escritório), `public/nucleo/` (memória, conexão, teclado, toques, início), `public/config/`, `public/bibliotecas/`.
+  - `index.html` é a lista do que carrega, na ordem; `styles.css` é a lista dos estilos. Arquivo novo: uma linha em cada.
+  - No APK as partes voltam a ser um `app.js` só e embaralhado (`apk/juntar-app.js`, chamado pelo `gerar-apk.ps1`).
+- **Duas caldeiras**: o tablet da Caldeira mostra a Caldeira 1 e a Caldeira 2 (cada uma com a sua folha, relatório e gráficos). A folha `caldeira` continua com o mesmo id: o que já foi anotado é da Caldeira 1. A nova é `caldeira_2`.
+- **Ralo, vários bags na mesma hora**: do lado de "Anote o peso do bag" ficam duas caixinhas, + e lixeira. O + guarda o peso digitado (ele sobe pequeno no quadro) e deixa o quadro vazio para o próximo bag; o quadro mostra a soma. As pesagens ficam em `pesagens` ("160+170+"); o total continua em `qtd`, então relatórios, API e totais não mudam (`setores/ralo/regras.js`).
+- **Apagar pergunta antes**: a lixeira (a caixinha do ralo e a do teclado, só o desenho) pergunta "Apagar?"; com o quadro vazio no ralo, ela tira o último bag.
+- **Totais do dia no painel**: o tablet chefe e o computador mostram os insumos e os quilos do ralo somados no dia e por turno (`blocoTotais` em `chefe/painel.js`).
+- **Atualização sozinha**: a central põe a versão mais nova em toda resposta da sincronização (`atualizacao`), e a nuvem também (`telas`, para quem está sem central). O aparelho fica sabendo em segundos. A atualização rápida (só as telas) instala sozinha quando ninguém mexe no aparelho há um minuto; a do APK abre a janela (o Android pergunta). A central do computador baixa da nuvem as telas novas assim que fica sabendo.
+- **Totais na API**: `GET /api/v1/totais?dia=AAAA-MM-DD` ou `?de=...&ate=...` (até 62 dias), por insumo, unidade, turno e, no ralo, por produto, e as dornas terminadas. O que mudou para o Evandro está em `Usina/API-mudancas-2.16.txt`. Teste: `testes/totais216.mjs`.
+- **Aplicativo para Windows** (`windows/`): o instalador liga a central dentro do aplicativo e abre o painel numa janela própria, sem navegador. Os dados ficam em Documentos\Usina. Fechar a janela deixa a central na bandeja para os tablets. Gerar: `windows\gerar-windows.ps1`.
+- **Telas**: tela de Conectar sem o logo repetido (fica só na barra) e com a assinatura no pé; relatórios da mesma altura; botões e quadros vizinhos com a mesma letra (`igualarVizinhos` em `design/texto-que-cabe.js`).
+- **Demonstração** já abre com 5 dias anotados (hoje e os 4 de antes), com relatórios.
+- Pedidos ao Codex em `.handoff/2026-10-20-*.md`.
 
 ## Produção: permissões, escritório no tablet chefe e telas (versão 2.15)
 

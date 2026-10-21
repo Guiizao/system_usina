@@ -1,0 +1,88 @@
+/* Pranchetas Ubirálcool - PALETA: todas as cores do aplicativo, no claro e no escuro. Mudou aqui, muda em tudo
+ * © 2026 Guilherme. Todos os direitos reservados. Uso somente com autorização do autor (veja LICENCA.txt). */
+
+/*
+ * Pranchetas Ubirálcool
+ * Base cinza (norma ISA-101 de telas industriais): cor só aparece quando significa algo.
+ *   verde    = ação principal / anotado
+ *   âmbar    = pendente, falta anotar
+ *   vermelho = valor fora do normal
+ * Fonte Atkinson Hyperlegible: feita para leitura por pessoas com baixa visão.
+ * Ela vem dentro do aplicativo (pasta fonts, licença em fonts/OFL.txt): abre na hora, mesmo sem internet.
+ */
+:root {
+  --chao: #dcdfdb;
+  --papel: #ffffff;
+  --papel-2: #f1f3f0;
+  --tinta: #1e2320;
+  --tinta-2: #4a524d;
+  --linha: #9ea6a0;
+  --linha-clara: #c9cec9;
+  --grafite: #2e3431;
+  --verde: #1b7a3e;
+  --verde-escuro: #135c2e;
+  --verde-fundo: #e3f1e6;
+  --ambar: #d99a00;
+  --ambar-fundo: #fff1c7;
+  --ambar-texto: #6b4b00;
+  --vermelho: #b3261e;
+  --vermelho-fundo: #fde8e6;
+  --azul-sel: #d6e6ff;
+  --ativo-fundo: #f3f8ff;
+  --foco: #0a5bd3;
+}
+
+/* Tela escura, para o turno da noite. O operador troca no botão ao lado do relógio. */
+:root[data-tema="escuro"] {
+  --chao: #14171a;
+  --papel: #1e2225;
+  --papel-2: #272c30;
+  --tinta: #eef1ee;
+  --tinta-2: #b3bcb6;
+  --linha: #5a625c;
+  --linha-clara: #3a413c;
+  --grafite: #0d0f10;
+  --verde: #4cae6e;
+  --verde-escuro: #75c78f;
+  --verde-fundo: #1d3325;
+  --ambar: #e0ab2b;
+  --ambar-fundo: #38300f;
+  --ambar-texto: #f3d383;
+  --vermelho: #ff6b62;
+  --vermelho-fundo: #3d1e1c;
+  --azul-sel: #1d3a5c;
+  --ativo-fundo: #16263a;
+  --foco: #7cb6ff;
+}
+
+/* Cores com nome (antes estavam escritas direto nas telas) */
+:root {
+  --logo-fundo-noite: #e9ece9;
+  --branco: #fff;
+  --preto: #000;
+  --topo-texto-2: #d3d8d4;
+  --topo-turno: #e6ebe7;
+  --topo-botao: rgba(255, 255, 255, .12);
+  --topo-botao-toque: rgba(255, 255, 255, .22);
+  --topo-botao-borda: rgba(255, 255, 255, .25);
+  --topo-turno-fundo: rgba(255, 255, 255, .14);
+  --ambar-tinta: #221a00;
+  --grafite-2: #454c48;
+  --vermelho-borda: #d9a3a0;
+  --verde-borda: #9cc9a9;
+  --sombra-leve: rgba(0, 0, 0, .18);
+  --sombra: rgba(0, 0, 0, .25);
+  --sombra-forte: rgba(0, 0, 0, .32);
+  --veu-janela: rgba(8, 10, 9, .78);
+  --veu-aviso: rgba(5, 6, 6, .88);
+  --azul-registro: #2563c9;
+  --azul-tinta: #0b3a82;
+  --azul-noite: #1c2d4a;
+  --azul-noite-tinta: #b9d2ff;
+  --azul-noite-borda: #6d9cf0;
+  --verde-tinta-noite: #06170c;
+}
+
+/* Gráficos do dia: uma cor por série */
+:root { --serie-1: #1f62c4; --serie-2: #c2410c; --serie-3: #15803d; --serie-4: #7c3aed; }
+:root[data-tema="escuro"] { --serie-1: #6aa8ff; --serie-2: #ff9a5c; --serie-3: #5fd08a; --serie-4: #b794ff; }

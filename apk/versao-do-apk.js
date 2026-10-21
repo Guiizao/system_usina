@@ -10,8 +10,9 @@ const crypto = require('crypto');
 const vm = require('vm');
 
 const PUBLICO = path.join(__dirname, '..', 'public');
-const achou = /const VERSAO = '(\d+)\.(\d+)\.(\d+)'/.exec(fs.readFileSync(path.join(PUBLICO, 'app.js'), 'utf8'));
-if (!achou) throw new Error('não achei o VERSAO no app.js');
+// 2.16: o aplicativo foi dividido em pastas; a versão fica em public/nucleo/base.js
+const achou = /const VERSAO = '(\d+)\.(\d+)\.(\d+)'/.exec(fs.readFileSync(path.join(PUBLICO, 'nucleo', 'base.js'), 'utf8'));
+if (!achou) throw new Error('não achei o VERSAO no nucleo/base.js');
 // (os testes montam pacotes de outra versão com PRANCHETAS_VERSAO)
 const versao = process.env.PRANCHETAS_VERSAO || `${achou[1]}.${achou[2]}.${achou[3]}`;
 // 2.7.0 vira 20700: o Android só atualiza por cima se o número for maior que o do instalado
@@ -27,9 +28,9 @@ if (process.argv[2] === 'gradle') {
 } else if (process.argv[2] === 'json') {
   const apk = fs.readFileSync(path.join(__dirname, 'saida', 'pranchetas.apk'));
   const contexto = { window: {} };
-  vm.runInNewContext(fs.readFileSync(path.join(PUBLICO, 'novidades.js'), 'utf8'), contexto);
+  vm.runInNewContext(fs.readFileSync(path.join(PUBLICO, 'config', 'novidades.js'), 'utf8'), contexto);
   const novidades = contexto.window.NOVIDADES || [];
-  if (!novidades.length || novidades[0].versao !== versao) throw new Error(`faltam as novidades da versão ${versao} em public/novidades.js`);
+  if (!novidades.length || novidades[0].versao !== versao) throw new Error(`faltam as novidades da versão ${versao} em public/config/novidades.js`);
   const info = { versao, codigo, tamanho: apk.length, sha256: crypto.createHash('sha256').update(apk).digest('hex'), novidades };
   fs.writeFileSync(path.join(__dirname, 'saida', 'versao.json'), JSON.stringify(info, null, 2));
   console.log(`saida\\versao.json: versão ${versao}, ${(apk.length / 1048576).toFixed(1)} MB`);
@@ -99,7 +100,7 @@ function pacoteDasTelas() {
   });
   juntar(origem, '');
   const contexto = { window: {} };
-  vm.runInNewContext(fs.readFileSync(path.join(PUBLICO, 'novidades.js'), 'utf8'), contexto);
+  vm.runInNewContext(fs.readFileSync(path.join(PUBLICO, 'config', 'novidades.js'), 'utf8'), contexto);
   const pacote = Buffer.from(JSON.stringify({ versao, apkMinimo: process.env.APK_MINIMO || versaoDoNativo(), criadoEm: new Date().toISOString(), novidades: contexto.window.NOVIDADES || [], arquivos }, null, 1));
   const assinatura = crypto.sign('sha256', pacote, privada).toString('base64'); // ECDSA P-256, formato DER (o Java confere do mesmo jeito)
   fs.writeFileSync(path.join(origem, 'pacote.json'), pacote);

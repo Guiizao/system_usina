@@ -1,0 +1,23 @@
+/* Pranchetas Ubirálcool - tablet de tela baixa deitado
+ * © 2026 Guilherme. Todos os direitos reservados. Uso somente com autorização do autor (veja LICENCA.txt). */
+
+/* ---------- Telas baixas deitadas (tablet de 7 e 8 polegadas com as barras do Android) ---------- */
+@media (orientation: landscape) and (max-height: 620px) {
+  :root { --topo: 60px; }
+  .topo .logo { width: 44px; height: 44px; }
+  .topo .atalho, .topo .tema { height: 50px; }
+  .topo .relogio b { font-size: 28px; }
+  .painel-cab small, .painel-cab span { display: none; }
+  .painel-cab .btn, .painel-cab-botoes .btn { min-height: 44px; font-size: 15px; }
+  .edicao.com-painel .painel { gap: 6px; padding: 8px 10px; }
+  .valor-linha { grid-template-columns: 62px minmax(0, 1fr) 62px; }
+  .valor-linha .mm { min-height: 58px; font-size: 34px; }
+  .visor { min-height: 58px; font-size: 38px; padding: 6px 10px; }
+  .dica-painel { font-size: 14px; }
+  .alerta-texto { font-size: 15px; padding: 5px 10px; }
+  .fichas button { min-height: 42px; }
+  .teclas { gap: 6px; grid-auto-rows: minmax(40px, 1fr); }
+  .teclas button { font-size: 28px; }
+  .painel-nav .btn { min-height: 52px; font-size: 18px; }
+  .rodape .btn { min-height: 64px; }
+}

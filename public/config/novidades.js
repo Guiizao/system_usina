@@ -4,6 +4,17 @@
    Depois do sinal de igual vem JSON puro, porque o servidor do tablet chefe (Java) também lê este arquivo. */
 window.NOVIDADES = [
   {
+    "versao": "2.16.0",
+    "data": "2026-10-21",
+    "itens": [
+      "Duas caldeiras: no tablet da Caldeira, escolha a Caldeira 1 ou a Caldeira 2. Cada uma tem a sua folha, o seu relatório e os seus gráficos. O que já foi anotado continua na Caldeira 1.",
+      "Atualização mais rápida: quando sai versão nova, os aparelhos ficam sabendo em segundos. A atualização das telas instala sozinha quando ninguém está mexendo no aparelho, sem senha e sem botão.",
+      "Relatórios do mesmo tamanho, letras iguais entre botões e quadros vizinhos, tela de Conectar arrumada (sem logo repetido e com a assinatura no pé).",
+      "A demonstração já abre com 5 dias anotados, para ver relatórios, gráficos e totais.",
+      "Para o escritório: totais do dia, por turno e por período na API (insumos e quilos do ralo, por produto)."
+    ]
+  },
+  {
     "versao": "2.15.0",
     "data": "2026-10-19",
     "itens": [

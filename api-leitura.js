@@ -7,6 +7,7 @@
  *   GET /api/v1/esquema               setores, pranchetas e campos (para o outro sistema saber o que é cada coisa)
  *   GET /api/v1/dias?de=&ate=         dias que têm anotação
  *   GET /api/v1/dias/AAAA-MM-DD       o dia inteiro, por setor e prancheta, com os totais
+ *   GET /api/v1/totais?dia=          insumos por unidade/turno/produto e dornas terminadas (ou de=&ate=, até 62 dias)
  *   GET /api/v1/registros?desde=N     o que mudou depois do número N (para o outro sistema ir buscando só o novo)
  *
  * Tudo com o cabeçalho  Authorization: Bearer <senha de leitura>.  A configuração da usina (senhas dos operadores,
@@ -32,6 +33,18 @@ function momento(data, h, fusoMin) {
   return fusoMin == null ? new Date(y, m - 1, d, h).getTime() : Date.UTC(y, m - 1, d, h) - fusoMin * 60000;
 }
 function somarDias(iso, n) { const [y, m, d] = iso.split('-').map(Number); const x = new Date(y, m - 1, d + n); return `${x.getFullYear()}-${pad2(x.getMonth() + 1)}-${pad2(x.getDate())}`; }
+
+/** Intervalo inclusivo e limitado, sem normalizar datas impossíveis nem aceitar filtros ambíguos. */
+function intervaloTotais(params) {
+  const dia = params.get('dia'), de = dia || params.get('de'), ate = dia || params.get('ate');
+  if ([...params.keys()].some((k) => !['dia', 'de', 'ate'].includes(k) || params.getAll(k).length !== 1) ||
+      (params.has('dia') && (params.has('de') || params.has('ate')))) return null;
+  const valido = (d) => ehDia(d) && Number.isFinite(Date.parse(d)) && new Date(d).toISOString().slice(0, 10) === d;
+  if (!valido(de) || !valido(ate)) return null;
+  const quantidade = (Date.parse(ate) - Date.parse(de)) / 86400000 + 1;
+  if (quantidade < 1 || quantidade > 62) return null;
+  return { de, ate, dias: Array.from({ length: quantidade }, (_, i) => new Date(Date.parse(de) + i * 86400000).toISOString().slice(0, 10)) };
+}
 
 /** medidasAtuais: as medidas das dornas trocadas pelo escritório (Configurações da usina), se houver.
     opcoes.fusoMin: o fuso da usina em minutos (a nuvem roda em UTC e passa -180). */
@@ -180,10 +193,47 @@ function criar(C, medidasAtuais, opcoes = {}) {
       })),
     };
   }
-  return { dia, registro, esquema };
+  /** Só quantidades de insumos: temperaturas, horas, metadados e registros apagados não são somados. */
+  function somatorio(registros) {
+    const ativos = registros.filter((r) => !r.apagado && publica(r) && /^\d+$/.test(r.chave));
+    const arredondar = (n) => Math.round(n * 100) / 100;
+    const insumos = C.setores.flatMap((s) => folhasDoSetor(s).filter((pid) => pranchetas[pid].tipo === 'insumo').flatMap((pid) => {
+      const p = pranchetas[pid], turnos = turnosDo(s), unidades = new Map();
+      const novo = () => ({ quantidade: 0, turnos: turnos.map((t) => ({ ...t, quantidade: 0 })), produtos: new Map() });
+      for (const r of ativos.filter((r) => r.prancheta === pid)) {
+        const v = r.valores || {}, n = parseFloat(v.qtd);
+        if (!Number.isFinite(n)) continue;
+        const unidade = v.unidade || p.unidade || '';
+        if (!unidades.has(unidade)) unidades.set(unidade, novo());
+        const soma = unidades.get(unidade);
+        soma.quantidade += n;
+        soma.turnos.find((t) => t.id === turnoDaHora(Number(r.chave), turnos).id).quantidade += n;
+        if (pid === 'ins_materia_prima') {
+          const produto = v.produto || '';
+          soma.produtos.set(produto, (soma.produtos.get(produto) || 0) + n);
+        }
+      }
+      if (!unidades.size) unidades.set(p.unidade || '', novo());
+      return [...unidades].map(([unidade, soma]) => ({
+        setor: s.id, prancheta: pid, insumo: p.nome, unidade, quantidade: arredondar(soma.quantidade),
+        turnos: soma.turnos.map((t) => ({ ...t, quantidade: arredondar(t.quantidade) })),
+        ...(pid === 'ins_materia_prima' ? { produtos: [...soma.produtos].map(([produto, n]) => ({ produto, quantidade: arredondar(n) })) } : {}),
+      }));
+    }));
+    return { insumos, dornasFinalizadas: ativos.filter((r) => r.prancheta === 'hid_anexo1' && !vazio((r.valores || {}).fim)).length };
+  }
+  function totais(intervalo, registros) {
+    const porDia = new Map(intervalo.dias.map((data) => [data, []]));
+    registros.forEach((r) => { if (porDia.has(r.data)) porDia.get(r.data).push(r); });
+    return { empresa: C.empresa, de: intervalo.de, ate: intervalo.ate,
+      dias: [...porDia].map(([data, regs]) => ({ data, ...somatorio(regs) })),
+      total: somatorio([...porDia.values()].flat()),
+    };
+  }
+  return { dia, registro, esquema, totais };
 }
 
 /** Anotação que pode sair pela API (a configuração da usina e os avisos internos, não). */
 const publica = (r) => r && ehDia(r.data) && r.prancheta !== 'avisos' && r.prancheta !== 'avisos-recibo' && r.prancheta !== 'registro';
 
-module.exports = { criar, publica, ehDia, isoLocal };
+module.exports = { criar, publica, ehDia, isoLocal, intervaloTotais };

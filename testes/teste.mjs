@@ -3,7 +3,7 @@
 import fs from 'node:fs';
 
 /** Senha do encarregado, lida do forms.js (os testes não guardam a senha em outro lugar). */
-export const SENHA_ENCARREGADO = (fs.readFileSync(new URL('../public/forms.js', import.meta.url), 'utf8').match(/pinAdmin:\s*'(\d+)'/) || [])[1];
+export const SENHA_ENCARREGADO = (fs.readFileSync(new URL('../public/config/forms.js', import.meta.url), 'utf8').match(/pinAdmin:\s*'(\d+)'/) || [])[1];
 /** Teclas para digitar a senha do encarregado e confirmar. */
 export const teclasDaSenha = () => [...SENHA_ENCARREGADO.split(''), 'ok'];
 /** Tablet chefe (versão 2.9): entra com a senha do administrador (a central nova cadastra o Guilherme com ela). */
@@ -60,3 +60,14 @@ export const resumo = (grupos) => {
   const todos = grupos.flatMap((g) => g.resultados);
   return { total: todos.length, passaram: todos.filter((r) => r.ok).length, falharam: todos.filter((r) => !r.ok).length };
 };
+
+// 2.16: o public foi dividido em pastas
+import { createRequire as criarRequire216 } from 'node:module';
+import { fileURLToPath as caminhoDoUrl216 } from 'node:url';
+const { carregarUsina } = criarRequire216(import.meta.url)('../carregar-usina.js');
+const PUBLICO216 = new URL('../public/', import.meta.url);
+/** Roda no contexto a configuração da usina como o aplicativo (config/forms.js e as folhas de cada setor). */
+export const usinaNoContexto = (ctx) => carregarUsina(caminhoDoUrl216(PUBLICO216), ctx);
+const NOVOS216 = { 'forms.js': 'config/forms.js', 'folhas.js': 'config/folhas.js', 'novidades.js': 'config/novidades.js' };
+/** Onde ficou cada arquivo que era solto no public (as bibliotecas foram para bibliotecas/). */
+export const caminhoNovo = (nome) => NOVOS216[nome] || (/^(rastreamento|xlsx|modelos|pdf|leitor|qrcode|cifra)\.js$/.test(nome) ? 'bibliotecas/' + nome : nome);

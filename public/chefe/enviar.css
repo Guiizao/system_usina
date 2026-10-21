@@ -1,0 +1,20 @@
+/* Pranchetas Ubirálcool - enviar, guardar e imprimir
+ * © 2026 Guilherme. Todos os direitos reservados. Uso somente com autorização do autor (veja LICENCA.txt). */
+
+/* ---------- Enviar, guardar e imprimir (versão 2.13): folha que sobe de baixo ---------- */
+.fundo-modal.de-baixo { align-items: flex-end; padding: 0; }
+.modal.folha-baixo { width: min(900px, 100%); max-height: calc(92dvh / var(--escala, 1)); border-radius: 16px 16px 0 0; padding-top: 6px; transition: transform .18s var(--suave, ease); display: flex; flex-direction: column; overflow: hidden; }
+.modal.folha-baixo > * { flex: none; }
+.modal.folha-baixo > .folha-baixo-corpo { flex: 1 1 auto; min-height: 0; overflow: auto; }
+.modal.folha-baixo.cheia { max-width: none; width: 100%; height: calc(100dvh / var(--escala, 1)); max-height: calc(100dvh / var(--escala, 1)); border-radius: 0; }
+.modal.folha-baixo h4 { margin: 14px 0 6px; font-size: 16px; color: var(--tinta-2); text-transform: uppercase; letter-spacing: .04em; }
+.puxador { display: flex; justify-content: center; padding: 6px 0 4px; cursor: grab; touch-action: none; }
+.puxador i { width: 56px; height: 6px; border-radius: 3px; background: var(--linha); }
+.folha-baixo-cab { display: flex; align-items: center; gap: 10px; }
+.folha-baixo-cab h3 { flex: 1; margin: 0; touch-action: none; }
+.periodo-envio { display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 10px; }
+.periodo-envio label { display: grid; gap: 4px; font-weight: 700; font-size: 16px; }
+.periodo-envio input { min-height: 52px; font-size: 19px; padding: 0 10px; border-radius: 10px; border: 2px solid var(--linha); background: var(--papel); color: var(--tinta); }
+.formatos-envio { grid-template-columns: repeat(auto-fit, minmax(min(100%, 190px), 1fr)); }
+/* ícone dentro do círculo das escolhas: do mesmo tamanho para todos (o do WhatsApp ficava grande demais) */
+.escolhas .escolha-ico svg.ico { width: 55%; height: 55%; }

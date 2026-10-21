@@ -1,0 +1,13 @@
+{
+  "name": "pranchetas-windows",
+  "productName": "Pranchetas Ubirálcool",
+  "version": "2.16.0",
+  "private": true,
+  "description": "Pranchetas Ubirálcool para Windows: a central da usina e o painel do escritório num aplicativo só",
+  "author": "Guilherme",
+  "main": "main.js",
+  "devDependencies": {
+    "electron": "44.5.1",
+    "electron-builder": "26.15.3"
+  }
+}

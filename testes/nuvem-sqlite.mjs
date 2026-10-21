@@ -20,7 +20,13 @@ export async function ligarNuvemSQLite(porta, segredo, token) {
     first: () => db.prepare(sql).get(...params) || null,
     run: () => db.prepare(sql).run(...params),
   });
-  const env = { SEGREDO_CENTRAL: segredo, TOKEN_LEITURA: token, DB: {
+  const env = { SEGREDO_CENTRAL: segredo, TOKEN_LEITURA: token, ASSETS: {
+    fetch(endereco) {
+      const arquivo = path.resolve(publico, '.' + new URL(endereco).pathname);
+      return arquivo.startsWith(publico + path.sep) && fs.existsSync(arquivo) && fs.statSync(arquivo).isFile()
+        ? new Response(fs.readFileSync(arquivo)) : new Response(null, { status: 404 });
+    },
+  }, DB: {
     prepare,
     batch(consultas) {
       db.exec('BEGIN');

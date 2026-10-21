@@ -196,6 +196,7 @@
     /* ===== Controle Diário da Caldeira ===== */
     function caldeira(pid, data) {
       const p = ctx.prancheta(pid);
+      const titulo = p.titulo.toUpperCase();
       const doc = D.caldeira || {};
       const regs = ctx.listar(data, pid);
       const porHora = {}; ctx.linhasDeHora(regs).forEach((r) => { porHora[r.chave] = r; });
@@ -206,7 +207,7 @@
       const linhas = p.itens.map((c) => ({ rotulo: c.papel || c.label, valores: [c.papel || c.label, ...horas.map((h, i) => valorHora(c, h, i))] }));
       const turnos = turnosDa(pid).map((t) => ({ nome: t.nome, operador: operadoresDoTurno(regs, t), horario: horarioDoTurno(t), obs: (ctx.pegar(data, pid, 'obs' + t.id) || { valores: {} }).valores.texto || '' }));
       const dados = {
-        cabecalho: [['Documento', 'CONTROLE DIÁRIO DA CALDEIRA'], ['Responsável', (doc.responsavel || []).filter(Boolean).join(' ')], ['Data', fmtData(data)]],
+        cabecalho: [['Documento', titulo], ['Responsável', (doc.responsavel || []).filter(Boolean).join(' ')], ['Data', fmtData(data)]],
         colunas, linhas,
         rodape: turnos.flatMap((t) => [[`${t.nome} - Operador`, t.operador], [`${t.nome} - Horário/Turno`, t.horario], [`${t.nome} - Obs`, t.obs]]),
       };
@@ -214,7 +215,7 @@
       const larguras = [15, ...horas.map(() => 5)];
       const g = new Grade(larguras);
       g.bloco(0, 0, 3, 3, '', BORDA);
-      g.bloco(0, 4, 3, n - 6, 'CONTROLE DIÁRIO DA CALDEIRA', { b: true, sz: 16, al: 'c', borda: true });
+      g.bloco(0, 4, 3, n - 6, titulo, { b: true, sz: 16, al: 'c', borda: true });
       g.bloco(0, n - 5, 3, n - 1, (doc.responsavel || []).join('\n'), { b: true, sz: 8, al: 'c', borda: true, quebra: true });
       [0, 1, 2, 3].forEach((r) => g.altura(r, 18));
       g.bloco(4, 0, 4, n - 1, `DATA: ${fmtData(data)}`, { b: true, sz: 10, al: 'l', borda: true });
@@ -233,7 +234,7 @@
         g.bloco(b0 + 2, a, b0 + 2, b, `OBS: ${t.obs}`, { sz: 9, al: 'l', va: 't', borda: true, quebra: true });
       });
       g.altura(b0, 22); g.altura(b0 + 1, 22); g.altura(b0 + 2, 48);
-      return { nome: 'Caldeira', paisagem: true, grade: g, imagem: { linha: 0, coluna: 0, alturaPx: 66, dx: 50, dy: 4 }, dados };
+      return { nome: p.nome, paisagem: true, grade: g, imagem: { linha: 0, coluna: 0, alturaPx: 66, dx: 50, dy: 4 }, dados };
     }
 
     /* ===== Controle Diário da Destilaria ===== */

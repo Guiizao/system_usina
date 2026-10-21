@@ -112,9 +112,9 @@ export async function testarPedidos210(nav, ligar, porta, grupo) {
       await chefe.esperar('!document.querySelector(".modal") && document.body.innerText.includes("Brix da dorna")', 8000, 'salvou o Brix');
       // no tablet do setor: pH 4,6 não avisa mais (o aviso agora é abaixo de 4,5); 4,4 avisa
       await hid.esperar('(document.querySelector("[data-quadro=\\"brix\\"]") || {}).textContent.includes("Brix da dorna")', 20000, 'nome novo no tablet do setor');
-      await hid.tocar('[data-quadro="phf"]'); await hid.tocar('[data-ed="limpar"]'); await hid.teclar(['4', ',', '6']);
+      await hid.tocar('[data-quadro="phf"]'); await hid.limpar(); await hid.teclar(['4', ',', '6']);
       certo(!(await hid.avaliar('document.querySelector("[data-quadro=\\"phf\\"]").className')).match(/\bfora\b/), 'pH 4,6 sem aviso');
-      await hid.tocar('[data-ed="limpar"]'); await hid.teclar(['4', ',', '4']);
+      await hid.limpar(); await hid.teclar(['4', ',', '4']);
       await hid.esperar('/\\bfora\\b/.test(document.querySelector("[data-quadro=\\"phf\\"]").className)', 3000, 'pH 4,4 com aviso');
       await hid.tocar('[data-ed="ocultar"]');
       // salva: com a anotação pela metade a tela do setor não se redesenha sozinha
@@ -137,7 +137,7 @@ export async function testarPedidos210(nav, ligar, porta, grupo) {
       await chefe.esperar('!document.querySelector(".modal")', 8000, 'voltou');
       await hid.esperar('USINA.pranchetas.hid_anexo1.campos.find((c) => c.id === "phf").avisos[0].valor === 5', 20000, 'o original chegou no tablet do setor');
       await hid.tocar('.seletor-nova [data-a="linha"]');
-      await hid.tocar('[data-quadro="phf"]'); await hid.tocar('[data-ed="limpar"]'); await hid.teclar(['4', ',', '6']);
+      await hid.tocar('[data-quadro="phf"]'); await hid.limpar(); await hid.teclar(['4', ',', '6']);
       await hid.esperar('/\\bfora\\b/.test(document.querySelector("[data-quadro=\\"phf\\"]").className)', 20000, 'pH 4,6 avisa de novo');
       await hid.tocar('[data-ed="ocultar"]');
     });

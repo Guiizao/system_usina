@@ -9,15 +9,15 @@
 import fs from 'node:fs';
 import vm from 'node:vm';
 import { createRequire } from 'node:module';
-import { teste, certo, igual } from './teste.mjs';
+import { teste, certo, igual, usinaNoContexto, caminhoNovo } from './teste.mjs';
 import { TAMANHOS, dormir } from './navegador.mjs';
 
 const require = createRequire(import.meta.url);
 const DIA = '2026-10-07';
-const fonte = (nome) => fs.readFileSync(new URL('../public/' + nome, import.meta.url), 'utf8');
+const fonte = (nome) => fs.readFileSync(new URL('../public/' + caminhoNovo(nome), import.meta.url), 'utf8');
 function forms() {
   const c = { window: {} };
-  vm.runInNewContext(fonte('forms.js'), c);
+  usinaNoContexto(c);
   return Object.assign(JSON.parse(JSON.stringify(c.window.USINA)), { turnosSetor: { nova_destilaria: '12h', caldeira: '12h' } });
 }
 const reg = (prancheta, chave, valores, operador) => ({ id: `${DIA}|${prancheta}|${chave}`, data: DIA, prancheta, chave, valores, operador, atualizadoEm: 1 });

@@ -46,7 +46,7 @@ export async function testarPedidos212(nav, ligar, porta, grupo, comApi) {
     await semNotificacao(cal);
     if (!(await cal.avaliar(`!!document.querySelector('[data-quadro="${quadro}"]')`))) await cal.tocar('[data-a="abrir-prancheta"][data-id="caldeira"]');
     await cal.tocar(`[data-quadro="${quadro}"]`);
-    await cal.tocar('[data-ed="limpar"]').catch(() => {});
+    await cal.limpar().catch(() => {});
     await cal.teclar(teclas);
   };
   const CFG = 'config|sistema|geral';

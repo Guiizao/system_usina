@@ -138,7 +138,7 @@ export async function testarPessoas(nav, ligar, porta, grupo) {
       // espera a anotação do Felipe chegar no tablet chefe (antes disso a Nº 1 é só o botão de dorna nova)
       await chefe.esperar('!!document.querySelector(".seletor:not(.seletor-nova) [data-a=\\"linha\\"][data-chave=\\"1\\"]")', 15000, 'dorna 1 no chefe');
       await chefe.tocar('[data-a="linha"][data-chave="1"]');
-      await chefe.tocar('[data-quadro="brix"]'); await chefe.tocar('[data-ed="limpar"]'); await chefe.teclar(['1', '9']);
+      await chefe.tocar('[data-quadro="brix"]'); await chefe.limpar(); await chefe.teclar(['1', '9']);
       await chefe.tocar('[data-ed="ocultar"]');
       await chefe.tocar('[data-a="salvar"]');
       const mudou = await esperarRegistro((x) => x.tipo === 'anotacao' && /Guilherme mudou Hidrólise/.test(x.texto), 'Guilherme corrigiu');

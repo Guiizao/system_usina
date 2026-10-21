@@ -494,7 +494,8 @@ public class ServidorCentral {
       apkMedidoEm = apk.lastModified();
     }
     JSONObject r = new JSONObject().put("versao", versao).put("tamanho", apk.length()).put("sha256", shaDoApk).put("url", "/apk/pranchetas.apk");
-    try (InputStream entrada = abrirDoApp("/novidades.js")) {
+    // 2.16: as novidades foram para config/; telas antigas (2.15 ou antes) ainda têm o arquivo na raiz
+    try (InputStream entrada = abrirNovidades()) {
       String texto = new String(lerTudo(entrada), StandardCharsets.UTF_8);
       int ini = texto.indexOf('[', texto.indexOf("NOVIDADES")), fim = texto.lastIndexOf(']');
       if (ini >= 0 && fim > ini) r.put("novidades", new JSONArray(texto.substring(ini, fim + 1)));
@@ -767,6 +768,7 @@ public class ServidorCentral {
 
   private void apiSync(byte[] corpo, String ip, String idCifrado, OutputStream saida) throws Exception {
     JSONObject resultado = sincronizar(new JSONObject(new String(corpo, StandardCharsets.UTF_8)), ip, idCifrado);
+    resultado.put("atualizacao", atualizacaoDisponivel());
     enviarJson(saida, "bloqueado".equals(resultado.optString("erro")) ? 423 : 200, resultado);
   }
 
@@ -1275,6 +1277,26 @@ public class ServidorCentral {
     } catch (Exception e) {
       return null;
     }
+  }
+
+  private JSONObject infoDasTelas(JSONObject p) throws Exception {
+    String formato = "\\d{1,2}\\.\\d{1,2}(\\.\\d{1,2})?";
+    if (p == null || !(p.opt("versao") instanceof String) || !(p.opt("apkMinimo") instanceof String) || !p.optString("versao").matches(formato) || !p.optString("apkMinimo").matches(formato)) return null;
+    return new JSONObject().put("versao", p.getString("versao")).put("apkMinimo", p.getString("apkMinimo"));
+  }
+
+  private synchronized Object atualizacaoDisponivel() throws Exception {
+    JSONObject local = null;
+    try (InputStream entrada = abrirDoApp("/pacote.json")) {
+      local = infoDasTelas(new JSONObject(new String(lerTudo(entrada), StandardCharsets.UTF_8)));
+    } catch (Exception ignorado) { }
+    JSONObject online = infoDasTelas(nuvem().optJSONObject("telas"));
+    if (online != null && (local == null || AtualizadorDeTelas.numero(online.optString("versao")) > AtualizadorDeTelas.numero(local.optString("versao")))) return online;
+    return local == null ? JSONObject.NULL : local;
+  }
+
+  private InputStream abrirNovidades() throws IOException {
+    try { return abrirDoApp("/config/novidades.js"); } catch (IOException e) { return abrirDoApp("/novidades.js"); }
   }
 
   /** Um arquivo das telas (rel começa com /). */
@@ -1838,12 +1860,13 @@ public class ServidorCentral {
         boolean bloqueiosDemais = bloqueados.length() > 500;
         Object medidas = medidasDoEscritorio();
         String medidasHash = resumo(String.valueOf(medidas));
+        // Um envio vazio por ciclo também consulta a versão, mesmo sem novas anotações.
         for (int vez = 0; vez < 40; vez++) {
           List<JSONObject> pend = pendentesNuvem(n);
           List<JSONObject> lote = pend.subList(0, Math.min(NUVEM_LOTE, pend.size()));
           boolean formsMudou = forms != null && !formsHash.equals(n.optString("formsHash"));
           boolean bloqueiosMudaram = !bloqueiosDemais && !bloqueiosHash.equals(n.optString("bloqueiosHash"));
-          if (lote.isEmpty() && !formsMudou && !bloqueiosMudaram && medidasHash.equals(n.optString("medidasHash"))) {
+          if (vez > 0 && lote.isEmpty() && !formsMudou && !bloqueiosMudaram && medidasHash.equals(n.optString("medidasHash"))) {
             synchronized (this) { n.put("arquivosEnviados", true).put("faltam", 0L); }
             break;
           }
@@ -1856,6 +1879,9 @@ public class ServidorCentral {
           Object[] r = pedirNuvem(url, segredo, "central/enviar", corpo);
           if ((Integer) r[0] != 200) throw new Exception(erroDaNuvem(r));
           synchronized (this) {
+            JSONObject telas = infoDasTelas(new JSONObject((String) r[1]).optJSONObject("telas"));
+            JSONObject anterior = infoDasTelas(n.optJSONObject("telas"));
+            if (telas != null && (anterior == null || AtualizadorDeTelas.numero(telas.optString("versao")) >= AtualizadorDeTelas.numero(anterior.optString("versao")))) n.put("telas", telas);
             if (!lote.isEmpty()) n.put("seq", lote.get(lote.size() - 1).optLong("seq"));
             if (forms != null) n.put("formsHash", formsHash);
             n.put("medidasHash", medidasHash).put("ultimoEnvio", System.currentTimeMillis()).put("faltam", (long) Math.max(0, pend.size() - lote.size()));
@@ -2498,7 +2524,7 @@ public class ServidorCentral {
 
   /** Mapa de autorização fixo, como as folhas só do chefe; nuvemForms vem de aparelhos e não dá permissão. */
   private static String setorDaFolha(String folha) {
-    if ("caldeira".equals(folha)) return "caldeira";
+    if (Arrays.asList("caldeira", "caldeira_2").contains(folha)) return "caldeira";
     if ("ins_materia_prima".equals(folha)) return "ralo";
     if (Arrays.asList("hid_anexo1", "hid_anexo2", "juntas_lphera_cal", "juntas_saczyme_alcolina").contains(folha)) return "hidrolise";
     if (Arrays.asList("destilaria", "ins_lactrol", "ins_ureia").contains(folha)) return "destilaria";

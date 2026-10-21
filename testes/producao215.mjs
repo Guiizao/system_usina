@@ -3,7 +3,7 @@ import path from 'node:path';
 import vm from 'node:vm';
 import http from 'node:http';
 import crypto from 'node:crypto';
-import { teste, certo, igual, SENHA_ENCARREGADO } from './teste.mjs';
+import { teste, certo, igual, SENHA_ENCARREGADO, usinaNoContexto } from './teste.mjs';
 import { pastaTemporaria } from './servidores.mjs';
 import { conectarTeste, clienteCifrado, Cifra } from './cifra.mjs';
 
@@ -43,7 +43,7 @@ export async function testarProducao(ligar, porta, grupo) {
     await p(dono, '/api/pessoas', { acao: 'salvar', pessoa: { nome: 'Leitura de teste', nivel: 'consulta', extras: { ler_folha: true }, pin: '3333' } });
     await entrar(consulta, 2, '3333');
     const ctx = { window: {} };
-    vm.runInNewContext(fs.readFileSync(new URL('../public/forms.js', import.meta.url), 'utf8'), ctx);
+    usinaNoContexto(ctx);
     await p(dono, '/api/nuvem', { acao: 'forms', forms: JSON.parse(JSON.stringify(ctx.window.USINA)) });
 
     await teste(grupo, 'padrões: nível 1 inclui escritório; nível 2 não tem conexão nem sistema; nível 3 mantém tudo', async () => {

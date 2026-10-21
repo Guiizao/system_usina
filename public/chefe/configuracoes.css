@@ -1,0 +1,17 @@
+/* Pranchetas Ubirálcool - configurações
+ * © 2026 Guilherme. Todos os direitos reservados. Uso somente com autorização do autor (veja LICENCA.txt). */
+
+/* ---------- Configurações ---------- */
+main.config { max-width: 1500px; }
+/* 2.15: colunas que se encaixam (a caixa curta não deixa buraco embaixo dela ao lado de uma comprida) */
+.config-grade { columns: 460px 3; column-gap: 12px; margin-bottom: 12px; }
+.config-grade > * { break-inside: avoid; }
+.config-grade .bloco { margin: 0 0 12px; }
+.autoria { margin: 18px 0 4px; font-size: 14px; line-height: 1.4; color: var(--tinta-2); text-align: center; }
+.config-grade h2 { display: flex; align-items: center; gap: 10px; font-size: 22px; margin: 0 0 8px; }
+.config-grade h2 small, .config-grade h3 small { font-size: 15px; color: var(--tinta-2); font-weight: 400; }
+.config-grade h3 { font-size: 17px; margin: 8px 0 8px; color: var(--tinta-2); }
+.linha-config { display: flex; align-items: center; gap: 12px; padding: 10px 0; border-top: 1px solid var(--linha-clara); }
+.linha-config div { flex: 1; min-width: 0; }
+.linha-config b { display: block; font-size: 19px; }
+.linha-config small { display: block; font-size: 16px; color: var(--tinta-2); word-break: break-all; }

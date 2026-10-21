@@ -3,19 +3,19 @@
 import fs from 'node:fs';
 import vm from 'node:vm';
 import { createRequire } from 'node:module';
-import { teste, certo, igual } from './teste.mjs';
+import { teste, certo, igual, usinaNoContexto, caminhoNovo } from './teste.mjs';
 
 const require = createRequire(import.meta.url);
-const Folhas = require('../public/folhas.js');
+const Folhas = require('../public/config/folhas.js');
 const Leitura = require('../api-leitura.js');
 const ONTEM = '2026-10-05';
 const HOJE = '2026-10-06';
 const fmtNum = (v) => String(v).replace('.', ',');
-const fonte = (nome) => fs.readFileSync(new URL('../public/' + nome, import.meta.url), 'utf8');
+const fonte = (nome) => fs.readFileSync(new URL('../public/' + caminhoNovo(nome), import.meta.url), 'utf8');
 
 function formsDoApp() {
   const ctx = { window: {} };
-  vm.runInNewContext(fonte('forms.js'), ctx);
+  usinaNoContexto(ctx);
   return JSON.parse(JSON.stringify(ctx.window.USINA));
 }
 
@@ -44,6 +44,50 @@ const registro = (pid, chave, valores, data = HOJE) => ({ id: `${data}/${pid}/${
 const folhaApi = (res, pid) => res.setores.flatMap((s) => s.pranchetas).find((p) => p.id === pid);
 
 export async function testarPapel212(grupo) {
+  await teste(grupo, '2.16: duas caldeiras com definição igual, campos independentes e quatro gráficos', async () => {
+    const forms = formsDoApp(), [p1, p2] = [forms.pranchetas.caldeira, forms.pranchetas.caldeira_2];
+    igual(forms.setores.find((s) => s.id === 'caldeira').pranchetas, ['caldeira', 'caldeira_2']);
+    igual([p1.nome, p2.nome], ['Caldeira 1', 'Caldeira 2']);
+    for (const k of ['itens', 'grupos', 'papel']) igual(p2[k], p1[k], k);
+    for (const pid of ['caldeira', 'caldeira_2']) {
+      igual(forms.graficos.filter((g) => g.prancheta === pid).map((g) => g.campos), [['pressao'], ['temp_agua']]);
+    }
+    // Confere também os objetos originais, antes da cópia JSON do helper.
+    const ctx = { window: {} }; usinaNoContexto(ctx);
+    const orig = ctx.window.USINA.pranchetas;
+    orig.caldeira.itens[0].label = 'Só da 1';
+    certo(orig.caldeira_2.itens[0].label !== 'Só da 1', 'campos não podem ser compartilhados');
+    const java = fs.readFileSync(new URL('../apk/nativo/java/br/com/ubiralcool/pranchetas/ServidorCentral.java', import.meta.url), 'utf8');
+    const lista = java.match(/Arrays\.asList\(([^)]*)\)\.contains\(folha\)\) return "caldeira"/);
+    certo(lista, 'mapa fixo da caldeira no Java');
+    igual(JSON.parse('[' + lista[1] + ']'), forms.setores.find((s) => s.id === 'caldeira').pranchetas);
+  });
+
+  await teste(grupo, '2.16: papel, Excel, XML e API separam as caldeiras e as 7h do dia seguinte', async () => {
+    const forms = formsDoApp();
+    const regs = [registro('caldeira', '7', { pressao: '5.1' }), registro('caldeira_2', '7', { pressao: '6.2' }),
+      registro('caldeira', '7', { pressao: '7.3' }, '2026-10-07'), registro('caldeira_2', '7', { pressao: '8.4' }, '2026-10-07')];
+    const a = ambiente(forms, regs);
+    const folhas = ['caldeira', 'caldeira_2'].map((pid) => a.papel.folha(pid, HOJE));
+    for (const [i, f] of folhas.entries()) {
+      const titulo = `CONTROLE DIÁRIO DA CALDEIRA ${i + 1}`;
+      igual(f.grade.cel['0,4'].v, titulo, 'cabeçalho da grade usada pelo PDF');
+      certo(a.modelos.paraHtml(f, '', fmtNum).includes(titulo), 'impressão');
+      certo(a.modelos.paraXml(f, HOJE, a.janela.xmlEscape).includes(titulo), 'XML');
+      igual(f.nomePlanilha, `Caldeira ${i + 1}`, 'abas distintas');
+      const valores = f.dados.linhas.find((l) => l.rotulo === 'PRESSÃO').valores;
+      igual([valores[1], valores.at(-1)], i ? [6.2, 8.4] : [5.1, 7.3]);
+    }
+    const g1 = JSON.parse(JSON.stringify(folhas[0].grade)), g2 = JSON.parse(JSON.stringify(folhas[1].grade));
+    for (const g of [g1, g2]) Object.values(g.cel).forEach((c) => { c.v = ''; });
+    igual(g1, g2, 'mesmo desenho');
+    const xlsx = await a.janela.criarXlsx(folhas.map(a.modelos.paraPlanilha)).text();
+    for (const n of [1, 2]) certo(xlsx.includes(`name="Caldeira ${n}"`) && xlsx.includes(`CONTROLE DIÁRIO DA CALDEIRA ${n}`), 'Excel ' + n);
+    const api = Leitura.criar(forms).dia(HOJE, regs.filter((r) => r.data === HOJE));
+    igual(folhaApi(api, 'caldeira').linhas[0].campos.pressao.valor, 5.1);
+    igual(folhaApi(api, 'caldeira_2').linhas[0].campos.pressao.valor, 6.2);
+  });
+
   await teste(grupo, 'campo novo da caldeira sai só no bloco separado, sem mudar Excel, HTML ou grade do PDF', async () => {
     const forms = formsDoApp();
     const regs = [registro('caldeira', '10', { pressao: '6.25', x_teste: '987.65' })];

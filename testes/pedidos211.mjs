@@ -61,7 +61,10 @@ export async function testarPedidos211(nav, ligar, porta, grupo) {
       await semNotificacao(chefe);
       await chefe.tocar('.numeros [data-a="aparelhos"]');
       await chefe.esperar(`!!document.querySelector('main.tela-aparelhos [data-a="aparelho-info"][data-id="${idHid}"]')`, 15000, 'o tablet da Hidrólise na lista');
-      const linha = await chefe.avaliar(`document.querySelector('[data-a="aparelho-info"][data-id="${idHid}"]').closest('.aparelho-linha').innerText`);
+      // o nome de quem usa chega na sincronização (a cada 5 s): com o computador carregado, pode levar mais de uma volta
+      const texto = `document.querySelector('[data-a="aparelho-info"][data-id="${idHid}"]').closest('.aparelho-linha').innerText`;
+      await chefe.esperar(`/Felipe/.test(${texto})`, 20000, 'o nome de quem usa').catch(() => {});
+      const linha = await chefe.avaliar(texto);
       certo(/Felipe/.test(linha) && /Tablet da Hidrólise/.test(linha) && /Ligado/.test(linha), linha);
       await chefe.tocar(`[data-a="aparelho-info"][data-id="${idHid}"]`);
       const ficha = await chefe.avaliar('document.querySelector(".modal .ficha").innerText');

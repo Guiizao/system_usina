@@ -1,0 +1,21 @@
+/* Pranchetas Ubirálcool - liberar tablet chefe e níveis
+ * © 2026 Guilherme. Todos os direitos reservados. Uso somente com autorização do autor (veja LICENCA.txt). */
+
+/* ---------- Liberar tablet chefe e níveis (versão 2.12) ---------- */
+.opcoes-nivel { display: grid; gap: 10px; margin: 6px 0 10px; }
+.nivel-op { display: grid; gap: 2px; text-align: left; padding: 12px 14px; min-height: 64px; border-radius: 12px; background: var(--papel); border: 2px solid var(--linha); }
+.nivel-op b { font-size: 19px; }
+.nivel-op span { font-size: 15px; color: var(--tinta-2); line-height: 1.25; }
+.nivel-op.sel { border-color: var(--verde); background: var(--verde-fundo); }
+/* os níveis rolam e Cancelar e Continuar ficam sempre à vista; no celular deitado, os três lado a lado */
+.modal.com-niveis { display: flex; flex-direction: column; }
+.modal.com-niveis > * { flex: none; }
+.modal.com-niveis > .opcoes-nivel { flex: 1 1 auto; min-height: 0; overflow: auto; }
+@media (orientation: landscape) and (max-height: 500px) {
+  .modal.com-niveis .opcoes-nivel { grid-template-columns: repeat(3, minmax(0, 1fr)); align-items: stretch; }
+  .modal.com-niveis .nivel-op { align-content: start; }
+}
+.segmentos button:disabled { opacity: .45; }
+/* escolhas que não cabem numa linha (celular em pé) passam para a de baixo */
+.segmentos.quebra { flex-wrap: wrap; }
+.segmentos.quebra button { flex: 1 1 auto; }

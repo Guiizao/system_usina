@@ -138,9 +138,19 @@ async function gravarPendentes(env, aparelho, geracao, lista) {
   ]);
 }
 
+async function telasPublicadas(env) {
+  // O binding lê o pacote deste deploy, sem depender do cache HTTP de uma publicação anterior.
+  try {
+    const r = await env.ASSETS.fetch('https://assets.local/telas/pacote.json');
+    if (!r.ok) return null;
+    const p = await r.json();
+    const valida = (v) => typeof v === 'string' && /^\d{1,2}\.\d{1,2}(\.\d{1,2})?$/.test(v);
+    return valida(p.versao) && valida(p.apkMinimo) ? { versao: p.versao, apkMinimo: p.apkMinimo } : null;
+  } catch { return null; } // um pacote ausente não interrompe a sincronização
+}
 /** Dois cursores independentes: só avançam sobre os itens efetivamente entregues. */
 async function puxarAparelho(env, aparelho, corpo) {
-  const resposta = { registros: [], seq: corpo.desdeSeq || 0, ordem: corpo.desdeOrdem || 0, mais: false };
+  const resposta = { registros: [], seq: corpo.desdeSeq || 0, ordem: corpo.desdeOrdem || 0, mais: false, telas: await telasPublicadas(env) };
   const { results } = await env.DB.prepare(`SELECT json, seq AS cursor, 0 AS fonte FROM
       (SELECT json, seq FROM registros WHERE seq > ? AND data >= ? ORDER BY seq LIMIT 501)
     UNION ALL SELECT json, ordem AS cursor, 1 AS fonte FROM
@@ -151,7 +161,7 @@ async function puxarAparelho(env, aparelho, corpo) {
     ORDER BY fonte, cursor LIMIT 501`).bind(resposta.seq, corpo.desdeDia || '0000-00-00', resposta.ordem, aparelho).all();
   // Reserva o envelope com os maiores cursores possíveis; conta bytes UTF-8, inclusive as vírgulas.
   const enc = new TextEncoder();
-  let bytes = enc.encode(JSON.stringify({ registros: [], seq: Number.MAX_SAFE_INTEGER, ordem: Number.MAX_SAFE_INTEGER, mais: false })).length;
+  let bytes = enc.encode(JSON.stringify({ ...resposta, seq: Number.MAX_SAFE_INTEGER, ordem: Number.MAX_SAFE_INTEGER })).length;
   for (const linha of results) {
     const registro = JSON.parse(linha.json);
     const tamanho = enc.encode(JSON.stringify(registro)).length + (resposta.registros.length ? 1 : 0);
@@ -226,7 +236,7 @@ async function receber(req, env) {
   }
   await env.DB.batch(consultas);
   const maior = regs.reduce((m, r) => Math.max(m, Number(r.seq)), 0);
-  return responder(200, { ok: true, recebidos: regs.length, seq: maior });
+  return responder(200, { ok: true, recebidos: regs.length, seq: maior, telas: await telasPublicadas(env) });
 }
 
 async function estado(env) {
@@ -249,6 +259,13 @@ async function apiDeLeitura(url, env) {
   const api = leitura.criar(C, () => medidas, { fusoMin: FUSO });
   const p = url.pathname;
   if (p === '/api/v1/esquema') return responder(200, api.esquema());
+  if (p === '/api/v1/totais') {
+    const intervalo = leitura.intervaloTotais(url.searchParams);
+    if (!intervalo) return responder(400, { erro: 'Use dia=AAAA-MM-DD ou de=AAAA-MM-DD&ate=AAAA-MM-DD, até 62 dias' });
+    const { results } = await env.DB.prepare("SELECT json FROM registros WHERE data >= ? AND data <= ? AND apagado = 0 AND prancheta NOT IN ('avisos', 'avisos-recibo', 'registro')")
+      .bind(intervalo.de, intervalo.ate).all();
+    return responder(200, api.totais(intervalo, results.map((l) => JSON.parse(l.json))));
+  }
   if (p === '/api/v1/dias') {
     const de = url.searchParams.get('de'); const ate = url.searchParams.get('ate');
     const { results } = await env.DB.prepare('SELECT data, anotacoes FROM dias WHERE anotacoes > 0 AND data >= ? AND data <= ? ORDER BY data DESC')
