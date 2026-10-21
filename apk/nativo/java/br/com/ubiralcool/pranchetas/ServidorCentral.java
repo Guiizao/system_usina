@@ -1841,7 +1841,7 @@ public class ServidorCentral {
           JSONObject j = new JSONObject((String) e[1]);
           synchronized (this) {
             if (!getGeracao().equals(j.optString("geracao")) || j.optLong("registros") == 0) {
-              n.put("seq", 0L).put("arquivosEnviados", false).put("formsHash", "").put("medidasHash", "").put("bloqueiosHash", "");
+              n.put("seq", 0L).put("arquivosEnviados", false).put("formsHash", "").put("medidasHash", "").put("bloqueiosHash", "").put("pessoasHash", "");
             }
             n.put("conferida", true);
           }
@@ -1851,6 +1851,8 @@ public class ServidorCentral {
         synchronized (this) { forms = config.optJSONObject("nuvemForms"); }
         if (forms != null) { forms = new JSONObject(forms.toString()); forms.remove("pinAdmin"); } // senha não vai para a nuvem
         String formsHash = forms == null ? "" : resumo(forms.toString());
+        JSONArray pessoas = pessoasParaNuvem();
+        String pessoasHash = resumo(pessoas.toString());
         // aparelhos bloqueados: longe da usina, o aparelho pergunta na nuvem (versão 2.11)
         JSONObject fotoBloqueios = bloqueiosParaNuvem();
         JSONArray bloqueados = fotoBloqueios.getJSONArray("lista");
@@ -1866,7 +1868,7 @@ public class ServidorCentral {
           List<JSONObject> lote = pend.subList(0, Math.min(NUVEM_LOTE, pend.size()));
           boolean formsMudou = forms != null && !formsHash.equals(n.optString("formsHash"));
           boolean bloqueiosMudaram = !bloqueiosDemais && !bloqueiosHash.equals(n.optString("bloqueiosHash"));
-          if (vez > 0 && lote.isEmpty() && !formsMudou && !bloqueiosMudaram && medidasHash.equals(n.optString("medidasHash"))) {
+          if (vez > 0 && lote.isEmpty() && pessoasHash.equals(n.optString("pessoasHash")) && !formsMudou && !bloqueiosMudaram && medidasHash.equals(n.optString("medidasHash"))) {
             synchronized (this) { n.put("arquivosEnviados", true).put("faltam", 0L); }
             break;
           }
@@ -1874,6 +1876,7 @@ public class ServidorCentral {
           for (JSONObject r : lote) regs.put(r);
           JSONObject corpo = new JSONObject().put("geracao", getGeracao()).put("medidas", medidas).put("registros", regs);
           if (formsMudou) corpo.put("forms", forms);
+          if (!pessoasHash.equals(n.optString("pessoasHash"))) corpo.put("pessoas", pessoas);
           // com a revisão: o aparelho só aceita a resposta da nuvem se ela for mais nova que o bloqueio que ele já tem
           if (bloqueiosMudaram) corpo.put("bloqueios", bloqueados).put("bloqueiosRev", bloqueiosRev);
           Object[] r = pedirNuvem(url, segredo, "central/enviar", corpo);
@@ -1884,6 +1887,7 @@ public class ServidorCentral {
             if (telas != null && (anterior == null || AtualizadorDeTelas.numero(telas.optString("versao")) >= AtualizadorDeTelas.numero(anterior.optString("versao")))) n.put("telas", telas);
             if (!lote.isEmpty()) n.put("seq", lote.get(lote.size() - 1).optLong("seq"));
             if (forms != null) n.put("formsHash", formsHash);
+            n.put("pessoasHash", pessoasHash);
             n.put("medidasHash", medidasHash).put("ultimoEnvio", System.currentTimeMillis()).put("faltam", (long) Math.max(0, pend.size() - lote.size()));
             if (!bloqueiosDemais) n.put("bloqueiosHash", bloqueiosHash);
             n.put("erro", bloqueiosDemais ? "Mais de 500 aparelhos bloqueados: a lista não vai para a nuvem" : "");
@@ -1918,7 +1922,7 @@ public class ServidorCentral {
       }
       synchronized (this) {
         if (!endereco.equals(n.optString("url"))) {
-          n.put("url", endereco).put("seq", 0L).put("arquivosEnviados", false).put("conferida", false).put("formsHash", "").put("medidasHash", "")
+          n.put("url", endereco).put("seq", 0L).put("arquivosEnviados", false).put("conferida", false).put("formsHash", "").put("medidasHash", "").put("pessoasHash", "")
            .put("erro", "").put("ultimoEnvio", 0L).put("faltam", 0L);
         }
         if (pedido.opt("segredo") instanceof String) {
@@ -1963,7 +1967,32 @@ public class ServidorCentral {
 
   private JSONObject guardarSenha(JSONObject p, String pin) throws Exception {
     String sal = sorteiaChave().substring(0, 32);
+    if (p.has("nivel")) p.put("nuvem", guardarSenhaNuvem(pin));
     return p.put("sal", sal).put("resumo", resumoDaSenha(pin, sal));
+  }
+
+  private JSONObject guardarSenhaNuvem(String pin) throws Exception {
+    String sal = sorteiaChave().substring(0, 32);
+    int iteracoes = 1000;
+    byte[] verificador = pbkdf2Sha256(pin, sal.getBytes(StandardCharsets.UTF_8), iteracoes);
+    return new JSONObject().put("sal", sal).put("iteracoes", iteracoes).put("verificador", hex(verificador));
+  }
+
+  private synchronized JSONArray pessoasParaNuvem() throws Exception {
+    JSONArray lista = pessoas(), saida = new JSONArray();
+    for (int i = 0; i < lista.length(); i++) {
+      JSONObject p = lista.optJSONObject(i);
+      if (!ativa(p)) continue;
+      List<String> funcoes = new ArrayList<>(funcoesDaPessoa(p));
+      funcoes.remove("conexao"); funcoes.remove("sistema"); Collections.sort(funcoes);
+      JSONArray listaFuncoes = new JSONArray();
+      for (String f : funcoes) listaFuncoes.put(f);
+      JSONObject copia = new JSONObject().put("id", p.optString("id")).put("nome", p.optString("nome"))
+        .put("nivel", p.optString("nivel")).put("ativo", true).put("funcoes", listaFuncoes);
+      if (p.optJSONObject("nuvem") != null) copia.put("nuvem", new JSONObject(p.getJSONObject("nuvem").toString()));
+      saida.put(copia);
+    }
+    return saida;
   }
 
   private static boolean ativa(JSONObject p) { return !p.has("ativo") || p.optBoolean("ativo"); }
@@ -2203,6 +2232,7 @@ public class ServidorCentral {
         if (nivel == 3 && !ehDono(pessoa)) { enviarJson(saida, 403, new JSONObject().put("erro", "Este tablet é só do dono do sistema")); return; }
         synchronized (this) {
           JSONObject antes = pessoaDoAparelho(aparelho);
+          if (pessoa.optJSONObject("nuvem") == null) { pessoa.put("nuvem", guardarSenhaNuvem(pin)); agendarNuvem(); }
           objetoDaConfig("sessoes").put(aparelho, new JSONObject().put("pessoaId", pessoa.optString("id")).put("em", agora));
           salvarConfig();
           if (antes == null || !antes.optString("id").equals(pessoa.optString("id"))) {
@@ -2283,6 +2313,7 @@ public class ServidorCentral {
         JSONObject p = existente != null ? existente : new JSONObject().put("id", "p" + sorteiaChave().substring(0, 8)).put("criadoEm", System.currentTimeMillis());
         p.put("nome", nome).put("nivel", nivel).put("extras", extras).put("ativo", ativo);
         if (!pin.isEmpty()) guardarSenha(p, pin);
+        agendarNuvem();
         if (existente == null) l.put(p);
         if (!ativo) {
           JSONObject sessoes = objetoDaConfig("sessoes");
@@ -2827,6 +2858,7 @@ public class ServidorCentral {
             if (resumoDaSenha(nova, x.optString("sal")).equals(x.optString("resumo"))) { enviarJson(saida, 400, new JSONObject().put("erro", "Essa senha já é de outra pessoa. Escolha outra.")); return; }
           }
           guardarSenha(dono, nova);
+          agendarNuvem();
         }
         dono.put("nivel", "administrador").put("ativo", true);
         JSONObject sessoes = objetoDaConfig("sessoes");

@@ -43,3 +43,19 @@ CREATE TABLE IF NOT EXISTS pendentes (
   PRIMARY KEY (aparelho, id)
 );
 CREATE INDEX IF NOT EXISTS pendentes_ordem ON pendentes (ordem);
+
+-- 2.16: também migra bancos existentes (publicar.ps1 reaplica este arquivo).
+CREATE TABLE IF NOT EXISTS pessoas (
+  id TEXT PRIMARY KEY,
+  json TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS acessos_nuvem (
+  aparelho TEXT PRIMARY KEY,
+  pessoa TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS tentativas_entrada (
+  chave TEXT PRIMARY KEY,
+  erros INTEGER NOT NULL,
+  bloqueios INTEGER NOT NULL DEFAULT 0,
+  ate INTEGER NOT NULL DEFAULT 0
+);

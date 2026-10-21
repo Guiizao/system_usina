@@ -6,6 +6,7 @@
  * Daqui sai a API só de leitura para o sistema do escritório (a mesma da central) e as atualizações do aplicativo.
  * Sem a central, os aparelhos trocam pendências pela nuvem; a central confere quando volta.
  *
+ *   POST /aparelho/entrar    senha pessoal libera leitura remota    (sem token)
  *   POST /aparelho/sync      os aparelhos enviam e puxam anotações   (X-Aparelho + Bearer HMAC)
  *   POST /central/enviar     a central manda as anotações novas      (Authorization: Bearer <SEGREDO_CENTRAL>)
  *   GET  /central/estado     a central pergunta até onde a nuvem tem  (Authorization: Bearer <SEGREDO_CENTRAL>)
@@ -62,9 +63,65 @@ async function tokenDoAparelho(segredo, aparelho) {
   const bytes = new Uint8Array(await crypto.subtle.sign('HMAC', chave, enc.encode('aparelho|' + aparelho)));
   return Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
 }
+
+/** Reserva antes da criptografia: pedidos simultâneos também respeitam as cinco tentativas. */
+async function reservarTentativa(env, chave, agora) {
+  return env.DB.prepare(`INSERT INTO tentativas_entrada (chave, erros) VALUES (?, 1)
+    ON CONFLICT(chave) DO UPDATE SET
+      erros = CASE WHEN ate > 0 THEN 1 ELSE erros + 1 END,
+      bloqueios = bloqueios + CASE WHEN ate = 0 AND erros = 4 THEN 1 ELSE 0 END,
+      ate = CASE WHEN ate = 0 AND erros = 4 THEN ? + CASE WHEN bloqueios = 0 THEN 60000 ELSE 900000 END ELSE 0 END
+    WHERE ate <= ? RETURNING chave`).bind(chave, agora, agora).first();
+}
+function devolverTentativa(env, chave) {
+  return env.DB.prepare(`UPDATE tentativas_entrada SET erros = MAX(0, erros - 1),
+    bloqueios = MAX(0, bloqueios - CASE WHEN ate > 0 THEN 1 ELSE 0 END), ate = 0 WHERE chave = ?`).bind(chave);
+}
+async function entrar(req, env) {
+  if (req.method !== 'POST') return responder(405, { erro: 'Use POST' });
+  let corpo;
+  try { corpo = await corpoFila(req, 1024); } catch (status) { return responder(status === 413 ? 413 : 400, { erro: status === 413 ? 'Máximo de 1 KB por entrada' : 'JSON inválido' }); }
+  const { aparelho, pin } = corpo;
+  if (!idAparelho(aparelho) || typeof pin !== 'string' || !/^\d{4,8}$/.test(pin)) return responder(400, { erro: 'Aparelho ou senha inválidos' });
+  if (!env.SEGREDO_CENTRAL) return responder(503, { erro: 'Nuvem não configurada' });
+  if (await env.DB.prepare('SELECT id FROM bloqueios WHERE id = ?').bind(aparelho).first()) return responder(423, { erro: 'bloqueado' });
+  // CF-Connecting-IP é preenchido pela Cloudflare, nunca X-Forwarded-For do cliente.
+  // IP primeiro: um IP já bloqueado não consegue criar linhas para milhares de aparelhos inventados.
+  const chaves = ['ip:' + (req.headers.get('CF-Connecting-IP') || 'sem-ip'), 'aparelho:' + aparelho];
+  const agora = Date.now();
+  if (!(await reservarTentativa(env, chaves[0], agora))) return responder(429, { erro: 'Muitas tentativas. Aguarde o desbloqueio.' });
+  if (!(await reservarTentativa(env, chaves[1], agora))) {
+    await devolverTentativa(env, chaves[0]).run();
+    return responder(429, { erro: 'Muitas tentativas. Aguarde o desbloqueio.' });
+  }
+  const enc = new TextEncoder();
+  const chave = await crypto.subtle.importKey('raw', enc.encode(pin), 'PBKDF2', false, ['deriveBits']);
+  const { results } = await env.DB.prepare("SELECT json FROM pessoas WHERE json_extract(json, '$.nuvem') IS NOT NULL").all();
+  let pessoa;
+  // ponytail: busca linear na lista pequena da usina; medir novamente se crescer (custo por verificador).
+  for (const linha of results) {
+    const p = JSON.parse(linha.json), n = p.nuvem;
+    const bits = await crypto.subtle.deriveBits({ name: 'PBKDF2', hash: 'SHA-256', salt: enc.encode(n.sal), iterations: n.iteracoes }, chave, 256);
+    const certo = Uint8Array.from(n.verificador.match(/../g), (b) => parseInt(b, 16));
+    if (crypto.subtle.timingSafeEqual(bits, certo)) { pessoa = p; break; }
+  }
+  if (!pessoa) return responder(401, { erro: 'Senha errada' });
+  const { id, nome, nivel, funcoes } = pessoa;
+  const data = new Date(agora + FUSO * 60000).toISOString().slice(0, 10), linha = 'nuvem-' + crypto.randomUUID();
+  const registro = { id: `${data}|registro|${linha}`, data, prancheta: 'registro', setor: 'central', chave: linha,
+    criadoEm: agora, atualizadoEm: agora, aparelho, operador: nome, apagado: false,
+    valores: { em: agora, tipo: 'entrada', quem: nome, aparelho: 'PC ' + aparelho, texto: `${nome} entrou pela nuvem no PC ${aparelho}` } };
+  const info = await env.DB.prepare("SELECT valor FROM info WHERE chave = 'geracao'").first();
+  await env.DB.batch([
+    ...chaves.map((c) => devolverTentativa(env, c)),
+    env.DB.prepare('INSERT INTO acessos_nuvem (aparelho, pessoa) VALUES (?, ?) ON CONFLICT(aparelho) DO UPDATE SET pessoa = excluded.pessoa').bind(aparelho, id),
+    ...consultasPendentes(env, aparelho, info?.valor || '', [registro]),
+  ]);
+  return responder(200, { token: await tokenDoAparelho(env.SEGREDO_CENTRAL, aparelho), pessoa: { id, nome, nivel, funcoes } });
+}
 /** Limita os bytes recebidos também quando não há Content-Length. */
-async function corpoFila(req) {
-  if (Number(req.headers.get('Content-Length')) > MAX_FILA_BYTES) throw 413;
+async function corpoFila(req, limite = MAX_FILA_BYTES) {
+  if (Number(req.headers.get('Content-Length')) > limite) throw 413;
   const leitor = req.body && req.body.getReader();
   if (!leitor) throw 400;
   const partes = []; let tamanho = 0;
@@ -72,7 +129,7 @@ async function corpoFila(req) {
     const { done, value } = await leitor.read();
     if (done) break;
     tamanho += value.byteLength;
-    if (tamanho > MAX_FILA_BYTES) { await leitor.cancel(); throw 413; }
+    if (tamanho > limite) { await leitor.cancel(); throw 413; }
     partes.push(value);
   }
   const bytes = new Uint8Array(tamanho); let pos = 0;
@@ -111,21 +168,30 @@ async function fila(req, env, confirmar, sync = false) {
   if (lista.some((r) => !r || typeof r.id !== 'string' || r.id.length > 300 || typeof r.data !== 'string' || typeof r.prancheta !== 'string' || typeof r.chave !== 'string'
     || r.id !== `${r.data}|${r.prancheta}|${r.chave}` || !(r.data === 'config' || leitura.ehDia(r.data))
     || !Number.isSafeInteger(r.atualizadoEm) || r.atualizadoEm < 0)) return responder(400, { erro: 'Anotação inválida' });
+  const acesso = await env.DB.prepare(`SELECT
+    (SELECT id FROM bloqueios WHERE id = ?) AS bloqueio,
+    (SELECT valor FROM info WHERE chave = 'geracao') AS geracao,
+    (SELECT pessoa FROM acessos_nuvem WHERE aparelho = ?) AS pessoa,
+    (SELECT json FROM pessoas WHERE id = (SELECT pessoa FROM acessos_nuvem WHERE aparelho = ?)) AS cadastro`).bind(aparelho, aparelho, aparelho).first();
+  if (acesso.bloqueio) return responder(423, { erro: 'bloqueado' });
+  if (acesso.pessoa && !acesso.cadastro) return responder(401, { erro: 'Pessoa desativada' });
+  const recusados = acesso.pessoa ? lista.map((r) => ({ id: r.id, motivo: 'somente_leitura' })) : [];
   if (sync) {
     if (['desdeSeq', 'desdeOrdem'].some((k) => corpo[k] !== undefined && (!Number.isSafeInteger(corpo[k]) || corpo[k] < 0))
       || (corpo.desdeDia !== undefined && !leitura.ehDia(corpo.desdeDia))) return responder(400, { erro: 'Cursor inválido' });
-    const estado = await env.DB.prepare("SELECT (SELECT json FROM bloqueios WHERE id = ?) AS bloqueio, (SELECT valor FROM info WHERE chave = 'geracao') AS geracao").bind(aparelho).first();
-    if (estado.bloqueio) return responder(423, { erro: 'bloqueado' });
-    if (corpo.geracao && estado.geracao && corpo.geracao !== estado.geracao) return responder(409, { geracao: estado.geracao });
+    if (corpo.geracao && acesso.geracao && corpo.geracao !== acesso.geracao) return responder(409, { geracao: acesso.geracao });
   }
-  if (lista.length) await gravarPendentes(env, aparelho, corpo.geracao || '', lista);
-  if (sync) return puxarAparelho(env, aparelho, corpo);
-  return responder(200, { ok: true, recebidos: lista.length });
+  if (lista.length && !acesso.pessoa) await gravarPendentes(env, aparelho, corpo.geracao || '', lista);
+  if (sync) return puxarAparelho(env, aparelho, corpo, recusados);
+  return responder(200, { ok: true, recebidos: acesso.pessoa ? 0 : lista.length, recusados });
 }
 
 /** Reserva uma faixa por lote na mesma transação; cada item tem seu próprio cursor. */
 async function gravarPendentes(env, aparelho, geracao, lista) {
-  await env.DB.batch([
+  await env.DB.batch(consultasPendentes(env, aparelho, geracao, lista));
+}
+function consultasPendentes(env, aparelho, geracao, lista) {
+  return [
     env.DB.prepare(`INSERT INTO info (chave, valor) VALUES ('ordemPendentes', ?)
       ON CONFLICT(chave) DO UPDATE SET valor = CAST(info.valor AS INTEGER) + excluded.valor`).bind(lista.length),
     env.DB.prepare(`INSERT INTO pendentes (aparelho, id, atualizadoEm, geracao, ordem, json)
@@ -135,7 +201,7 @@ async function gravarPendentes(env, aparelho, geracao, lista) {
       ON CONFLICT(aparelho, id) DO UPDATE SET atualizadoEm = excluded.atualizadoEm, geracao = excluded.geracao,
         ordem = excluded.ordem, json = excluded.json
       WHERE excluded.atualizadoEm > pendentes.atualizadoEm`).bind(aparelho, geracao, lista.length, JSON.stringify(lista)),
-  ]);
+  ];
 }
 
 async function telasPublicadas(env) {
@@ -149,8 +215,8 @@ async function telasPublicadas(env) {
   } catch { return null; } // um pacote ausente não interrompe a sincronização
 }
 /** Dois cursores independentes: só avançam sobre os itens efetivamente entregues. */
-async function puxarAparelho(env, aparelho, corpo) {
-  const resposta = { registros: [], seq: corpo.desdeSeq || 0, ordem: corpo.desdeOrdem || 0, mais: false, telas: await telasPublicadas(env) };
+async function puxarAparelho(env, aparelho, corpo, recusados = []) {
+  const resposta = { registros: [], recusados, seq: corpo.desdeSeq || 0, ordem: corpo.desdeOrdem || 0, mais: false, telas: await telasPublicadas(env) };
   const { results } = await env.DB.prepare(`SELECT json, seq AS cursor, 0 AS fonte FROM
       (SELECT json, seq FROM registros WHERE seq > ? AND data >= ? ORDER BY seq LIMIT 501)
     UNION ALL SELECT json, ordem AS cursor, 1 AS fonte FROM
@@ -191,12 +257,33 @@ async function receber(req, env) {
     bloqueios = corpo.bloqueios.filter((b) => b && typeof b.id === 'string' && /^[\w.-]{1,80}$/.test(b.id))
       .map((b) => ({ id: b.id, em: Number(b.em) || 0, rev: Number(b.rev) || 0, modo: b.modo === 'senha' ? 'senha' : 'trava', apagar: !!b.apagar }));
   }
+  let pessoas = null;
+  if ('pessoas' in corpo) {
+    if (!Array.isArray(corpo.pessoas) || corpo.pessoas.length > 500) return responder(400, { erro: 'Lista de pessoas inválida' });
+    pessoas = [];
+    for (const p of corpo.pessoas) {
+      if (!p || !idAparelho(p.id) || typeof p.nome !== 'string' || !p.nome.trim() || p.nome.length > 40
+        || !['administrador', 'encarregado', 'consulta'].includes(p.nivel) || typeof p.ativo !== 'boolean'
+        || !Array.isArray(p.funcoes) || p.funcoes.length > 100 || p.funcoes.some((f) => typeof f !== 'string' || !/^[a-z_]{2,30}$/.test(f))) return responder(400, { erro: 'Pessoa inválida' });
+      if (!p.ativo) continue;
+      // Lista explícita: nem senha, nem sal/resumo da central podem ser persistidos aqui.
+      const copia = { id: p.id, nome: p.nome, nivel: p.nivel, ativo: true, funcoes: [...new Set(p.funcoes)].filter((f) => !['conexao', 'sistema'].includes(f)) };
+      if (p.nuvem !== undefined) {
+        const n = p.nuvem;
+        if (!n || typeof n.sal !== 'string' || !/^[a-f0-9]{32}$/.test(n.sal)
+          || typeof n.verificador !== 'string' || !/^[a-f0-9]{64}$/.test(n.verificador) || n.iteracoes !== 1000) return responder(400, { erro: 'Verificador inválido' });
+        copia.nuvem = { sal: n.sal, iteracoes: n.iteracoes, verificador: n.verificador };
+      }
+      pessoas.push(copia);
+    }
+    if (new Set(pessoas.map((p) => p.id)).size !== pessoas.length) return responder(400, { erro: 'Pessoa repetida' });
+  }
   const info = await lerInfo(env);
   const consultas = [];
   const geracao = String(corpo.geracao || '');
   // a central foi zerada (Apagar todos os dados do sistema) ou é outra central: a cópia começa de novo
   if (geracao && info.geracao && geracao !== info.geracao) {
-    consultas.push(env.DB.prepare('DELETE FROM registros'), env.DB.prepare('DELETE FROM dias'));
+    consultas.push(env.DB.prepare('DELETE FROM registros'), env.DB.prepare('DELETE FROM dias'), env.DB.prepare('DELETE FROM pessoas'));
   }
   const novasInfo = { geracao, ultimoEnvio: String(Date.now()) };
   if (corpo.forms && typeof corpo.forms === 'object') {
@@ -213,6 +300,10 @@ async function receber(req, env) {
   consultas.push(env.DB.prepare(TIRAR_PIN_ANTIGO));
   consultas.push(env.DB.prepare(`INSERT INTO info (chave, valor) SELECT key, value FROM json_each(?) WHERE true
     ON CONFLICT(chave) DO UPDATE SET valor = excluded.valor`).bind(JSON.stringify(novasInfo)));
+  if (pessoas) {
+    consultas.push(env.DB.prepare('DELETE FROM pessoas'));
+    consultas.push(env.DB.prepare("INSERT INTO pessoas (id, json) SELECT json_extract(value, '$.id'), value FROM json_each(?)").bind(JSON.stringify(pessoas)));
+  }
   if (regs.length) {
     const texto = JSON.stringify(regs);
     consultas.push(env.DB.prepare(`INSERT INTO registros (id, data, prancheta, setor, chave, seq, atualizadoEm, apagado, json)
@@ -297,6 +388,7 @@ export default {
       if (p === '/' || p === '') {
         return new Response('Nuvem das Pranchetas Digitais da Ubirálcool: no ar.\n', { headers: { 'Content-Type': 'text/plain; charset=utf-8' } });
       }
+      if (p === '/aparelho/entrar') return await entrar(req, env);
       if (p === '/aparelho/sync') return await fila(req, env, false, true);
       if (p === '/fila' || p === '/fila/confirmar') return await fila(req, env, p === '/fila/confirmar');
       if (p.startsWith('/central/')) {
