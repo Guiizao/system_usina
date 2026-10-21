@@ -59,7 +59,8 @@ export async function testarTurno216(g) {
       });
       await teste(g, nome + ': valida URL, tipos e segredo; segredo criado só aparece uma vez', async () => {
         const cli = await c.cliente();
-        for (const p of [{ url: 'javascript:alert(1)' }, { url: 'https://usuario:senha@example.com/' }, { ligado: 'sim' }, { segredo: 'x\r\ny' }, { segredo: '🔑' }])
+        // http pela internet: o segredo iria aberto (só https; http só na rede da usina, como o destino deste teste)
+        for (const p of [{ url: 'javascript:alert(1)' }, { url: 'https://usuario:senha@example.com/' }, { url: 'http://example.com/totais' }, { url: 'http://8.8.8.8/totais' }, { ligado: 'sim' }, { segredo: 'x\r\ny' }, { segredo: '🔑' }])
           igual((await cli.pedir('/api/turnos', { corpo: { acao: 'configurar', ...p } })).status, 400);
         const e = await c.api('/api/turnos', { acao: 'configurar', url: destino.url, segredo: '', ligado: true, forms: C });
         certo(e.segredoCriado?.length >= 20, 'não criou segredo');

@@ -1610,6 +1610,11 @@ public class ServidorCentral {
         if (!url.isEmpty()) {
           try { URL u = new URL(url); if (!("http".equals(u.getProtocol()) || "https".equals(u.getProtocol())) || u.getHost().isEmpty() || u.getUserInfo() != null || u.getRef() != null || url.matches(".*\\s.*")) throw new Exception(); }
           catch (Exception e) { throw new IllegalArgumentException("Endereço inválido"); }
+          // http só dentro da rede da usina; pela internet o segredo e os totais iriam abertos (igual ao envio-turnos.js)
+          String host;
+          try { host = new URL(url).getHost(); } catch (Exception e) { throw new IllegalArgumentException("Endereço inválido"); }
+          if (url.toLowerCase(java.util.Locale.ROOT).startsWith("http:") && !host.matches("(?i)localhost|127\\.\\d+\\.\\d+\\.\\d+|10\\.\\d+\\.\\d+\\.\\d+|192\\.168\\.\\d+\\.\\d+|172\\.(1[6-9]|2\\d|3[01])\\.\\d+\\.\\d+|\\[::1\\]|[^.:]+|.+\\.local"))
+            throw new IllegalArgumentException("Pela internet, o endereço começa com https:// (com http o segredo iria aberto)");
         }
         boolean ligado = p.has("ligado") ? p.optBoolean("ligado") : b.optBoolean("ligado");
         if (ligado && url.isEmpty()) throw new IllegalArgumentException("Cadastre o endereço primeiro");

@@ -5,6 +5,8 @@ const http = require('http');
 const https = require('https');
 const leitura = require('./api-leitura');
 
+// http só dentro da rede da usina; pela internet o segredo e os totais iriam abertos (2.16, revisão de segurança)
+const naRedeLocal = (host) => /^(localhost|127\.\d+\.\d+\.\d+|10\.\d+\.\d+\.\d+|192\.168\.\d+\.\d+|172\.(1[6-9]|2\d|3[01])\.\d+\.\d+|\[::1\]|[^.:]+|.+\.local)$/i.test(host);
 const dataLocal = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 function diaProducao(C, agora) {
   const d = new Date(agora);
@@ -54,6 +56,7 @@ function criar({ config, salvar, forms, registros, agora = Date.now }) {
     if (url) {
       let u; try { u = new URL(url); } catch (_) { throw new Error('Endereço inválido'); }
       if (!['http:', 'https:'].includes(u.protocol) || u.username || u.password || u.hash) throw new Error('Endereço inválido');
+      if (u.protocol === 'http:' && !naRedeLocal(u.hostname)) throw new Error('Pela internet, o endereço começa com https:// (com http o segredo iria aberto)');
     }
     const ligado = p.ligado === undefined ? b.ligado : p.ligado;
     if (ligado && !url) throw new Error('Cadastre o endereço primeiro');
@@ -95,4 +98,4 @@ function criar({ config, salvar, forms, registros, agora = Date.now }) {
   }
   return { estado, configurar, verificar };
 }
-module.exports = { criar, encerrados, diaProducao };
+module.exports = { criar, encerrados, diaProducao, naRedeLocal };

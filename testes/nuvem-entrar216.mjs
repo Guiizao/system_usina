@@ -14,6 +14,10 @@ import { novoGrupo, teste, igual, certo, resumo, SENHA_ENCARREGADO } from './tes
 const SEGREDO = 'segredo-ficticio-entrada216';
 const verificador = (pin, sal = 'a'.repeat(32)) => ({ sal, iteracoes: 1000, verificador: pbkdf2Sync(pin, sal, 1000, 32, 'sha256').toString('hex') });
 const pessoa = (id, pin) => ({ id, nome: id, nivel: 'consulta', ativo: true, funcoes: ['relatorios'], ...(pin ? { nuvem: verificador(pin) } : {}) });
+const hmac = (texto) => createHmac('sha256', SEGREDO).update(texto).digest('hex');
+// o que a nuvem guarda (a conferência selada com o segredo da central) e a chave de leitura que ela dá
+const selado = (pin, sal) => hmac('senha|' + verificador(pin, sal).verificador);
+const chaveDeLeitura = (aparelho, id, pin, sal) => hmac(`leitura|${aparelho}|${id}|${selado(pin, sal)}`);
 
 export async function testarNuvemEntrar216(g) {
   const n = await ligarNuvemSQLite(8340, SEGREDO, 'leitura-ficticia');
@@ -43,14 +47,18 @@ export async function testarNuvemEntrar216(g) {
       igual(rows.length, 2);
       const texto = JSON.stringify(rows);
       for (const s of ['nao-guardar', 'sal-central', 'resumo-central', 'conexao', 'sistema']) certo(!texto.includes(s), s);
+      // o banco da nuvem sozinho não dá para testar PINs: só a conferência selada com o segredo da central
+      certo(!texto.includes(verificador('4567').verificador), 'verificador sem selo no banco');
+      certo(texto.includes(selado('4567')), 'conferência selada');
       igual((await enviar({ pessoas: [{ ...p, nuvem: { ...p.nuvem, iteracoes: 999999 } }] })).status, 400);
       igual(n.consultar('SELECT id FROM pessoas').length, 2, 'envio inválido preserva a lista');
     });
     let login;
-    await teste(g, 'login sem token retorna HMAC do aparelho e apenas os dados públicos da pessoa', async () => {
+    await teste(g, 'login dá a chave de leitura (nunca a chave do tablet) e apenas os dados públicos da pessoa', async () => {
       login = await entrar('pc-lucas');
       igual(login.status, 200);
-      igual(login.json.token, createHmac('sha256', SEGREDO).update('aparelho|pc-lucas').digest('hex'));
+      certo(login.json.token !== hmac('aparelho|pc-lucas'), 'deu a chave de um tablet');
+      igual(login.json.token, chaveDeLeitura('pc-lucas', 'Lucas', '4567'));
       igual(login.json.pessoa, { id: 'Lucas', nome: 'Lucas', nivel: 'consulta', funcoes: ['relatorios'] });
       igual(login.headers.get('Access-Control-Allow-Origin'), '*');
       igual(n.consultar('SELECT pessoa FROM acessos_nuvem')[0].pessoa, 'Lucas');
@@ -78,6 +86,47 @@ export async function testarNuvemEntrar216(g) {
       const fila = await n.pedir('/fila', { senha: SEGREDO });
       certo(fila.json.itens.some((r) => r.registro.valores.texto === 'Lucas entrou pela nuvem no PC pc-lucas'));
       igual((await n.pedir('/aparelho/sync', { senha: login.json.token, aparelho: 'outro', corpo: { registros: [] } })).status, 401);
+    });
+    await teste(g, 'entrar com o número de um tablet de verdade não tira a escrita dele', async () => {
+      igual((await entrar('tablet-real')).status, 200);
+      const novo = { ...registro, id: `${data}|teste|real`, chave: 'real', valores: { valor: 'do tablet' } };
+      const r = await n.pedir('/aparelho/sync', { senha: hmac('aparelho|tablet-real'), aparelho: 'tablet-real', corpo: { registros: [novo] } });
+      igual(r.status, 200); igual(r.json.recusados, []);
+      certo(JSON.stringify(n.consultar("SELECT json FROM pendentes WHERE aparelho = 'tablet-real'")).includes('do tablet'), 'a anotação do tablet não ficou');
+      limparTentativas();
+    });
+    await teste(g, 'sem Relatórios e Escritório não entra; tirar a permissão, trocar a senha ou desativar corta a chave na hora', async () => {
+      await enviar({ pessoas: [pessoa('Lucas', '4567'), { ...pessoa('Bruno', '7777'), funcoes: ['corrigir'] }] });
+      igual((await entrar('pc-bruno', '7777')).status, 401, 'Bruno não vê pela nuvem');
+      const sync = () => n.pedir('/aparelho/sync', { senha: login.json.token, aparelho: 'pc-lucas', corpo: { registros: [] } });
+      igual((await sync()).status, 200);
+      await enviar({ pessoas: [{ ...pessoa('Lucas', '4567'), funcoes: ['corrigir'] }] });
+      igual((await sync()).status, 401, 'tirou Relatórios');
+      await enviar({ pessoas: [{ ...pessoa('Lucas'), nuvem: verificador('4567', 'c'.repeat(32)) }] });
+      igual((await sync()).status, 401, 'senha nova (outro sal)');
+      await enviar({ pessoas: [pessoa('Lucas', '4567')] });
+      igual((await sync()).status, 200, 'mesma senha de antes volta a valer');
+      limparTentativas();
+    });
+    await teste(g, 'conferência guardada antes do selo (21/10) é selada na primeira entrada', async () => {
+      const antiga = JSON.stringify({ ...pessoa('Velho'), nuvem: verificador('3141') });
+      n.consultar(`INSERT INTO pessoas (id, json) VALUES ('Velho', '${antiga}') RETURNING id`);
+      igual((await entrar('pc-velho', '3141')).status, 200);
+      const guardado = n.consultar("SELECT json FROM pessoas WHERE id = 'Velho'")[0].json;
+      certo(!guardado.includes(verificador('3141').verificador) && guardado.includes(selado('3141')), guardado);
+      n.consultar("DELETE FROM pessoas WHERE id = 'Velho' RETURNING id");
+      limparTentativas();
+    });
+    await teste(g, 'limite geral: 20 senhas erradas por hora somando IPs e aparelhos diferentes', async () => {
+      limparTentativas();
+      for (let i = 0; i < 20; i++) igual((await entrar('geral-' + i, '0000', `198.18.0.${i + 1}`)).status, 401);
+      igual((await entrar('geral-novo', '4567', '198.18.1.1')).status, 429, 'a 21ª passou');
+      // o IP e o aparelho barrados pelo geral não ficam com o erro (devolvido)
+      igual(n.consultar("SELECT erros FROM tentativas_entrada WHERE chave = 'ip:198.18.1.1'")[0].erros, 0);
+      limparTentativas();
+      igual((await entrar('geral-novo', '4567', '198.18.1.1')).status, 200);
+      igual(n.consultar("SELECT chave FROM tentativas_entrada WHERE chave LIKE 'todos:%'").length, 1, 'só a hora atual');
+      limparTentativas();
     });
     await teste(g, 'bloqueio por aparelho, 1 minuto e depois 15 minutos, persiste no D1', async () => {
       limparTentativas();

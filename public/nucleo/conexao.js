@@ -255,6 +255,8 @@
         marcarNuvem(r.status < 500);
         if (r.status === 404) { sync.nuvemAntiga = true; sync.enviandoNuvem = false; sync.nuvemEm = 0; return mandarParaNuvem(); }
         if (r.status === 423) { conferirNaNuvem(true); return; } // bloqueado: a nuvem diz como
+        // 2.16: pela nuvem, a senha mudou, a pessoa foi desativada ou perdeu Relatórios e Escritório: entra de novo
+        if (r.status === 401 && cfg.soNuvem) { sairDaNuvem(); toast('O acesso pela nuvem acabou (a senha mudou ou a permissão foi tirada). Entre de novo.', 'erro'); return; }
         if (!r.ok) return; // 409: a nuvem é de outra central (zerada ou trocada); espera falar com a central
         const d = await r.json();
         versaoNaSincronizacao(d.telas); // 2.16: sem a central, quem avisa da versão nova é a nuvem
