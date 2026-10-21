@@ -8,7 +8,9 @@
 .campo .parcelas b.nova { animation: bagSobe var(--mov-janela, .24s) var(--suave, ease-out) both; }
 @keyframes bagSobe { from { opacity: 0; transform: translateY(26px) scale(1.8); } to { opacity: 1; transform: none; } }
 @media (prefers-reduced-motion: reduce) { .campo .parcelas b.nova { animation: none; } }
-.fichas .somar-bag { margin-left: auto; white-space: nowrap; border: 2px solid var(--verde); color: var(--verde-escuro); font-weight: 700; }
+.cabecalho-form .caixinhas { display: inline-flex; gap: 8px; }
+.cabecalho-form .caixinha { width: 52px; height: 52px; padding: 0; display: grid; place-items: center; }
+.cabecalho-form .caixinha svg.ico { width: 26px; height: 26px; }
 .edicao { flex: 1 1 auto; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr); }
 .edicao .coluna { min-width: 0; min-height: 0; display: flex; flex-direction: column; }
 .barra-trabalho { flex: none; padding: 10px 18px 0; display: flex; flex-direction: column; }

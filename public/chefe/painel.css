@@ -46,6 +46,12 @@
 /* 2.15: até 6 gráficos no painel só na tela larga (computador); nas outras, 4 */
 @media (max-width: 1399px) { .graficos-painel .grafico-botao:nth-child(n+5) { display: none; } }
 .aparelhos-agora .titulo-secao h2 { margin: 0; }
+/* Totais do dia (2.16): o nome do insumo e os turnos à esquerda, o total à direita */
+.total-linha { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; padding: 6px 0; border-top: 1px solid var(--linha-clara); }
+.total-linha > span { min-width: 0; }
+.total-linha b { display: block; font-size: 17px; }
+.total-linha small { color: var(--tinta-2); font-size: 15px; }
+.total-linha strong { font-size: 20px; white-space: nowrap; font-variant-numeric: tabular-nums; }
 .agora-linha { display: flex; align-items: center; gap: 10px; padding: 6px 0; border-top: 1px solid var(--linha-clara); }
 .agora-linha > span:last-child { min-width: 0; }
 .agora-linha b { display: block; font-size: 17px; }

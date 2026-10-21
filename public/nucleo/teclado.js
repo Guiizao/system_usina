@@ -31,7 +31,16 @@
     atualizarEdicao(antes && antes !== id ? [antes, id] : [id]);
   }
   const passoDo = (a) => a.passo || Math.pow(10, -(a.dec || 0));
-  /** 2.16: apagar pergunta antes (Sim ou Não). No ralo, com o visor vazio, a lixeira tira o último bag somado. */
+  /** Ralo (2.16): a caixinha + do lado de "Anote o peso do bag" guarda o peso deste bag (ele sobe pequeno no quadro)
+      e deixa o quadro pronto para o próximo, com o teclado aberto nele. */
+  function somarBag() {
+    const a = alvos.find((x) => x.somar);
+    if (!a || !a.somar()) return;
+    a.recemSomado = true;
+    if (ed.alvoId === a.id && !ed.oculto) { ed.texto = ''; ed.substituir = false; atualizarEdicao([a.id]); } else selecionar(a.id);
+    setTimeout(() => { a.recemSomado = false; }, 600);
+  }
+  /** 2.16: apagar pergunta antes (Sim ou Não). No ralo, com o quadro vazio, a lixeira tira o último bag somado. */
   async function limparComPergunta(a) {
     const ultima = vazio(a.get()) && a.ultimaParcela ? a.ultimaParcela() : '';
     if (ultima) {
@@ -60,13 +69,6 @@
     if (k.startsWith('o:')) { a.set(a.opcoes[Number(k.slice(2))]); atualizarEdicao([a.id]); return setTimeout(() => tecla('prox'), 180); }
     if (k === 'marcar') { a.set(vazio(a.get()) ? 'OK' : ''); return atualizarEdicao([a.id]); }
     if (k === 'limpar') return limparComPergunta(a);
-    if (k === 'somar') {
-      if (!a.somar()) return;
-      ed.texto = ''; ed.substituir = false; a.recemSomado = true;
-      atualizarEdicao([a.id]);
-      setTimeout(() => { a.recemSomado = false; }, 600);
-      return;
-    }
 
     let s = ed.substituir && (/^[\d,.]$/.test(k) || k.length === 1) && k !== '+' && k !== '-' ? '' : ed.texto;
     ed.substituir = false;
@@ -181,7 +183,7 @@
       ${a.dica ? `<p class="dica-painel">${esc(a.dica)}</p>` : ''}
       ${a.sugestao ? `<p class="dica-painel">${esc(a.sugestao)}</p>` : ''}
       ${a.type === 'time' ? `<div class="fichas"><button class="largo" data-ed="agora">${ico('relogio')} Agora, ${horaAgora()}</button></div>` : ''}
-      ${a.unidades && a.unidades.length > 1 ? `<div class="fichas">${a.unidades.map((u) => `<button data-ed="u:${u}" class="${u === unidade ? 'sel' : ''}">${u}</button>`).join('')}${a.somar ? `<button class="btn somar-bag" data-ed="somar">${ico('mais')} Outro bag</button>` : ''}</div>` : ''}
+      ${a.unidades && a.unidades.length > 1 ? `<div class="fichas">${a.unidades.map((u) => `<button data-ed="u:${u}" class="${u === unidade ? 'sel' : ''}">${u}</button>`).join('')}</div>` : ''}
       ${teclas}${nav}`;
   }
 

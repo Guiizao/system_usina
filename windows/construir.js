@@ -15,6 +15,16 @@ async function construir() {
   for (const nome of fs.readdirSync(raiz).filter((n) => n.endsWith('.js'))) fs.copyFileSync(path.join(raiz, nome), path.join(pacote, nome));
   for (const nome of ['main.js', 'pacote.js']) fs.copyFileSync(path.join(__dirname, nome), path.join(pacote, nome));
   fs.cpSync(path.join(raiz, 'public'), path.join(pacote, 'public'), { recursive: true });
+  // como no APK: as partes do aplicativo viram um app.js só, embaralhado (quem abrir o instalador não lê o código)
+  const { execFileSync } = require('node:child_process');
+  const publico = path.join(pacote, 'public');
+  execFileSync(process.execPath, [path.join(raiz, 'apk', 'juntar-app.js'), publico], { stdio: 'inherit' });
+  const terser = path.join(raiz, 'apk', 'node_modules', 'terser', 'bin', 'terser');
+  if (!fs.existsSync(terser)) console.log('Aviso: sem o terser (apk/node_modules), o código vai sem embaralhar.');
+  else for (const js of fs.readdirSync(publico, { recursive: true }).filter((n) => n.endsWith('.js') && !n.endsWith('qrcode.js') && !/^lib[\\/]/.test(n))) {
+    const arquivo = path.join(publico, js); // (qrcode.js e a pasta lib são de outros autores: vão como estão)
+    execFileSync(process.execPath, [terser, arquivo, '--compress', '--mangle', '--comments', '/Guilherme/', '-o', arquivo]);
+  }
   const apk = path.join(raiz, 'apk', 'saida');
   if (fs.existsSync(apk)) fs.cpSync(apk, path.join(pacote, 'apk', 'saida'), { recursive: true });
   else console.log('Aviso: apk/saida não existe; o instalador será gerado sem APK para os tablets.');
@@ -26,7 +36,8 @@ async function construir() {
     appId: 'br.com.ubiralcool.pranchetas', productName: 'Pranchetas Ubirálcool',
     electronVersion: devDependencies.electron,
     electronDist: path.join(__dirname, 'node_modules', 'electron', 'dist'),
-    directories: { output: saida }, asar: true, npmRebuild: false,
+    // sem asar: a central copia pastas (o APK dos tablets) e o fs dentro do asar não deixa; o código já vai embaralhado
+    directories: { output: saida }, asar: false, npmRebuild: false,
     files: ['**/*'],
     win: { icon: path.join(pacote, 'public', 'icons', 'icon-512.png'), signExecutable: false },
     nsis: { oneClick: false, perMachine: true, allowToChangeInstallationDirectory: true,

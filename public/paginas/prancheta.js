@@ -440,6 +440,8 @@
       seletor = seletorDeHoras(chave, hoje, (h) => porHora[h] && !vazio(porHora[h].valores.qtd), (h) => `${fmtNum(porHora[h].valores.qtd)} ${porHora[h].valores.unidade || ''}`);
       const reg = porHora[chave];
       cabecalhoForm = reg && !vazio(reg.valores.qtd) ? `<span class="aviso ok">${ico('certo')} Anotado por ${esc(reg.operador || 'sem nome')}</span>` : `<span class="aviso">${p.rotuloQtd ? `Anote o ${esc(p.rotuloQtd.toLowerCase())}` : 'Anote quanto foi colocado'}</span>`;
+      // ralo (2.16): do lado, as caixinhas de somar mais um bag e de apagar
+      if (p.somaPesagens) cabecalhoForm += `<span class="caixinhas"><button class="btn caixinha" data-a="bag-somar" aria-label="Somar mais um bag" title="Somar mais um bag">${ico('mais')}</button><button class="btn caixinha perigo" data-a="bag-apagar" aria-label="Apagar" title="Apagar">${ico('lixeira')}</button></span>`;
       rotuloSalvar = `Salvar ${p.nome} das ${rotuloHoraPapel(chave)}`;
       const meta = (pegar(data, v.pid, 'meta') || { valores: {} }).valores;
       const extras = extrasOperador(p);

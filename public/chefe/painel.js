@@ -69,6 +69,7 @@
 
           <aside class="lateral-chefe">
             ${veNoChefe('escritorio') ? blocoEscritorio() : ''}
+            ${veNoChefe('relatorios') ? blocoTotais(data) : ''}
             ${veNoChefe('relatorios') ? `<section class="bloco">
               <h2>Compartilhar a folha do dia</h2>
               <button class="btn primario largo" data-a="compartilhar" data-destino="escritorio">${ico('enviar')} Enviar para o escritório</button>
@@ -109,6 +110,29 @@
         <button data-a="esc-abrir" data-t="esc-calculos" data-dia="${dia}">${ico('grafico')}<span>Cálculos da produção</span></button>
         <button data-a="esc-abrir" data-t="esc-rastreamento" data-dia="${dia}">${ico('documento')}<span>Rastreamento e etiqueta</span></button>
       </div>
+    </section>`;
+  }
+  /** 2.16: o que foi gasto no dia, somado por turno: os insumos e os quilos do ralo (o mesmo dos totais da API).
+      Hora, pressão e temperatura não se somam: não entram. */
+  function blocoTotais(data) {
+    const linhas = [];
+    setores().forEach((s) => s.pranchetas.flatMap(folhasDe).filter((pid) => prancheta(pid).tipo === 'insumo').forEach((pid) => {
+      const p = prancheta(pid), turnos = turnosDaPrancheta(pid), porUnidade = {};
+      linhasDeHora(listar(data, pid)).forEach((r) => {
+        const n = parseFloat(r.valores.qtd);
+        if (isNaN(n)) return;
+        const u = r.valores.unidade || p.unidade || '';
+        const x = porUnidade[u] || (porUnidade[u] = { total: 0, turnos: turnos.map((t) => ({ t, q: 0 })) });
+        x.total += n;
+        x.turnos.find((y) => y.t === turnoDaHora(Number(r.chave), turnos)).q += n;
+      });
+      Object.entries(porUnidade).forEach(([u, x]) => linhas.push(Object.assign({ nome: p.nome, u }, x)));
+    }));
+    const num = (n) => fmtNum(String(Math.round(n * 100) / 100));
+    return `<section class="bloco totais-dia"><h2>Totais do dia</h2>
+      ${linhas.length ? linhas.map((l) => `<div class="total-linha"><span><b>${esc(l.nome)}</b>
+        <small>${l.turnos.filter((y) => y.q).map((y) => `${esc(y.t.nome.replace(' Turno', ''))} ${num(y.q)}`).join(' · ')}</small></span>
+        <strong>${num(l.total)} <small>${esc(l.u)}</small></strong></div>`).join('') : '<p class="sub">Nada somado ainda neste dia.</p>'}
     </section>`;
   }
   /** Quem está trabalhando agora: cada aparelho, quem usa e se está ligado (a visão geral do escritório). */
