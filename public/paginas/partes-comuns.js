@@ -72,7 +72,11 @@
     alvos = [];
     // a animação de entrada é só de quem trocou de tela: o redesenho que vem da central (a cada 5 s) não pode piscar
     app.classList.remove('troca', 'troca-linha');
-    app.innerHTML = (telas[v.tela] || telaInicio)(v);
+    // computador (2.16): menu fixo à esquerda e a tela à direita (chefe/menu-pc.js)
+    const html = (telas[v.tela] || telaInicio)(v);
+    const menu = comMenuPc();
+    app.classList.toggle('com-menu', menu);
+    app.innerHTML = menu ? menuPc(v) + `<div class="area-pc">${html}</div>` : html;
     ultimaChaveTela = chaveTela;
     if (mesmaTela) app.querySelectorAll(ROLAM).forEach((el, i) => { if (rolagens[i]) { el.scrollLeft = rolagens[i][0]; el.scrollTop = rolagens[i][1]; } });
     else rolarDepois = true; // abriu a tela ou trocou a linha: a escolhida vai para o meio

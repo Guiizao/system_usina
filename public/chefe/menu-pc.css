@@ -1,0 +1,39 @@
+/* Pranchetas Ubirálcool - computador: painel administrativo (menu fixo, barra enxuta, números de painel)
+ * © 2026 Guilherme. Todos os direitos reservados. Uso somente com autorização do autor (veja LICENCA.txt). */
+
+/* o menu à esquerda e a tela à direita */
+#app.com-menu { flex-direction: row; }
+#app.com-menu > .area-pc { flex: 1; min-width: 0; display: flex; flex-direction: column; overflow: hidden; }
+.menu-pc {
+  flex: none; width: 248px; display: flex; flex-direction: column; gap: 2px; padding: 14px 10px 12px;
+  background: var(--grafite); color: var(--branco); overflow-y: auto;
+}
+.menu-marca { display: flex; align-items: center; gap: 12px; padding: 2px 8px 14px; margin-bottom: 4px; border-bottom: 1px solid var(--topo-botao-borda); }
+.menu-marca img { width: 42px; height: 42px; border-radius: 8px; background: var(--branco); padding: 3px; }
+.menu-marca b { display: block; font-size: 19px; }
+.menu-marca small { display: block; font-size: 14px; color: var(--topo-texto-2); }
+.menu-titulo { margin: 12px 10px 4px; font-size: 13px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--topo-texto-2); }
+.menu-item {
+  display: flex; align-items: center; gap: 12px; width: 100%; min-height: 42px; padding: 8px 12px; border-radius: 8px;
+  font-size: 16px; color: var(--topo-texto-2); text-align: left;
+}
+.menu-item svg.ico { width: 20px; height: 20px; }
+.menu-item span { flex: 1; min-width: 0; display: flex; align-items: center; gap: 8px; }
+.menu-item:hover { background: var(--topo-botao); color: var(--branco); }
+.menu-item.ativo { background: var(--branco); color: var(--grafite); font-weight: 700; }
+.menu-item .contador { margin-left: auto; font-style: normal; min-width: 22px; height: 22px; padding: 0 6px; border-radius: 999px; display: grid; place-items: center; background: var(--ambar); color: var(--ambar-tinta); font-size: 13px; }
+.menu-pe { margin-top: auto; padding: 12px 10px 2px; border-top: 1px solid var(--topo-botao-borda); }
+.menu-pe b { display: block; font-size: 16px; }
+.menu-pe small { display: block; font-size: 14px; color: var(--topo-texto-2); }
+
+/* barra de cima: o que já está no menu sai dela (logo, avisos, ler folha, relatórios, usina) */
+#app.com-menu .topo .logo, #app.com-menu .topo [data-a="avisos"], #app.com-menu .topo [data-a="ler-folha"],
+#app.com-menu .topo [data-a="relatorios"], #app.com-menu .topo [data-a="config"] { display: none; }
+
+/* números do dia com cara de painel: o nome em cima, pequeno, e o número grande */
+#app.com-menu .numeros div, #app.com-menu .numeros .numero-botao { display: flex; flex-direction: column-reverse; justify-content: flex-end; gap: 2px; padding: 12px 16px; }
+#app.com-menu .numeros span { font-size: 13px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
+#app.com-menu .numeros b { font-size: 32px; }
+
+/* rótulos dos pontos dos gráficos: no computador (escala 0,9) não podem ficar abaixo do mínimo de leitura */
+#app.com-menu .graf-leg small { font-size: 14px; }

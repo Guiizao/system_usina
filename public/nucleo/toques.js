@@ -37,6 +37,8 @@
     if (!b || modalAberto()) return;
     const a = b.dataset.a;
     const v = view();
+    // menu do computador: cada item é uma seção; o Voltar dela leva ao painel (as telas não se empilham)
+    if (b.closest('.menu-pc') && pilha.length > 1) pilha = [pilha[0]];
     // tablet chefe: confere se quem está usando pode fazer isso (e pede a senha se ninguém entrou)
     if (ehCentral() && PRECISA[a]) {
       const f = PRECISA[a] === 'folha' ? (soDoChefe(v.pid) ? 'anotar' : 'corrigir') : PRECISA[a];
