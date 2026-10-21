@@ -1,5 +1,5 @@
 /* Pranchetas Digitais - © 2026 Guilherme. */
-const { app, BrowserWindow, Menu, Tray, dialog, shell, nativeImage } = require('electron');
+const { app, BrowserWindow, Menu, Tray, dialog, shell, nativeImage, session } = require('electron');
 const fs = require('node:fs');
 const path = require('node:path');
 const net = require('node:net');
@@ -70,6 +70,10 @@ async function ligar() {
   if (falhou) return;
   if (!pronta) throw new Error('A central não respondeu a tempo. Feche o aplicativo e tente novamente.');
 
+  // O Chromium do Electron derruba a página quando o service worker grava no cache ("bad IPC message, CacheStorageCache").
+  // No computador a central está aqui mesmo: o service worker não faz falta. Apaga o que ficou de antes (as anotações
+  // guardadas na página ficam: só o cache e o service worker saem).
+  await session.defaultSession.clearStorageData({ storages: ['serviceworkers', 'cachestorage'] }).catch(() => {});
   const icone = nativeImage.createFromPath(path.join(process.env.PASTA_PUBLICA, 'icons', 'icon-512.png'));
   janela = new BrowserWindow({ title: 'Pranchetas Ubirálcool', width: 1280, height: 800,
     show: false, icon: icone, autoHideMenuBar: true,
@@ -78,7 +82,9 @@ async function ligar() {
   // registro da janela (Documentos não; fica com o programa): ajuda a achar tela branca, erro de página ou travamento
   const registro = (...x) => { try { fs.appendFileSync(path.join(app.getPath('userData'), 'janela.log'), new Date().toISOString() + ' ' + x.join(' ') + '\n'); } catch { /* sem registro, segue */ } };
   janela.webContents.on('console-message', (e) => registro('console', e.level, e.message, (e.sourceId || '') + ':' + (e.lineNumber || '')));
-  janela.webContents.on('render-process-gone', (e, d) => registro('a página caiu', JSON.stringify(d)));
+  // a página caiu: anota e abre de novo (até 3 vezes, para não ficar em volta)
+  let quedas = 0;
+  janela.webContents.on('render-process-gone', (e, d) => { registro('a página caiu', JSON.stringify(d)); if (++quedas <= 3) setTimeout(() => janela.reload(), 500); });
   janela.webContents.on('did-fail-load', (e, codigo, desc, url) => registro('não carregou', codigo, desc, url));
   janela.on('unresponsive', () => registro('a janela parou de responder'));
   registro('abrindo', endereco);

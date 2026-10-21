@@ -148,6 +148,7 @@
     // a luz da nuvem no botão Conexão: o aparelho confere sozinho se alcança a nuvem
     setInterval(() => conferirNaNuvem(), 120000);
     app.addEventListener('pointerdown', function primeira() { entrarTelaCheia(); app.removeEventListener('pointerdown', primeira); });
-    if (!NO_APK && 'serviceWorker' in navigator && window.isSecureContext) navigator.serviceWorker.register('sw.js').catch(() => {});
+    // (no programa do Windows não: o Electron derruba a página quando o service worker grava no cache; a central é local)
+    if (!NO_APK && !/Electron\//.test(navigator.userAgent) && 'serviceWorker' in navigator && window.isSecureContext) navigator.serviceWorker.register('sw.js').catch(() => {});
     conectarNoComputador();
   }
