@@ -34,12 +34,12 @@
   async function entrarPelaNuvem() {
     const url = nuvemForm.url.replace(/\/+$/, '');
     // https, ou a nuvem de teste neste mesmo computador (http://127.0.0.1)
-    if (!/^(https:\/\/[^\s/]+|http:\/\/(127\.0\.0\.1|localhost)(:\d+)?)/.test(url)) return toast('Confira o endereço da nuvem (começa com https://)', 'erro');
+    if (!enderecoNuvemSeguro(url)) return toast('Confira o endereço da nuvem (começa com https://)', 'erro');
     const pin = await pedirSenhaModal('Sua senha', 'A mesma que você usa no tablet chefe.');
     if (!pin) return;
     let r, d = {};
     try {
-      r = await fetch(url + '/aparelho/entrar', { method: 'POST', cache: 'no-store', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ aparelho: cfg.deviceId, pin }) });
+      r = await fetch(url + '/aparelho/entrar', { method: 'POST', cache: 'no-store', redirect: 'error', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ aparelho: cfg.deviceId, pin }) });
       d = await r.json().catch(() => ({}));
     } catch (e) { return toast('Sem internet ou endereço errado: não achei a nuvem.', 'erro'); }
     if (r.status === 429) return toast(d.erro || 'Muitas senhas erradas. Espere um pouco e tente de novo.', 'erro');

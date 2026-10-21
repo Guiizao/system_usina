@@ -10,6 +10,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { ligarNuvemSQLite } from './nuvem-sqlite.mjs';
 import { centralNode, centralJava } from './servidores.mjs';
 import { novoGrupo, teste, igual, certo, resumo, SENHA_ENCARREGADO } from './teste.mjs';
+import { testarClienteSeguranca216 } from './seguranca216.mjs';
 
 const SEGREDO = 'segredo-ficticio-entrada216';
 const verificador = (pin, sal = 'a'.repeat(32)) => ({ sal, iteracoes: 1000, verificador: pbkdf2Sync(pin, sal, 1000, 32, 'sha256').toString('hex') });
@@ -20,6 +21,7 @@ const selado = (pin, sal) => hmac('senha|' + verificador(pin, sal).verificador);
 const chaveDeLeitura = (aparelho, id, pin, sal) => hmac(`leitura|${aparelho}|${id}|${selado(pin, sal)}`);
 
 export async function testarNuvemEntrar216(g) {
+  await testarClienteSeguranca216(g);
   const n = await ligarNuvemSQLite(8340, SEGREDO, 'leitura-ficticia');
   const entrar = async (aparelho, pin = '4567', ip = '192.0.2.1') => {
     const r = await fetch(n.url + '/aparelho/entrar', { method: 'POST', headers: { 'Content-Type': 'application/json', 'CF-Connecting-IP': ip }, body: JSON.stringify({ aparelho, pin }) });
@@ -95,6 +97,12 @@ export async function testarNuvemEntrar216(g) {
       certo(JSON.stringify(n.consultar("SELECT json FROM pendentes WHERE aparelho = 'tablet-real'")).includes('do tablet'), 'a anotação do tablet não ficou');
       limparTentativas();
     });
+    await teste(g, 'chaves de leitura pessoal e da API não publicam, confirmam nem leem a fila da central', async () => {
+      for (const senha of [login.json.token, 'leitura-ficticia']) {
+        for (const [rota, corpo] of [['/central/enviar', { registros: [] }], ['/fila/confirmar', { itens: [] }], ['/fila', undefined], ['/central/estado', undefined]])
+          igual((await n.pedir(rota, { senha, aparelho: 'pc-lucas', corpo })).status, 401, rota);
+      }
+    });
     await teste(g, 'sem Relatórios e Escritório não entra; tirar a permissão, trocar a senha ou desativar corta a chave na hora', async () => {
       await enviar({ pessoas: [pessoa('Lucas', '4567'), { ...pessoa('Bruno', '7777'), funcoes: ['corrigir'] }] });
       igual((await entrar('pc-bruno', '7777')).status, 401, 'Bruno não vê pela nuvem');
@@ -126,6 +134,10 @@ export async function testarNuvemEntrar216(g) {
       limparTentativas();
       igual((await entrar('geral-novo', '4567', '198.18.1.1')).status, 200);
       igual(n.consultar("SELECT chave FROM tentativas_entrada WHERE chave LIKE 'todos:%'").length, 1, 'só a hora atual');
+      limparTentativas();
+      const simultaneos = await Promise.all(Array.from({ length: 30 }, (_, i) => entrar('geral-paralelo-' + i, '0000', `198.18.2.${i + 1}`)));
+      igual(simultaneos.filter((r) => r.status === 401).length, 20);
+      igual(simultaneos.filter((r) => r.status === 429).length, 10);
       limparTentativas();
     });
     await teste(g, 'bloqueio por aparelho, 1 minuto e depois 15 minutos, persiste no D1', async () => {

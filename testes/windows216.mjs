@@ -9,6 +9,7 @@ import { spawn } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { createRequire } from 'node:module';
 import { novoGrupo, teste, certo, igual, resumo } from './teste.mjs';
+import { testarWindowsSeguranca216 } from './seguranca216.mjs';
 
 const require = createRequire(import.meta.url);
 const APP = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -22,6 +23,7 @@ async function esperar(fn, descricao, ms = 25000) {
 const portaOcupada = (porta) => new Promise((r) => { const s = net.connect(porta, '127.0.0.1'); s.once('connect', () => { s.destroy(); r(true); }); s.once('error', () => r(false)); });
 
 export async function testarWindows216(g) {
+  await testarWindowsSeguranca216(g);
   const exe = path.join(APP, 'windows', 'node_modules', 'electron', 'dist', 'electron.exe');
   await teste(g, 'versão encontrada nas pastas do public/', async () => {
     certo(/^\d+\.\d+\.\d+$/.test(lerVersao(path.join(APP, 'public'))), 'versão real inválida');
@@ -65,5 +67,5 @@ export async function testarWindows216(g) {
 if (import.meta.url === pathToFileURL(process.argv[1]).href) {
   const g = novoGrupo('Aplicativo Windows 2.16');
   await testarWindows216(g);
-  resumo([g]);
+  const r = resumo([g]); console.log(JSON.stringify(r)); process.exitCode = r.falharam ? 1 : 0;
 }

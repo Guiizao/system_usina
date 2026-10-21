@@ -6,7 +6,13 @@ const https = require('https');
 const leitura = require('./api-leitura');
 
 // http só dentro da rede da usina; pela internet o segredo e os totais iriam abertos (2.16, revisão de segurança)
-const naRedeLocal = (host) => /^(localhost|127\.\d+\.\d+\.\d+|10\.\d+\.\d+\.\d+|192\.168\.\d+\.\d+|172\.(1[6-9]|2\d|3[01])\.\d+\.\d+|\[::1\]|[^.:]+|.+\.local)$/i.test(host);
+const naRedeLocal = (host) => !/^(\d+|0x[0-9a-f]+)$/i.test(host)
+  && /^(localhost|127\.\d+\.\d+\.\d+|10\.\d+\.\d+\.\d+|192\.168\.\d+\.\d+|172\.(1[6-9]|2\d|3[01])\.\d+\.\d+|\[::1\]|[^.:]+|.+\.local)$/i.test(host);
+function validarEndereco(url) {
+  let u; try { u = new URL(url); } catch (_) { throw new Error('Endereço inválido'); }
+  if (!['http:', 'https:'].includes(u.protocol) || u.username || u.password || u.hash) throw new Error('Endereço inválido');
+  if (u.protocol === 'http:' && !naRedeLocal(u.hostname)) throw new Error('Pela internet, o endereço começa com https:// (com http o segredo iria aberto)');
+}
 const dataLocal = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 function diaProducao(C, agora) {
   const d = new Date(agora);
@@ -53,11 +59,7 @@ function criar({ config, salvar, forms, registros, agora = Date.now }) {
         (p.segredo !== undefined && (typeof p.segredo !== 'string' || p.segredo.length > 200 || /[^\x20-\x7e]/.test(p.segredo))) ||
         (p.ligado !== undefined && typeof p.ligado !== 'boolean')) throw new Error('Configuração inválida');
     const url = p.url === undefined ? b.url : p.url.trim();
-    if (url) {
-      let u; try { u = new URL(url); } catch (_) { throw new Error('Endereço inválido'); }
-      if (!['http:', 'https:'].includes(u.protocol) || u.username || u.password || u.hash) throw new Error('Endereço inválido');
-      if (u.protocol === 'http:' && !naRedeLocal(u.hostname)) throw new Error('Pela internet, o endereço começa com https:// (com http o segredo iria aberto)');
-    }
+    if (url) validarEndereco(url);
     const ligado = p.ligado === undefined ? b.ligado : p.ligado;
     if (ligado && !url) throw new Error('Cadastre o endereço primeiro');
     if (ligado && (!b.ligado || url !== b.url)) b.desde = diaProducao(forms(), agora());
@@ -84,6 +86,8 @@ function criar({ config, salvar, forms, registros, agora = Date.now }) {
         if (antes && antes.ok && antes.hash === hash) continue;
         if (!manual && antes && !antes.ok && momento - antes.em < 600000) continue;
         const url = b.url, segredo = b.segredo;
+        // A configuração pode ter sido gravada antes da exigência de HTTPS.
+        try { validarEndereco(url); } catch (e) { return { ok: false, erro: e.message, quantidade }; }
         const status = await postar(url, segredo, dados), ok = status >= 200 && status < 300;
         const erro = ok ? '' : !status ? 'Sem resposta do destino' : status === 401 || status === 403 ? 'O destino recusou o segredo' : `O destino respondeu ${status}`;
         // Uma configuração trocada durante o pedido não herda o recibo do destino anterior.

@@ -68,6 +68,13 @@ export async function testarTurno216(g) {
         const s = await estado(); certo(s.temSegredo && !s.segredo && !s.segredoCriado, 'segredo vazou no estado');
         await c.api('/api/turnos', { acao: 'configurar', segredo: 'SEGREDO-TURNO216' });
       });
+      await teste(g, nome + ': IP público escrito como inteiro não vira nome de máquina local', async () => {
+        const cli = await c.cliente();
+        const r = await cli.pedir('/api/turnos', { corpo: { acao: 'configurar', url: 'http://134744072/totais' } });
+        // 134744072 é a representação decimal de 8.8.8.8.
+        await c.api('/api/turnos', { acao: 'configurar', url: destino.url });
+        igual(r.status, 400);
+      });
       const regs = [reg(data, 'ins_lphera', 7, { qtd: '10' }), reg(data, 'ins_lphera', 8, { qtd: '2', unidade: 'L' }),
         reg(data, 'ins_cal', 7, { qtd: '1000', unidade: 'g' }), reg(data, 'ins_cal', 8, { qtd: '2', unidade: 'kg' }),
         reg(data, 'ins_materia_prima', 7, { qtd: '3', produto: 'MASSA' }), reg(data, 'hid_anexo1', 1, { fim: '10:00' }),
@@ -129,6 +136,14 @@ export async function testarTurno216(g) {
         await c.api('/api/sync', { registros: [{ ...regs[0], valores: { qtd: '30' }, atualizadoEm: Date.now() + 4000 }] });
         igual((await c.api('/api/turnos', { acao: 'enviar' })).ok, false);
         await new Promise((r) => setTimeout(r, 400)); igual(destino.recebidos.length, n);
+      });
+      await teste(g, nome + ': configuração antiga HTTP pública é recusada também ao enviar', async () => {
+        const cfg = JSON.parse(fs.readFileSync(cfgPath, 'utf8'));
+        Object.assign(cfg.envioTurnos, { url: 'http://example.invalid/totais', ligado: true, enviados: {} });
+        fs.writeFileSync(cfgPath, JSON.stringify(cfg));
+        await c.reiniciar();
+        const r = await c.api('/api/turnos', { acao: 'enviar' });
+        certo(r.ok === false && /https:\/\//.test(r.erro), 'não bloqueou HTTP antigo antes do envio: ' + JSON.stringify(r));
       });
     } finally { await c.desligar(); await destino.desligar(); }
   }
