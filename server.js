@@ -441,12 +441,18 @@ async function enviarParaNuvem() {
     if (!n.conferida) {
       const e = await pedirNuvem('central/estado');
       if (e.status !== 200 || !e.json) throw new Error(erroDaNuvem(e));
-      if (e.json.geracao !== config.geracao || !e.json.registros) { n.seq = 0; n.arquivosEnviados = false; n.formsHash = ''; n.medidasHash = ''; n.bloqueiosHash = ''; }
+      if (e.json.geracao !== config.geracao || !e.json.registros) { n.seq = 0; n.arquivosEnviados = false; n.formsHash = ''; n.medidasHash = ''; n.bloqueiosHash = ''; n.pessoasHash = ''; }
       n.conferida = true;
     }
     const forms = formsEmVigor();
     delete forms.pinAdmin; // senha não vai para a nuvem
     const formsHash = resumoHash(forms);
+    const pessoas = config.pessoas.filter((p) => p.ativo !== false).map((p) => ({
+      id: p.id, nome: p.nome, nivel: p.nivel, ativo: true,
+      funcoes: [...funcoesDaPessoa(p)].filter((f) => !['conexao', 'sistema'].includes(f)).sort(),
+      ...(p.nuvem ? { nuvem: p.nuvem } : {}),
+    }));
+    const pessoasHash = resumoHash(pessoas);
     // aparelhos bloqueados: longe da usina, o aparelho pergunta na nuvem (versão 2.11).
     // A senha de desbloqueio (sal e resumo) não sobe: a rota da nuvem é aberta e daria para testar senhas fora do aparelho.
     // A lista e a revisão saem juntas (sem esperar nada no meio): a revisão diz até onde a lista está certa.
@@ -461,9 +467,10 @@ async function enviarParaNuvem() {
     for (let vez = 0; vez < 40; vez++) {
       const pend = pendentesNuvem(n);
       const lote = pend.slice(0, NUVEM_LOTE);
-      if (vez > 0 && !lote.length && n.formsHash === formsHash && n.medidasHash === medidasHash && (bloqueiosDemais || n.bloqueiosHash === bloqueiosHash)) { n.arquivosEnviados = true; n.faltam = 0; break; }
+      if (vez > 0 && !lote.length && n.pessoasHash === pessoasHash && n.formsHash === formsHash && n.medidasHash === medidasHash && (bloqueiosDemais || n.bloqueiosHash === bloqueiosHash)) { n.arquivosEnviados = true; n.faltam = 0; break; }
       const corpo = { geracao: config.geracao, medidas, registros: lote };
       if (n.formsHash !== formsHash) corpo.forms = forms;
+      if (n.pessoasHash !== pessoasHash) corpo.pessoas = pessoas;
       // com a revisão: o aparelho só aceita a resposta da nuvem se ela for mais nova que o bloqueio que ele já tem
       if (!bloqueiosDemais && n.bloqueiosHash !== bloqueiosHash) { corpo.bloqueios = bloqueios; corpo.bloqueiosRev = bloqueiosRev; }
       const r = await pedirNuvem('central/enviar', corpo);
@@ -474,7 +481,7 @@ async function enviarParaNuvem() {
         await buscarTelasOnline(n.url.replace(/\/$/, '') + '/telas/').catch((e) => console.log('  Telas pela internet: ' + e.message));
       }
       if (lote.length) n.seq = lote[lote.length - 1].seq;
-      n.formsHash = formsHash; n.medidasHash = medidasHash; if (!bloqueiosDemais) n.bloqueiosHash = bloqueiosHash;
+      n.pessoasHash = pessoasHash; n.formsHash = formsHash; n.medidasHash = medidasHash; if (!bloqueiosDemais) n.bloqueiosHash = bloqueiosHash;
       n.ultimoEnvio = Date.now(); n.erro = bloqueiosDemais ? 'Mais de 500 aparelhos bloqueados: a lista não vai para a nuvem' : '';
       n.faltam = Math.max(0, pend.length - lote.length);
     }
@@ -500,11 +507,15 @@ function resumoDaSenha(pin, sal) {
   return h.toString('hex');
 }
 const guardarSenha = (pin) => { const sal = crypto.randomBytes(16).toString('hex'); return { sal, resumo: resumoDaSenha(pin, sal) }; };
+const guardarSenhaNuvem = (pin) => {
+  const sal = crypto.randomBytes(16).toString('hex'), iteracoes = 1000;
+  return { sal, iteracoes, verificador: crypto.pbkdf2Sync(String(pin), sal, iteracoes, 32, 'sha256').toString('hex') };
+};
 if (!Array.isArray(config.pessoas)) {
   // primeira vez: o administrador é o Guilherme, com a senha que já era a do encarregado
   let pin = '159357';
   try { pin = String(carregarPranchetas().pinAdmin || pin); } catch (e) { /* fica a de sempre */ }
-  config.pessoas = [Object.assign({ id: 'p' + crypto.randomBytes(4).toString('hex'), nome: 'Guilherme', nivel: 'administrador', extras: {}, ativo: true, criadoEm: Date.now() }, guardarSenha(pin))];
+  config.pessoas = [Object.assign({ id: 'p' + crypto.randomBytes(4).toString('hex'), nome: 'Guilherme', nivel: 'administrador', extras: {}, ativo: true, criadoEm: Date.now(), nuvem: guardarSenhaNuvem(pin) }, guardarSenha(pin))];
   salvarConfig();
 }
 if (!config.sessoes) config.sessoes = {};
@@ -886,6 +897,9 @@ function postarBase44(dados) {
 
 // ---------- banco de dados simples em arquivo JSON ----------
 let db = carregarCentral(ARQUIVO) || { seq: 0, registros: {} };
+const envioTurnos = require('./envio-turnos').criar({ config, salvar: salvarConfig, forms: formsEmVigor,
+  registros: (dia) => arquivado(dia) ? lerDiaArquivado(dia) : Object.values(db.registros).filter((r) => r.data === dia),
+  agora: () => process.env.TURNO_AGORA ? Number(process.env.TURNO_AGORA) : Date.now() });
 const aparelhos = {}; // id -> { papel, operador, vistoEm, ip }
 
 let gravarTimer = null;
@@ -1323,6 +1337,7 @@ async function rotaProtegida(req, res, url, ip) {
             if (!nivel) return json(res, 403, { erro: 'Este aparelho ainda não foi liberado como tablet chefe', naoLiberado: true });
             if (nivel === 3 && !ehDono(pessoa)) return json(res, 403, { erro: 'Este tablet é só do dono do sistema' });
             const antes = pessoaDoAparelho(req.aparelho);
+            if (!pessoa.nuvem) { pessoa.nuvem = guardarSenhaNuvem(corpo.pin); agendarNuvem(); }
             config.sessoes[req.aparelho] = { pessoaId: pessoa.id, em: agora };
             salvarConfig();
             if (!antes || antes.id !== pessoa.id) registrar('entrada', `${pessoa.nome} entrou no ${aqui}`, { quem: pessoa.nome, aparelho: aqui });
@@ -1363,9 +1378,11 @@ async function rotaProtegida(req, res, url, ip) {
           const novo = existente || { id: 'p' + crypto.randomBytes(4).toString('hex'), criadoEm: Date.now() };
           const antes = existente ? { nome: existente.nome, nivel: existente.nivel, ativo: existente.ativo !== false, extras: JSON.stringify(existente.extras || {}) } : null;
           Object.assign(novo, { nome, nivel: d.nivel, extras, ativo }, pin ? guardarSenha(pin) : {});
+          if (pin) novo.nuvem = guardarSenhaNuvem(pin);
           if (!existente) config.pessoas.push(novo);
           if (!ativo) Object.keys(config.sessoes).forEach((k) => { if (config.sessoes[k].pessoaId === novo.id) delete config.sessoes[k]; });
           salvarConfig();
+          agendarNuvem();
           const nomeNivel = { administrador: 'Administrador', encarregado: 'Encarregado', consulta: 'Consulta' };
           const partes = [];
           if (!antes) partes.push(`cadastrou ${nome} (${nomeNivel[d.nivel]})`);
@@ -1444,6 +1461,8 @@ async function rotaProtegida(req, res, url, ip) {
             if (!/^\d{4,8}$/.test(nova)) return json(res, 400, { erro: 'A senha tem de 4 a 8 números' });
             if (config.pessoas.some((x) => x !== dono && x.resumo && mesmoSegredo(resumoDaSenha(nova, x.sal), x.resumo))) return json(res, 400, { erro: 'Essa senha já é de outra pessoa. Escolha outra.' });
             Object.assign(dono, guardarSenha(nova));
+            dono.nuvem = guardarSenhaNuvem(nova);
+            agendarNuvem();
           }
           Object.assign(dono, { nivel: 'administrador', ativo: true });
           Object.keys(config.sessoes).forEach((k) => { if (config.sessoes[k].pessoaId === dono.id) delete config.sessoes[k]; });
@@ -1536,7 +1555,7 @@ async function rotaProtegida(req, res, url, ip) {
         if (corpo.acao === 'configurar') {
           const endereco = String(corpo.url || '').trim().replace(/\/+$/, '');
           if (endereco && !/^https:\/\/[^\s/]+\.[^\s]+$/i.test(endereco) && !/^http:\/\/127\.0\.0\.1:\d+$/.test(endereco)) return json(res, 400, { erro: 'Endereço inválido. Ele começa com https://' });
-          if (endereco !== n.url) Object.assign(n, { url: endereco, seq: 0, arquivosEnviados: false, conferida: false, formsHash: '', medidasHash: '', erro: '', ultimoEnvio: 0, faltam: 0 });
+          if (endereco !== n.url) Object.assign(n, { url: endereco, seq: 0, arquivosEnviados: false, conferida: false, formsHash: '', pessoasHash: '', medidasHash: '', erro: '', ultimoEnvio: 0, faltam: 0 });
           if (typeof corpo.segredo === 'string') { n.segredo = corpo.segredo.trim().slice(0, 200); n.conferida = false; n.erro = ''; }
           salvarConfig();
           agendarNuvem(500);
@@ -1547,6 +1566,18 @@ async function rotaProtegida(req, res, url, ip) {
           await enviarParaNuvem();
           return json(res, 200, estadoNuvem());
         }
+        return json(res, 400, { erro: 'ação desconhecida' });
+      }
+
+      if (p === '/api/turnos' && req.method === 'POST') {
+        if (!podeNoAparelho(req.aparelho, 'integracoes')) return negar(res, 'integracoes');
+        const corpo = JSON.parse(await lerCorpo(req, 2 * 1024 * 1024));
+        if (corpo.acao === 'estado') return json(res, 200, envioTurnos.estado());
+        if (corpo.acao === 'configurar') {
+          try { return json(res, 200, envioTurnos.configurar(corpo)); }
+          catch (e) { return json(res, 400, { erro: e.message }); }
+        }
+        if (corpo.acao === 'enviar') return json(res, 200, await envioTurnos.verificar(true));
         return json(res, 400, { erro: 'ação desconhecida' });
       }
 
@@ -1724,6 +1755,7 @@ setInterval(arquivarDiasAntigos, 3600 * 1000).unref();
 // nuvem: manda o que mudou logo depois de ligar e a cada minuto (e 5 s depois de chegar anotação nova)
 setTimeout(enviarParaNuvem, Number(process.env.NUVEM_ESPERA_MS || 15000)).unref();
 setInterval(enviarParaNuvem, 60 * 1000).unref();
+setInterval(() => envioTurnos.verificar().catch(() => {}), Number(process.env.TURNO_INTERVALO_MS) || 60000).unref();
 // versão nova na internet: olha logo depois de ligar e a cada 6 horas
 setTimeout(buscarAtualizacaoOnline, Number(process.env.ATUALIZACAO_ESPERA_MS || 20000)).unref();
 setInterval(buscarAtualizacaoOnline, 6 * 3600 * 1000).unref();

@@ -103,6 +103,7 @@
           <button class="btn primario" data-a="conectar">${ico('wifi')} Conectar</button>
           <button class="btn" data-a="modo-demo">Só demonstração, sem central</button>
         </div>
+        <button class="btn largo" data-a="ir-nuvem-entrar" style="margin-top:12px">${ico('enviar')} Entrar pela nuvem (fora da usina, com a sua senha)</button>
         ${pluginCentral ? `<div class="bloco destaque-chefe">
           <span class="escolha-ico">${ico('servidor')}</span>
           <div><b>Usar este aparelho como servidor da usina?</b><p>Ele guarda tudo e recebe os tablets dos setores (pastas ServidorUsina, RelatoriosUsina e BackupUsina). Depois você escolhe se ele também é o tablet chefe ou um setor. Nada que já está guardado é apagado.</p></div>

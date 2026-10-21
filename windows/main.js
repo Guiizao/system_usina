@@ -1,14 +1,38 @@
 /* Pranchetas Digitais - © 2026 Guilherme. */
-const { app, BrowserWindow, Menu, Tray, dialog, shell, nativeImage } = require('electron');
+/* Programa do Windows (2.16, decisão do Guilherme): o painel administrativo pela nuvem. A central continua no tablet
+   chefe; o computador não liga central, não abre porta no firewall e não entrega APK. Ele só mostra as telas que vêm
+   dentro do programa (servidas aqui mesmo, num endereço local) e a pessoa entra com a sua senha pela nuvem. */
+const { app, BrowserWindow, Menu, Tray, dialog, shell, nativeImage, session } = require('electron');
 const fs = require('node:fs');
+const http = require('node:http');
 const path = require('node:path');
-const net = require('node:net');
-const { semearApk } = require('./pacote');
 
 const raiz = app.isPackaged ? __dirname : path.resolve(__dirname, '..');
-const porta = Number(process.env.PORTA || 8080);
-const endereco = `http://127.0.0.1:${porta}`;
-let janela, bandeja, saindo = false, falhou = false;
+const publico = path.join(raiz, 'public');
+let janela, bandeja, saindo = false, endereco = '';
+
+const TIPOS = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8',
+  '.png': 'image/png', '.svg': 'image/svg+xml', '.json': 'application/json', '.webmanifest': 'application/manifest+json',
+  '.woff2': 'font/woff2', '.ttf': 'font/ttf', '.txt': 'text/plain; charset=utf-8', '.onnx': 'application/octet-stream' };
+
+/** As telas do programa num endereço só deste computador (127.0.0.1, porta escolhida pelo Windows): nada fica aberto na rede. */
+function servirTelas() {
+  return new Promise((resolve, reject) => {
+    const servidor = http.createServer((req, res) => {
+      let rel = decodeURIComponent(new URL(req.url, 'http://x').pathname);
+      if (rel === '/') rel = '/index.html';
+      const alvo = path.normalize(path.join(publico, rel));
+      if (!alvo.startsWith(publico + path.sep)) { res.writeHead(403); return res.end(); }
+      fs.readFile(alvo, (erro, dados) => {
+        if (erro) { res.writeHead(404); return res.end('Não encontrado'); }
+        res.writeHead(200, { 'Content-Type': TIPOS[path.extname(alvo)] || 'application/octet-stream', 'Cache-Control': 'no-cache' });
+        res.end(dados);
+      });
+    });
+    servidor.once('error', reject);
+    servidor.listen(0, '127.0.0.1', () => resolve(`http://127.0.0.1:${servidor.address().port}`));
+  });
+}
 
 function abrir() {
   if (!janela) return;
@@ -17,97 +41,38 @@ function abrir() {
   janela.focus();
 }
 
-async function falhar(erro) {
-  if (falhou) return;
-  falhou = true;
-  await app.whenReady();
-  await dialog.showMessageBox({ type: 'error', title: 'Central das Pranchetas',
-    message: erro.code === 'EADDRINUSE' ? `A porta ${porta} já está sendo usada.` : 'Não foi possível ligar a central.',
-    detail: erro.code === 'EADDRINUSE'
-      ? 'Outra central ou outro programa já está ligado neste computador. Feche esse programa e abra as Pranchetas novamente. A central que já estava ligada não foi encerrada.'
-      : erro.message,
-    buttons: ['Fechar'] });
-  app.exit(1);
-}
-
-function conferirPorta() {
-  return new Promise((resolve, reject) => {
-    const teste = net.createServer();
-    teste.once('error', reject);
-    teste.listen(porta, process.env.ENDERECO || '0.0.0.0', () => teste.close(resolve));
-  });
-}
-
 function externo(url) {
   // Nunca entregue file:, javascript: ou protocolos arbitrários ao Windows.
-  if (/^(https?:|mailto:|whatsapp:)/i.test(url)) {
-    shell.openExternal(url).catch((erro) => dialog.showErrorBox('Não foi possível abrir o link', erro.message));
-  }
+  if (/^(https?:|mailto:|whatsapp:)/i.test(url)) shell.openExternal(url).catch((erro) => dialog.showErrorBox('Não foi possível abrir o link', erro.message));
 }
-
-function local(url) {
-  try { return new URL(url).origin === endereco; } catch { return false; }
-}
+const local = (url) => { try { return new URL(url).origin === endereco; } catch { return false; } };
 
 async function ligar() {
-  if (!Number.isInteger(porta) || porta < 1 || porta > 65535) throw new Error('PORTA precisa estar entre 1 e 65535.');
-  await conferirPorta();
-  process.env.PORTA = String(porta);
-  process.env.PASTA_DADOS = path.resolve(process.env.PASTA_DADOS || path.join(app.getPath('documents'), 'Usina'));
-  process.env.PASTA_APK = path.resolve(process.env.PASTA_APK || path.join(app.getPath('userData'), 'apk'));
-  process.env.PASTA_PUBLICA = path.join(raiz, 'public');
-  semearApk(path.join(raiz, 'apk', 'saida'), process.env.PASTA_APK);
-  require(path.join(raiz, 'server.js'));
-  // O require inicia o listen, mas a janela só abre quando a central responder.
-  let pronta = false;
-  for (let i = 0; i < 100 && !falhou; i++) {
-    try {
-      const r = await fetch(endereco + '/api/ping', { signal: AbortSignal.timeout(500) });
-      if (r.ok && (await r.json()).app === 'pranchetas') { pronta = true; break; }
-    } catch { /* a central ainda está ligando */ }
-    await new Promise((r) => setTimeout(r, 100));
-  }
-  if (falhou) return;
-  if (!pronta) throw new Error('A central não respondeu a tempo. Feche o aplicativo e tente novamente.');
-
-  const icone = nativeImage.createFromPath(path.join(process.env.PASTA_PUBLICA, 'icons', 'icon-512.png'));
-  janela = new BrowserWindow({ title: 'Pranchetas Ubirálcool', width: 1280, height: 800,
-    show: false, icon: icone, autoHideMenuBar: true,
+  endereco = await servirTelas();
+  // O Chromium do Electron derruba a página quando o service worker grava no cache ("bad IPC message, CacheStorageCache"):
+  // aqui ele não faz falta. Apaga o que ficou de uma versão anterior (as anotações guardadas na página ficam).
+  await session.defaultSession.clearStorageData({ storages: ['serviceworkers', 'cachestorage'] }).catch(() => {});
+  const icone = nativeImage.createFromPath(path.join(publico, 'icons', 'icon-512.png'));
+  janela = new BrowserWindow({ title: 'Pranchetas Ubirálcool', width: 1440, height: 900, show: false, icon: icone, autoHideMenuBar: true,
     webPreferences: { contextIsolation: true, nodeIntegration: false, sandbox: true } });
   janela.setMenu(null);
-  // registro da janela (Documentos não; fica com o programa): ajuda a achar tela branca, erro de página ou travamento
+  // registro da janela (fica com o programa): ajuda a achar tela branca, erro de página ou travamento
   const registro = (...x) => { try { fs.appendFileSync(path.join(app.getPath('userData'), 'janela.log'), new Date().toISOString() + ' ' + x.join(' ') + '\n'); } catch { /* sem registro, segue */ } };
   janela.webContents.on('console-message', (e) => registro('console', e.level, e.message, (e.sourceId || '') + ':' + (e.lineNumber || '')));
-  janela.webContents.on('render-process-gone', (e, d) => registro('a página caiu', JSON.stringify(d)));
   janela.webContents.on('did-fail-load', (e, codigo, desc, url) => registro('não carregou', codigo, desc, url));
   janela.on('unresponsive', () => registro('a janela parou de responder'));
-  registro('abrindo', endereco);
+  // a página caiu: anota e abre de novo (até 3 vezes, para não ficar em volta)
+  let quedas = 0;
+  janela.webContents.on('render-process-gone', (e, d) => { registro('a página caiu', JSON.stringify(d)); if (++quedas <= 3) setTimeout(() => janela.reload(), 500); });
   janela.on('close', (evento) => { if (!saindo) { evento.preventDefault(); janela.hide(); } });
-  janela.webContents.setWindowOpenHandler(({ url }) => {
-    if (local(url)) janela.loadURL(url).catch(falhar); else externo(url);
-    return { action: 'deny' };
-  });
-  janela.webContents.on('will-navigate', (evento, url) => {
-    if (!local(url)) { evento.preventDefault(); externo(url); }
-  });
-  janela.webContents.on('will-redirect', (evento, url) => {
-    if (!local(url)) { evento.preventDefault(); externo(url); }
-  });
+  janela.webContents.setWindowOpenHandler(({ url }) => { if (local(url)) janela.loadURL(url).catch(() => {}); else externo(url); return { action: 'deny' }; });
+  janela.webContents.on('will-navigate', (evento, url) => { if (!local(url)) { evento.preventDefault(); externo(url); } });
+  janela.webContents.on('will-redirect', (evento, url) => { if (!local(url)) { evento.preventDefault(); externo(url); } });
 
-  // Somente o aplicativo instalado altera o início automático, nunca o Electron de desenvolvimento/teste.
-  const preferencia = path.join(app.getPath('userData'), 'windows.json');
-  if (app.isPackaged && !fs.existsSync(preferencia)) {
-    app.setLoginItemSettings({ openAtLogin: true });
-    fs.writeFileSync(preferencia, JSON.stringify({ inicioConfigurado: true }));
-  }
   bandeja = new Tray(icone.resize({ width: 32, height: 32 }));
-  bandeja.setToolTip('Pranchetas Ubirálcool — central ligada');
+  bandeja.setToolTip('Pranchetas Ubirálcool — painel pela nuvem');
   bandeja.setContextMenu(Menu.buildFromTemplate([
     { label: 'Abrir', click: abrir },
-    { label: 'Pasta dos relatórios', click: async () => {
-      const erro = await shell.openPath(path.join(process.env.PASTA_DADOS, 'RelatoriosUsina'));
-      if (erro) dialog.showErrorBox('Pasta dos relatórios', erro);
-    } },
     { label: 'Iniciar com o Windows', type: 'checkbox', enabled: app.isPackaged,
       checked: app.isPackaged && app.getLoginItemSettings().openAtLogin,
       click: (item) => app.setLoginItemSettings({ openAtLogin: item.checked }) },
@@ -115,10 +80,9 @@ async function ligar() {
     { label: 'Sair', click: () => app.quit() },
   ]));
   bandeja.on('double-click', abrir);
-  // a janela conecta sozinha na central daqui (2.16): o código vai no endereço, só para esta janela, e sai dele na hora
-  let codigo = '';
-  try { codigo = JSON.parse(fs.readFileSync(path.join(process.env.PASTA_DADOS, 'ServidorUsina', 'config.json'), 'utf8')).codigo || ''; } catch { /* sem o código, a tela pede */ }
-  await janela.loadURL(endereco + '/' + (/^\d{6}$/.test(codigo) ? '?codigo=' + codigo : ''));
+  registro('abrindo', endereco);
+  // ?nuvem=1: a primeira tela é "Entrar pela nuvem" (não a de conectar na rede da usina)
+  await janela.loadURL(endereco + '/?nuvem=1');
   abrir();
 }
 
@@ -129,6 +93,8 @@ else {
   app.on('activate', abrir);
   app.on('before-quit', () => { saindo = true; });
   app.on('window-all-closed', () => {});
-  process.once('uncaughtException', falhar); // inclui uma disputa pela porta entre a conferência e o listen
-  app.whenReady().then(ligar).catch(falhar);
+  app.whenReady().then(ligar).catch(async (erro) => {
+    await dialog.showMessageBox({ type: 'error', title: 'Pranchetas Ubirálcool', message: 'Não foi possível abrir o painel.', detail: erro.message, buttons: ['Fechar'] });
+    app.exit(1);
+  });
 }

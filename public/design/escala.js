@@ -17,7 +17,8 @@
     // tudo maior. Tablet e celular dizem ponteiro grosso e sem hover (o notebook com tela de toque conta como computador)
     const pc = !celular && window.matchMedia && matchMedia('(hover: hover) and (pointer: fine)').matches;
     document.documentElement.dataset.pc = pc ? '1' : '';
-    let z = celular ? 0.94 : pc ? 1 : Math.max(1, Math.min(w >= h ? Math.min(w / 1100, h / 690) : Math.min(w / 690, h / 1100), 1.8));
+    // 2.16: no computador, escala de painel administrativo (tudo menor, mais coisa na tela)
+    let z = celular ? 0.94 : pc ? 0.9 : Math.max(1, Math.min(w >= h ? Math.min(w / 1100, h / 690) : Math.min(w / 690, h / 1100), 1.8));
     z *= { menor: 0.88, normal: 1, maior: 1.14 }[cfg.escala] || 1;
     z = Math.round(z * 100) / 100;
     document.documentElement.style.setProperty('--escala', z);

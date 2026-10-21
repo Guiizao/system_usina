@@ -14,7 +14,7 @@
     const p = pessoaAtual();
     return `<button class="atalho pessoa-chefe ${p ? '' : 'alerta'}" data-a="pessoa" aria-label="${p ? `${esc(p.nome)}: toque para sair` : 'Entrar com a sua senha'}">${ico('pessoa')}<span>${esc(p ? p.nome : 'Entrar')}</span></button>
       ${veNoChefe('avisos') ? `<button class="atalho" data-a="avisos" aria-label="Avisos${abertos ? `, ${abertos} esperando` : ''}">${ico('sino')}<span>Avisos</span>${abertos ? `<em class="contador">${abertos}</em>` : ''}</button>` : ''}
-      ${veNoChefe('ler_folha') ? `<button class="atalho" data-a="ler-folha">${ico('camera')}<span>Ler folha</span></button>` : ''}
+      ${veNoChefe('ler_folha') && lerFolhaLigada() ? `<button class="atalho" data-a="ler-folha">${ico('camera')}<span>Ler folha</span></button>` : ''}
       ${veNoChefe('relatorios') ? `<button class="atalho" data-a="relatorios">${ico('pasta')}<span>Relatórios</span></button>` : ''}
       ${FUNCOES_DA_USINA.some(veNoChefe) ? `<button class="atalho" data-a="config">${ico('pessoas')}<span>Usina</span></button>` : ''}`;
   }
@@ -26,7 +26,9 @@
     const todos = lista.flatMap((s) => s.pranchetas.flatMap(folhasDe).flatMap((pid) => listar(data, pid)));
     const pend = data === hoje ? lista.flatMap((s) => s.pranchetas.map((pid) => resumoPrancheta(pid, data))).filter((r) => r.estado === 'pendente').length : 0;
     const ligados = st ? st.aparelhos.filter((a) => a.online).length : 0;
-    const subtitulo = cfg.demo ? 'Demonstração, dados só neste aparelho' : sync.modo === 'online' ? (centralNoTablet() ? 'Servidor ligado neste aparelho' : 'Acompanhando a central em tempo real') : 'Procurando o servidor';
+    const subtitulo = cfg.demo ? 'Demonstração, dados só neste aparelho'
+      : cfg.soNuvem ? (sync.nuvemEm ? `Pela nuvem · atualizado às ${new Date(sync.nuvemEm).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}` : 'Pela nuvem')
+      : sync.modo === 'online' ? (centralNoTablet() ? 'Servidor ligado neste aparelho' : 'Acompanhando a central em tempo real') : 'Procurando o servidor';
 
     return `${cabecalho(nomeDoChefe(), subtitulo, false, atalhosChefe())}
       <main class="painel-chefe">
@@ -40,7 +42,7 @@
           <div class="numeros">
             <div><b>${todos.length}</b><span>anotações</span></div>
             <div class="${pend ? 'atencao' : ''}"><b>${pend}</b><span>pendências</span></div>
-            <button class="numero-botao" data-a="aparelhos"><b>${cfg.demo && !st ? '-' : ligados}</b><span>aparelhos ligados</span></button>
+            ${cfg.soNuvem ? '' : `<button class="numero-botao" data-a="aparelhos"><b>${cfg.demo && !st ? '-' : ligados}</b><span>aparelhos ligados</span></button>`}
           </div>
         </div>
 
@@ -57,7 +59,7 @@
               // o que falta vem primeiro; depois a dorna em andamento (o escritório vê as duas coisas)
               const agora = [pends[0], andando[0]].filter(Boolean).map((r) => r.texto.replace(/\.$/, '')).join('. ');
               const situacao = diasBuscando.has(data) ? 'Buscando as anotações na central...' : agora ? agora + '.' : regs.length ? `${contar(regs.length, 'anotação', 'anotações')}, a última às ${hora}` : 'Nada anotado neste dia';
-              const aparelho = cfg.demo ? '' : disp ? (disp.bloqueio ? 'Bloqueado' : disp.online ? `Ligado${disp.operador ? `, ${disp.operador}` : ''}` : situacaoDoAparelho(disp)) : 'Tablet não conectado';
+              const aparelho = cfg.demo || cfg.soNuvem ? '' : disp ? (disp.bloqueio ? 'Bloqueado' : disp.online ? `Ligado${disp.operador ? `, ${disp.operador}` : ''}` : situacaoDoAparelho(disp)) : 'Tablet não conectado';
               const sinal = cfg.demo ? '' : disp && disp.online ? 'ok' : disp ? 'off' : '';
               return `<button class="setor-cartao ${pends.length ? 'pendente' : andando.length ? 'andamento' : regs.length ? 'feito' : ''}" data-a="abrir-setor" data-id="${s.id}">
                 <span class="desenho">${ico(s.icone)}</span>
@@ -115,24 +117,12 @@
   /** 2.16: o que foi gasto no dia, somado por turno: os insumos e os quilos do ralo (o mesmo dos totais da API).
       Hora, pressão e temperatura não se somam: não entram. */
   function blocoTotais(data) {
-    const linhas = [];
-    setores().forEach((s) => s.pranchetas.flatMap(folhasDe).filter((pid) => prancheta(pid).tipo === 'insumo').forEach((pid) => {
-      const p = prancheta(pid), turnos = turnosDaPrancheta(pid), porUnidade = {};
-      linhasDeHora(listar(data, pid)).forEach((r) => {
-        const n = parseFloat(r.valores.qtd);
-        if (isNaN(n)) return;
-        const u = r.valores.unidade || p.unidade || '';
-        const x = porUnidade[u] || (porUnidade[u] = { total: 0, turnos: turnos.map((t) => ({ t, q: 0 })) });
-        x.total += n;
-        x.turnos.find((y) => y.t === turnoDaHora(Number(r.chave), turnos)).q += n;
-      });
-      Object.entries(porUnidade).forEach(([u, x]) => linhas.push(Object.assign({ nome: p.nome, u }, x)));
-    }));
+    const linhas = totaisPorTurno(data);
     const num = (n) => fmtNum(String(Math.round(n * 100) / 100));
     return `<section class="bloco totais-dia"><h2>Totais do dia</h2>
       ${linhas.length ? linhas.map((l) => `<div class="total-linha"><span><b>${esc(l.nome)}</b>
         <small>${l.turnos.filter((y) => y.q).map((y) => `${esc(y.t.nome.replace(' Turno', ''))} ${num(y.q)}`).join(' · ')}</small></span>
-        <strong>${num(l.total)} <small>${esc(l.u)}</small></strong></div>`).join('') : '<p class="sub">Nada somado ainda neste dia.</p>'}
+        <strong>${num(l.total)} <small>${esc(l.unidade)}</small></strong></div>`).join('') : '<p class="sub">Nada somado ainda neste dia.</p>'}
     </section>`;
   }
   /** Quem está trabalhando agora: cada aparelho, quem usa e se está ligado (a visão geral do escritório). */
@@ -147,7 +137,7 @@
   }
   /** Atalhos para as outras telas, só os que a pessoa pode usar. */
   function blocoIrPara() {
-    const itens = [['graficos', 'grafico', 'Gráficos', ''], ['relatorios', 'pasta', 'Relatórios', 'relatorios'], ['aparelhos', 'wifi', 'Aparelhos', ''],
+    const itens = [['graficos', 'grafico', 'Gráficos', ''], ['relatorios', 'pasta', 'Relatórios', 'relatorios'], ...(cfg.soNuvem ? [] : [['aparelhos', 'wifi', 'Aparelhos', '']]),
       ['pessoas', 'pessoas', 'Pessoas', 'pessoas'], ['registro', 'nota', 'Registro', 'registro'], ['config', 'ajustes', 'Usina', 'usina']]
       .filter(([, , , f]) => !f || veNoChefe(f));
     return `<section class="bloco ir-para"><h2>Ir para</h2><div class="grade-acoes">${itens.map(([a, i, t]) => `<button data-a="${a}">${ico(i)}<span>${t}</span></button>`).join('')}</div></section>`;

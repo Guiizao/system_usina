@@ -42,9 +42,18 @@
             <h2>${ico('escritorio')} Totais do dia no Base44</h2>
             ${htmlBase44()}
           </section>
+          ${pode('integracoes') ? `<section class="bloco" id="bloco-turnos">
+            <h2>${ico('enviar')} Totais ao fim do turno</h2>
+            ${htmlEnvioTurnos()}
+          </section>` : ''}
           <section class="bloco" id="bloco-nuvem">
             <h2>${ico('servidor')} Nuvem (internet)</h2>
             ${htmlNuvem()}
+          </section>
+          <section class="bloco">
+            <h2>${ico('camera')} Ler folha de papel</h2>
+            <p class="sub">A foto da folha de papel vira anotação. Quando todos estiverem no tablet, dá para desligar: o botão some do tablet chefe.</p>
+            <div class="linha-config"><div><b>Ler folha pela foto</b><small>${lerFolhaLigada() ? 'Ligado' : 'Desligado'}</small></div><button class="btn pequeno" data-a="ler-folha-ligar">${lerFolhaLigada() ? 'Desligar' : 'Ligar'}</button></div>
           </section>
           <section class="bloco">
             <h2>${ico('balanca')} Listas do ralo</h2>
@@ -112,6 +121,8 @@
       <div class="lista-erros">${lista.slice(-40).reverse().map((e) => `<div><b>${esc(quando(e.quando || e.recebidoEm))} · ${esc((setorPorId(e.papel) || {}).nome || e.papel || '')} · ${esc(e.aparelho || '')}</b><span>${esc(e.msg)}</span><small>tela ${esc(e.tela || '-')} · versão ${esc(e.versao || '-')}</small></div>`).join('')}</div>
       <div class="acoes-modal um"><button class="btn primario" data-k="x">Fechar</button></div>`, (k, b, fechar) => fechar(), { classe: 'largo' });
   }
+  /** 2.16: "Ler folha de papel" pode ser desligado quando todos estiverem no tablet (pedido do Guilherme). */
+  const lerFolhaLigada = () => configSistema().lerFolha !== false;
   function mudarConfigLista(tipo, setorId, pid) {
     const cs = configSistema();
     if (tipo === 'setor') {

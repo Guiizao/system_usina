@@ -92,6 +92,7 @@
   const postJson = (caminho, corpo, ms) => buscar(caminho, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(corpo) }, ms);
 
   async function sincronizar() {
+    if (cfg.soNuvem) return cfg.pessoa ? sincronizarNuvem() : undefined; // 2.16: pela nuvem, sem central
     if (cfg.demo || !cfg.chave || sync.ocupado) return;
     sync.ocupado = true;
     try {

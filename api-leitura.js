@@ -201,9 +201,11 @@ function criar(C, medidasAtuais, opcoes = {}) {
       const p = pranchetas[pid], turnos = turnosDo(s), unidades = new Map();
       const novo = () => ({ quantidade: 0, turnos: turnos.map((t) => ({ ...t, quantidade: 0 })), produtos: new Map() });
       for (const r of ativos.filter((r) => r.prancheta === pid)) {
-        const v = r.valores || {}, n = parseFloat(v.qtd);
+        const v = r.valores || {}, valor = parseFloat(v.qtd);
+        const conversao = (C.somarEm || {})[v.unidade || p.unidade || ''];
+        const n = valor * (conversao ? conversao.fator : 1);
         if (!Number.isFinite(n)) continue;
-        const unidade = v.unidade || p.unidade || '';
+        const unidade = conversao ? conversao.unidade : v.unidade || p.unidade || '';
         if (!unidades.has(unidade)) unidades.set(unidade, novo());
         const soma = unidades.get(unidade);
         soma.quantidade += n;
@@ -213,7 +215,7 @@ function criar(C, medidasAtuais, opcoes = {}) {
           soma.produtos.set(produto, (soma.produtos.get(produto) || 0) + n);
         }
       }
-      if (!unidades.size) unidades.set(p.unidade || '', novo());
+      if (!unidades.size) unidades.set(((C.somarEm || {})[p.unidade] || {}).unidade || p.unidade || '', novo());
       return [...unidades].map(([unidade, soma]) => ({
         setor: s.id, prancheta: pid, insumo: p.nome, unidade, quantidade: arredondar(soma.quantidade),
         turnos: soma.turnos.map((t) => ({ ...t, quantidade: arredondar(t.quantidade) })),

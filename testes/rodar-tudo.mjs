@@ -47,12 +47,18 @@ import { testarConexao2135 } from './conexao2135.mjs';
 import { testarWindows216 } from './windows216.mjs';
 import { testarApkWeb } from './rodar-apk-web.mjs';
 import { testarTotais216 } from './totais216.mjs';
+import { testarTurno216 } from './turno216.mjs';
+import { testarNuvemEntrar216 } from './nuvem-entrar216.mjs';
+import { testarPainelNuvem216 } from './painel-nuvem216.mjs';
 import { centralNode, centralJava, APP } from './servidores.mjs';
 
 const SAIDA = path.join(APP, 'testes', 'saida');
 fs.mkdirSync(SAIDA, { recursive: true });
 const t0 = Date.now();
 const grupos = [];
+const gt216 = novoGrupo('Totais por turno 2.16');
+await testarTurno216(gt216);
+grupos.push(gt216);
 
 // 1. código
 const g1 = novoGrupo('Código sem erro de escrita');
@@ -69,6 +75,13 @@ grupos.push(g1);
 const gw = novoGrupo('Aplicativo Windows 2.16');
 await testarWindows216(gw);
 grupos.push(gw);
+
+const gn216 = novoGrupo('Entrada pela nuvem 2.16 (SQLite, Node e Java)');
+await testarNuvemEntrar216(gn216);
+const gp216 = novoGrupo('Painel do PC pela nuvem 2.16');
+await testarPainelNuvem216(gp216);
+grupos.push(gp216);
+grupos.push(gn216);
 
 // 2. configuração
 const g2 = novoGrupo('Configuração das folhas (forms.js)');

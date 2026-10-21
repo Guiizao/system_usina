@@ -47,22 +47,22 @@ async function esperar(fn) {
 export async function testarTotais216(g, sqlite = false) {
   const C = forms(), intervalo = leitura.intervaloTotais(new URLSearchParams({ de: dia, ate: terceiro }));
   const regs = [...registros(dia), ...registros(seguinte)];
-  await teste(g, 'soma por unidade e por hora do turno, produtos e dornas; exclui meta, apagados e grades', async () => {
+  await teste(g, 'converte antes de somar por hora do turno, produtos e dornas; exclui meta, apagados e grades', async () => {
     const r = leitura.criar(C).totais(intervalo, regs), d = r.dias[0];
-    igual(item(d, 'ins_lphera', 'mL').quantidade, 36);
-    igual(item(d, 'ins_lphera', 'mL').turnos.map((t) => t.quantidade), [3, 18, 15]);
-    igual(item(d, 'ins_lphera', 'L').quantidade, 2);
+    igual(item(d, 'ins_lphera', 'mL').quantidade, 2036);
+    igual(item(d, 'ins_lphera', 'mL').turnos.map((t) => t.quantidade), [2003, 18, 15]);
+    igual(d.insumos.filter((x) => x.prancheta === 'ins_lphera').length, 1);
     igual(item(d, 'ins_materia_prima').produtos, [{ produto: 'MASSA', quantidade: 4.25 }, { produto: 'FINI', quantidade: 2.75 }]);
     igual(d.dornasFinalizadas, 1); igual(r.total.dornasFinalizadas, 2);
     certo(d.insumos.every((x) => C.pranchetas[x.prancheta].tipo === 'insumo'), 'só insumos');
-    igual(item(r.total, 'ins_lphera', 'mL').quantidade, 72);
+    igual(item(r.total, 'ins_lphera', 'mL').quantidade, 4072);
     igual(item(r.total, 'ins_cal').quantidade, 0.01, 'arredonda só depois de somar o período');
     certo(r.dias[2].insumos.every((x) => x.quantidade === 0), 'dia vazio com zeros');
     igual(r.dias[2].dornasFinalizadas, 0);
   });
   await teste(g, '12 h por setor: 19h, meia-noite e 6h ficam no segundo turno', async () => {
     const r = leitura.criar({ ...C, turnosSetor: { hidrolise: '12h' } }).totais(intervalo, regs);
-    igual(item(r.dias[0], 'ins_lphera', 'mL').turnos.map((t) => t.quantidade), [10, 26]);
+    igual(item(r.dias[0], 'ins_lphera', 'mL').turnos.map((t) => t.quantidade), [2010, 26]);
     igual(item(r.dias[0], 'ins_materia_prima').turnos.length, 3, 'outro setor mantém os turnos');
   });
 
@@ -129,10 +129,10 @@ export async function testarTotais216(g, sqlite = false) {
           await teste(g, onde + ': período, dia e 12 h configuradas' + (onde === 'API local' ? ', incluindo arquivo antigo' : ''), async () => {
             const r = await pedir(`de=${dia}&ate=${terceiro}`);
             igual(r.status, 200);
-            igual(item(r.json.total, 'ins_lphera', 'mL').quantidade, 72);
-            igual(item(r.json.dias[0], 'ins_lphera', 'mL').turnos.map((t) => t.quantidade), [10, 26]);
+            igual(item(r.json.total, 'ins_lphera', 'mL').quantidade, 4072);
+            igual(item(r.json.dias[0], 'ins_lphera', 'mL').turnos.map((t) => t.quantidade), [2010, 26]);
             igual((await pedir('dia=' + dia)).json.total.dornasFinalizadas, 1);
-            if (onde === 'API local') igual(item((await pedir('dia=2020-01-01')).json.total, 'ins_lphera', 'mL').quantidade, 36);
+            if (onde === 'API local') igual(item((await pedir('dia=2020-01-01')).json.total, 'ins_lphera', 'mL').quantidade, 2036);
           });
           await teste(g, onde + ': Bearer obrigatório, datas reais, intervalo inclusivo de até 62 dias', async () => {
             igual((await pedir('dia=' + dia, 'errada')).status, 401);
@@ -150,7 +150,7 @@ export async function testarTotais216(g, sqlite = false) {
             { ...base[1], apagado: true, atualizadoEm },
           ] });
           await c.api('/api/nuvem', { acao: 'enviar' });
-          igual(item((await pedirNuvem(`de=${dia}&ate=${terceiro}`)).json.total, 'ins_lphera', 'mL').quantidade, 80);
+          igual(item((await pedirNuvem(`de=${dia}&ate=${terceiro}`)).json.total, 'ins_lphera', 'mL').quantidade, 4080);
           if (nome === 'computador') igual((await pedirLocal(`de=${dia}&ate=${terceiro}`)).json, (await pedirNuvem(`de=${dia}&ate=${terceiro}`)).json);
         });
         await teste(g, nome + ': versão nova sem lançamentos chega no próximo envio vazio', async () => {

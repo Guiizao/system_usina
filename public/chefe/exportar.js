@@ -131,7 +131,13 @@
     const insumos = lista.flatMap((s) => s.pranchetas.flatMap(folhasDe)).filter((pid) => prancheta(pid).tipo === 'insumo');
     if (insumos.length) {
       linhas.push('', '*TOTAIS DO DIA (insumos)*');
-      insumos.forEach((pid) => linhas.push(`• ${prancheta(pid).nome}: ${totalInsumo(linhasDeHora(listarPapel(data, pid))) || 'nada adicionado'}`));
+      // 2.16: numa unidade só (g vira kg, L vira mL) e com o que foi em cada turno
+      const totais = totaisPorTurno(data, listarPapel);
+      const num = (n) => fmtNum(String(Math.round(n * 100) / 100));
+      insumos.forEach((pid) => {
+        const ls = totais.filter((x) => x.folha === pid);
+        linhas.push(`• ${prancheta(pid).nome}: ${ls.length ? ls.map((x) => `${num(x.total)} ${x.unidade}` + (x.turnos.filter((y) => y.q).length > 1 ? ` (${x.turnos.filter((y) => y.q).map((y) => `${y.t.nome.replace(' Turno', '')} ${num(y.q)}`).join(' · ')})` : '')).join(' + ') : 'nada adicionado'}`);
+      });
     }
     return linhas.join('\n');
   }

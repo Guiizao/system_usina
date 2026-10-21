@@ -28,6 +28,7 @@
     config: 'usina', 'medida-grupo': 'usina', 'medidas-planilha': 'usina', contato: 'usina', 'lista-add': 'usina', 'lista-remove': 'usina',
     'setor-liga': 'usina', 'prancheta-liga': 'usina', 'lembrete-liga': 'usina', 'lembrete-horario': 'usina', 'turnos-setor': 'usina', 'op-add': 'usina', 'op-senha': 'usina', 'op-remove': 'usina',
     'nuvem-url': 'integracoes', 'nuvem-segredo': 'integracoes', 'nuvem-enviar': 'integracoes', 'base44-url': 'integracoes', 'base44-segredo': 'integracoes', 'base44-enviar': 'integracoes',
+    'turnos-url': 'integracoes', 'turnos-segredo': 'integracoes', 'turnos-ligar': 'integracoes', 'turnos-enviar': 'integracoes', 'turnos-atualizar': 'integracoes',
     'novo-codigo': 'conexao',
     graficos: 'relatorios', folhas: 'folhas', 'folha-campo': 'folhas', 'folha-unidades': 'folhas',
   };
@@ -36,13 +37,25 @@
     if (!b || modalAberto()) return;
     const a = b.dataset.a;
     const v = view();
+    // menu do computador: cada item é uma seção; o Voltar dela leva ao painel (as telas não se empilham)
+    if (b.closest('.menu-pc') && pilha.length > 1) pilha = [pilha[0]];
     // tablet chefe: confere se quem está usando pode fazer isso (e pede a senha se ninguém entrou)
     if (ehCentral() && PRECISA[a]) {
       const f = PRECISA[a] === 'folha' ? (soDoChefe(v.pid) ? 'anotar' : 'corrigir') : PRECISA[a];
       if (!(await exigir(f))) return;
     }
     switch (a) {
+      case 'ir-nuvem-entrar': ed.alvoId = null; pilha = [{ tela: 'nuvem-entrar' }]; return render(true);
+      case 'nuvem-entrar': return entrarPelaNuvem();
       case 'pessoa': {
+        if (cfg.soNuvem) { // pela nuvem: só mostra quem entrou e o Sair
+          const p = pessoaAtual();
+          if (!p) { pilha = [{ tela: 'nuvem-entrar' }]; return render(true); }
+          const r = await abrirModal(`<h3>${esc(p.nome)}</h3><p class="dica">Entrou pela nuvem: vê o painel, os relatórios e o escritório.</p>
+            <div class="acoes-modal"><button class="btn" data-k="x">Fechar</button><button class="btn primario" data-k="sair">${ico('voltar')} Sair</button></div>`, (k, b2, fechar) => fechar(k), {});
+          if (r === 'sair') sairDaNuvem();
+          return;
+        }
         if (!pessoaAtual()) return entrarNoChefe();
         const p = pessoaAtual();
         const opcoes = [pode('pessoas') ? '<button class="btn" data-k="pessoas">Pessoas e permissões</button>' : '', pode('registro') ? '<button class="btn" data-k="registro">Registro do sistema</button>' : '', pode('folhas') ? '<button class="btn" data-k="folhas">Folhas e avisos</button>' : ''].join('');
@@ -89,6 +102,7 @@
       case 'graficos': return ir({ tela: 'graficos', data: v.data || dataProducao(), setor: b.dataset.setor || '' });
       case 'graficos-dia': { const d = somarDias(v.data, Number(b.dataset.n)); if (d > dataProducao()) return; pilha[pilha.length - 1] = Object.assign({}, v, { data: d }); return render(true); }
       case 'graficos-setor': v.setor = b.dataset.setor || ''; return render();
+      case 'graficos-modo': v.semana = b.dataset.modo === 'semana'; return render(true);
       case 'folhas': return ir({ tela: 'folhas' });
       case 'folha-campo': return editarCampoDaFolha(b.dataset.pid, b.dataset.id);
       case 'folha-unidades': return editarUnidadesDaFolha(b.dataset.pid);
@@ -111,7 +125,7 @@
         pilha = [telaInicial()]; return render(true);
       }
       case 'virar-central': return prepararTabletChefe();
-      case 'voltar-conectar': cfg.papel = null; salvarCfg(); pilha = [telaInicial()]; return render(true);
+      case 'voltar-conectar': cfg.papel = null; cfg.soNuvem = false; salvarCfg(); pilha = [telaInicial()]; return render(true);
       case 'abrir-painel': pilha = [telaInicial()]; return render(true);
       case 'desligar-servidor': {
         if (!(await confirmar('Desligar o servidor deste aparelho?', 'Os tablets param de enviar até ele ser ligado de novo (aqui ou em outro aparelho). Nada é apagado: as anotações continuam guardadas neste aparelho.', 'Desligar', true))) return;
@@ -292,6 +306,8 @@
       case 'abrir-setor': return ir({ tela: 'prancheta', pid: pranchetasDasAbas(b.dataset.id)[0], data: v.data, monitor: soConsulta() || undefined });
       case 'compartilhar': return compartilhar(b.dataset.destino, v.data || dataProducao());
       case 'relatorios': return ir({ tela: 'relatorios' });
+      case 'relatorio-resumo': return verResumo(b.dataset.data);
+      case 'ler-folha-ligar': if (!(await exigir('usina'))) return; salvarConfigSistema({ lerFolha: !lerFolhaLigada() }); return render();
       case 'avisos': return ir({ tela: 'avisos' });
       case 'ver-erros': return verErros();
       case 'caber-folha': cfg.folhaNormal = !cfg.folhaNormal; salvarCfg(); return render();
@@ -360,7 +376,7 @@
       }
       case 'config': {
         // mexe no número do escritório, operadores e setores de todos os tablets: a permissão foi conferida antes (PRECISA)
-        carregarBase44(); carregarNuvem();
+        carregarBase44(); carregarNuvem(); carregarEnvioTurnos();
         return ir({ tela: 'config' });
       }
       case 'nuvem-url': {
@@ -386,6 +402,8 @@
         toast(nuvemInfo.erro ? 'Não foi: ' + nuvemInfo.erro : nuvemInfo.faltam ? `Mandou. Faltam ${nuvemInfo.faltam}` : 'Tudo na nuvem', nuvemInfo.erro ? 'erro' : 'ok');
         return render();
       }
+      case 'turnos-url': case 'turnos-segredo': case 'turnos-ligar': case 'turnos-enviar': case 'turnos-atualizar':
+        return acaoEnvioTurnos(a, b);
       case 'base44-url': {
         const atual = (base44Info && base44Info.url) || '';
         const valor = await textoLivre({ titulo: 'Endereço no Base44', dica: 'Quem montou o sistema do escritório copia do Base44 (a função receberTotaisPranchetas). Começa com https://. Deixe em branco para parar de enviar.', valor: atual, tipo: 'url', max: 300 });

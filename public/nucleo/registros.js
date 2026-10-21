@@ -31,6 +31,25 @@
   }
   const listar = (data, pid) => (indiceDasFolhas().porFolha.get(`${data}|${pid}`) || []).slice();
   const linhasDeHora = (regs) => regs.filter((r) => /^\d+$/.test(r.chave));
+  /** 2.16: para somar, tudo numa unidade só (C.somarEm: g vira kg, L vira mL). Devolve [quantidade, unidade]. */
+  const naUnidadeDeSoma = (n, u) => { const c = (C.somarEm || {})[u]; return c ? [n * c.fator, c.unidade] : [n, u]; };
+  /** Totais do dia de cada insumo, numa unidade só e por turno: [{ setor, nome, folha, unidade, total, turnos: [{ t, q }] }]. */
+  function totaisPorTurno(data, ler = listar) {
+    const linhas = [];
+    setores().forEach((s) => s.pranchetas.flatMap(folhasDe).filter((pid) => prancheta(pid).tipo === 'insumo').forEach((pid) => {
+      const p = prancheta(pid), turnos = turnosDaPrancheta(pid), porUnidade = {};
+      linhasDeHora(ler(data, pid)).forEach((r) => {
+        const n0 = parseFloat(r.valores.qtd);
+        if (isNaN(n0)) return;
+        const [n, u] = naUnidadeDeSoma(n0, r.valores.unidade || p.unidade || '');
+        const x = porUnidade[u] || (porUnidade[u] = { total: 0, turnos: turnos.map((t) => ({ t, q: 0 })) });
+        x.total += n;
+        x.turnos.find((y) => y.t === turnoDaHora(Number(r.chave), turnos)).q += n;
+      });
+      Object.entries(porUnidade).forEach(([u, x]) => linhas.push(Object.assign({ setor: s.nome, nome: p.nome, folha: pid, unidade: u }, x)));
+    }));
+    return linhas;
+  }
 
   function gravar(data, pid, chave, valores, extra = {}) {
     const id = idReg(data, pid, chave);
