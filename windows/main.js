@@ -19,7 +19,9 @@ const TIPOS = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; ch
 function servirTelas() {
   return new Promise((resolve, reject) => {
     const servidor = http.createServer((req, res) => {
-      let rel = decodeURIComponent(new URL(req.url, 'http://x').pathname);
+      // endereço com % quebrado (ex.: /%E0%A4%A) não pode derrubar o programa
+      let rel;
+      try { rel = decodeURIComponent(new URL(req.url, 'http://x').pathname); } catch { res.writeHead(400); return res.end(); }
       if (rel === '/') rel = '/index.html';
       const alvo = path.normalize(path.join(publico, rel));
       if (!alvo.startsWith(publico + path.sep)) { res.writeHead(403); return res.end(); }

@@ -4,6 +4,15 @@
    Depois do sinal de igual vem JSON puro, porque o servidor do tablet chefe (Java) também lê este arquivo. */
 window.NOVIDADES = [
   {
+    "versao": "2.16.1",
+    "data": "2026-10-21",
+    "itens": [
+      "Mais segurança no acesso pela nuvem: quem entra pelo computador só vê. Trocar a senha da pessoa, desativar ou tirar Relatórios e Escritório desconecta na hora.",
+      "Só entra pela nuvem quem tem Relatórios ou Escritório.",
+      "O envio dos totais ao fim do turno só aceita endereço https:// fora da rede da usina."
+    ]
+  },
+  {
     "versao": "2.16.0",
     "data": "2026-10-21",
     "itens": [

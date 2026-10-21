@@ -8,7 +8,7 @@ import net from 'node:net';
 import { spawn } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { createRequire } from 'node:module';
-import { novoGrupo, teste, certo, resumo } from './teste.mjs';
+import { novoGrupo, teste, certo, igual, resumo } from './teste.mjs';
 
 const require = createRequire(import.meta.url);
 const APP = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -41,6 +41,9 @@ export async function testarWindows216(g) {
       const html = await (await fetch(endereco + '/?nuvem=1')).text();
       certo(html.includes('entrar-pela-nuvem.js') || html.includes('app.js'), 'as telas não vieram');
       certo((await fetch(endereco + '/../server.js')).status !== 200, 'entregou arquivo fora das telas');
+      certo((await fetch(endereco + '/..%5Cserver.js')).status !== 200, 'entregou arquivo fora das telas (barra invertida)');
+      igual((await fetch(endereco + '/%E0%A4%A')).status, 400, '% quebrado');
+      igual((await fetch(endereco + '/index.html')).status, 200, 'o programa continua de pé depois do % quebrado');
       certo(!/a página caiu/.test(fs.readFileSync(log, 'utf8')), 'a página caiu: ' + fs.readFileSync(log, 'utf8').slice(-300));
     });
     await teste(g, 'sem central: a porta 8080 continua livre', async () => {
