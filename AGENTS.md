@@ -6,7 +6,7 @@ Troca as pranchetas de papel da usina por tablets no Wi-Fi. A raiz não tem `pac
 
 - `server.js`: central do computador (1.700 linhas). `api-leitura.js`: API só de leitura (e os totais) para o escritório. `carregar-usina.js`: monta a configuração como o aplicativo (a central e os testes usam).
 - `public/` (o aplicativo, em pastas desde a 2.16):
-  - `design/`: `cores.css` (a paleta, claro e escuro: mudou ali, muda em tudo), `tipografia.css`, `medidas.css`, `movimento.css` (o `--ritmo` muda a velocidade de todas as animações), ajustes por tamanho de tela (`telas/`), `escala.js` e `texto-que-cabe.js`.
+  - `design/`: `cores.css` (a paleta, claro e escuro: mudou ali, muda em tudo), `tipografia.css`, `medidas.css`, `movimento.css` (o `--ritmo` muda a velocidade de todas as animações), ajustes por tamanho de tela (`telas/`), `escala.js`, `texto-que-cabe.js` e `grades.js` (grade de botões ou cartões sem caixa sozinha na última linha: grade nova entra na lista `GRADES`).
   - `setores/<setor>/`: `pranchetas.js` (o setor e as folhas dele: campos, limites, avisos), `regras.js` (o que só aquele setor faz: dornas da hidrólise, volume do vinho, bags do ralo) e `estilo.css`.
   - `paginas/` (telas de todo aparelho), `chefe/` (telas do tablet chefe e do escritório), `nucleo/` (memória, conexão, teclado, toques, início), `config/` (`forms.js` geral, `folhas.js`, `novidades.js`), `bibliotecas/` (Excel, PDF, papel, leitor, cifra, QR code).
   - `index.html` é a lista do que carrega, na ordem (`data-usina`: configuração; `data-app`: o aplicativo). `styles.css` é a lista dos estilos, na ordem.

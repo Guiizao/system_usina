@@ -11,8 +11,9 @@
 .avisos-grade .bloco { margin: 0; }
 .avisos-grade h2 { display: flex; align-items: center; gap: 10px; font-size: 24px; margin: 0 0 6px; }
 .novo-aviso h3 { margin: 14px 0 8px; font-size: 18px; color: var(--tinta-2); }
-.chips-escolha { display: flex; flex-wrap: wrap; gap: 8px; }
-.chips-escolha button { display: inline-flex; align-items: center; gap: 8px; min-height: 56px; padding: 0 16px; border-radius: 12px; background: var(--papel); border: 2px solid var(--linha); color: var(--tinta); font-size: 18px; font-weight: 700; }
+/* 2.16.1: caixas do mesmo tamanho, sem uma sozinha embaixo (as colunas vêm do design/grades.js) */
+.chips-escolha { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 200px), 1fr)); gap: 8px; }
+.chips-escolha button { display: flex; min-width: 0; align-items: center; gap: 8px; min-height: 56px; padding: 0 16px; border-radius: 12px; background: var(--papel); border: 2px solid var(--linha); color: var(--tinta); font-size: 18px; font-weight: 700; }
 .chips-escolha button span { overflow-wrap: normal; }
 .chips-escolha button svg.ico { flex: none; width: 24px; height: 24px; color: var(--tinta-2); }
 .chips-escolha button.sel { border: 3px solid var(--verde); background: var(--verde-fundo); color: var(--verde-escuro); }

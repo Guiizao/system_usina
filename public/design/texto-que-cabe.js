@@ -11,7 +11,7 @@
     '.opcoes.nomes .nome-op b', '.campo .rot', '.campo .val', '.item .texto b', '.setor-cartao .texto b', '.papel-cartao b',
     '.abas button', '.seletor button', '.rodape .btn', '.painel-nav .btn', '.chip', '.topo .titulo b', '.topo .titulo span', '.topo .atalho span',
     '.chips-escolha button span', '.escolhas button b', '.cabecalho-form .aviso', '.cabecalho-form .btn', '.opcoes-painel button',
-    '.linha-botoes .btn', '.acoes-modal .btn', '.btn.largo', '.aviso-item-cab b', '.aparelho b', '.data-grande b', '.boas-vindas h1', '.visor',
+    '.linha-botoes .btn', '.acoes-modal .btn', '.grade-acoes button span', '.btn.largo', '.aviso-item-cab b', '.aparelho b', '.data-grande b', '.boas-vindas h1', '.visor',
   ].join(', ');
   const cabe = (el) => {
     // nome do quadro com o selo do lado (aviso ou volume): precisa sobrar um pouco, senão a última letra do selo encosta na borda
@@ -31,6 +31,7 @@
     return el.scrollWidth <= el.clientWidth && el.scrollHeight <= el.clientHeight + 1;
   };
   function caberTextos(raiz = document, apertado = false) {
+    equilibrarGrades(raiz); // antes de medir os textos: as colunas mudam a largura das caixas
     const topo = raiz.classList && raiz.classList.contains('topo') ? raiz : raiz.querySelector('.topo');
     if (topo && !apertado) topo.classList.remove('apertado');
     // o selo do turno fica do lado do nome da tela só se o nome couber inteiro; senão ele some (o nome vem primeiro)
@@ -81,7 +82,7 @@
     ['.campo .rot', '.campos'], ['.campo .val:not(.vazio)', '.campos'], ['.linha-botoes .btn', '.linha-botoes'],
     ['.acoes-modal .btn', '.acoes-modal'], ['.abas button', '.abas'], ['.seletor button', '.seletor'], ['.rodape .btn', '.rodape'],
     ['.painel-nav .btn', '.painel-nav'], ['.item .texto b', 'main'], ['.setor-cartao .texto b', 'main'], ['.papel-cartao b', 'main'],
-    ['.escolhas button b', '.escolhas'], ['.chips-escolha button span', '.chips-escolha'], ['.opcoes-painel button', '.opcoes-painel'],
+    ['.escolhas button b', '.escolhas'], ['.grade-acoes button span', '.grade-acoes'], ['.chips-escolha button span', '.chips-escolha'], ['.opcoes-painel button', '.opcoes-painel'],
     ['.opcoes.nomes .nome-op b', '.opcoes'], ['.topo .atalho span', '.topo'], ['.chip', '.chips, .linha-chips'],
   ];
   function igualarVizinhos(lista) {

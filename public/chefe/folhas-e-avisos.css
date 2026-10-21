@@ -7,7 +7,8 @@
 .selo-mudado { display: inline-block; font-size: 13px; font-weight: 700; padding: 1px 8px; border-radius: 20px; background: var(--azul-sel); color: var(--tinta); vertical-align: middle; }
 .avisos-bloco { display: grid; gap: 6px; }
 .aviso-editar { display: grid; grid-template-columns: 1fr 90px 1fr; gap: 6px; padding: 8px; border-radius: 10px; background: var(--papel-2); border: 1.5px solid var(--linha-clara); }
-.aviso-editar .av-texto { grid-column: 1 / 3; }
+.aviso-editar .av-texto { grid-column: 1 / -1; }
+.aviso-editar .av-curto { grid-column: 1 / 3; }
 .aviso-editar select, .aviso-editar input { min-height: 46px; font-size: 17px; padding: 0 8px; border-radius: 8px; border: 2px solid var(--linha); background: var(--papel); color: var(--tinta); min-width: 0; }
 .aviso-editar .btn { min-height: 46px; }
 @media (orientation: landscape) and (max-height: 640px) {

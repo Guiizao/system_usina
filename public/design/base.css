@@ -22,6 +22,14 @@ button { font: inherit; color: inherit; border: 0; background: none; cursor: poi
 button:focus-visible { outline: 4px solid var(--foco); outline-offset: 2px; }
 button:disabled { opacity: .45; cursor: default; }
 input, textarea { font: inherit; user-select: text; -webkit-user-select: text; color: var(--tinta); }
+/* 2.16.1: toda caixa de digitar (texto, endereço, e-mail, telefone, senha, número, data, lista) com o fundo do papel, a letra
+   da tinta e os cantos arredondados, no tema claro e no escuro. Antes, a caixa sem estilo da tela ficava com o fundo branco
+   do navegador: no turno da noite a letra clara sumia no branco. O :where() não pesa: cada tela ainda muda o tamanho. */
+:where(input:not([type=checkbox], [type=radio], [type=range], [type=file], [type=color]), textarea, select) {
+  color: var(--tinta); background: var(--papel); border: 2px solid var(--linha); border-radius: 10px; padding: 8px 12px; min-width: 0; max-width: 100%;
+}
+:where(input, textarea)::placeholder { color: var(--tinta-2); opacity: 1; }
+:where(input, textarea, select):focus-visible { outline: 3px solid var(--foco); outline-offset: 1px; }
 [hidden] { display: none !important; }
 /* 2.16: nenhuma barra de rolagem de navegador em tela nenhuma: rola com o dedo, a roda do mouse e o teclado */
 * { scrollbar-width: none; }

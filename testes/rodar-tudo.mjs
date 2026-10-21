@@ -33,6 +33,7 @@ import { testarAtualizacao } from './atualizacao.mjs';
 import { testarNuvem, temWrangler } from './nuvem.mjs';
 import { testarPessoas } from './pessoas.mjs';
 import { testarPedidos210 } from './pedidos210.mjs';
+import { testarAjustes2161 } from './ajustes2161.mjs';
 import { testarSeguranca } from './seguranca.mjs';
 import { testarPedidos211 } from './pedidos211.mjs';
 import { testarNiveis } from './niveis212.mjs';
@@ -190,6 +191,12 @@ try {
   for (const [nome, ligar, porta] of [['computador', (p, d) => centralNode(p, d), 8255], ['tablet chefe', centralJava, 8256]]) {
     const g = novoGrupo('Versão 2.10 (PDF, gráficos e folhas) na central do ' + nome);
     await testarPedidos210(nav, ligar, porta, g);
+    grupos.push(g);
+  }
+  // 4j2. versão 2.16.1: Brix acima de 25, caixas de digitar, grades sem caixa sozinha e aviso com texto curto, nas duas centrais
+  for (const [nome, ligar, porta] of [['computador', (p, d) => centralNode(p, d), 8362], ['tablet chefe', centralJava, 8363]]) {
+    const g = novoGrupo('Pedidos de 21/10 (2.16.1) na central do ' + nome);
+    await testarAjustes2161(nav, ligar, porta, g);
     grupos.push(g);
   }
   // 4k. versão 2.11: aparelhos (quem usa, nome no Android, modelo, endereço) e bloqueio, direto na central e no aplicativo
