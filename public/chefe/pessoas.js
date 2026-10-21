@@ -19,6 +19,7 @@
   let demoFuncoes = null; // demonstração com uma pessoa que só pode algumas coisas (&funcoes=relatorios,escritorio)
   const pessoaAtual = () => {
     if (cfg.demo && ehCentral()) return demoSemPessoa ? null : demoFuncoes ? { nome: 'Lucas', nivel: 'consulta', funcoes: demoFuncoes } : { nome: 'Guilherme', nivel: 'administrador', extras: {}, teto: null, dono: true };
+    if (cfg.soNuvem) return cfg.pessoa || null; // pela nuvem: vale até sair (a nuvem já conferiu a senha)
     if (!ehCentral() || !cfg.pessoa) return null;
     return cfg.pessoaTurno === turnoDaPessoa() ? cfg.pessoa : null;
   };

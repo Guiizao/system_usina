@@ -45,7 +45,17 @@
       if (!(await exigir(f))) return;
     }
     switch (a) {
+      case 'ir-nuvem-entrar': ed.alvoId = null; pilha = [{ tela: 'nuvem-entrar' }]; return render(true);
+      case 'nuvem-entrar': return entrarPelaNuvem();
       case 'pessoa': {
+        if (cfg.soNuvem) { // pela nuvem: só mostra quem entrou e o Sair
+          const p = pessoaAtual();
+          if (!p) { pilha = [{ tela: 'nuvem-entrar' }]; return render(true); }
+          const r = await abrirModal(`<h3>${esc(p.nome)}</h3><p class="dica">Entrou pela nuvem: vê o painel, os relatórios e o escritório.</p>
+            <div class="acoes-modal"><button class="btn" data-k="x">Fechar</button><button class="btn primario" data-k="sair">${ico('voltar')} Sair</button></div>`, (k, b2, fechar) => fechar(k), {});
+          if (r === 'sair') sairDaNuvem();
+          return;
+        }
         if (!pessoaAtual()) return entrarNoChefe();
         const p = pessoaAtual();
         const opcoes = [pode('pessoas') ? '<button class="btn" data-k="pessoas">Pessoas e permissões</button>' : '', pode('registro') ? '<button class="btn" data-k="registro">Registro do sistema</button>' : '', pode('folhas') ? '<button class="btn" data-k="folhas">Folhas e avisos</button>' : ''].join('');
@@ -114,7 +124,7 @@
         pilha = [telaInicial()]; return render(true);
       }
       case 'virar-central': return prepararTabletChefe();
-      case 'voltar-conectar': cfg.papel = null; salvarCfg(); pilha = [telaInicial()]; return render(true);
+      case 'voltar-conectar': cfg.papel = null; cfg.soNuvem = false; salvarCfg(); pilha = [telaInicial()]; return render(true);
       case 'abrir-painel': pilha = [telaInicial()]; return render(true);
       case 'desligar-servidor': {
         if (!(await confirmar('Desligar o servidor deste aparelho?', 'Os tablets param de enviar até ele ser ligado de novo (aqui ou em outro aparelho). Nada é apagado: as anotações continuam guardadas neste aparelho.', 'Desligar', true))) return;
@@ -295,6 +305,8 @@
       case 'abrir-setor': return ir({ tela: 'prancheta', pid: pranchetasDasAbas(b.dataset.id)[0], data: v.data, monitor: soConsulta() || undefined });
       case 'compartilhar': return compartilhar(b.dataset.destino, v.data || dataProducao());
       case 'relatorios': return ir({ tela: 'relatorios' });
+      case 'relatorio-resumo': return verResumo(b.dataset.data);
+      case 'ler-folha-ligar': if (!(await exigir('usina'))) return; salvarConfigSistema({ lerFolha: !lerFolhaLigada() }); return render();
       case 'avisos': return ir({ tela: 'avisos' });
       case 'ver-erros': return verErros();
       case 'caber-folha': cfg.folhaNormal = !cfg.folhaNormal; salvarCfg(); return render();

@@ -41,7 +41,9 @@
     window.voltarDoAndroid = voltar;
   }
   function telaInicial() {
-    if (!cfg.chave && !cfg.demo) return { tela: 'conectar' };
+    // 2.16: pela nuvem (computador do escritório): o painel com a pessoa que entrou, ou a tela de entrar
+    if (cfg.soNuvem) return cfg.pessoa ? { tela: 'central', data: dataProducao() } : { tela: 'nuvem-entrar' };
+    if (!cfg.chave && !cfg.demo) return params.get('nuvem') ? { tela: 'nuvem-entrar' } : { tela: 'conectar' };
     if (!cfg.papel) return { tela: 'configurar' };
     if (ehCentral()) return { tela: 'central', data: dataProducao() };
     if (ehEscritorio()) return { tela: 'escritorio', data: cfg.demo ? dataProducao() : diaFechado() };

@@ -62,6 +62,7 @@
       pessoas: telaPessoas, registro: telaRegistro, graficos: telaGraficos, folhas: telaFolhas,
       aparelhos: telaAparelhos, 'bloqueado-adm': telaBloqueioAdm,
       escritorio: telaEscritorio, 'esc-calculos': telaEscCalculos, 'esc-rastreamento': telaEscRastreamento,
+      'nuvem-entrar': telaNuvemEntrar,
     };
     const chaveTela = JSON.stringify([v.tela, v.pid, v.data, v.monitor]);
     const outraTela = chaveTela !== ultimaChaveTela;

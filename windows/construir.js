@@ -12,8 +12,8 @@ async function construir() {
   // Caminho fixo dentro da saída do build, nunca a pasta de dados da central.
   fs.rmSync(pacote, { recursive: true, force: true });
   fs.mkdirSync(pacote, { recursive: true });
-  for (const nome of fs.readdirSync(raiz).filter((n) => n.endsWith('.js'))) fs.copyFileSync(path.join(raiz, nome), path.join(pacote, nome));
-  for (const nome of ['main.js', 'pacote.js']) fs.copyFileSync(path.join(__dirname, nome), path.join(pacote, nome));
+  // 2.16: o programa é só o painel pela nuvem: vai o main.js e as telas (sem a central, sem o APK dos tablets)
+  fs.copyFileSync(path.join(__dirname, 'main.js'), path.join(pacote, 'main.js'));
   fs.cpSync(path.join(raiz, 'public'), path.join(pacote, 'public'), { recursive: true });
   // como no APK: as partes do aplicativo viram um app.js só, embaralhado (quem abrir o instalador não lê o código)
   const { execFileSync } = require('node:child_process');
@@ -25,9 +25,6 @@ async function construir() {
     const arquivo = path.join(publico, js); // (qrcode.js e a pasta lib são de outros autores: vão como estão)
     execFileSync(process.execPath, [terser, arquivo, '--compress', '--mangle', '--comments', '/Guilherme/', '-o', arquivo]);
   }
-  const apk = path.join(raiz, 'apk', 'saida');
-  if (fs.existsSync(apk)) fs.cpSync(apk, path.join(pacote, 'apk', 'saida'), { recursive: true });
-  else console.log('Aviso: apk/saida não existe; o instalador será gerado sem APK para os tablets.');
   fs.copyFileSync(path.join(raiz, 'LICENCA.txt'), path.join(pacote, 'LICENCA.txt'));
   const { devDependencies, ...manifesto } = require('./package.json');
   fs.writeFileSync(path.join(pacote, 'package.json'), JSON.stringify({ ...manifesto, version: versao }, null, 2));

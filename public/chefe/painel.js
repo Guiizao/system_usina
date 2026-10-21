@@ -14,7 +14,7 @@
     const p = pessoaAtual();
     return `<button class="atalho pessoa-chefe ${p ? '' : 'alerta'}" data-a="pessoa" aria-label="${p ? `${esc(p.nome)}: toque para sair` : 'Entrar com a sua senha'}">${ico('pessoa')}<span>${esc(p ? p.nome : 'Entrar')}</span></button>
       ${veNoChefe('avisos') ? `<button class="atalho" data-a="avisos" aria-label="Avisos${abertos ? `, ${abertos} esperando` : ''}">${ico('sino')}<span>Avisos</span>${abertos ? `<em class="contador">${abertos}</em>` : ''}</button>` : ''}
-      ${veNoChefe('ler_folha') ? `<button class="atalho" data-a="ler-folha">${ico('camera')}<span>Ler folha</span></button>` : ''}
+      ${veNoChefe('ler_folha') && lerFolhaLigada() ? `<button class="atalho" data-a="ler-folha">${ico('camera')}<span>Ler folha</span></button>` : ''}
       ${veNoChefe('relatorios') ? `<button class="atalho" data-a="relatorios">${ico('pasta')}<span>Relatórios</span></button>` : ''}
       ${FUNCOES_DA_USINA.some(veNoChefe) ? `<button class="atalho" data-a="config">${ico('pessoas')}<span>Usina</span></button>` : ''}`;
   }

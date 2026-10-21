@@ -169,6 +169,9 @@ window.USINA = {
   // Se o aparelho ficar este tempo sem achar a central, ele trava até voltar para o Wi-Fi da usina
 
   // Listas que o tablet chefe pode mudar em Configurações da usina (estes são os valores iniciais)
+  // 2.16: endereço da nuvem que já vem preenchido em "Entrar pela nuvem" (computador e celular fora da usina)
+  nuvemPadrao: 'https://pranchetas-nuvem.guiizao.workers.dev',
+
   // 2.16: os totais (painel, resumo e API) somam numa unidade só: g vira kg e L vira mL. Copos ficam copos.
   somarEm: { g: { unidade: 'kg', fator: 0.001 }, L: { unidade: 'mL', fator: 1000 } },
 
