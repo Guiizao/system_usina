@@ -149,4 +149,5 @@
     setInterval(() => conferirNaNuvem(), 120000);
     app.addEventListener('pointerdown', function primeira() { entrarTelaCheia(); app.removeEventListener('pointerdown', primeira); });
     if (!NO_APK && 'serviceWorker' in navigator && window.isSecureContext) navigator.serviceWorker.register('sw.js').catch(() => {});
+    conectarNoComputador();
   }

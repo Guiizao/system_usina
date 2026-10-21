@@ -40,7 +40,8 @@ async function construir() {
     directories: { output: saida }, asar: false, npmRebuild: false,
     files: ['**/*'],
     win: { icon: path.join(pacote, 'public', 'icons', 'icon-512.png'), signExecutable: false },
-    nsis: { oneClick: false, perMachine: true, allowToChangeInstallationDirectory: true,
+    // sempre em Arquivos de Programas: fora dela (ex.: na Área de Trabalho) a parte isolada do Electron não lê a pasta e a janela fica branca
+    nsis: { oneClick: false, perMachine: true, allowToChangeInstallationDirectory: false,
       include: path.join(__dirname, 'instalador.nsh'), deleteAppDataOnUninstall: false,
       artifactName: 'Pranchetas-Ubiralcool-${version}.exe', shortcutName: 'Pranchetas Ubirálcool' },
   } });
