@@ -243,8 +243,21 @@ function assinaturaConfere(dados, assinatura) {
   try { return crypto.verify('sha256', dados, crypto.createPublicKey({ key: Buffer.from(chave, 'base64'), format: 'der', type: 'spki' }), Buffer.from(String(assinatura).trim(), 'base64')); } catch (e) { return false; }
 }
 function pacoteDasTelas() { try { return JSON.parse(fs.readFileSync(path.join(TELAS, 'pacote.json'), 'utf8')); } catch (e) { return null; } }
+function infoDasTelas(p) {
+  return p && typeof p.versao === 'string' && /^\d{1,2}\.\d{1,2}(\.\d{1,2})?$/.test(p.versao) &&
+    typeof p.apkMinimo === 'string' && /^\d{1,2}\.\d{1,2}(\.\d{1,2})?$/.test(p.apkMinimo) ? { versao: p.versao, apkMinimo: p.apkMinimo } : null;
+}
+function atualizacaoDisponivel() {
+  const local = infoDasTelas(pacoteDasTelas()), online = infoDasTelas(config.nuvem && config.nuvem.telas);
+  return online && (!local || numeroDaVersao(online.versao) > numeroDaVersao(local.versao)) ? online : local;
+}
+let buscandoTelas = null;
+function buscarTelasOnline(raiz) {
+  if (!buscandoTelas) buscandoTelas = baixarTelasOnline(raiz).finally(() => { buscandoTelas = null; });
+  return buscandoTelas;
+}
 /** Baixa da nuvem o pacote das telas mais novo (só o que mudou), confere a assinatura e cada arquivo. */
-async function buscarTelasOnline(raiz) {
+async function baixarTelasOnline(raiz) {
   const pacote = await baixarDaInternet(raiz + 'pacote.json', 2 * 1024 * 1024);
   const assinatura = (await baixarDaInternet(raiz + 'pacote.sig', 4096)).toString('utf8');
   if (!assinaturaConfere(pacote, assinatura)) throw new Error('o pacote das telas da internet não tem a assinatura certa');
@@ -311,6 +324,13 @@ function apiLeitura(req, res, url) {
   const api = apiDeLeitura();
   const p = url.pathname;
   if (p === '/api/v1/esquema') return json(res, 200, api.esquema());
+  if (p === '/api/v1/totais') {
+    const intervalo = leitura.intervaloTotais(url.searchParams);
+    if (!intervalo) return json(res, 400, { erro: 'Use dia=AAAA-MM-DD ou de=AAAA-MM-DD&ate=AAAA-MM-DD, até 62 dias' });
+    const regs = Object.values(db.registros).filter((r) => r.data >= intervalo.de && r.data <= intervalo.ate && !arquivado(r.data));
+    for (const data of intervalo.dias) if (arquivado(data)) regs.push(...lerDiaArquivado(data));
+    return json(res, 200, api.totais(intervalo, regs));
+  }
   if (p === '/api/v1/dias') {
     const de = url.searchParams.get('de'); const ate = url.searchParams.get('ate');
     const dias = Object.entries(diasComAnotacao()).filter(([d, n]) => n && (!leitura.ehDia(de) || d >= de) && (!leitura.ehDia(ate) || d <= ate))
@@ -437,16 +457,22 @@ async function enviarParaNuvem() {
     const bloqueiosDemais = bloqueios.length > 500;
     const medidas = medidasDoEscritorio();
     const medidasHash = resumoHash(medidas);
+    // Um envio vazio por ciclo também consulta a versão publicada, mesmo sem novas anotações.
     for (let vez = 0; vez < 40; vez++) {
       const pend = pendentesNuvem(n);
       const lote = pend.slice(0, NUVEM_LOTE);
-      if (!lote.length && n.formsHash === formsHash && n.medidasHash === medidasHash && (bloqueiosDemais || n.bloqueiosHash === bloqueiosHash)) { n.arquivosEnviados = true; n.faltam = 0; break; }
+      if (vez > 0 && !lote.length && n.formsHash === formsHash && n.medidasHash === medidasHash && (bloqueiosDemais || n.bloqueiosHash === bloqueiosHash)) { n.arquivosEnviados = true; n.faltam = 0; break; }
       const corpo = { geracao: config.geracao, medidas, registros: lote };
       if (n.formsHash !== formsHash) corpo.forms = forms;
       // com a revisão: o aparelho só aceita a resposta da nuvem se ela for mais nova que o bloqueio que ele já tem
       if (!bloqueiosDemais && n.bloqueiosHash !== bloqueiosHash) { corpo.bloqueios = bloqueios; corpo.bloqueiosRev = bloqueiosRev; }
       const r = await pedirNuvem('central/enviar', corpo);
       if (r.status !== 200) throw new Error(erroDaNuvem(r));
+      const telas = infoDasTelas(r.json && r.json.telas);
+      if (telas && (!infoDasTelas(n.telas) || numeroDaVersao(telas.versao) >= numeroDaVersao(n.telas.versao))) n.telas = telas;
+      if (vez === 0 && infoDasTelas(n.telas) && numeroDaVersao(n.telas.versao) > numeroDaVersao((pacoteDasTelas() || {}).versao)) {
+        await buscarTelasOnline(n.url.replace(/\/$/, '') + '/telas/').catch((e) => console.log('  Telas pela internet: ' + e.message));
+      }
       if (lote.length) n.seq = lote[lote.length - 1].seq;
       n.formsHash = formsHash; n.medidasHash = medidasHash; if (!bloqueiosDemais) n.bloqueiosHash = bloqueiosHash;
       n.ultimoEnvio = Date.now(); n.erro = bloqueiosDemais ? 'Mais de 500 aparelhos bloqueados: a lista não vai para a nuvem' : '';
@@ -1276,6 +1302,7 @@ async function rotaProtegida(req, res, url, ip) {
       if (p === '/api/sync' && req.method === 'POST') {
         const corpo = JSON.parse(await lerCorpo(req));
         const resultado = sincronizar(corpo, req.aparelho, ip);
+        resultado.atualizacao = atualizacaoDisponivel();
         return json(res, resultado.erro === 'bloqueado' ? 423 : 200, resultado);
       }
 

@@ -45,6 +45,7 @@ import { testarLembrete213 } from './lembrete213.mjs';
 import { testarTurnos213 } from './turnos213.mjs';
 import { testarConexao2135 } from './conexao2135.mjs';
 import { testarApkWeb } from './rodar-apk-web.mjs';
+import { testarTotais216 } from './totais216.mjs';
 import { centralNode, centralJava, APP } from './servidores.mjs';
 
 const SAIDA = path.join(APP, 'testes', 'saida');
@@ -118,6 +119,12 @@ for (const [nome, ligar, porta] of [['computador', centralNode, 8245], ['tablet 
 for (const [nome, ligar, porta] of [['computador', centralNode, 8271], ['tablet chefe', centralJava, 8272]]) {
   const g = novoGrupo('Longo prazo e central nova, direto na central do ' + nome);
   await testarRobustezCentral(ligar, porta, g);
+  grupos.push(g);
+}
+
+{
+  const g = novoGrupo('Totais e atualização 2.16');
+  await testarTotais216(g);
   grupos.push(g);
 }
 
