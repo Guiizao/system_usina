@@ -132,6 +132,11 @@ export async function abrirNavegador({ porta = 9340 + Math.floor(Math.random() *
       },
       texto: () => a.avaliar('document.body.innerText'),
       async teclar(teclas) { for (const k of teclas) await a.tocar(`[data-ed="${k}"], [data-k="${k}"]`); },
+      /** Limpar do teclado (2.16): apagar um valor salvo pergunta antes; confirma o Sim se a pergunta aparecer. */
+      async limpar() {
+        await a.tocar('[data-ed="limpar"]');
+        if (await a.avaliar('new Promise((r) => setTimeout(() => r(!!document.querySelector(\'.modal [data-k="sim"]\')), 250))')) await a.tocar('.modal [data-k="sim"]');
+      },
       async digitar(texto) { await cdp('Input.insertText', { text: texto }, sessionId); await dormir(80); },
       async foto(arquivo, { inteira = false } = {}) {
         fs.mkdirSync(path.dirname(arquivo), { recursive: true });

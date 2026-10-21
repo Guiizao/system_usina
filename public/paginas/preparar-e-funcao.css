@@ -49,10 +49,11 @@
 .papel-cartao.sel { border: 3px solid var(--verde); background: var(--verde-fundo); }
 /* 2.16: tela larga: três por linha (os seis cartões ficam 3 + 3, nenhum sozinho embaixo) e mais altos, sem sobrar meia tela */
 @media (min-width: 760px) {
-  .papeis { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
-  .papeis .papel-cartao { min-height: clamp(150px, 24vh, 260px); padding: 18px; }
-  .papeis .papel-cartao b { font-size: 24px; }
-  .papeis .papel-cartao small { font-size: 16px; }
+  /* só na tela de escolher a função (os ajustes usam a mesma grade, menor) */
+  .boas-vindas .papeis { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+  .boas-vindas .papeis .papel-cartao { min-height: clamp(150px, 24vh, 260px); padding: 18px; }
+  .boas-vindas .papeis .papel-cartao b { font-size: 24px; }
+  .boas-vindas .papeis .papel-cartao small { font-size: 16px; }
 }
 .papel-cartao:active { border-color: var(--verde); }
 .papel-atual { display: flex; align-items: center; gap: 12px; margin: 0 0 10px; }

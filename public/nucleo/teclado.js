@@ -27,7 +27,7 @@
     const antes = ed.alvoId;
     ed.alvoId = id; ed.oculto = false; ed.substituir = a.type === 'num' || a.type === 'time';
     ed.letras = a.type === 'text';
-    ed.texto = textoInicial(a);
+    ed.texto = textoInicial(a); ed.digitou = false;
     atualizarEdicao(antes && antes !== id ? [antes, id] : [id]);
   }
   const passoDo = (a) => a.passo || Math.pow(10, -(a.dec || 0));
@@ -40,8 +40,11 @@
     if (ed.alvoId === a.id && !ed.oculto) { ed.texto = ''; ed.substituir = false; atualizarEdicao([a.id]); } else selecionar(a.id);
     setTimeout(() => { a.recemSomado = false; }, 600);
   }
-  /** 2.16: apagar pergunta antes (Sim ou Não). No ralo, com o quadro vazio, a lixeira tira o último bag somado. */
-  async function limparComPergunta(a) {
+  /** 2.16: apagar um valor que já estava salvo pergunta antes (Sim ou Não); corrigir o que acabou de digitar, não
+      (para trocar um valor salvo basta digitar: a primeira tecla já troca). A lixeira do ralo pergunta sempre ("sempre").
+      No ralo, com o quadro vazio, a lixeira tira o último bag somado. */
+  async function limparComPergunta(a, sempre = false) {
+    if (!sempre && ed.alvoId === a.id && ed.digitou) { ed.texto = ''; a.set(''); ed.substituir = false; return atualizarEdicao([a.id]); }
     const ultima = vazio(a.get()) && a.ultimaParcela ? a.ultimaParcela() : '';
     if (ultima) {
       if (await confirmar(`Tirar o último bag (${fmtCampo(a, ultima)}${a.getUnidade ? ' ' + a.getUnidade() : ''})?`, 'Ele sai da soma desta hora.', 'Sim, tirar', true)) { a.tirarUltima(); atualizarEdicao([a.id]); }
@@ -69,6 +72,7 @@
     if (k.startsWith('o:')) { a.set(a.opcoes[Number(k.slice(2))]); atualizarEdicao([a.id]); return setTimeout(() => tecla('prox'), 180); }
     if (k === 'marcar') { a.set(vazio(a.get()) ? 'OK' : ''); return atualizarEdicao([a.id]); }
     if (k === 'limpar') return limparComPergunta(a);
+    ed.digitou = true; // daqui para baixo, a tecla muda o que está no visor
 
     let s = ed.substituir && (/^[\d,.]$/.test(k) || k.length === 1) && k !== '+' && k !== '-' ? '' : ed.texto;
     ed.substituir = false;

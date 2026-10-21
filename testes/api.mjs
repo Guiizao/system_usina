@@ -262,8 +262,10 @@ export async function testarApi(central, grupo) {
     return `envio ${envio} ms, busca de tudo ${busca} ms, ${(r.texto.length / 1048576).toFixed(1)} MB`;
   });
   await teste(grupo, '2.16: tablet da caldeira grava nas duas; outro setor não cria nem altera nelas', async () => {
-    const cal = await conectarTeste(U, central.codigo(), 'teste-caldeiras216');
-    const outro = await conectarTeste(U, central.codigo(), 'teste-ralo216');
+    // a central deixa 6 conexões por minuto do mesmo IP: este grupo já conectou outros, então espera a vez
+    const conectar = async (id) => { for (let i = 0; i < 4; i++) { const c = await conectarTeste(U, central.codigo(), id); if (c.pedir) return c; if (c.status !== 429) throw new Error(id + ': ' + JSON.stringify(c)); await dormir(20000); } throw new Error(id + ': limite de conexões'); };
+    const cal = await conectar('teste-caldeiras216');
+    const outro = await conectar('teste-ralo216');
     const regs = ['caldeira', 'caldeira_2'].map((pid, i) => registro('7', { pressao: String(5 + i) }, Date.now(), {
       id: `${hoje()}|${pid}|7`, prancheta: pid, setor: 'caldeira', aparelho: cal.aparelho,
     }));

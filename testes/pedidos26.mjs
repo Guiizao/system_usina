@@ -82,7 +82,7 @@ export async function testarPedidos26(nav, ligar, porta, grupo) {
     await teste(grupo, 'folga maior que a altura da dorna avisa do lado do número', async () => {
       await tab.tocar('[data-quadro="sac3_folga"]'); await tab.teclar(['3']);
       certo((await texto(tab, '[data-quadro="sac3_folga"] .tag-aviso')).includes('Maior que a dorna'), 'sem aviso');
-      await tab.tocar('[data-ed="limpar"]');
+      await tab.limpar();
       await tab.tocar('[data-ed="ocultar"]');
     });
 
@@ -197,7 +197,7 @@ print(json.dumps({'folhas': wb.sheetnames, 'v7229': 7229.25 in valores, 'sub': 2
       // no tablet, a Dorna 3 da Sacarificação (altura 3 m): folga 0,5 -> (3 - 0,5) x 2,835 x 1000 = 7.087,5
       await tab.tocar('[data-a="aba"][data-id="med_dornas"]');
       await tab.tocar('[data-a="linha"][data-chave="sac"]');
-      await tab.tocar('[data-quadro="sac3_folga"]'); await tab.tocar('[data-ed="limpar"]'); await tab.teclar(['0', ',', '5']);
+      await tab.tocar('[data-quadro="sac3_folga"]'); await tab.limpar(); await tab.teclar(['0', ',', '5']);
       await tab.tocar('[data-ed="ocultar"]');
       await tab.tocar('[data-a="salvar"]');
       const t0 = Date.now();

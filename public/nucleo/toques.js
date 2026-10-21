@@ -267,7 +267,7 @@
         return render();
       }
       case 'bag-somar': return somarBag();
-      case 'bag-apagar': { const a = alvos.find((x) => x.somar); if (a) await limparComPergunta(a); return; }
+      case 'bag-apagar': { const a = alvos.find((x) => x.somar); if (a) await limparComPergunta(a, true); return; }
       case 'apagar-linha': {
         const p = prancheta(v.pid);
         const k = Number(rascunho.chave);
