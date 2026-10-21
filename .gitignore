@@ -4,6 +4,8 @@ apk/node_modules/
 apk/www/
 apk/saida/
 apk/*.log
+windows/node_modules/
+windows/saida/
 _vendor/node_modules/
 node_modules/
 

@@ -44,6 +44,7 @@ import { testarEnvio213 } from './envio213.mjs';
 import { testarLembrete213 } from './lembrete213.mjs';
 import { testarTurnos213 } from './turnos213.mjs';
 import { testarConexao2135 } from './conexao2135.mjs';
+import { testarWindows216 } from './windows216.mjs';
 import { testarApkWeb } from './rodar-apk-web.mjs';
 import { centralNode, centralJava, APP } from './servidores.mjs';
 
@@ -63,6 +64,10 @@ await teste(g1, 'scripts de treino do leitor (Python)', async () => {
   }
 });
 grupos.push(g1);
+
+const gw = novoGrupo('Aplicativo Windows 2.16');
+await testarWindows216(gw);
+grupos.push(gw);
 
 // 2. configuração
 const g2 = novoGrupo('Configuração das folhas (forms.js)');
