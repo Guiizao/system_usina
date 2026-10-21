@@ -3,6 +3,56 @@
 /* Parte do aplicativo: no navegador cada parte é um arquivo; no APK elas viram um app.js só (apk/juntar-app.js). */
 'use strict';
 
+  let turnosInfo = null;
+  async function carregarEnvioTurnos() {
+    if (!pode('integracoes')) return;
+    try {
+      const r = await postJson('api/turnos', { acao: 'estado' }, 8000);
+      if (r.ok) { turnosInfo = await r.json(); if (view().tela === 'config' && podeRedesenhar()) render(); }
+    } catch (e) { /* a tela informa que não foi possível carregar */ }
+  }
+  function htmlEnvioTurnos() {
+    const b = turnosInfo || { enviados: {} };
+    const quando = (ms) => new Date(ms).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+    return `<p class="sub">Ao terminar cada turno, a central manda os totais acumulados do dia para o sistema do Evandro. Usa os horários de cada setor e tenta de novo a cada 10 minutos se houver erro. Corrigiu uma folha dos últimos 7 dias, manda de novo.</p>
+      <div class="linha-config"><div><b>Endereço de destino</b><small>${esc(b.url ? enderecoCurto(b.url) : 'não cadastrado')}</small></div><button class="btn pequeno" data-a="turnos-url">${b.url ? 'Trocar' : 'Cadastrar'}</button></div>
+      <div class="linha-config"><div><b>Segredo</b><small>${b.temSegredo ? 'cadastrado (não aparece aqui)' : 'não cadastrado'}</small></div><button class="btn pequeno" data-a="turnos-segredo">${b.temSegredo ? 'Trocar' : 'Cadastrar'}</button></div>
+      <div class="linha-config"><div><b>Envio automático</b><small>${b.ligado ? `Ligado desde ${fmtData(b.desde)}` : 'Desligado'}</small></div><button class="btn pequeno" data-a="turnos-ligar" aria-pressed="${!!b.ligado}">${b.ligado ? 'Desligar' : 'Ligar'}</button></div>
+      <div class="linha-config"><div><b>Situação</b><small>${turnosInfo ? 'Só envia turnos encerrados desde que foi ligado.' : cfg.demo ? 'Na demonstração não há central.' : 'Carregue a situação para consultar os envios.'}</small></div><button class="btn pequeno" data-a="turnos-atualizar">Atualizar</button></div>
+      ${Object.values(b.enviados).slice(0, 5).map((e) => `<div class="linha-config base44-dia ${e.ok ? 'ok' : 'erro'}"><div><b>${fmtData(e.data)} · ${esc(e.turno.nome)}</b><small>${pad2(e.turno.inicio)}h–${pad2(e.turno.fim)}h · ${e.ok ? 'Enviado' : esc(e.erro)} · ${quando(e.em)}</small></div></div>`).join('')}
+      <button class="btn" data-a="turnos-enviar" ${b.ligado ? '' : 'disabled'}>Mandar agora</button>`;
+  }
+  async function acaoEnvioTurnos(acao, botao) {
+    if (acao === 'turnos-atualizar') return carregarEnvioTurnos();
+    if (!turnosInfo) await carregarEnvioTurnos();
+    if (!turnosInfo) return toast('Não consegui falar com a central', 'erro');
+    let mudanca = {};
+    if (acao === 'turnos-url') {
+      const url = await textoLivre({ titulo: 'Endereço do sistema do Evandro', dica: 'O endereço que recebe os totais por POST. Começa com https://.', valor: turnosInfo.url || '', tipo: 'url', max: 2000 });
+      if (url === undefined) return;
+      mudanca = { url, ...(!url ? { ligado: false } : {}) };
+    } else if (acao === 'turnos-segredo') {
+      const segredo = await textoLivre({ titulo: 'Segredo do envio por turno', dica: 'Use o mesmo segredo cadastrado no destino. Em branco, a central cria um e mostra uma única vez.', tipo: 'text', max: 200 });
+      if (segredo === undefined) return;
+      mudanca = { segredo };
+    } else if (acao === 'turnos-ligar') mudanca = { ligado: !turnosInfo.ligado };
+    const enviar = acao === 'turnos-enviar';
+    botao.disabled = true;
+    if (enviar) toast('Mandando os totais dos turnos encerrados...');
+    try {
+      const r = await postJson('api/turnos', enviar ? { acao: 'enviar' } : { acao: 'configurar', forms: C, ...mudanca }, enviar ? 60000 : 8000);
+      const d = await r.json();
+      if (!r.ok || d.ok === false) return toast(d.erro || 'A central recusou', 'erro');
+      if (!enviar) {
+        const { segredoCriado, ...estado } = d;
+        turnosInfo = estado;
+        if (segredoCriado) await abrirModal(`<h3>Segredo criado</h3><p class="dica">Passe este segredo para o Evandro configurar o recebimento. Ele não aparece de novo aqui.</p><p class="segredo-grande">${esc(segredoCriado)}</p><div class="acoes-modal um"><button class="btn primario" data-k="x">Anotei</button></div>`, (k, b, fechar) => fechar());
+      }
+      toast(enviar ? d.quantidade ? `${d.quantidade} envio(s) concluído(s)` : 'Nenhum turno encerrado com totais novos' : 'Configuração salva');
+    } catch (e) { toast('Não consegui falar com a central. Consulte a situação.', 'erro'); }
+    finally { botao.disabled = false; await carregarEnvioTurnos(); render(); }
+  }
+
   /* =========================================================
    * Totais do dia no Base44 (o sistema do escritório onde o Lucas lança os totais)
    * Quando o dia fecha (07:00), o tablet chefe soma cada insumo e a central manda pela internet.

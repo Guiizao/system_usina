@@ -47,12 +47,16 @@ import { testarConexao2135 } from './conexao2135.mjs';
 import { testarWindows216 } from './windows216.mjs';
 import { testarApkWeb } from './rodar-apk-web.mjs';
 import { testarTotais216 } from './totais216.mjs';
+import { testarTurno216 } from './turno216.mjs';
 import { centralNode, centralJava, APP } from './servidores.mjs';
 
 const SAIDA = path.join(APP, 'testes', 'saida');
 fs.mkdirSync(SAIDA, { recursive: true });
 const t0 = Date.now();
 const grupos = [];
+const gt216 = novoGrupo('Totais por turno 2.16');
+await testarTurno216(gt216);
+grupos.push(gt216);
 
 // 1. código
 const g1 = novoGrupo('Código sem erro de escrita');

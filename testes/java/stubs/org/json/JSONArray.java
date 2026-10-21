@@ -4,6 +4,9 @@ package org.json;
 import java.util.ArrayList;
 
 public class JSONArray {
+  public JSONObject getJSONObject(int i) throws JSONException {
+    JSONObject o = optJSONObject(i); if (o == null) throw new JSONException("sem objeto " + i); return o;
+  }
   final ArrayList<Object> l = new ArrayList<>();
 
   public JSONArray() { }

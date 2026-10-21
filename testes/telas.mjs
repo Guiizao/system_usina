@@ -66,6 +66,7 @@ const TELAS = [
   ['chefe-relatorios', '&papel=central&tela=relatorios'],
   ['chefe-usina', '&papel=central&tela=config'],
   ['chefe-usina-base44', '&papel=central&tela=config&base44=1', async (a) => a.avaliar('document.getElementById("bloco-base44").scrollIntoView()')],
+  ['chefe-usina-turnos', '&papel=central&tela=config&turnos=1', async (a) => a.avaliar('document.getElementById("bloco-turnos").scrollIntoView()')],
   ['chefe-prancheta', '&papel=central&tela=prancheta&pid=hid_anexo1'],
   ['ajustes', '&papel=hidrolise&op=Guilherme&tela=admin'],
   ['preparando-servidor', '&tela=preparando&fim=1'],

@@ -193,6 +193,10 @@ public class ServidorCentral {
     rodando = true;
     new Thread(this::aceitarConexoes, "servidor-usina").start();
     iniciarNuvem();
+    relogioTurnos = Executors.newSingleThreadScheduledExecutor();
+    relogioTurnos.scheduleWithFixedDelay(() -> {
+      try { verificarTurnos(false); } catch (Exception e) { /* a próxima rodada tenta novamente */ }
+    }, Long.getLong("pranchetas.turnoIntervalo", 60000L), Long.getLong("pranchetas.turnoIntervalo", 60000L), java.util.concurrent.TimeUnit.MILLISECONDS);
   }
 
   public synchronized void parar() {
@@ -200,6 +204,7 @@ public class ServidorCentral {
     try { if (socketServidor != null) socketServidor.close(); } catch (IOException ignorado) { }
     if (trabalhadores != null) trabalhadores.shutdownNow();
     if (relogioNuvem != null) { relogioNuvem.shutdownNow(); relogioNuvem = null; }
+    if (relogioTurnos != null) { relogioTurnos.shutdownNow(); relogioTurnos = null; }
   }
 
   public boolean estaRodando() { return rodando; }
@@ -675,6 +680,10 @@ public class ServidorCentral {
         // quem trocou recebe a chave nova dele (a resposta vai embaralhada com a chave antiga)
         if (("/api/novo-codigo".equals(caminho) || "/api/codigo-trocado".equals(caminho)) && "POST".equals(metodo)) {
           apiCodigo(caminho, corpo, aparelho, saida); return;
+        }
+        if ("/api/turnos".equals(caminho) && "POST".equals(metodo)) {
+          if (!podeNoAparelho(aparelho, "integracoes")) { negar(saida, "integracoes"); return; }
+          apiTurnos(corpo, saida); return;
         }
         if ("/api/base44".equals(caminho) && "POST".equals(metodo)) {
           String acaoBase44 = acaoDoPedido(corpo);
@@ -1552,6 +1561,193 @@ public class ServidorCentral {
   /* O tablet chefe calcula; a central manda pela internet. O endereço e */
   /* o segredo ficam só aqui, não vão para os tablets.                   */
   /* ------------------------------------------------------------------ */
+
+  private java.util.concurrent.ScheduledExecutorService relogioTurnos;
+  private final java.util.concurrent.atomic.AtomicBoolean enviandoTurnos = new java.util.concurrent.atomic.AtomicBoolean();
+  private long agoraTurnos() { return Long.getLong("pranchetas.turnoAgora", System.currentTimeMillis()); }
+  private synchronized JSONObject envioTurnos() throws Exception {
+    JSONObject b = config.optJSONObject("envioTurnos");
+    if (b == null) { b = new JSONObject().put("url", "").put("segredo", "").put("ligado", false).put("enviados", new JSONObject()); config.put("envioTurnos", b); }
+    return b;
+  }
+  private synchronized JSONObject estadoTurnos() throws Exception {
+    JSONObject b = envioTurnos(), todos = b.getJSONObject("enviados"), enviados = new JSONObject();
+    List<String> chaves = new ArrayList<>(); todos.keys().forEachRemaining(chaves::add);
+    chaves.sort((a, z) -> Long.compare(todos.optJSONObject(z).optLong("em"), todos.optJSONObject(a).optLong("em")));
+    for (String k : chaves.subList(0, Math.min(15, chaves.size()))) enviados.put(k, todos.opt(k));
+    return new JSONObject().put("url", b.optString("url")).put("ligado", b.optBoolean("ligado")).put("temSegredo", !b.optString("segredo").isEmpty())
+        .put("desde", b.optString("desde")).put("enviados", enviados);
+  }
+  /** Definições mandadas pelo chefe, com as escolhas atuais do sistema. Nunca recebe totais do cliente. */
+  private synchronized JSONObject formsTurnos() throws Exception {
+    JSONObject f = config.optJSONObject("nuvemForms");
+    if (f == null) throw new IllegalArgumentException("Abra as configurações no tablet chefe para carregar as folhas");
+    f = new JSONObject(f.toString());
+    JSONObject cs = registros.optJSONObject("config|sistema|geral");
+    JSONObject v = cs == null || cs.optBoolean("apagado") ? null : cs.optJSONObject("valores");
+    f.put("turnosSetor", v != null && v.optJSONObject("turnosSetor") != null ? v.optJSONObject("turnosSetor") : new JSONObject());
+    JSONObject folhas = v == null ? null : v.optJSONObject("folhas"), ps = f.getJSONObject("pranchetas");
+    for (Iterator<String> it = ps.keys(); it.hasNext(); ) {
+      String pid = it.next(); JSONObject p = ps.optJSONObject(pid), m = folhas == null ? null : folhas.optJSONObject(pid);
+      JSONArray u = m == null ? null : m.optJSONArray("_unidades");
+      if (u != null && u.length() > 0 && !u.optString(0).isEmpty()) p.put("unidade", u.optString(0));
+    }
+    return f;
+  }
+  private void apiTurnos(byte[] corpo, OutputStream saida) throws Exception {
+    JSONObject p = new JSONObject(new String(corpo, StandardCharsets.UTF_8));
+    String acao = p.optString("acao");
+    if ("estado".equals(acao)) { enviarJson(saida, 200, estadoTurnos()); return; }
+    if ("enviar".equals(acao)) { enviarJson(saida, 200, verificarTurnos(true)); return; }
+    if (!"configurar".equals(acao)) { enviarJson(saida, 400, new JSONObject().put("erro", "ação desconhecida")); return; }
+    try {
+      synchronized (this) {
+        JSONObject b = envioTurnos();
+        if ((p.has("url") && (!(p.opt("url") instanceof String) || p.optString("url").length() > 2000)) ||
+            (p.has("segredo") && (!(p.opt("segredo") instanceof String) || !p.optString("segredo").matches("[ -~]{0,200}"))) ||
+            (p.has("ligado") && !(p.opt("ligado") instanceof Boolean))) throw new IllegalArgumentException("Configuração inválida");
+        String url = p.has("url") ? p.optString("url").trim() : b.optString("url");
+        if (!url.isEmpty()) {
+          try { URL u = new URL(url); if (!("http".equals(u.getProtocol()) || "https".equals(u.getProtocol())) || u.getHost().isEmpty() || u.getUserInfo() != null || u.getRef() != null || url.matches(".*\\s.*")) throw new Exception(); }
+          catch (Exception e) { throw new IllegalArgumentException("Endereço inválido"); }
+        }
+        boolean ligado = p.has("ligado") ? p.optBoolean("ligado") : b.optBoolean("ligado");
+        if (ligado && url.isEmpty()) throw new IllegalArgumentException("Cadastre o endereço primeiro");
+        JSONObject f = p.optJSONObject("forms");
+        if (f != null) {
+          if (f.optJSONObject("pranchetas") == null || f.optJSONArray("setores") == null || f.optJSONArray("turnos") == null || f.optJSONArray("turnos12h") == null) throw new IllegalArgumentException("Folhas inválidas");
+          config.put("nuvemForms", f);
+        }
+        if (ligado) formsTurnos();
+        if (ligado && (!b.optBoolean("ligado") || !url.equals(b.optString("url")))) b.put("desde", diaDaUsina(agoraTurnos()));
+        if (!url.equals(b.optString("url")) || p.has("segredo")) b.put("enviados", new JSONObject());
+        b.put("url", url).put("ligado", ligado);
+        if (p.has("segredo")) b.put("segredo", p.optString("segredo").trim());
+        String criado = "";
+        if (b.optString("segredo").isEmpty()) { criado = sorteiaChave(); b.put("segredo", criado); }
+        salvarConfig();
+        JSONObject r = estadoTurnos(); if (!criado.isEmpty()) r.put("segredoCriado", criado);
+        enviarJson(saida, 200, r);
+      }
+    } catch (IllegalArgumentException e) { enviarJson(saida, 400, new JSONObject().put("erro", e.getMessage())); }
+  }
+  private JSONArray turnosDoSetor(JSONObject f, JSONObject s) throws Exception {
+    return f.getJSONArray("12h".equals(f.getJSONObject("turnosSetor").optString(s.optString("id"))) ? "turnos12h" : "turnos");
+  }
+  private int horaNoDia(JSONObject f, int h) { return h < f.optInt("inicioDoDia") ? h + 24 : h; }
+  private List<JSONObject> turnosEncerrados(JSONObject f, String desde, long agora) throws Exception {
+    Map<String, JSONObject> turnos = new LinkedHashMap<>();
+    JSONArray setores = f.getJSONArray("setores");
+    for (int i = 0; i < setores.length(); i++) {
+      JSONArray ts = turnosDoSetor(f, setores.getJSONObject(i));
+      for (int j = 0; j < ts.length(); j++) { JSONObject t = ts.getJSONObject(j); turnos.put(t.optInt("id") + "-" + t.optInt("inicio") + "-" + t.optInt("fim"), t); }
+    }
+    List<JSONObject> eventos = new ArrayList<>();
+    java.text.SimpleDateFormat fmt = new java.text.SimpleDateFormat("yyyy-MM-dd", Locale.US);
+    String hoje = diaDaUsina(agora);
+    for (int i = 7; i >= 0; i--) {
+      java.util.Calendar d = java.util.Calendar.getInstance(); d.setTime(fmt.parse(hoje)); d.add(java.util.Calendar.DATE, -i);
+      String data = fmt.format(d.getTime()); if (data.compareTo(desde) < 0) continue;
+      for (Map.Entry<String, JSONObject> par : turnos.entrySet()) {
+        JSONObject t = par.getValue(); java.util.Calendar fim = (java.util.Calendar) d.clone();
+        int h = t.optInt("fim"); fim.add(java.util.Calendar.DATE, h <= f.optInt("inicioDoDia") || h == 24 ? 1 : 0); fim.set(java.util.Calendar.HOUR_OF_DAY, h % 24);
+        if (fim.getTimeInMillis() <= agora) eventos.add(new JSONObject().put("data", data).put("chave", data + "|" + par.getKey()).put("turno", t).put("em", fim.getTimeInMillis()));
+      }
+    }
+    eventos.sort((a, z) -> { int c = Long.compare(a.optLong("em"), z.optLong("em")); return c != 0 ? c : a.optString("chave").compareTo(z.optString("chave")); });
+    return eventos;
+  }
+  private double numeroTotal(String s) {
+    java.util.regex.Matcher m = java.util.regex.Pattern.compile("^[+-]?(?:\\d+\\.?\\d*|\\.\\d+)(?:[eE][+-]?\\d+)?").matcher(s.trim());
+    try { return m.find() ? Double.parseDouble(m.group()) : Double.NaN; } catch (Exception e) { return Double.NaN; }
+  }
+  private JSONObject somaVazia(JSONArray turnos) throws Exception {
+    JSONArray ts = new JSONArray();
+    for (int i = 0; i < turnos.length(); i++) ts.put(new JSONObject(turnos.getJSONObject(i).toString()).put("quantidade", 0));
+    return new JSONObject().put("quantidade", 0).put("turnos", ts).put("produtos", new JSONObject());
+  }
+  private synchronized JSONObject totaisTurnos(JSONObject f, String data) throws Exception {
+    List<JSONObject> ativos = new ArrayList<>(); JSONArray arquivo = arquivado(data) ? lerDiaArquivado(data) : null;
+    if (arquivo != null) { for (int i = 0; i < arquivo.length(); i++) ativos.add(arquivo.getJSONObject(i)); }
+    else for (Iterator<String> it = registros.keys(); it.hasNext(); ) { JSONObject r = registros.optJSONObject(it.next()); if (data.equals(r.optString("data"))) ativos.add(r); }
+    ativos.removeIf(r -> r.optBoolean("apagado") || !r.optString("chave").matches("\\d+"));
+    JSONArray insumos = new JSONArray(), setores = f.getJSONArray("setores"); JSONObject ps = f.getJSONObject("pranchetas"), conversoes = f.optJSONObject("somarEm");
+    for (int i = 0; i < setores.length(); i++) {
+      JSONObject s = setores.getJSONObject(i); JSONArray ts = turnosDoSetor(f, s), folhas = s.getJSONArray("pranchetas"); List<String> ids = new ArrayList<>();
+      for (int j = 0; j < folhas.length(); j++) {
+        String pid = folhas.optString(j); JSONObject p = ps.getJSONObject(pid);
+        if ("juntas".equals(p.optString("tipo"))) { JSONArray partes = p.getJSONArray("partes"); for (int k = 0; k < partes.length(); k++) ids.add(partes.getJSONObject(k).optString("prancheta")); }
+        else ids.add(pid);
+      }
+      for (String pid : ids) {
+        JSONObject p = ps.getJSONObject(pid); if (!"insumo".equals(p.optString("tipo"))) continue;
+        Map<String, JSONObject> unidades = new LinkedHashMap<>();
+        for (JSONObject r : ativos) {
+          if (!pid.equals(r.optString("prancheta"))) continue;
+          JSONObject v = r.optJSONObject("valores"); if (v == null) continue;
+          String u = v.optString("unidade"); if (u.isEmpty()) u = p.optString("unidade");
+          JSONObject conv = conversoes == null ? null : conversoes.optJSONObject(u);
+          double n = numeroTotal(v.optString("qtd")) * (conv == null ? 1 : numeroTotal(conv.optString("fator")));
+          if (Double.isNaN(n) || Double.isInfinite(n)) continue;
+          if (conv != null) u = conv.optString("unidade");
+          if (!unidades.containsKey(u)) unidades.put(u, somaVazia(ts));
+          JSONObject soma = unidades.get(u); soma.put("quantidade", numeroTotal(soma.optString("quantidade")) + n);
+          int hora = horaNoDia(f, Integer.parseInt(r.optString("chave"))), indice = 0;
+          for (int k = 0; k < ts.length(); k++) { JSONObject t = ts.getJSONObject(k); int fim = t.optInt("fim"); if (fim <= f.optInt("inicioDoDia")) fim += 24; if (hora >= horaNoDia(f, t.optInt("inicio")) && hora < fim) { indice = k; break; } }
+          JSONObject t = soma.getJSONArray("turnos").getJSONObject(indice); t.put("quantidade", numeroTotal(t.optString("quantidade")) + n);
+          if ("ins_materia_prima".equals(pid)) { JSONObject produtos = soma.getJSONObject("produtos"); String produto = v.optString("produto"); produtos.put(produto, numeroTotal(produtos.optString(produto, "0")) + n); }
+        }
+        if (unidades.isEmpty()) { String u = p.optString("unidade"); JSONObject conv = conversoes == null ? null : conversoes.optJSONObject(u); unidades.put(conv == null ? u : conv.optString("unidade"), somaVazia(ts)); }
+        for (Map.Entry<String, JSONObject> par : unidades.entrySet()) {
+          JSONObject soma = par.getValue(), item = new JSONObject().put("setor", s.optString("id")).put("prancheta", pid).put("insumo", p.optString("nome")).put("unidade", par.getKey()).put("quantidade", Math.round(numeroTotal(soma.optString("quantidade")) * 100) / 100.0);
+          JSONArray turnos = soma.getJSONArray("turnos"); for (int k = 0; k < turnos.length(); k++) { JSONObject t = turnos.getJSONObject(k); t.put("quantidade", Math.round(numeroTotal(t.optString("quantidade")) * 100) / 100.0); } item.put("turnos", turnos);
+          if ("ins_materia_prima".equals(pid)) { JSONObject produtos = soma.getJSONObject("produtos"); JSONArray lista = new JSONArray(); for (Iterator<String> it = produtos.keys(); it.hasNext(); ) { String produto = it.next(); lista.put(new JSONObject().put("produto", produto).put("quantidade", Math.round(numeroTotal(produtos.optString(produto)) * 100) / 100.0)); } item.put("produtos", lista); }
+          insumos.put(item);
+        }
+      }
+    }
+    int dornas = 0; for (JSONObject r : ativos) { JSONObject v = r.optJSONObject("valores"); if ("hid_anexo1".equals(r.optString("prancheta")) && v != null && !v.optString("fim").isEmpty()) dornas++; }
+    JSONObject total = new JSONObject().put("insumos", insumos).put("dornasFinalizadas", dornas);
+    return new JSONObject().put("empresa", f.opt("empresa")).put("de", data).put("ate", data).put("dias", new JSONArray().put(new JSONObject(total.toString()).put("data", data))).put("total", total);
+  }
+  private JSONObject verificarTurnos(boolean manual) throws Exception {
+    if (!enviandoTurnos.compareAndSet(false, true)) return new JSONObject().put("ok", false).put("erro", "Já está enviando");
+    int quantidade = 0;
+    try {
+      JSONObject f, b; long agora = agoraTurnos();
+      synchronized (this) { b = envioTurnos(); if (!b.optBoolean("ligado") || b.optString("url").isEmpty()) return new JSONObject().put("ok", false).put("erro", "O envio por turno está desligado"); f = formsTurnos(); }
+      for (JSONObject e : turnosEncerrados(f, b.optString("desde", diaDaUsina(agora)), agora)) {
+        JSONObject dados = totaisTurnos(f, e.optString("data")).put("turnoEncerrado", e.getJSONObject("turno"));
+        String hash = resumo(dados.toString()), url, segredo, chave = e.optString("chave");
+        synchronized (this) {
+          if (!b.optBoolean("ligado")) break;
+          JSONObject antes = b.getJSONObject("enviados").optJSONObject(chave);
+          if (antes != null && antes.optBoolean("ok") && hash.equals(antes.optString("hash"))) continue;
+          if (!manual && antes != null && !antes.optBoolean("ok") && agora - antes.optLong("em") < 600000L) continue;
+          url = b.optString("url"); segredo = b.optString("segredo");
+        }
+        int status = 0; HttpURLConnection con = null;
+        try {
+          con = (HttpURLConnection) new URL(url).openConnection(); con.setInstanceFollowRedirects(false);
+          con.setConnectTimeout(20000); con.setReadTimeout(20000); con.setRequestMethod("POST"); con.setDoOutput(true);
+          con.setRequestProperty("Content-Type", "application/json"); con.setRequestProperty("X-Pranchetas-Segredo", segredo);
+          try (OutputStream o = con.getOutputStream()) { o.write(dados.toString().getBytes(StandardCharsets.UTF_8)); }
+          status = con.getResponseCode();
+        } catch (Exception erro) { /* nenhum texto remoto ou segredo vai para o estado */ }
+        finally { if (con != null) con.disconnect(); }
+        boolean ok = status >= 200 && status < 300;
+        String erro = ok ? "" : status == 0 ? "Sem resposta do destino" : status == 401 || status == 403 ? "O destino recusou o segredo" : "O destino respondeu " + status;
+        synchronized (this) {
+          if (!url.equals(b.optString("url")) || !segredo.equals(b.optString("segredo"))) break;
+          JSONObject enviados = b.getJSONObject("enviados"); enviados.put(chave, new JSONObject().put("data", e.optString("data")).put("turno", e.opt("turno")).put("hash", hash).put("ok", ok).put("em", agoraTurnos()).put("status", status).put("erro", erro));
+          List<String> chaves = new ArrayList<>(); enviados.keys().forEachRemaining(chaves::add); Collections.sort(chaves); for (int i = 0; i < chaves.size() - 80; i++) enviados.remove(chaves.get(i));
+          salvarConfig(); quantidade++;
+        }
+        if (!ok) return new JSONObject().put("ok", false).put("erro", erro).put("quantidade", quantidade);
+      }
+      return new JSONObject().put("ok", true).put("quantidade", quantidade);
+    } finally { enviandoTurnos.set(false); }
+  }
 
   private final Set<String> enviandoBase44 = Collections.synchronizedSet(new HashSet<>());
 
