@@ -27,6 +27,9 @@ export async function testarWindows216(g) {
     certo(/^\d+\.\d+\.\d+$/.test(lerVersao(path.join(APP, 'public'))), 'versão real inválida');
   });
   if (!fs.existsSync(exe)) { console.log('  PULADO: windows/node_modules/electron não está instalado.'); return; }
+  // abre a janela do programa na tela deste computador: só com --janela (pedido do Guilherme: o teste do painel é pela
+  // nuvem, no navegador, em testes/painel-nuvem216.mjs)
+  if (!process.argv.includes('--janela')) { console.log('  PULADO: a janela do programa (node testes/windows216.mjs --janela).'); return; }
   const dados = fs.mkdtempSync(path.join(os.tmpdir(), 'pranchetas-windows216-'));
   const abrir = () => spawn(exe, [path.join(APP, 'windows', 'main.js'), `--user-data-dir=${dados}`], { stdio: 'ignore' });
   const primeira = abrir();
