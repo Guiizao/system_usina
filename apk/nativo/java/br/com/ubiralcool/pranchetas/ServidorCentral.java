@@ -494,7 +494,8 @@ public class ServidorCentral {
       apkMedidoEm = apk.lastModified();
     }
     JSONObject r = new JSONObject().put("versao", versao).put("tamanho", apk.length()).put("sha256", shaDoApk).put("url", "/apk/pranchetas.apk");
-    try (InputStream entrada = abrirDoApp("/novidades.js")) {
+    // 2.16: as novidades foram para config/; telas antigas (2.15 ou antes) ainda têm o arquivo na raiz
+    try (InputStream entrada = abrirNovidades()) {
       String texto = new String(lerTudo(entrada), StandardCharsets.UTF_8);
       int ini = texto.indexOf('[', texto.indexOf("NOVIDADES")), fim = texto.lastIndexOf(']');
       if (ini >= 0 && fim > ini) r.put("novidades", new JSONArray(texto.substring(ini, fim + 1)));
@@ -1292,6 +1293,10 @@ public class ServidorCentral {
     JSONObject online = infoDasTelas(nuvem().optJSONObject("telas"));
     if (online != null && (local == null || AtualizadorDeTelas.numero(online.optString("versao")) > AtualizadorDeTelas.numero(local.optString("versao")))) return online;
     return local == null ? JSONObject.NULL : local;
+  }
+
+  private InputStream abrirNovidades() throws IOException {
+    try { return abrirDoApp("/config/novidades.js"); } catch (IOException e) { return abrirDoApp("/novidades.js"); }
   }
 
   /** Um arquivo das telas (rel começa com /). */
