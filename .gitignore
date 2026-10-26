@@ -26,3 +26,6 @@ nuvem/publicar-log.txt
 .omc/
 apk/.omc/
 .claude/
+
+# área de trabalho dos planos (superpowers)
+.superpowers/
