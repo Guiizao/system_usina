@@ -66,7 +66,9 @@ export async function testarWindowsSeguranca216(g) {
 }
 
 function cliente() {
-  const ctx = vm.createContext({ URL, NO_APK: false, cfg: { deviceId: 'pc-teste' }, window: {}, registros: {}, document: { getElementById: () => null },
+  const campos = { 'nuvem-nome': { value: 'pessoa-teste' }, 'nuvem-senha': { value: '2468', focus() {} } };
+  const ctx = vm.createContext({ URL, NO_APK: false, cfg: { deviceId: 'pc-teste' }, window: {}, registros: {},
+    document: { addEventListener() {}, getElementById: (id) => campos[id] || null },
     pedirSenhaModal: async () => '2468', toast() {}, salvarCfg() {}, salvarRegistros() {}, marcarNuvem() {},
     atualizarConexao() {}, primeiroDiaGuardado: () => '2026-10-01', render() {}, turnoDaPessoa: () => 'turno',
     ed: {}, telaInicial: () => ({}), pilha: [], view: () => ({ tela: 'nuvem-entrar' }) });

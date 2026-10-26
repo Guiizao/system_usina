@@ -53,6 +53,7 @@
           ordem: nome ? (p[nome] || []).slice() : [],
           grupos: p.grupos ? copia(p.grupos) : null,
           unidades: p.tipo === 'insumo' ? (p.unidades || []).slice() : null,
+          unidade: p.unidade,
         });
       }
       const orig = originais.get(pid);
@@ -92,7 +93,7 @@
       if (p.tipo === 'insumo') {
         const u = (m._unidades || []).filter(Boolean);
         p.unidades = u.length ? u.slice() : orig.unidades.slice();
-        p.unidade = p.unidades[0];
+        p.unidade = u.length ? u[0] : orig.unidade;
       }
     });
     return forms;

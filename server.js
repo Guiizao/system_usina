@@ -648,7 +648,10 @@ function guardarSetor(aparelho, papel) {
   salvarConfig();
 }
 function podeFolhaNoSetor(aparelho, r) {
-  const setor = formsLidas().setores.find((s) => !s.soChefe && s.pranchetas.includes(r.prancheta));
+  const forms = formsLidas();
+  const setor = forms.setores.find((s) => s.pranchetas.some((pid) => pid === r.prancheta ||
+    (forms.pranchetas[pid]?.partes || []).some((p) => p.prancheta === r.prancheta)));
+  if (setor?.soChefe) return false;
   if (!setor) return true;
   const salvo = config.setoresAparelhos?.[aparelho];
   return !!salvo && (salvo.atual === setor.id || (Number.isFinite(r.atualizadoEm) && r.atualizadoEm > 0 && r.atualizadoEm <= (salvo.anteriores[setor.id] || 0)));
@@ -1460,7 +1463,8 @@ async function rotaProtegida(req, res, url, ip) {
           const nivel = 'nivel' in corpo ? Number(corpo.nivel) : nivelDoAparelho(req.aparelho) || 2;
           if (![1, 2, 3].includes(nivel)) return json(res, 400, { erro: 'Nível inválido' });
           // nível 3 só o dono; 1 ou 2, quem libera tablets chefe (administrador, ou quem ganhou a função) ou o dono
-          if (nivel === 3 ? !ehDono(pessoa) : !funcoesDaPessoa(pessoa).has('chefes')) return json(res, 403, { erro: nivel === 3 ? 'Só o dono do sistema libera o nível 3' : `${pessoa.nome} não pode liberar tablet chefe` });
+          if ((nivel === 3 || nivelDoAparelho(req.aparelho) === 3) && !ehDono(pessoa)) return json(res, 403, { erro: 'Só o dono do sistema muda o nível 3' });
+          if (!funcoesDaPessoaNoAparelho(pessoa, req.aparelho).has('chefes')) return json(res, 403, { erro: `${pessoa.nome} não pode liberar tablet chefe neste aparelho` });
           const a = config.aparelhosChefe[req.aparelho] || (config.aparelhosChefe[req.aparelho] = {});
           const antes = nivelDoAparelho(req.aparelho);
           Object.assign(a, { nivel, liberadoPor: pessoa.nome, liberadoEm: agora });
@@ -1484,6 +1488,8 @@ async function rotaProtegida(req, res, url, ip) {
             agendarNuvem();
           }
           Object.assign(dono, { nivel: 'administrador', ativo: true });
+          // Recuperação troca o tablet perdido pelo atual, sem deixar o dono preso ao vínculo antigo.
+          if (dono.aparelhos?.length) dono.aparelhos = [req.aparelho];
           Object.keys(config.sessoes).forEach((k) => { if (config.sessoes[k].pessoaId === dono.id) delete config.sessoes[k]; });
           const a = config.aparelhosChefe[req.aparelho] || (config.aparelhosChefe[req.aparelho] = {});
           Object.assign(a, { nivel: 3, liberadoPor: 'senha do programador', liberadoEm: Date.now() });

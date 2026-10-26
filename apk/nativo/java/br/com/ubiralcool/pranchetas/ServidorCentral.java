@@ -2801,7 +2801,7 @@ public class ServidorCentral {
   private static String setorDaFolha(String folha) {
     if (Arrays.asList("caldeira", "caldeira_2").contains(folha)) return "caldeira";
     if ("ins_materia_prima".equals(folha)) return "ralo";
-    if (Arrays.asList("hid_anexo1", "hid_anexo2", "juntas_lphera_cal", "juntas_saczyme_alcolina").contains(folha)) return "hidrolise";
+    if (Arrays.asList("hid_anexo1", "hid_anexo2", "juntas_lphera_cal", "juntas_saczyme_alcolina", "ins_lphera", "ins_cal", "ins_saczyme", "ins_alcolina").contains(folha)) return "hidrolise";
     if (Arrays.asList("destilaria", "ins_lactrol", "ins_ureia").contains(folha)) return "destilaria";
     if ("nova_destilaria".equals(folha)) return "nova_destilaria";
     return "";
@@ -2823,6 +2823,7 @@ public class ServidorCentral {
   }
 
   private boolean podeFolhaNoSetor(String aparelho, JSONObject r) throws Exception {
+    if (PRANCHETAS_SO_DO_CHEFE.contains(r.optString("prancheta"))) return false;
     String setor = setorDaFolha(r.optString("prancheta"));
     if (setor.isEmpty()) return true;
     JSONObject salvo = objetoDaConfig("setoresAparelhos").optJSONObject(aparelho);
@@ -3063,8 +3064,11 @@ public class ServidorCentral {
       int nivel = pedido.has("nivel") ? pedido.optInt("nivel", 0) : nivelDoAparelho(aparelho) > 0 ? nivelDoAparelho(aparelho) : 2;
       if (nivel < 1 || nivel > 3) { enviarJson(saida, 400, new JSONObject().put("erro", "Nível inválido")); return; }
       // nível 3 só o dono; 1 ou 2, quem libera tablets chefe (administrador, ou quem ganhou a função) ou o dono
-      if (nivel == 3 ? !ehDono(pessoa) : !funcoesDaPessoa(pessoa).contains("chefes")) {
-        enviarJson(saida, 403, new JSONObject().put("erro", nivel == 3 ? "Só o dono do sistema libera o nível 3" : pessoa.optString("nome") + " não pode liberar tablet chefe"));
+      if ((nivel == 3 || nivelDoAparelho(aparelho) == 3) && !ehDono(pessoa)) {
+        enviarJson(saida, 403, new JSONObject().put("erro", "Só o dono do sistema muda o nível 3")); return;
+      }
+      if (!funcoesDaPessoaNoAparelho(pessoa, aparelho).contains("chefes")) {
+        enviarJson(saida, 403, new JSONObject().put("erro", pessoa.optString("nome") + " não pode liberar tablet chefe neste aparelho"));
         return;
       }
       int antes;
@@ -3106,6 +3110,8 @@ public class ServidorCentral {
           agendarNuvem();
         }
         dono.put("nivel", "administrador").put("ativo", true);
+        // Recuperação troca o tablet perdido pelo atual, sem deixar o dono preso ao vínculo antigo.
+        if (dono.optJSONArray("aparelhos") != null && dono.optJSONArray("aparelhos").length() > 0) dono.put("aparelhos", new JSONArray().put(aparelho));
         JSONObject sessoes = objetoDaConfig("sessoes");
         List<String> tirar = new ArrayList<>();
         for (Iterator<String> it = sessoes.keys(); it.hasNext(); ) { String k = it.next(); JSONObject s = sessoes.optJSONObject(k); if (s != null && dono.optString("id").equals(s.optString("pessoaId"))) tirar.add(k); }
