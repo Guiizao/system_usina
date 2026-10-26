@@ -45,12 +45,13 @@ export async function testarPainelNuvem216(g) {
     const pc = await nav.novoAparelho('pc', TAMANHOS.pcGrande);
     await teste(g, 'o painel do PC entra pela nuvem com a senha e recebe as anotações', async () => {
       await pc.ir(c.url + '/?nuvem=1');
-      await pc.esperar('!!document.querySelector("[data-a=\\"nuvem-entrar\\"]")', 15000, 'tela de entrar pela nuvem');
+      // 2.17: entra escolhendo o nome e digitando a senha; a lista vem da nuvem do teste
+      await pc.esperar('!!document.querySelector(".entrar-cartao")', 15000, 'tela de entrar pela nuvem');
       await pc.foto(path.join(FOTOS, '1-entrar-pela-nuvem.png'));
-      await pc.avaliar(`nuvemForm.url = ${JSON.stringify(n.url)}; 1`);
-      await pc.tocar('[data-a="nuvem-entrar"]');
-      for (const k of PIN) await pc.tocar(`.modal [data-k="${k}"]`);
-      await pc.tocar('.modal [data-k="ok"]');
+      await pc.avaliar(`(() => { nuvemForm.url = ${JSON.stringify(n.url)}; nuvemForm.pessoas = null; nuvemForm.erro = ''; render(true); return 1; })()`);
+      await pc.esperar('!!document.querySelector("#nuvem-nome option[value=lucas]")', 15000, 'nomes da nuvem');
+      await pc.avaliar(`(() => { document.getElementById('nuvem-nome').value = 'lucas'; document.getElementById('nuvem-senha').value = ${JSON.stringify(PIN)}; return 1; })()`);
+      await pc.tocar('.entrar-cartao button[type=submit]');
       await pc.esperar('!!document.querySelector(".menu-pc") && Object.keys(registros).length > 50', 30000, 'painel com as anotações');
       certo(await pc.avaliar('cfg.soNuvem && cfg.pessoa.nome === "Lucas"'), 'entrou como Lucas');
       const total = await pc.avaliar('Object.values(registros).filter((r) => /^\\d{4}-/.test(r.data) && r.prancheta !== "registro").length');

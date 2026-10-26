@@ -47,6 +47,8 @@
     switch (a) {
       case 'ir-nuvem-entrar': ed.alvoId = null; pilha = [{ tela: 'nuvem-entrar' }]; return render(true);
       case 'nuvem-entrar': return entrarPelaNuvem();
+      case 'nuvem-servidor': return servidorDaNuvem();
+      case 'nuvem-nomes': nuvemForm.pessoas = null; nuvemForm.erro = ''; render(true); return;
       case 'pessoa': {
         if (cfg.soNuvem) { // pela nuvem: só mostra quem entrou e o Sair
           const p = pessoaAtual();

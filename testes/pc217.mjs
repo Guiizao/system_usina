@@ -7,6 +7,18 @@ import { pathToFileURL } from 'node:url';
 import { abrirNavegador, TAMANHOS, dormir } from './navegador.mjs';
 import { novoGrupo, teste, certo, igual, resumo, entrarComoChefe, teclasDaSenha } from './teste.mjs';
 import { centralNode, pastaTemporaria, APP } from './servidores.mjs';
+import { ligarNuvemSQLite } from './nuvem-sqlite.mjs';
+import { pbkdf2Sync } from 'node:crypto';
+
+const SEGREDO = 'segredo-ficticio-pc217';
+// senhas de teste das pessoas fictícias (nunca as de verdade)
+const verificador = (pin, sal = 'c'.repeat(32)) => ({ sal, iteracoes: 1000, verificador: pbkdf2Sync(pin, sal, 1000, 32, 'sha256').toString('hex') });
+const PESSOAS = [
+  { id: 'lucas', nome: 'Lucas', nivel: 'consulta', ativo: true, funcoes: ['escritorio', 'relatorios'], nuvem: verificador('2468') },
+  { id: 'ana', nome: 'Ana', nivel: 'consulta', ativo: true, funcoes: ['relatorios'], nuvem: verificador('1357') },
+];
+/** Cfg inicial só na primeira página (as recargas mantêm o que o aplicativo gravou). */
+const cfgInicial = (nuvemUrl) => `if (!localStorage.getItem('usina.cfg')) localStorage.setItem('usina.cfg', JSON.stringify({ nuvemUrl: ${JSON.stringify(nuvemUrl)} }));`;
 
 const FOTOS = path.join(APP, 'testes', 'saida', 'pc217');
 const semNotificacao = async (a) => { await a.avaliar('(() => { const t = document.getElementById("toast"); if (t && !t.hidden) t.click(); return 1; })()'); await dormir(350); };
@@ -58,6 +70,51 @@ export async function testarNivelNaTela217(nav, g) {
   } finally {
     for (const a of aparelhos) await a.fechar().catch(() => {});
     await c.desligar();
+  }
+}
+
+/** Task 4: entrar no PC por nome e senha; o endereço da nuvem fica na aba Servidor. */
+export async function testarEntrarPC217(nav, g) {
+  fs.mkdirSync(FOTOS, { recursive: true });
+  const n = await ligarNuvemSQLite(8368, SEGREDO, 'leitura-ficticia-pc217');
+  const c = await centralNode(8369, pastaTemporaria('pc217-login')); // só entrega as telas, como o programa do Windows
+  const aparelhos = [];
+  try {
+    igual((await n.pedir('/central/enviar', { senha: SEGREDO, corpo: { geracao: 'pc217', registros: [], pessoas: PESSOAS } })).status, 200);
+    const pc = await nav.novoAparelho('pc', TAMANHOS.pcGrande); aparelhos.push(pc);
+    await pc.antesDeAbrir(cfgInicial(n.url));
+    await teste(g, 'tela de entrar: logo, lista de nomes, senha e Entrar; o servidor fica numa aba própria', async () => {
+      await pc.ir(c.url + '/?nuvem=1');
+      await pc.esperar('!!document.querySelector("#nuvem-nome option[value=lucas]")', 15000, 'nomes da nuvem');
+      igual(await pc.avaliar('[...document.querySelectorAll("#nuvem-nome option")].filter((o) => o.value).map((o) => o.textContent).join()'), 'Ana,Lucas');
+      certo(await pc.avaliar('!!document.querySelector(".entrar-cartao img.entrar-logo") && document.querySelector("#nuvem-senha").type === "password"'), 'logo e senha');
+      certo(!(await pc.avaliar('!!document.querySelector("#nuvem-url, [data-quadro=nuvem-url]")')), 'o endereço não aparece na tela de entrar');
+      await pc.foto(path.join(FOTOS, 'entrar-pc.png'));
+      await pc.tocar('[data-a="nuvem-servidor"]');
+      await pc.esperar('!!document.querySelector(".modal #txt")', 5000, 'aba Servidor');
+      igual(await pc.avaliar('document.querySelector(".modal #txt").value'), n.url);
+      await pc.tocar('.modal [data-k="x"]');
+    });
+    await teste(g, 'senha errada avisa sem perder o nome; a certa entra como Lucas', async () => {
+      await pc.avaliar(`(() => { document.getElementById('nuvem-nome').value = 'lucas'; document.getElementById('nuvem-senha').value = '1111'; return 1; })()`);
+      await pc.tocar('.entrar-cartao button[type=submit]');
+      await pc.esperar('document.getElementById("toast").textContent.includes("Senha não confere")', 8000, 'senha errada');
+      igual(await pc.avaliar('document.getElementById("nuvem-nome").value'), 'lucas');
+      await pc.avaliar(`(() => { document.getElementById('nuvem-senha').value = '2468'; return 1; })()`);
+      await pc.tocar('.entrar-cartao button[type=submit]');
+      await pc.esperar('cfg.soNuvem && cfg.pessoa && cfg.pessoa.nome === "Lucas" && !!document.querySelector(".menu-pc")', 15000, 'entrou');
+    });
+    const longe = await nav.novoAparelho('pc sem nuvem', TAMANHOS.computador); aparelhos.push(longe);
+    await longe.antesDeAbrir(cfgInicial('http://127.0.0.1:9'));
+    await teste(g, 'sem achar a nuvem: o nome fica desligado e a tela diz por quê', async () => {
+      await longe.ir(c.url + '/?nuvem=1');
+      await longe.esperar('document.querySelector("#nuvem-nome") && document.querySelector("#nuvem-nome").disabled && document.body.innerText.includes("Sem internet: não achei a nuvem")', 15000, 'aviso sem nuvem');
+      await longe.foto(path.join(FOTOS, 'entrar-sem-nuvem.png'));
+    });
+    for (const a of aparelhos) certo(!a.erros.length, a.erros.join(' | '));
+  } finally {
+    for (const a of aparelhos) await a.fechar().catch(() => {});
+    await c.desligar(); await n.desligar();
   }
 }
 
@@ -113,6 +170,7 @@ if (import.meta.url === pathToFileURL(process.argv[1]).href) {
     const so = process.argv[2];
     if (!so || so === 'nivel') await testarNivelNaTela217(nav, g);
     if (!so || so === 'toast') await testarNotificacoes217(nav, g);
+    if (!so || so === 'entrar') await testarEntrarPC217(nav, g);
   } finally { await nav.fechar(); }
   resumo([g]);
 }

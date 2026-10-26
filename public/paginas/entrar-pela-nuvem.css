@@ -1,0 +1,18 @@
+/* Pranchetas Ubirálcool - entrar pela nuvem (PC e celular fora da usina)
+ * © 2026 Guilherme. Todos os direitos reservados. Uso somente com autorização do autor (veja LICENCA.txt). */
+
+/* 2.17: um cartão no meio da tela, com o nome, a senha e Entrar; o servidor fica no botão do canto */
+.tela-entrar-nuvem { display: grid; place-items: center; align-content: center; gap: 16px; min-height: calc(100% - 20px); padding: 24px 16px; }
+.entrar-cartao { display: grid; gap: 14px; width: min(460px, 100%); padding: 28px 28px 24px; border-radius: 18px;
+  background: var(--papel); border: 1.5px solid var(--linha-clara); box-shadow: 0 18px 48px var(--sombra); }
+.entrar-topo { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.entrar-logo { width: 64px; height: 64px; object-fit: contain; }
+.entrar-cartao h1 { margin: 2px 0 0; font-size: 32px; }
+.entrar-cartao .sub { margin: 0; }
+.entrar-cartao label { display: grid; gap: 6px; font-weight: 700; font-size: 17px; }
+.entrar-cartao select, .entrar-cartao input { min-height: 56px; font-size: 20px; padding: 0 14px; width: 100%; }
+.entrar-cartao select:disabled, .entrar-cartao input:disabled { opacity: .6; }
+.aviso-entrar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 0; padding: 10px 12px; border-radius: 12px;
+  background: var(--ambar-fundo); color: var(--ambar-texto); font-weight: 700; }
+.aviso-entrar > span { flex: 1 1 180px; min-width: 0; }
+.tela-entrar-nuvem .autoria { margin: 0; text-align: center; }
