@@ -35,7 +35,7 @@ import { testarPessoas } from './pessoas.mjs';
 import { testarPedidos210 } from './pedidos210.mjs';
 import { testarAjustes2161 } from './ajustes2161.mjs';
 import { testarTotais217 } from './totais217.mjs';
-import { testarNivelNaTela217, testarNotificacoes217, testarEntrarPC217, testarPainelPC217, testarLogoEAbertura217 } from './pc217.mjs';
+import { testarNivelNaTela217, testarNotificacoes217, testarEntrarPC217, testarPainelPC217, testarLogoEAbertura217, testarTecladoDoPC217 } from './pc217.mjs';
 import { testarSeguranca } from './seguranca.mjs';
 import { testarPedidos211 } from './pedidos211.mjs';
 import { testarNiveis } from './niveis212.mjs';
@@ -302,7 +302,9 @@ try {
   // 4r. versão 2.17: nível pela pessoa (duas centrais), nuvem com nomes e aparelhos, segurança sem janela (processos próprios)
   const g217 = novoGrupo('Versão 2.17: nível pela pessoa, nuvem e segurança');
   for (const [nome, arq] of [['nível pela pessoa e aparelho fixo, nas duas centrais', 'nivel217.mjs'],
-    ['nuvem: lista de nomes, entrada por pessoa e aparelhos ao vivo, nas duas centrais', 'nuvem217.mjs'], ['segurança do Windows e do cliente (sem janela)', 'seguranca216.mjs']]) {
+    ['nuvem: lista de nomes, entrada por pessoa e aparelhos ao vivo, nas duas centrais', 'nuvem217.mjs'], ['segurança do Windows e do cliente (sem janela)', 'seguranca216.mjs'],
+    ['revisão do Codex: setor, nível 3 do dono, uréia e recuperar o dono, nas duas centrais', 'revisao217.mjs'],
+    ['2.17.1: dois aparelhos na mesma linha juntam campo a campo (Node, Java, nuvem e aparelho)', 'juncao2171.mjs'], ['2.17.1: Sair revoga a chave da nuvem', 'sair2171.mjs']]) {
     await teste(g217, nome, async () => {
       const r = spawnSync(process.execPath, [path.join(APP, 'testes', arq)], { cwd: APP, encoding: 'utf8', timeout: 900000 });
       const fim = ((r.stdout || '').match(/\d+ de \d+ testes passaram.*|"total":\d+,"passaram":\d+,"falharam":\d+/g) || []).pop() || '';
@@ -313,7 +315,7 @@ try {
   grupos.push(g217);
   // 4s. versão 2.17: as telas novas (liberar sem nível, Vale em, notificação, entrar no PC, painel do PC, logo e abertura)
   { const g = novoGrupo('Telas da 2.17');
-    for (const f of [testarNivelNaTela217, testarNotificacoes217, testarEntrarPC217, testarPainelPC217, testarLogoEAbertura217]) await f(nav, g);
+    for (const f of [testarNivelNaTela217, testarNotificacoes217, testarEntrarPC217, testarPainelPC217, testarLogoEAbertura217, testarTecladoDoPC217]) await f(nav, g);
     grupos.push(g); }
   // 5. extras
   const g5 = novoGrupo('Leitura de foto, impressão e aplicativo sem rede');
@@ -333,10 +335,9 @@ const porTamanho = {};
 telas.forEach((t) => { (porTamanho[t.tamanho] = porTamanho[t.tamanho] || []).push(t); });
 for (const [tam, lista] of Object.entries(porTamanho)) {
   await teste(g6, `${tam}: ${lista.length} telas sem texto cortado, sem rolagem para o lado e sem erro`, async () => {
-    const ruins = lista.filter((t) => t.falhou || t.erros.length || t.problemas.some((p) => p.tipo !== 'botao-pequeno'));
-    certo(!ruins.length, ruins.map((t) => `${t.tela}: ${t.falhou || t.erros[0] || t.problemas.filter((p) => p.tipo !== 'botao-pequeno').map((p) => p.tipo + ' ' + p.texto).slice(0, 2).join('; ')}`).join(' | ').slice(0, 600));
-    const pequenos = lista.reduce((s, t) => s + t.problemas.filter((p) => p.tipo === 'botao-pequeno').length, 0);
-    return pequenos ? `${pequenos} botões abaixo de 34 px (aceitável só no celular deitado)` : '';
+    // 2.17.1: botão abaixo de 34 px também conta (antes o celular deitado tinha 300 e o teste aceitava)
+    const ruins = lista.filter((t) => t.falhou || t.erros.length || t.problemas.length);
+    certo(!ruins.length, ruins.map((t) => `${t.tela}: ${t.falhou || t.erros[0] || t.problemas.map((p) => p.tipo + ' ' + p.texto).slice(0, 2).join('; ')}`).join(' | ').slice(0, 600));
   });
 }
 grupos.push(g6);

@@ -67,7 +67,7 @@ export async function testarWindowsSeguranca216(g) {
 
 function cliente() {
   const campos = { 'nuvem-nome': { value: 'pessoa-teste' }, 'nuvem-senha': { value: '2468', focus() {} } };
-  const ctx = vm.createContext({ URL, NO_APK: false, cfg: { deviceId: 'pc-teste' }, window: {}, registros: {},
+  const ctx = vm.createContext({ URL, AbortController, setTimeout, clearTimeout, NO_APK: false, cfg: { deviceId: 'pc-teste' }, window: {}, registros: {},
     document: { addEventListener() {}, getElementById: (id) => campos[id] || null },
     pedirSenhaModal: async () => '2468', toast() {}, salvarCfg() {}, salvarRegistros() {}, marcarNuvem() {},
     atualizarConexao() {}, primeiroDiaGuardado: () => '2026-10-01', render() {}, turnoDaPessoa: () => 'turno',
@@ -118,7 +118,8 @@ export async function testarClienteSeguranca216(g) {
     const c = cliente(); Object.assign(c.cfg, { soNuvem: true, nuvemUrl: 'https://example.com', nuvemToken: 'token', pessoa: {} });
     let concluir, iniciou;
     const chamado = new Promise((r) => iniciou = r);
-    c.fetch = () => new Promise((r) => { concluir = r; iniciou(); });
+    c.fetch = (url) => url.endsWith('/aparelho/sair') ? Promise.resolve({ status: 200 })
+      : new Promise((r) => { concluir = r; iniciou(); });
     c.versaoNaSincronizacao = () => {}; c.podar = () => {};
     const sync = vm.runInContext('sincronizarNuvem()', c); await chamado;
     vm.runInContext('sairDaNuvem()', c);

@@ -18,7 +18,8 @@ const pessoa = (id, pin) => ({ id, nome: id, nivel: 'consulta', ativo: true, fun
 const hmac = (texto) => createHmac('sha256', SEGREDO).update(texto).digest('hex');
 // o que a nuvem guarda (a conferência selada com o segredo da central) e a chave de leitura que ela dá
 const selado = (pin, sal) => hmac('senha|' + verificador(pin, sal).verificador);
-const chaveDeLeitura = (aparelho, id, pin, sal) => hmac(`leitura|${aparelho}|${id}|${selado(pin, sal)}`);
+// 2.17.1: cada entrada tem a sua sessão (o Sair revoga): a chave leva o código da sessão
+const chaveDeLeitura = (aparelho, id, pin, sessao, sal) => hmac(`leitura|${aparelho}|${id}|${selado(pin, sal)}|${sessao}`);
 
 export async function testarNuvemEntrar216(g) {
   await testarClienteSeguranca216(g);
@@ -60,7 +61,8 @@ export async function testarNuvemEntrar216(g) {
       login = await entrar('pc-lucas');
       igual(login.status, 200);
       certo(login.json.token !== hmac('aparelho|pc-lucas'), 'deu a chave de um tablet');
-      igual(login.json.token, chaveDeLeitura('pc-lucas', 'Lucas', '4567'));
+      const sessao = n.consultar("SELECT nonce FROM sessoes_nuvem WHERE aparelho = 'pc-lucas'")[0].nonce;
+      igual(login.json.token, chaveDeLeitura('pc-lucas', 'Lucas', '4567', sessao));
       igual(login.json.pessoa, { id: 'Lucas', nome: 'Lucas', nivel: 'consulta', funcoes: ['relatorios'] });
       igual(login.headers.get('Access-Control-Allow-Origin'), '*');
       igual(n.consultar('SELECT pessoa FROM acessos_nuvem')[0].pessoa, 'Lucas');

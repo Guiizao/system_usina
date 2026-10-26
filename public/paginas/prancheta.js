@@ -54,11 +54,12 @@
   const extrasOperador = (p) => (p.camposOperador || []).filter((c) => !p.camposEscritorio.some((e) => e.id === c.id));
   const operadorPreenche = (p, id) => (p.camposOperador || []).some((c) => c.id === id);
 
-  /** Quando foi mexida a anotação que está na linha (0 se ainda não tem). */
+  /** Uma junção pode mudar campos sem mudar o maior horário da linha. */
   function fonteDaFolha(p, pid, data, chave) {
-    if (p.tipo === 'fermentacao') { const c = cicloAtual(chave); return c ? c.atualizadoEm || 0 : 0; }
-    if (p.tipo === 'juntas') return p.partes.map((pt) => (pegar(data, pt.prancheta, chave) || {}).atualizadoEm || 0).join(',');
-    return (pegar(data, pid, chave) || {}).atualizadoEm || 0;
+    const versao = (r) => r ? JSON.stringify([r.atualizadoEm, r.camposEm, r.valores]) : '';
+    if (p.tipo === 'fermentacao') return versao(cicloAtual(chave));
+    if (p.tipo === 'juntas') return p.partes.map((pt) => versao(pegar(data, pt.prancheta, chave))).join(',');
+    return versao(pegar(data, pid, chave));
   }
 
   function prepararRascunho(v) {
@@ -570,7 +571,7 @@
       const temAlgo = Object.entries(rascunho.valores).some(([k, x]) => k !== 'hora' && !/_vol$/.test(k) && !vazio(x));
       // no tablet chefe vale o nome de quem anotou antes; folha só do chefe (Vinho e Fermentação) leva o nome do tablet chefe
       const operador = ehCentral() ? (existente && existente.operador) || quem || '' : (existente && existente.operador) || quem;
-      if (temAlgo) gravar(data, v.pid, chave, rascunho.valores, Object.assign({ operador }, marcaAlteracao));
+      if (temAlgo) gravar(data, v.pid, chave, rascunho.valores, Object.assign({ operador }, marcaAlteracao), rascunho.novo ? null : rascunho.original);
       else if (existente) apagar(data, v.pid, chave);
       else if (!automatico) { toast(chave === 'param' ? 'Anote pelo menos um Brix antes de salvar' : 'Anote pelo menos uma folga antes de salvar', 'erro'); return false; }
       if (!opcoes.silencioso && (temAlgo || existente)) toast(`${chave === 'param' ? 'Brix da produção' : g.nome} salvo`);
@@ -578,7 +579,7 @@
       const val = {}; p.campos.forEach((c) => { val[c.id] = rascunho.valores[c.id] || ''; });
       const temAlgo = Object.values(val).some((x) => !vazio(x));
       const existente = rascunho.ciclo ? pegar(rascunho.ciclo.data, PID_FERMENTACAO, rascunho.ciclo.chave) : null;
-      if (existente) mudarCiclo(existente, val, Object.assign({ operador: existente.operador || quem || '' }, marcaAlteracao));
+      if (existente) mudarCiclo(existente, camposMudados(val, rascunho.original), Object.assign({ operador: existente.operador || quem || '' }, marcaAlteracao));
       else if (temAlgo) { const novo = novoCiclo(chave, val, quem || ''); rascunho.ciclo = { data: novo.data, chave: novo.chave }; }
       else if (!automatico) { toast('Anote pelo menos um quadro antes de salvar', 'erro'); return false; }
       if (!opcoes.silencioso && (existente || temAlgo)) toast(`Dorna Nº ${chave} salva`);
@@ -591,7 +592,7 @@
         const operador = ehCentral() ? (existente && existente.operador) || '' : (existente && !existente.auto && existente.operador) || quem;
         // confirmou a soma das dornas (não mudou o valor): se depois entrar outra dorna nessa hora, a soma volta para conferir
         const somaConfirmada = !!(existente && (existente.auto || existente.somaConfirmada) && existente.dornas && existente.valores.qtd === item.qtd);
-        if (!vazio(item.qtd)) { gravar(data, pt.prancheta, chave, { qtd: item.qtd, unidade: item.unidade }, Object.assign({ operador, auto: false, conferir: false, somaConfirmada, dornas: somaConfirmada ? existente.dornas : [] }, marcaAlteracao)); algum = true; }
+        if (!vazio(item.qtd)) { gravar(data, pt.prancheta, chave, { qtd: item.qtd, unidade: item.unidade }, Object.assign({ operador, auto: false, conferir: false, somaConfirmada, dornas: somaConfirmada ? existente.dornas : [] }, marcaAlteracao), rascunho.novo ? null : rascunho.original[pt.prancheta]); algum = true; }
         else if (existente) apagar(data, pt.prancheta, chave);
       });
       if (!algum && !automatico && rascunho.novo) { toast('Anote pelo menos uma quantidade antes de salvar', 'erro'); return false; }
@@ -613,13 +614,13 @@
         });
         extra.manuais = [...manuais];
       }
-      if (temAlgo) gravar(data, v.pid, chave, rascunho.valores, extra);
+      if (temAlgo) gravar(data, v.pid, chave, rascunho.valores, extra, rascunho.novo ? null : rascunho.original);
       else if (existente) apagar(data, v.pid, chave); // quadros todos limpos: só a linha sai (renumerar é só no botão Apagar)
       else if (!automatico && !extrasMudaram) { toast('Anote pelo menos um quadro antes de salvar', 'erro'); return false; }
       if (p.tipo === 'dornas' && (temAlgo || existente)) depoisDeMudarDorna(data, v.pid, temAlgo ? Number(chave) : null);
 
       if (p.tipo === 'grade' && extrasMudaram) gravar(data, v.pid, 'obs' + turnoDaHora(chave, turnosDaPrancheta(v.pid)).id, { texto: rascunho.extras.obs }, { operador: quem || '' });
-      if (p.tipo === 'insumo' && ehCentral() && extrasMudaram) gravar(data, v.pid, 'meta', rascunho.extras.meta);
+      if (p.tipo === 'insumo' && ehCentral() && extrasMudaram) gravar(data, v.pid, 'meta', rascunho.extras.meta, {}, JSON.parse(rascunho.originalExtras).meta);
       const nome = p.tipo === 'dornas' ? `${p.rotulo} Nº ${chave}` : p.tipo === 'grade' ? `Leitura das ${rotuloHora(chave)}` : `${p.nome} das ${rotuloHoraPapel(chave)}`;
       const et = p.envio && temAlgo ? etapaDaDorna(p, pegar(data, v.pid, chave)) : '';
       if (!opcoes.silencioso) toast(`${nome} salva${et && et !== 'anotada' ? ` (${et})` : ''}`);
@@ -632,7 +633,8 @@
     }
     rascunho.original = JSON.parse(JSON.stringify(rascunho.valores));
     rascunho.originalExtras = JSON.stringify(rascunho.extras);
-    rascunho.fonte = fonteDaFolha(p, v.pid, data, chave); // o que acabou de salvar não conta como anotação de fora
+    rascunho.novo = false;
+    rascunho.fonte = null; // na próxima renderização mostra também os campos recebidos enquanto editava
     return true;
   }
 

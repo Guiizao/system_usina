@@ -24,7 +24,20 @@
         setTimeout(() => fundo.remove(), movimentoReduzido() ? 0 : 170);
         resolve(valor);
       };
-      const teclas = (e) => { if (opcoes.aoTeclar) opcoes.aoTeclar(e, fechar); if (e.key === 'Escape' && !opcoes.fixo) fechar(undefined); };
+      const teclas = (e) => {
+        if (opcoes.aoTeclar) opcoes.aoTeclar(e, fechar);
+        if (e.key === 'Escape' && !opcoes.fixo) return fechar(undefined);
+        if (e.defaultPrevented || e.ctrlKey || e.altKey || e.metaKey) return;
+        // 2.17.1, teclado do computador: Enter num campo confirma; com teclas na tela (senha, leitura da folha), a tecla aperta o botão igual
+        const naTela = (k) => fundo.querySelector(`.teclas [data-k="${k}"]`);
+        let b = null;
+        if (e.target.matches && e.target.matches('input, textarea, select')) { if (e.key === 'Enter' && e.target.tagName === 'INPUT') b = fundo.querySelector('[data-k="ok"]'); }
+        else if (/^[0-9,.:]$/.test(e.key)) b = naTela(e.key) || (e.key === '.' ? naTela(',') : null);
+        else if (e.key === 'Backspace') b = naTela('b');
+        else if (e.key === 'Delete') b = naTela('c');
+        else if (e.key === 'Enter' && fundo.querySelector('.teclas')) b = fundo.querySelector('[data-k="ok"]');
+        if (b && !b.disabled) { e.preventDefault(); b.click(); }
+      };
       document.addEventListener('keydown', teclas);
       fecharModalAtual = () => fechar(undefined);
       fundo.addEventListener('click', (e) => {

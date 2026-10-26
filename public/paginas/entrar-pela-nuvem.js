@@ -103,6 +103,13 @@
 
   /** Sair pela nuvem: volta para a tela de entrar (o que já chegou continua guardado neste aparelho). */
   function sairDaNuvem() {
+    const url = (cfg.nuvemUrl || '').replace(/\/+$/, ''), token = cfg.nuvemToken, aparelho = cfg.deviceId;
     cfg.pessoa = null; cfg.nuvemToken = ''; cfg.soNuvem = true; salvarCfg();
     pilha = [{ tela: 'nuvem-entrar' }]; render(true);
+    // Sair do aparelho nao depende da internet; a chave enviada e a que existia antes de limpar cfg.
+    if (token && enderecoNuvemSeguro(url)) {
+      const parar = new AbortController(), relogio = setTimeout(() => parar.abort(), 8000);
+      fetch(url + '/aparelho/sair', { method: 'POST', cache: 'no-store', redirect: 'error', keepalive: true, signal: parar.signal,
+        headers: { Authorization: 'Bearer ' + token, 'X-Aparelho': aparelho } }).catch(() => {}).finally(() => clearTimeout(relogio));
+    }
   }

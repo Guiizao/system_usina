@@ -401,7 +401,8 @@ public class ServidorCentral {
       int n = 0;
       for (JSONObject r : novos) {
         JSONObject a = mapa.get(r.optString("id"));
-        if (a == null || r.optLong("atualizadoEm") >= a.optLong("atualizadoEm")) { mapa.put(r.optString("id"), r); n++; }
+        JSONObject junto = juntarCampos(a, r);
+        if (junto != null || a == null || r.optLong("atualizadoEm") >= a.optLong("atualizadoEm")) { mapa.put(r.optString("id"), junto == null ? r : junto); n++; }
       }
       JSONArray tudo = new JSONArray();
       for (JSONObject r : mapa.values()) tudo.put(r);
@@ -828,7 +829,7 @@ public class ServidorCentral {
         String data = r.optString("data");
         String prancheta = r.optString("prancheta");
         // o id diz o que a anotação é (dia|folha|linha): com outro id, uma anotação poderia passar por configuração
-        if (!r.optString("id").equals(data + "|" + prancheta + "|" + r.optString("chave")) || !("config".equals(data) || ehDia(data))) {
+        if (!r.optString("id").equals(data + "|" + prancheta + "|" + r.optString("chave")) || !("config".equals(data) || ehDia(data)) || !camposEmValidos(r)) {
           recusados.put(new JSONObject().put("id", r.optString("id")).put("motivo", "invalido"));
           continue;
         }
@@ -863,7 +864,13 @@ public class ServidorCentral {
           if (!soEscritorio.isEmpty()) {
             JSONObject valores = r.optJSONObject("valores");
             JSONObject guardados = atual == null ? null : atual.optJSONObject("valores");
-            for (String c : soEscritorio) { if (guardados != null && guardados.has(c)) valores.put(c, guardados.opt(c)); else valores.remove(c); }
+            for (String c : soEscritorio) {
+              if (guardados != null && guardados.has(c)) valores.put(c, guardados.opt(c)); else valores.remove(c);
+              JSONObject campos = r.optJSONObject("camposEm"), anteriores = atual == null ? null : atual.optJSONObject("camposEm");
+              if (campos != null) { if (anteriores != null && anteriores.has(c)) campos.put(c, anteriores.opt(c)); else campos.remove(c); }
+            }
+            JSONObject campos = r.optJSONObject("camposEm");
+            if (campos != null) for (Iterator<String> it = campos.keys(); it.hasNext(); ) r.put("atualizadoEm", Math.max(r.optLong("atualizadoEm"), campos.optLong(it.next())));
           }
         }
         // dia que só está no BackupUsina: junta lá (depois de conferido como os outros)
@@ -876,7 +883,8 @@ public class ServidorCentral {
           lista.add(r);
           continue;
         }
-        JSONObject entrada = !"config".equals(data) && criadasSemSaber(atual, r) ? juntarLinhas(atual, r) : r;
+        JSONObject entrada = juntarCampos(atual, r);
+        if (entrada == null) entrada = !"config".equals(data) && criadasSemSaber(atual, r) ? juntarLinhas(atual, r) : r;
         // a configuração já foi conferida pela revisão (o relógio do aparelho não decide)
         if (atual == null || entrada != r || r.optLong("atualizadoEm") >= atual.optLong("atualizadoEm") || "config".equals(r.optString("data"))) {
           seq++;
@@ -912,6 +920,44 @@ public class ServidorCentral {
   /* Dois aparelhos criaram a mesma linha sem um saber do outro (ex.: o tablet chefe corrigiu uma dorna nos segundos
      antes de recebê-la): em vez de a última apagar a primeira, os valores se juntam. O mais novo vale nos quadros que
      ele preencheu; o resto continua. A linha junta ganha um horário novo, para chegar de novo nos dois aparelhos. */
+  private static boolean camposEmValidos(JSONObject r) {
+    if (!r.has("camposEm")) return true;
+    JSONObject campos = r.optJSONObject("camposEm");
+    if (campos == null || r.optJSONObject("valores") == null) return false;
+    for (Iterator<String> it = campos.keys(); it.hasNext(); ) {
+      String k = it.next(); Object em = campos.opt(k);
+      if ("__proto__".equals(k) || "constructor".equals(k) || "prototype".equals(k) || !(em instanceof Number)) return false;
+      double n = ((Number) em).doubleValue();
+      if (!Double.isFinite(n) || n < 0 || n > 9007199254740991d || n != Math.floor(n) || n > r.optLong("atualizadoEm")) return false;
+    }
+    return true;
+  }
+
+  private static JSONObject juntarCampos(JSONObject a, JSONObject b) throws Exception {
+    if (a == null || !a.optString("id").equals(b.optString("id")) || "config".equals(a.optString("data")) || "config".equals(b.optString("data"))
+        || a.optBoolean("apagado") || b.optBoolean("apagado") || a.optJSONObject("camposEm") == null || b.optJSONObject("camposEm") == null
+        || !camposEmValidos(a) || !camposEmValidos(b)) return null;
+    JSONObject av = a.getJSONObject("valores"), bv = b.getJSONObject("valores"), ac = a.getJSONObject("camposEm"), bc = b.getJSONObject("camposEm");
+    Set<String> chaves = new java.util.LinkedHashSet<>();
+    for (JSONObject obj : new JSONObject[] { av, bv, ac, bc }) for (Iterator<String> it = obj.keys(); it.hasNext(); ) chaves.add(it.next());
+    JSONObject valores = new JSONObject(), campos = new JSONObject();
+    for (String k : chaves) {
+      if ("__proto__".equals(k) || "constructor".equals(k) || "prototype".equals(k)) continue;
+      long ea = ac.optLong(k), eb = bc.optLong(k);
+      String va = av.has(k) ? new JSONArray().put(av.opt(k)).toString() : "", vb = bv.has(k) ? new JSONArray().put(bv.opt(k)).toString() : "";
+      if (!va.isEmpty()) va = va.substring(1, va.length() - 1);
+      if (!vb.isEmpty()) vb = vb.substring(1, vb.length() - 1);
+      JSONObject fonte = eb > ea || (eb == ea && vb.compareTo(va) >= 0) ? bv : av;
+      if (fonte.has(k)) valores.put(k, fonte.opt(k));
+      campos.put(k, Math.max(ea, eb));
+    }
+    JSONObject junto = new JSONObject(a.toString());
+    for (Iterator<String> it = b.keys(); it.hasNext(); ) { String k = it.next(); junto.put(k, b.opt(k)); }
+    JSONObject novo = b.optLong("atualizadoEm") >= a.optLong("atualizadoEm") ? b : a;
+    for (Iterator<String> it = novo.keys(); it.hasNext(); ) { String k = it.next(); junto.put(k, novo.opt(k)); }
+    return junto.put("valores", valores).put("camposEm", campos).put("atualizadoEm", Math.max(a.optLong("atualizadoEm"), b.optLong("atualizadoEm")));
+  }
+
   private static boolean criadasSemSaber(JSONObject atual, JSONObject r) {
     // só entre aparelhos diferentes: o mesmo aparelho mudando a própria linha vale a versão mais nova, como sempre
     return atual != null && !atual.optBoolean("apagado") && !r.optBoolean("apagado")
@@ -936,6 +982,7 @@ public class ServidorCentral {
     junta.put("operador", novo.optString("operador").isEmpty() ? velho.optString("operador") : novo.optString("operador"));
     junta.put("criadoEm", Math.min(a.optLong("criadoEm"), b.optLong("criadoEm")));
     junta.put("atualizadoEm", Math.max(a.optLong("atualizadoEm"), b.optLong("atualizadoEm")) + 1);
+    junta.remove("camposEm"); // mescla legada, sem horário por campo confiável
     return junta;
   }
 
@@ -1993,6 +2040,22 @@ public class ServidorCentral {
       : new JSONObject(atual.toString());
     correcao.put("atualizadoEm", Math.max(System.currentTimeMillis(), Math.max(correcao.optLong("atualizadoEm"), r.optLong("atualizadoEm"))) + 1)
       .put("seq", ++seq).put("recebidoEm", System.currentTimeMillis());
+    if (r.optJSONObject("camposEm") != null && !correcao.optBoolean("apagado")) {
+      JSONObject campos = correcao.optJSONObject("camposEm");
+      if (campos == null) campos = new JSONObject();
+      for (JSONObject obj : new JSONObject[] { correcao.optJSONObject("valores"), r.optJSONObject("valores"), r.optJSONObject("camposEm") }) {
+        if (obj != null) for (Iterator<String> it = obj.keys(); it.hasNext(); ) {
+          String k = it.next();
+          if ("__proto__".equals(k) || "constructor".equals(k) || "prototype".equals(k)) continue;
+          JSONObject anteriores = atual.optJSONObject("camposEm");
+          long antes = anteriores == null ? atual.optLong("atualizadoEm") : anteriores.optLong(k), veio = r.getJSONObject("camposEm").optLong(k);
+          Object valor = r.optJSONObject("valores") == null ? null : r.getJSONObject("valores").opt(k);
+          boolean mudou = !mesmoJson(correcao.getJSONObject("valores").opt(k), valor);
+          campos.put(k, veio > antes || (veio == antes && mudou) ? correcao.optLong("atualizadoEm") : antes);
+        }
+      }
+      correcao.put("camposEm", campos);
+    }
     correcao.remove("sincronizado");
     registros.put(id, correcao);
     if (arquivado(data)) {

@@ -58,7 +58,8 @@ export async function testarTotais217(g) {
     });
     await teste(g, 'operário da destilaria: linha nova da uréia já vem em canecas e grava a unidade', async () => {
       const d = await nav.novoAparelho('destilaria', TAMANHOS.tablet);
-      await d.ir(c.url + '/?demo&papel=destilaria&op=Mateus&tela=prancheta&pid=ins_ureia');
+      // a linha das 07h (a demonstração tem uréia em kg às 11h: o teste não pode depender da hora em que roda)
+      await d.ir(c.url + '/?demo&papel=destilaria&op=Mateus&tela=prancheta&pid=ins_ureia&chave=7');
       await d.tocar('[data-quadro="qtd"]');
       igual(await d.avaliar(`(document.querySelector('[data-ed^="u:"].sel') || {}).textContent`), 'canecas', 'a unidade marcada');
       await d.teclar(['2']); await d.tocar('[data-ed="ocultar"]'); await d.tocar('[data-a="salvar"]');

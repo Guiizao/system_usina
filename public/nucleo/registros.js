@@ -51,16 +51,30 @@
     return linhas;
   }
 
-  function gravar(data, pid, chave, valores, extra = {}) {
+  // O rascunho pode ter sido aberto antes de outra anotação chegar pela rede.
+  const camposMudados = (valores, original) => Object.fromEntries(Object.entries(valores)
+    .filter(([k, valor]) => !original || JSON.stringify(valor) !== JSON.stringify(original[k])));
+
+  function gravar(data, pid, chave, valores, extra = {}, original) {
     const id = idReg(data, pid, chave);
     const antigo = registros[id] && !registros[id].apagado ? registros[id] : null;
-    const agora = Date.now();
+    const agora = Math.max(Date.now(), (antigo && antigo.atualizadoEm || 0) + 1);
     registros[id] = Object.assign({}, antigo || {}, {
       id, data, prancheta: pid, setor: (setorDaPrancheta(pid) || {}).id, chave: String(chave),
-      valores: Object.assign({}, antigo ? antigo.valores : {}, valores),
+      valores: Object.assign({}, antigo ? antigo.valores : {}, camposMudados(valores, antigo ? original : null)),
       criadoEm: antigo ? antigo.criadoEm : agora, atualizadoEm: agora,
       aparelho: cfg.deviceId, apagado: false, sincronizado: false,
     }, extra);
+    if (data !== 'config') {
+      const camposEm = Object.assign({}, antigo && antigo.camposEm);
+      for (const k of Object.keys(antigo && antigo.valores || {})) {
+        if (!Object.hasOwn(camposEm, k)) camposEm[k] = antigo.atualizadoEm;
+      }
+      for (const [k, valor] of Object.entries(registros[id].valores)) {
+        if (!antigo || JSON.stringify(valor) !== JSON.stringify(antigo.valores[k])) camposEm[k] = agora;
+      }
+      registros[id].camposEm = camposEm;
+    }
     salvarRegistros(); sincronizarLogo();
     if (registros[id].prancheta !== PID_REGISTRO) verificarLembrete();
     return registros[id];
@@ -68,10 +82,29 @@
   function apagar(data, pid, chave) {
     const id = idReg(data, pid, chave);
     if (!registros[id]) return;
-    registros[id] = Object.assign({}, registros[id], { apagado: true, atualizadoEm: Date.now(), sincronizado: false, aparelho: cfg.deviceId });
+    registros[id] = Object.assign({}, registros[id], { apagado: true, atualizadoEm: Math.max(Date.now(), registros[id].atualizadoEm + 1), sincronizado: false, aparelho: cfg.deviceId });
     salvarRegistros(); sincronizarLogo();
   }
   const pendentes = () => Object.values(registros).filter((r) => !r.sincronizado).length;
+
+  /** Receber não confirma o envio que ainda está pendente neste aparelho. */
+  function receberRegistro(rec) {
+    const local = registros[rec.id];
+    if (local && local.esperaEntrar) return false;
+    const junto = Juncao.juntar(local, rec);
+    if (junto) {
+      if (JSON.stringify([junto.valores, junto.camposEm]) === JSON.stringify([local.valores, local.camposEm])
+        && junto.atualizadoEm === local.atualizadoEm) return false;
+      registros[rec.id] = Object.assign(junto, { sincronizado: !!local.sincronizado });
+      delete registros[rec.id].naNuvem;
+      return true;
+    }
+    if (!local || rec.atualizadoEm > local.atualizadoEm) {
+      registros[rec.id] = Object.assign({}, rec, { sincronizado: true });
+      return true;
+    }
+    return false;
+  }
 
   /* Quanto cada aparelho guarda. A memória do navegador do Android é pequena (uns 5 milhões de letras,
      perto de 2 meses de anotações da usina inteira): o tablet do setor guarda só os últimos dias e o tablet chefe
