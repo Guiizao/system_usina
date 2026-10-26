@@ -8,6 +8,7 @@
  *
  *   GET  /aparelho/pessoas   nomes de quem pode entrar pela nuvem   (sem token)
  *   POST /aparelho/entrar    senha pessoal libera leitura remota    (sem token)
+ *   POST /aparelho/sair      revoga a chave pessoal deste aparelho  (X-Aparelho + Bearer HMAC)
  *   POST /aparelho/sync      os aparelhos enviam e puxam anotações   (X-Aparelho + Bearer HMAC)
  *   POST /central/enviar     a central manda as anotações novas      (Authorization: Bearer <SEGREDO_CENTRAL>)
  *   GET  /central/estado     a central pergunta até onde a nuvem tem  (Authorization: Bearer <SEGREDO_CENTRAL>)
@@ -19,6 +20,7 @@
  * numa consulta só (a lista inteira vai como um JSON e o próprio banco abre com json_each).
  */
 import leitura from '../../api-leitura.js';
+import Juncao from '../../public/nucleo/juncao.js';
 
 const FUSO = -180; // a usina fica em -03:00 (o Brasil não tem mais horário de verão)
 const MAX_POR_ENVIO = 500;
@@ -77,13 +79,27 @@ async function pessoasDaNuvem(req, env) {
     .map(({ id, nome }) => ({ id, nome })).sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR') || a.id.localeCompare(b.id));
   return responder(200, { pessoas });
 }
-const tokenDeLeitura = (segredo, aparelho, p) => assinar(segredo, `leitura|${aparelho}|${p.id}|${p.nuvem.selado}`);
+const tokenDeLeitura = (segredo, aparelho, p, nonce = '') => assinar(segredo, `leitura|${aparelho}|${p.id}|${p.nuvem.selado}${nonce ? '|' + nonce : ''}`);
 // a conferência da senha fica selada com o segredo da central (que não está no banco): o banco sozinho não revela o PIN
 const selar = (segredo, verificador) => assinar(segredo, 'senha|' + verificador);
 async function leitorDaNuvem(env, aparelho, recebido) {
-  const linha = await env.DB.prepare('SELECT p.json FROM acessos_nuvem a JOIN pessoas p ON p.id = a.pessoa WHERE a.aparelho = ?').bind(aparelho).first();
+  const linha = await env.DB.prepare(`SELECT p.json, s.nonce FROM acessos_nuvem a JOIN pessoas p ON p.id = a.pessoa
+    LEFT JOIN sessoes_nuvem s ON s.aparelho = a.aparelho WHERE a.aparelho = ?`).bind(aparelho).first();
   const p = linha && JSON.parse(linha.json);
-  return veNaNuvem(p) && (await mesmoSegredo(recebido, await tokenDeLeitura(env.SEGREDO_CENTRAL, aparelho, p))) ? p : null;
+  const nonce = linha?.nonce || ''; // sem sessao: chave da 2.16 continua valendo ate sair ou entrar novamente
+  return veNaNuvem(p) && (await mesmoSegredo(recebido, await tokenDeLeitura(env.SEGREDO_CENTRAL, aparelho, p, nonce))) ? { pessoa: p, nonce } : null;
+}
+
+async function sair(req, env) {
+  if (req.method !== 'POST') return responder(405, { erro: 'Use POST' });
+  const aparelho = req.headers.get('X-Aparelho');
+  const acesso = idAparelho(aparelho) && env.SEGREDO_CENTRAL && await leitorDaNuvem(env, aparelho, senhaDoPedido(req));
+  if (!acesso) return responder(401, { erro: 'Credencial de leitura invalida' });
+  // Uma saida atrasada nao pode revogar a chave de quem acabou de entrar no mesmo aparelho.
+  await env.DB.prepare(`DELETE FROM acessos_nuvem WHERE aparelho = ? AND pessoa = ?
+    AND COALESCE((SELECT nonce FROM sessoes_nuvem WHERE aparelho = ?), '') = ?`)
+    .bind(aparelho, acesso.pessoa.id, aparelho, acesso.nonce).run();
+  return responder(200, { ok: true });
 }
 
 /** Reserva antes da criptografia: pedidos simultâneos também respeitam as cinco tentativas. */
@@ -141,6 +157,7 @@ async function entrar(req, env) {
   }
   if (!pessoa) return responder(401, { erro: 'Senha errada (ou essa pessoa não vê pela nuvem: precisa de Relatórios ou Escritório)' });
   const { id, nome, nivel, funcoes } = pessoa;
+  const nonce = crypto.randomUUID();
   const data = new Date(agora + FUSO * 60000).toISOString().slice(0, 10), linha = 'nuvem-' + crypto.randomUUID();
   const registro = { id: `${data}|registro|${linha}`, data, prancheta: 'registro', setor: 'central', chave: linha,
     criadoEm: agora, atualizadoEm: agora, aparelho, operador: nome, apagado: false,
@@ -150,9 +167,10 @@ async function entrar(req, env) {
     ...chaves.map((c) => devolverTentativa(env, c)),
     env.DB.prepare("DELETE FROM tentativas_entrada WHERE chave LIKE 'todos:%' AND chave <> ?").bind(geral),
     env.DB.prepare('INSERT INTO acessos_nuvem (aparelho, pessoa) VALUES (?, ?) ON CONFLICT(aparelho) DO UPDATE SET pessoa = excluded.pessoa').bind(aparelho, id),
+    env.DB.prepare('INSERT INTO sessoes_nuvem (aparelho, nonce) VALUES (?, ?) ON CONFLICT(aparelho) DO UPDATE SET nonce = excluded.nonce').bind(aparelho, nonce),
     ...consultasPendentes(env, aparelho, info?.valor || '', [registro]),
   ]);
-  return responder(200, { token: await tokenDeLeitura(env.SEGREDO_CENTRAL, aparelho, pessoa), pessoa: { id, nome, nivel, funcoes } });
+  return responder(200, { token: await tokenDeLeitura(env.SEGREDO_CENTRAL, aparelho, pessoa, nonce), pessoa: { id, nome, nivel, funcoes } });
 }
 /** Limita os bytes recebidos também quando não há Content-Length. */
 async function corpoFila(req, limite = MAX_FILA_BYTES) {
@@ -207,7 +225,7 @@ async function fila(req, env, confirmar, sync = false) {
   if (corpo.geracao !== undefined && (typeof corpo.geracao !== 'string' || corpo.geracao.length > 100)) return responder(400, { erro: 'Geração inválida' });
   if (lista.some((r) => !r || typeof r.id !== 'string' || r.id.length > 300 || typeof r.data !== 'string' || typeof r.prancheta !== 'string' || typeof r.chave !== 'string'
     || r.id !== `${r.data}|${r.prancheta}|${r.chave}` || !(r.data === 'config' || leitura.ehDia(r.data))
-    || !Number.isSafeInteger(r.atualizadoEm) || r.atualizadoEm < 0)) return responder(400, { erro: 'Anotação inválida' });
+    || !Number.isSafeInteger(r.atualizadoEm) || r.atualizadoEm < 0 || !Juncao.valido(r))) return responder(400, { erro: 'Anotação inválida' });
   const acesso = await env.DB.prepare("SELECT (SELECT id FROM bloqueios WHERE id = ?) AS bloqueio, (SELECT valor FROM info WHERE chave = 'geracao') AS geracao").bind(aparelho).first();
   const recusados = leitor ? lista.map((r) => ({ id: r.id, motivo: 'somente_leitura' })) : [];
   if (sync) {
@@ -280,6 +298,14 @@ async function puxarAparelho(env, aparelho, corpo, recusados = [], leitor = fals
     resposta.registros.push(registro); bytes += tamanho;
     resposta[linha.fonte ? 'ordem' : 'seq'] = linha.cursor;
   }
+  // As pendências continuam separadas por aparelho no banco: a central confere cada permissão ao voltar.
+  // Na entrega, os campos se juntam; entre páginas o aplicativo aplica a mesma regra.
+  const juntas = new Map();
+  for (const r of resposta.registros) {
+    const a = juntas.get(r.id);
+    juntas.set(r.id, Juncao.juntar(a, r) || (!a || r.atualizadoEm > a.atualizadoEm ? r : a));
+  }
+  resposta.registros = [...juntas.values()];
   return responder(200, resposta);
 }
 
@@ -443,6 +469,7 @@ export default {
       }
       if (p === '/aparelho/pessoas') return await pessoasDaNuvem(req, env);
       if (p === '/aparelho/entrar') return await entrar(req, env);
+      if (p === '/aparelho/sair') return await sair(req, env);
       if (p === '/aparelho/sync') return await fila(req, env, false, true);
       if (p === '/fila' || p === '/fila/confirmar') return await fila(req, env, p === '/fila/confirmar');
       if (p.startsWith('/central/')) {
