@@ -72,5 +72,8 @@ export async function testarTotais217(g) {
 if (import.meta.url === pathToFileURL(process.argv[1]).href) {
   const g = novoGrupo('Escritório em kg (2.17)');
   await testarTotais217(g);
-  resumo([g]);
+  const r = resumo([g]);
+  console.log(`
+${r.passaram} de ${r.total} testes passaram${r.falharam ? `, ${r.falharam} falharam` : ''}`);
+  process.exitCode = r.falharam ? 1 : 0;
 }

@@ -360,8 +360,13 @@
     const estado = { nivel: atual ? atual.nivel : 'encarregado', extras: Object.assign({}, atual ? atual.extras : {}), ativo: atual ? atual.ativo : true,
       fixos: new Set(atual && atual.aparelhos ? atual.aparelhos : []) };
     estado.soFixos = estado.fixos.size > 0;
-    // 2.17: os tablets chefe conhecidos, para "Vale em" (fora deles a pessoa só consulta)
-    const chefes = Object.entries(v.lista.aparelhos || {}).map(([id, a]) => ({ id, nome: a.nome || ((sync.status && sync.status.aparelhos || []).find((x) => x.id === id) || {}).nome || id.slice(0, 8) }));
+    // 2.17: os aparelhos que a central conhece (tablets chefe e de setor), para "Vale em" (fora deles a pessoa só consulta)
+    const vistos = (sync.status && sync.status.aparelhos) || [];
+    const ids = [...new Set([...Object.keys(v.lista.aparelhos || {}), ...vistos.map((a) => a.id)])];
+    const chefes = ids.map((id) => {
+      const a = (v.lista.aparelhos || {})[id] || {}, x = vistos.find((y) => y.id === id) || {};
+      return { id, nome: a.nome || x.nome || (x.papel && x.papel !== 'central' ? `Tablet: ${(setorPorId(x.papel) || {}).nome || x.papel}` : id.slice(0, 8)) };
+    });
     const marcadas = () => funcoesDe({ nivel: estado.nivel, extras: estado.extras });
     const desenhar = (f) => {
       f.querySelectorAll('[data-k^="n:"]').forEach((b) => b.classList.toggle('sel', b.dataset.k === 'n:' + estado.nivel));

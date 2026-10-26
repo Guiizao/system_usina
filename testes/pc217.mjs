@@ -2,6 +2,7 @@
 /* Telas da 2.17: liberar sem escolher nível e aparelhos fixos da pessoa (2b). Fotos em testes/saida/pc217/.
    node testes/pc217.mjs */
 import fs from 'node:fs';
+import http from 'node:http';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { abrirNavegador, TAMANHOS, dormir } from './navegador.mjs';
@@ -45,10 +46,13 @@ export async function testarNivelNaTela217(nav, g) {
       await semNotificacao(chefe);
       await chefe.tocar('[data-a="pessoa"]'); await chefe.tocar('[data-k="pessoas"]');
       await chefe.esperar('!!document.querySelector("[data-a=\\"pessoa-nova\\"]")', 10000, 'tela de pessoas');
+      // um tablet de setor que a central conhece também pode ser fixo (revisão do Codex)
+      await chefe.avaliar(`(() => { sync.status.aparelhos.push({ id: 'tab-setor', nome: 'Tablet da Hidrólise', papel: 'hidrolise' }); return 1; })()`);
       await chefe.tocar('[data-a="pessoa-nova"]');
       await chefe.esperar('!!document.querySelector(".modal [data-k=\\"v:todos\\"]")', 5000, 'Vale em');
       certo(await chefe.avaliar('document.querySelector(".modal [data-k=\\"v:todos\\"]").classList.contains("sel")'), 'qualquer aparelho vem marcado');
       await chefe.tocar('.modal [data-k="v:fixos"]');
+      certo(await chefe.avaliar('!!document.querySelector(\'.modal [data-k="a:tab-setor"]\')'), 'tablet de setor na lista');
       const id = await chefe.avaliar('cfg.deviceId');
       await chefe.tocar(`.modal [data-k="a:${id}"]`);
       await chefe.avaliar('(() => { document.getElementById("p-nome").value = "Lucas"; document.getElementById("p-pin").value = "3344"; return 1; })()');
@@ -111,6 +115,15 @@ export async function testarEntrarPC217(nav, g) {
       await longe.esperar('document.querySelector("#nuvem-nome") && document.querySelector("#nuvem-nome").disabled && document.body.innerText.includes("Sem internet: não achei a nuvem")', 15000, 'aviso sem nuvem');
       await longe.foto(path.join(FOTOS, 'entrar-sem-nuvem.png'));
     });
+    // nuvem que não responde (rede presa): a tela desiste em 8 s e diz por quê, em vez de ficar em "Buscando"
+    const parado = http.createServer(() => {}); await new Promise((r) => parado.listen(8375, '127.0.0.1', r));
+    const preso = await nav.novoAparelho('pc rede presa', TAMANHOS.computador); aparelhos.push(preso);
+    await preso.antesDeAbrir(cfgInicial('http://127.0.0.1:8375'));
+    await teste(g, 'nuvem que não responde: desiste em até 10 s com o aviso', async () => {
+      await preso.ir(c.url + '/?nuvem=1');
+      await preso.esperar('document.body.innerText.includes("Sem internet: não achei a nuvem")', 11000, 'desistiu');
+    });
+    parado.closeAllConnections(); parado.close();
     for (const a of aparelhos) certo(!a.erros.length, a.erros.join(' | '));
   } finally {
     for (const a of aparelhos) await a.fechar().catch(() => {});
@@ -280,5 +293,8 @@ if (import.meta.url === pathToFileURL(process.argv[1]).href) {
     if (!so || so === 'painel') await testarPainelPC217(nav, g);
     if (!so || so === 'logo') await testarLogoEAbertura217(nav, g);
   } finally { await nav.fechar(); }
-  resumo([g]);
+  const r = resumo([g]);
+  console.log(`
+${r.passaram} de ${r.total} testes passaram${r.falharam ? `, ${r.falharam} falharam` : ''}`);
+  process.exitCode = r.falharam ? 1 : 0;
 }

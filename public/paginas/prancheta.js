@@ -121,7 +121,8 @@
           }
         }
       }
-      if (!r && p.tipo === 'insumo') valores.unidade = p.unidade;
+      // 2.17: linha nova começa na unidade nova da folha (uréia em canecas); a anotação antiga sem unidade segue p.unidade
+      if (!r && p.tipo === 'insumo') valores.unidade = p.unidadeNova || p.unidade;
       if (p.tipo === 'grade') { const t = turnoDaHora(chave, turnosDaPrancheta(v.pid)); const o = pegar(data, v.pid, 'obs' + t.id); extras.obs = o ? o.valores.texto || '' : ''; }
       if (p.tipo === 'insumo') { const m = pegar(data, v.pid, 'meta'); extras.meta = m ? Object.assign({}, m.valores) : {}; }
     }
@@ -182,7 +183,7 @@
         };
       });
     }
-    const lista = [{ id: 'qtd', label: p.rotuloQtd || 'Quantidade adicionada', type: 'num', dec: 2, unidades: p.unidades, get: () => val.qtd, set: (x) => { if (p.unidadeNova && !val.unidade && !val.qtd) val.unidade = p.unidadeNova; val.qtd = x; }, getUnidade: () => val.unidade || (p.unidadeNova && !val.qtd ? p.unidadeNova : p.unidade), setUnidade: (u) => { val.unidade = u; } }];
+    const lista = [{ id: 'qtd', label: p.rotuloQtd || 'Quantidade adicionada', type: 'num', dec: 2, unidades: p.unidades, get: () => val.qtd, set: (x) => { val.qtd = x; }, getUnidade: () => val.unidade || p.unidade, setUnidade: (u) => { val.unidade = u; } }];
     if (p.somaPesagens) Object.assign(lista[0], pesagensNaHora(val)); // ralo: vários bags na mesma hora (setores/ralo/regras.js)
     (p.camposOperador || []).filter(visivel).forEach((c) => {
       if (c.opcional && !opcoesDe(c).length) return;

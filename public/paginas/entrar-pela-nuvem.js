@@ -20,7 +20,9 @@
     nuvemForm.buscando = true; nuvemForm.erro = '';
     try {
       if (!enderecoNuvemSeguro(url)) throw new Error('endereço');
-      const r = await fetch(url + '/aparelho/pessoas', { cache: 'no-store', redirect: 'error' });
+      // rede presa: desiste em 8 s e diz por quê (em vez de ficar em "Buscando")
+      const parar = new AbortController(), relogio = setTimeout(() => parar.abort(), 8000);
+      const r = await fetch(url + '/aparelho/pessoas', { cache: 'no-store', redirect: 'error', signal: parar.signal }).finally(() => clearTimeout(relogio));
       const d = await r.json();
       if (!r.ok || !Array.isArray(d.pessoas)) throw new Error('resposta');
       nuvemForm.pessoas = d.pessoas;
