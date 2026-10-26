@@ -53,6 +53,11 @@ CREATE TABLE IF NOT EXISTS acessos_nuvem (
   aparelho TEXT PRIMARY KEY,
   pessoa TEXT NOT NULL
 );
+-- 2.17.1: sessao nova por entrada; tabela separada permite reaplicar a migracao.
+CREATE TABLE IF NOT EXISTS sessoes_nuvem (
+  aparelho TEXT PRIMARY KEY,
+  nonce TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS tentativas_entrada (
   chave TEXT PRIMARY KEY,
   erros INTEGER NOT NULL,

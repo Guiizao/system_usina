@@ -167,7 +167,7 @@
         if (recusados.length) avisarRecusa(recusados);
         // a central não tem mais ninguém dentro deste aparelho (o nível mudou, a pessoa saiu de outro jeito): entra de novo
         if (semSessao && cfg.pessoa) { cfg.pessoa = null; salvarCfg(); render(); }
-        envio.forEach((e) => { const atual = registros[e.id]; if (!ids.has(e.id) && atual && atual.atualizadoEm === e.atualizadoEm) { atual.sincronizado = true; delete atual.esperaEntrar; } });
+        envio.forEach((e) => { const atual = registros[e.id]; if (!ids.has(e.id) && atual && atual.atualizadoEm === e.atualizadoEm && atual.valores === e.valores) { atual.sincronizado = true; delete atual.esperaEntrar; } });
         // a revisão nova da configuração aceita (a próxima mudança vai com ela)
         Object.entries(resp1.revs || {}).forEach(([id, rev]) => { if (registros[id]) registros[id].rev = rev; });
         salvarRegistros();
@@ -193,9 +193,7 @@
       if (r2.ok) {
         const dados = await r2.json();
         for (const rec of dados.registros) {
-          const local = registros[rec.id];
-          // anotação guardada esperando alguém entrar não é trocada pela da central (ela ainda vai subir)
-          if (!local || (!local.esperaEntrar && rec.atualizadoEm > local.atualizadoEm)) { registros[rec.id] = Object.assign({}, rec, { sincronizado: true }); mudou = true; }
+          if (receberRegistro(rec)) mudou = true;
         }
         cfg.ultimoSeq = dados.seq; cfg.corteSync = corte; salvarCfg();
         if (mudou) { podar(); salvarRegistros(); }
@@ -275,10 +273,9 @@
           if (j !== sync.aparelhosNuvemJson) { sync.aparelhosNuvemJson = j; sync.aparelhosNuvem = d.aparelhos; sync.aparelhosNuvemEm = Number(d.aparelhosEm) || 0; mudou = true; }
         }
         versaoNaSincronizacao(d.telas); // 2.16: sem a central, quem avisa da versão nova é a nuvem
-        lista.forEach((x) => { const local = registros[x.id]; if (local && local.atualizadoEm === x.atualizadoEm) local.naNuvem = x.atualizadoEm; });
+        lista.forEach((x) => { const local = registros[x.id]; if (local && local.atualizadoEm === x.atualizadoEm && local.valores === x.valores) local.naNuvem = x.atualizadoEm; });
         for (const rec of d.registros || []) {
-          const local = registros[rec.id];
-          if (!local || (!local.esperaEntrar && rec.atualizadoEm > local.atualizadoEm)) { registros[rec.id] = Object.assign({}, rec, { sincronizado: true }); mudou = true; }
+          if (receberRegistro(rec)) mudou = true;
         }
         cfg.nuvemSeq = Math.max(cfg.nuvemSeq || 0, Number(d.seq) || 0);
         cfg.nuvemOrdem = Math.max(cfg.nuvemOrdem || 0, Number(d.ordem) || 0);
@@ -309,7 +306,7 @@
       marcarNuvem(r.status < 500);
       if (r.status === 401 && cfg.soNuvem) { sairDaNuvem(); return; }
       if (!r.ok) return;
-      lista.forEach((x) => { const local = registros[x.id]; if (local && local.atualizadoEm === x.atualizadoEm) local.naNuvem = x.atualizadoEm; });
+      lista.forEach((x) => { const local = registros[x.id]; if (local && local.atualizadoEm === x.atualizadoEm && local.valores === x.valores) local.naNuvem = x.atualizadoEm; });
       salvarRegistros();
       if (!sync.avisouNuvem) { sync.avisouNuvem = true; toast('Sem a central: as anotações foram pela internet. A central pega quando puder.', 'info'); }
     } catch (e) { /* sem internet também: tenta de novo daqui a um minuto */ } finally { sync.enviandoNuvem = false; }
@@ -355,8 +352,7 @@
         if (!r.ok) throw new Error('central');
         const dados = await r.json();
         (dados.registros || []).forEach((rec) => {
-          const local = registros[rec.id];
-          if (!local || (!local.esperaEntrar && rec.atualizadoEm > local.atualizadoEm)) registros[rec.id] = Object.assign({}, rec, { sincronizado: true });
+          receberRegistro(rec);
         });
         salvarRegistros();
       } catch (e) {

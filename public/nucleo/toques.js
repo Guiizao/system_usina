@@ -276,7 +276,7 @@
         if (ehCentral() && antes && antes.operador && antes.operador !== 'escritório' && !(await autorizar([antes.operador]))) return;
         Object.entries(p.vemDe.campos).forEach(([meu, dela]) => { if (!vazio(base.valores[dela])) rascunho.valores[meu] = base.valores[dela]; });
         const r = pegar(data, v.pid, rascunho.chave);
-        gravar(data, v.pid, rascunho.chave, rascunho.valores, { operador: (r && r.operador) || operadorAtual() || '', manuais: [] });
+        gravar(data, v.pid, rascunho.chave, rascunho.valores, { operador: (r && r.operador) || operadorAtual() || '', manuais: [] }, rascunho.novo ? null : rascunho.original);
         somarInsumosDoDia(data);
         toast(`Copiado da ${prancheta(p.vemDe.prancheta).nome}. Volta a acompanhar.`);
         ed.alvoId = null; rascunho = null;

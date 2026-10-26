@@ -186,6 +186,7 @@ const ATUALIZE = 'Atualize o aplicativo: a central agora usa a conexão embaralh
 if (!config.tokenLeitura) { config.tokenLeitura = crypto.randomBytes(24).toString('base64url'); salvarConfig(); }
 const TOKEN_LEITURA = process.env.TOKEN_LEITURA || config.tokenLeitura;
 const leitura = require('./api-leitura');
+const Juncao = require('./public/nucleo/juncao');
 let apiLeituraPronta = null;
 const medidasDoEscritorio = () => { const c = db.registros['config|sistema|geral']; return c && !c.apagado && c.valores ? c.valores.medicao || null : null; };
 /** As definições das pranchetas (2.16: o config/forms.js e as folhas de cada setor, como o aplicativo monta). */
@@ -392,6 +393,16 @@ function corrigirRecusaNuvem(r) {
     atualizadoEm: Math.max(Date.now(), Number(atual && atual.atualizadoEm) || 0, r.atualizadoEm) + 1,
     seq: ++db.seq, recebidoEm: Date.now(),
   });
+  if (r.camposEm && !correcao.apagado) {
+    correcao.camposEm = Object.assign({}, atual.camposEm);
+    for (const k of new Set([...Object.keys(correcao.valores), ...Object.keys(r.valores || {}), ...Object.keys(r.camposEm)])) {
+      if (['__proto__', 'constructor', 'prototype'].includes(k)) continue;
+      const antes = atual.camposEm ? atual.camposEm[k] || 0 : atual.atualizadoEm;
+      const veio = r.camposEm[k] || 0;
+      const mudou = JSON.stringify(correcao.valores[k]) !== JSON.stringify((r.valores || {})[k]);
+      correcao.camposEm[k] = veio > antes || (veio === antes && mudou) ? correcao.atualizadoEm : antes;
+    }
+  }
   delete correcao.sincronizado;
   db.registros[r.id] = correcao;
   if (arquivado(r.data)) {
@@ -955,7 +966,10 @@ function juntarNoArquivo(data, novos) {
   const mapa = {};
   lerDiaArquivado(data).forEach((r) => { mapa[r.id] = r; });
   let n = 0;
-  novos.forEach((r) => { const a = mapa[r.id]; if (!a || r.atualizadoEm >= a.atualizadoEm) { mapa[r.id] = r; n += 1; } });
+  novos.forEach((r) => {
+    const a = mapa[r.id], junto = Juncao.juntar(a, r);
+    if (junto || !a || r.atualizadoEm >= a.atualizadoEm) { mapa[r.id] = junto || r; n += 1; }
+  });
   const arquivo = arquivoDoDia(data);
   fs.writeFileSync(arquivo + '.tmp', JSON.stringify(Object.values(mapa), null, 1));
   fs.renameSync(arquivo + '.tmp', arquivo);
@@ -985,10 +999,12 @@ function juntarLinhas(a, b) {
   const [velho, novo] = b.atualizadoEm >= a.atualizadoEm ? [a, b] : [b, a];
   const valores = Object.assign({}, velho.valores);
   Object.entries(novo.valores || {}).forEach(([k, x]) => { if (x !== '' && x != null) valores[k] = x; });
-  return Object.assign({}, velho, novo, {
+  const junta = Object.assign({}, velho, novo, {
     valores, operador: novo.operador || velho.operador,
     criadoEm: Math.min(a.criadoEm, b.criadoEm), atualizadoEm: Math.max(a.atualizadoEm, b.atualizadoEm) + 1,
   });
+  delete junta.camposEm; // a mescla legada não tem horário por campo confiável
+  return junta;
 }
 // só entre aparelhos diferentes: o mesmo aparelho mudando a própria linha vale a versão mais nova, como sempre
 const criadasSemSaber = (atual, r) => !!(atual && !atual.apagado && !r.apagado && atual.valores && r.valores
@@ -1266,7 +1282,7 @@ function sincronizar(corpo, aparelho, ip) {
     let r = r0;
     if (!r || typeof r.id !== 'string' || typeof r.atualizadoEm !== 'number') continue;
     // o id diz o que a anotação é (dia|folha|linha): com outro id, uma anotação poderia passar por configuração
-    if (r.id !== `${r.data}|${r.prancheta}|${r.chave}` || !(r.data === 'config' || ehDia(r.data))) { recusados.push({ id: r.id, motivo: 'invalido' }); continue; }
+    if (r.id !== `${r.data}|${r.prancheta}|${r.chave}` || !(r.data === 'config' || ehDia(r.data)) || !Juncao.valido(r)) { recusados.push({ id: r.id, motivo: 'invalido' }); continue; }
     // configuração da usina: confere quem pode mudar cada parte, e o conflito
     if (r.data === 'config') {
       const d = decidirConfig(db.registros[r.id], r, aparelho);
@@ -1292,7 +1308,13 @@ function sincronizar(corpo, aparelho, ip) {
         const guardado = guardadaDe(r);
         const valores = Object.assign({}, r.valores);
         soEscritorio.forEach((c) => { if (guardado && guardado.valores && c in guardado.valores) valores[c] = guardado.valores[c]; else delete valores[c]; });
-        r = Object.assign({}, r, { valores });
+        const camposEm = r.camposEm && Object.assign({}, r.camposEm);
+        if (camposEm) soEscritorio.forEach((c) => {
+          if (guardado && guardado.camposEm && Object.hasOwn(guardado.camposEm, c)) camposEm[c] = guardado.camposEm[c];
+          else delete camposEm[c];
+        });
+        r = Object.assign({}, r, { valores }, camposEm ? { camposEm } : {});
+        if (camposEm) r.atualizadoEm = Math.max(r.atualizadoEm, ...Object.values(camposEm));
       }
     }
     if (r.prancheta === 'rastreamento' && !nivelAqui && liberadosNoSetor[aparelho]) liberadosNoSetor[aparelho].ate = Date.now() + LIBERADO_NO_SETOR_MS;
@@ -1303,7 +1325,7 @@ function sincronizar(corpo, aparelho, ip) {
       continue;
     }
     const atual = db.registros[r.id];
-    const entrada = r.data !== 'config' && criadasSemSaber(atual, r) ? juntarLinhas(atual, r) : r;
+    const entrada = Juncao.juntar(atual, r) || (r.data !== 'config' && criadasSemSaber(atual, r) ? juntarLinhas(atual, r) : r);
     // a configuração já foi conferida pela revisão (o relógio do aparelho não decide)
     if (!atual || entrada !== r || r.atualizadoEm >= atual.atualizadoEm || r.data === 'config') {
       db.seq += 1;
