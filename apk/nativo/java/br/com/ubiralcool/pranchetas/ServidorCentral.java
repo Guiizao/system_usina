@@ -3059,7 +3059,8 @@ public class ServidorCentral {
         enviarJson(saida, 403, new JSONObject().put("erro", "Senha errada"));
         return;
       }
-      int nivel = pedido.has("nivel") ? pedido.optInt("nivel", 0) : ehDono(pessoa) ? 3 : 2;
+      // 2.17: liberar não pergunta o nível. Aparelho novo fica no 2 (também com a senha do dono); o já liberado mantém o dele.
+      int nivel = pedido.has("nivel") ? pedido.optInt("nivel", 0) : nivelDoAparelho(aparelho) > 0 ? nivelDoAparelho(aparelho) : 2;
       if (nivel < 1 || nivel > 3) { enviarJson(saida, 400, new JSONObject().put("erro", "Nível inválido")); return; }
       // nível 3 só o dono; 1 ou 2, quem libera tablets chefe (administrador, ou quem ganhou a função) ou o dono
       if (nivel == 3 ? !ehDono(pessoa) : !funcoesDaPessoa(pessoa).contains("chefes")) {

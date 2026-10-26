@@ -46,11 +46,14 @@ for (const [nome, ligar, porta] of [['node', centralNode, 18217], ['java', centr
       igual((await entrar(b, '2222')).nivel, 1);
       igual(cfg().aparelhosChefe.B.nivel, 1);
     });
-    await teste(g, 'liberar sem nível: administrador dá 2; dono dá 3', async () => {
+    await teste(g, 'liberar sem nível: aparelho novo fica no 2 (também com a senha do dono); já liberado mantém o nível', async () => {
       const admin = await liberar(b, '2222');
-      igual(admin.status, 200); igual(admin.nivel, 2);
-      const dono = await liberar(adm, SENHA_ENCARREGADO);
-      igual(dono.status, 200); igual(dono.nivel, 3);
+      igual(admin.status, 200); igual(admin.nivel, 1, 'o B já era nível 1: continua 1');
+      // o dono configura o tablet de outra pessoa com a senha dele: não pode virar "nível 3, só do dono"
+      const novo = await conectarTeste(c.url, c.codigo(), 'novo-' + nome);
+      const dono = await liberar(novo, SENHA_ENCARREGADO);
+      igual(dono.status, 200); igual(dono.nivel, 2);
+      igual((await liberar(adm, SENHA_ENCARREGADO, { nivel: 3 })).nivel, 3, 'o nível 3 só quando o dono escolhe');
       igual((await entrar(adm, SENHA_ENCARREGADO)).status, 200);
     });
     // Mantém a preparação independente das falhas esperadas antes da implementação.

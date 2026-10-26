@@ -1455,7 +1455,9 @@ async function rotaProtegida(req, res, url, ip) {
           if (t.length >= 5) return json(res, 429, { erro: 'Muitas senhas erradas. Espere um minuto.' });
           const pessoa = /^\d{4,8}$/.test(String(corpo.pin || '')) ? pessoaDaSenha(corpo.pin) : null;
           if (!pessoa) { t.push(agora); registrar('entrada', `Senha errada ao liberar o ${aqui} como tablet chefe`, { aparelho: aqui }); return json(res, 403, { erro: 'Senha errada' }); }
-          const nivel = 'nivel' in corpo ? Number(corpo.nivel) : ehDono(pessoa) ? 3 : 2;
+          // 2.17: liberar não pergunta o nível. Aparelho novo fica no 2 (também com a senha do dono, que configura o tablet
+          // dos outros); o já liberado mantém o dele. O 1 e o 3 o administrador e o dono escolhem em Aparelhos.
+          const nivel = 'nivel' in corpo ? Number(corpo.nivel) : nivelDoAparelho(req.aparelho) || 2;
           if (![1, 2, 3].includes(nivel)) return json(res, 400, { erro: 'Nível inválido' });
           // nível 3 só o dono; 1 ou 2, quem libera tablets chefe (administrador, ou quem ganhou a função) ou o dono
           if (nivel === 3 ? !ehDono(pessoa) : !funcoesDaPessoa(pessoa).has('chefes')) return json(res, 403, { erro: nivel === 3 ? 'Só o dono do sistema libera o nível 3' : `${pessoa.nome} não pode liberar tablet chefe` });

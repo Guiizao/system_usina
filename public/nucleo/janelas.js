@@ -30,7 +30,7 @@
       fundo.addEventListener('click', (e) => {
         if (e.target === fundo) return opcoes.fixo ? undefined : fechar(undefined);
         const b = e.target.closest('[data-k]');
-        if (b) aoClicar(b.dataset.k, b, fechar, fundo);
+        if (b) { aoClicar(b.dataset.k, b, fechar, fundo); agendarCaber([fundo]); } // a janela mudou: grades e textos de novo
       });
       if (opcoes.aoAbrir) opcoes.aoAbrir(fundo, fechar);
       agendarCaber();
