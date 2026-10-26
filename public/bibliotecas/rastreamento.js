@@ -97,6 +97,9 @@
     const quantidade = (r, pid) => {
       const n = numero(r.valores.qtd);
       const unidade = String(r.valores.unidade || (C.pranchetas[pid] || {}).unidade || '').trim();
+      // 2.17: copos de cal e canecas de uréia em kg, pela mesma tabela dos totais (C.somarEm)
+      const emKg = ((C.somarEm || {})[unidade] || {}).unidade === 'kg' ? C.somarEm[unidade].fator : 0;
+      if (emKg && n !== '') return { qtd: Math.round(n * emKg * 1e6) / 1e6, unidade: 'kg' };
       return { qtd: n === '' ? '' : /^(mL|g)$/i.test(unidade) ? n / 1000 : n, unidade: /^ml$/i.test(unidade) ? 'L' : /^g$/i.test(unidade) ? 'kg' : unidade };
     };
     const mp = de('ins_materia_prima');

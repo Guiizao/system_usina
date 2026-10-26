@@ -34,6 +34,7 @@ import { testarNuvem, temWrangler } from './nuvem.mjs';
 import { testarPessoas } from './pessoas.mjs';
 import { testarPedidos210 } from './pedidos210.mjs';
 import { testarAjustes2161 } from './ajustes2161.mjs';
+import { testarTotais217 } from './totais217.mjs';
 import { testarSeguranca } from './seguranca.mjs';
 import { testarPedidos211 } from './pedidos211.mjs';
 import { testarNiveis } from './niveis212.mjs';
@@ -199,6 +200,8 @@ try {
     await testarAjustes2161(nav, ligar, porta, g);
     grupos.push(g);
   }
+  // 4j3. versão 2.17: o escritório vê a cal e a uréia em kg; o operário continua em copos e canecas
+  { const g = novoGrupo('Escritório em kg (2.17)'); await testarTotais217(g); grupos.push(g); }
   // 4k. versão 2.11: aparelhos (quem usa, nome no Android, modelo, endereço) e bloqueio, direto na central e no aplicativo
   for (const [nome, ligar, porta] of [['computador', (p, d, x) => centralNode(p, d, undefined, x), 8253], ['tablet chefe', centralJava, 8254]]) {
     const g = novoGrupo('Bloqueio e informações dos aparelhos, direto na central do ' + nome);

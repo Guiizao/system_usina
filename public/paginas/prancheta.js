@@ -182,7 +182,7 @@
         };
       });
     }
-    const lista = [{ id: 'qtd', label: p.rotuloQtd || 'Quantidade adicionada', type: 'num', dec: 2, unidades: p.unidades, get: () => val.qtd, set: (x) => { val.qtd = x; }, getUnidade: () => val.unidade || p.unidade, setUnidade: (u) => { val.unidade = u; } }];
+    const lista = [{ id: 'qtd', label: p.rotuloQtd || 'Quantidade adicionada', type: 'num', dec: 2, unidades: p.unidades, get: () => val.qtd, set: (x) => { if (p.unidadeNova && !val.unidade && !val.qtd) val.unidade = p.unidadeNova; val.qtd = x; }, getUnidade: () => val.unidade || (p.unidadeNova && !val.qtd ? p.unidadeNova : p.unidade), setUnidade: (u) => { val.unidade = u; } }];
     if (p.somaPesagens) Object.assign(lista[0], pesagensNaHora(val)); // ralo: vários bags na mesma hora (setores/ralo/regras.js)
     (p.camposOperador || []).filter(visivel).forEach((c) => {
       if (c.opcional && !opcoesDe(c).length) return;

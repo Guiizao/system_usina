@@ -172,8 +172,10 @@ window.USINA = {
   // 2.16: endereço da nuvem que já vem preenchido em "Entrar pela nuvem" (computador e celular fora da usina)
   nuvemPadrao: 'https://pranchetas-nuvem.guiizao.workers.dev',
 
-  // 2.16: os totais (painel, resumo e API) somam numa unidade só: g vira kg e L vira mL. Copos ficam copos.
-  somarEm: { g: { unidade: 'kg', fator: 0.001 }, L: { unidade: 'mL', fator: 1000 } },
+  // 2.16: os totais (painel, resumo, escritório e API) somam numa unidade só: g vira kg e L vira mL.
+  // 2.17 (pedido do Ademir): para o escritório, 1 copo de cal = 680 g e 1 caneca de uréia = 780 g, em kg.
+  // O operário continua anotando e vendo copos e canecas; a anotação guarda o que ele digitou.
+  somarEm: { g: { unidade: 'kg', fator: 0.001 }, L: { unidade: 'mL', fator: 1000 }, copos: { unidade: 'kg', fator: 0.68 }, canecas: { unidade: 'kg', fator: 0.78 } },
 
   produtosPadrao: ['MASSA', 'FINI', 'OUTRO'],
   fornecedoresPadrao: [],
