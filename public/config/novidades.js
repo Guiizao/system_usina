@@ -4,6 +4,19 @@
    Depois do sinal de igual vem JSON puro, porque o servidor do tablet chefe (Java) também lê este arquivo. */
 window.NOVIDADES = [
   {
+    "versao": "2.17.0",
+    "data": "2026-10-26",
+    "itens": [
+      "Escritório: a cal e a uréia somam em kg (1 copo de cal = 680 g, 1 caneca de uréia = 780 g) no resumo, no painel, no escritório e na API. Na produção continua em copos e canecas.",
+      "Uréia anotada em canecas.",
+      "Tablet chefe: liberar não pergunta mais o nível. O que cada um faz vem de quem entra; em Pessoas, dá para prender a pessoa aos aparelhos dela (em outro aparelho ela só consulta).",
+      "Computador: entrar escolhendo o nome e digitando a senha; o endereço do servidor fica num botão à parte.",
+      "Painel do computador: aparelhos ligados ao vivo, últimas anotações do dia e o escritório pela nuvem (enviar e imprimir).",
+      "Logo nova (o U da Ubirálcool) e abertura animada no programa do Windows.",
+      "Notificações com × para fechar, ícone de cada tipo e menos tempo na tela."
+    ]
+  },
+  {
     "versao": "2.16.1",
     "data": "2026-10-21",
     "itens": [

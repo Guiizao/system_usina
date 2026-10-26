@@ -92,7 +92,8 @@
     if (resp === 'recuperar') return recuperarDono();
     const pin = await pedirSenhaModal('Senha para liberar', 'A senha de quem libera tablets chefe (o administrador ou o dono).');
     if (pin === undefined) return undefined;
-    const r = await postJson('api/chefes', { acao: 'liberar', pin }, 10000).catch(() => null);
+    // nível 2 dito com todas as letras: a central 2.16 (tablet chefe ainda sem o APK novo) exige o nível
+    const r = await postJson('api/chefes', { acao: 'liberar', pin, nivel: 2 }, 10000).catch(() => null);
     if (!r) { toast('Não consegui falar com a central', 'erro'); return undefined; }
     const d = await r.json().catch(() => ({}));
     if (!r.ok) { toast(d.erro || 'A central recusou', 'erro'); return undefined; }
