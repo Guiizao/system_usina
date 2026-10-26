@@ -278,7 +278,7 @@
         cfg.nuvemSeq = Math.max(cfg.nuvemSeq || 0, Number(d.seq) || 0);
         cfg.nuvemOrdem = Math.max(cfg.nuvemOrdem || 0, Number(d.ordem) || 0);
         salvarRegistros(); salvarCfg();
-        if (lista.length && !sync.avisouNuvem) { sync.avisouNuvem = true; toast('Sem a central: as anotações vão pela nuvem e as dos outros chegam por ela.', 'ok'); }
+        if (lista.length && !sync.avisouNuvem) { sync.avisouNuvem = true; toast('Sem a central: as anotações vão pela nuvem e as dos outros chegam por ela.', 'info'); }
         if (!d.mais) break;
       }
       if (mudou) { podar(); salvarRegistros(); }
@@ -306,7 +306,7 @@
       if (!r.ok) return;
       lista.forEach((x) => { const local = registros[x.id]; if (local && local.atualizadoEm === x.atualizadoEm) local.naNuvem = x.atualizadoEm; });
       salvarRegistros();
-      if (!sync.avisouNuvem) { sync.avisouNuvem = true; toast('Sem a central: as anotações foram pela internet. A central pega quando puder.', 'ok'); }
+      if (!sync.avisouNuvem) { sync.avisouNuvem = true; toast('Sem a central: as anotações foram pela internet. A central pega quando puder.', 'info'); }
     } catch (e) { /* sem internet também: tenta de novo daqui a um minuto */ } finally { sync.enviandoNuvem = false; }
   }
   /* A hora de cada anotação vem do relógio do aparelho. Se ele estiver muito diferente da central,

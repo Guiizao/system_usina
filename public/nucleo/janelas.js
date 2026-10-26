@@ -213,14 +213,19 @@
     clearTimeout(toastSaindo);
     toastSaindo = setTimeout(() => { t.hidden = true; t.classList.remove('saindo'); }, movimentoReduzido() ? 0 : 200);
   }
+  // 2.17: ícone por tipo e botão de fechar; ok e informação somem rápido, aviso e erro ficam mais
+  const ICONE_DO_TOAST = { ok: 'certo', erro: 'fechar', aviso: 'alerta', info: 'info' };
   function toast(msg, tipo = 'ok') {
     const t = document.getElementById('toast');
+    if (!ICONE_DO_TOAST[tipo]) tipo = 'ok';
     clearTimeout(toastSaindo);
-    t.innerHTML = (tipo === 'ok' ? ico('certo') : ico('alerta')) + `<span>${esc(msg)}</span>`;
+    t.innerHTML = `<span class="toast-ico">${ico(ICONE_DO_TOAST[tipo])}</span><span class="toast-texto">${esc(msg)}</span>`
+      + `<button class="toast-x" aria-label="Fechar">${ico('fechar')}</button>`;
     // reinicia a animação de entrada mesmo se já havia outra notificação na tela
     t.className = ''; void t.offsetWidth; t.className = tipo; t.hidden = false;
     t.setAttribute('role', tipo === 'erro' ? 'alert' : 'status');
     t.onclick = esconderToast; // um toque fecha
-    // mensagem longa fica um pouco mais na tela
-    clearTimeout(toastTimer); toastTimer = setTimeout(esconderToast, Math.min(6000, 2600 + String(msg).length * 45));
+    // mensagem longa fica um pouco mais na tela (até 4 s); aviso 5 s; erro 6 s
+    const tempo = tipo === 'erro' ? 6000 : tipo === 'aviso' ? 5000 : Math.min(4000, 2200 + String(msg).length * 30);
+    clearTimeout(toastTimer); toastTimer = setTimeout(esconderToast, tempo);
   }

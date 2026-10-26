@@ -61,9 +61,58 @@ export async function testarNivelNaTela217(nav, g) {
   }
 }
 
+/** Task 7: notificação rápida com ×, ícone por tipo e tempo na tela. */
+export async function testarNotificacoes217(nav, g) {
+  const c = await centralNode(8367, pastaTemporaria('pc217-toast'));
+  const a = await nav.novoAparelho('notificações', TAMANHOS.tablet);
+  try {
+    await a.ir(c.url + '/?demo&papel=central', 'typeof toast === "function"');
+    const estado = () => a.avaliar(`(() => { const t = document.getElementById('toast'); return JSON.stringify({ visivel: !t.hidden && !t.classList.contains('saindo'),
+      tipo: t.className.replace('saindo', '').trim(), ico: (t.querySelector('.toast-ico') || {}).innerHTML || '',
+      x: !!t.querySelector('button.toast-x[aria-label="Fechar"]'), texto: (t.querySelector('.toast-texto') || {}).textContent || '' }); })()`).then(JSON.parse);
+    await teste(g, 'cada tipo tem o seu ícone e o botão ×', async () => {
+      const icones = {};
+      for (const tipo of ['ok', 'erro', 'aviso', 'info']) {
+        await a.avaliar(`(() => { toast('Teste ${tipo}', '${tipo}'); return 1; })()`);
+        const e = await estado();
+        igual(e.tipo, tipo); certo(e.x, 'tem o ×'); igual(e.texto, 'Teste ' + tipo);
+        icones[tipo] = e.ico;
+        await a.foto(path.join(FOTOS, `notificacao-${tipo}.png`));
+      }
+      igual(new Set(Object.values(icones)).size, 4, 'quatro ícones diferentes');
+    });
+    await teste(g, 'o × fecha na hora', async () => {
+      await a.avaliar(`(() => { toast('Fecha já', 'info'); return 1; })()`);
+      await a.tocar('#toast button.toast-x');
+      await a.esperar(`document.getElementById('toast').hidden`, 600, 'fechou');
+    });
+    await teste(g, 'ok curto some em até 3 s; erro fica pelo menos 5,5 s', async () => {
+      await a.avaliar(`(() => { toast('Anotação salva aqui', 'ok'); return 1; })()`);
+      await a.esperar(`document.getElementById('toast').hidden`, 3200, 'ok sumiu');
+      await a.avaliar(`(() => { toast('Não consegui falar com a central', 'erro'); return 1; })()`);
+      await dormir(5500);
+      certo((await estado()).visivel, 'erro ainda na tela aos 5,5 s');
+      await a.esperar(`document.getElementById('toast').hidden`, 1500, 'erro sumiu');
+    });
+    await teste(g, 'notificação nova troca o texto e recomeça o tempo', async () => {
+      await a.avaliar(`(() => { toast('Primeira', 'ok'); return 1; })()`);
+      await dormir(1800);
+      await a.avaliar(`(() => { toast('Segunda', 'ok'); return 1; })()`);
+      await dormir(1500);
+      const e = await estado(); certo(e.visivel, 'ainda na tela'); igual(e.texto, 'Segunda');
+      await a.tocar('#toast button.toast-x');
+    });
+    certo(!a.erros.length, a.erros.join(' | '));
+  } finally { await a.fechar().catch(() => {}); await c.desligar(); }
+}
+
 if (import.meta.url === pathToFileURL(process.argv[1]).href) {
   const nav = await abrirNavegador();
   const g = novoGrupo('Telas da 2.17');
-  try { await testarNivelNaTela217(nav, g); } finally { await nav.fechar(); }
+  try {
+    const so = process.argv[2];
+    if (!so || so === 'nivel') await testarNivelNaTela217(nav, g);
+    if (!so || so === 'toast') await testarNotificacoes217(nav, g);
+  } finally { await nav.fechar(); }
   resumo([g]);
 }

@@ -15,7 +15,7 @@
       if (cfg.escritorio && Date.now() >= cfg.escritorio.ate) {
         cfg.escritorio = null; salvarCfg();
         if (modalAberto()) fecharModalAtual();
-        pilha = [telaInicial()]; render(true); toast('Ficou 10 minutos sem mexer: entre de novo com a senha');
+        pilha = [telaInicial()]; render(true); toast('Ficou 10 minutos sem mexer: entre de novo com a senha', 'aviso');
       }
       return;
     }
