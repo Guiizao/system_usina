@@ -25,7 +25,7 @@
     const lista = setores();
     const todos = lista.flatMap((s) => s.pranchetas.flatMap(folhasDe).flatMap((pid) => listar(data, pid)));
     const pend = data === hoje ? lista.flatMap((s) => s.pranchetas.map((pid) => resumoPrancheta(pid, data))).filter((r) => r.estado === 'pendente').length : 0;
-    const ligados = st ? st.aparelhos.filter((a) => a.online).length : 0;
+    const ligados = aparelhosDoPainel().filter((a) => a.online).length;
     const subtitulo = cfg.demo ? 'Demonstração, dados só neste aparelho'
       : cfg.soNuvem ? (sync.nuvemEm ? `Pela nuvem · atualizado às ${new Date(sync.nuvemEm).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}` : 'Pela nuvem')
       : sync.modo === 'online' ? (centralNoTablet() ? 'Servidor ligado neste aparelho' : 'Acompanhando a central em tempo real') : 'Procurando o servidor';
@@ -42,7 +42,8 @@
           <div class="numeros">
             <div><b>${todos.length}</b><span>anotações</span></div>
             <div class="${pend ? 'atencao' : ''}"><b>${pend}</b><span>pendências</span></div>
-            ${cfg.soNuvem ? '' : `<button class="numero-botao" data-a="aparelhos"><b>${cfg.demo && !st ? '-' : ligados}</b><span>aparelhos ligados</span></button>`}
+            ${cfg.soNuvem ? `<div data-num="ligados"><b>${sync.aparelhosNuvem ? ligados : '-'}</b><span>aparelhos ligados</span></div>`
+              : `<button class="numero-botao" data-num="ligados" data-a="aparelhos"><b>${cfg.demo && !st ? '-' : ligados}</b><span>aparelhos ligados</span></button>`}
           </div>
         </div>
 
@@ -85,6 +86,7 @@
               </div>
             </section>` : ''}
             ${blocoAparelhosAgora()}
+            ${comMenuPc() ? blocoUltimasAnotacoes(todos) : ''}
             ${blocoIrPara()}
             ${cfg.demo || pode('conexao') ? `<section class="bloco conectar">
               <h2>Conectar um tablet</h2>
@@ -125,15 +127,37 @@
         <strong>${num(l.total)} <small>${esc(l.unidade)}</small></strong></div>`).join('') : '<p class="sub">Nada somado ainda neste dia.</p>'}
     </section>`;
   }
+  /** Os aparelhos da usina: da central (na rede) ou, pelo PC, da lista que a central manda para a nuvem (2.17).
+      Pela nuvem, ligado = falou com a central até 2 min antes do último envio; sem envio há 5 min, ninguém aparece ligado. */
+  const SEM_SINAL_DA_CENTRAL_MS = 5 * 60000;
+  function aparelhosDoPainel() {
+    if (!cfg.soNuvem) return (sync.status && sync.status.aparelhos) || [];
+    const em = sync.aparelhosNuvemEm || 0, semSinal = Date.now() - em > SEM_SINAL_DA_CENTRAL_MS;
+    return (sync.aparelhosNuvem || []).map((a) => Object.assign({}, a, {
+      online: !semSinal && a.vistoEm > 0 && em - a.vistoEm < 2 * 60000,
+      minutos: a.vistoEm > 0 ? Math.max(0, Math.round((Date.now() - a.vistoEm) / 60000)) : null,
+    }));
+  }
   /** Quem está trabalhando agora: cada aparelho, quem usa e se está ligado (a visão geral do escritório). */
   function blocoAparelhosAgora() {
-    const lista = ((sync.status && sync.status.aparelhos) || []).slice().sort((a, b) => Number(!!b.online) - Number(!!a.online));
+    const lista = aparelhosDoPainel().slice().sort((a, b) => Number(!!b.online) - Number(!!a.online));
     if (!lista.length) return '';
-    return `<section class="bloco aparelhos-agora"><div class="titulo-secao"><h2>Aparelhos agora</h2><button class="btn pequeno" data-a="aparelhos">Ver todos</button></div>
+    const em = sync.aparelhosNuvemEm || 0;
+    const aviso = cfg.soNuvem && Date.now() - em > SEM_SINAL_DA_CENTRAL_MS
+      ? `<p class="sub aviso-sinal">${ico('alerta')} A usina está sem sinal da central desde ${new Date(em).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}.</p>` : '';
+    return `<section class="bloco aparelhos-agora"><div class="titulo-secao"><h2>Aparelhos agora</h2>${cfg.soNuvem ? '' : '<button class="btn pequeno" data-a="aparelhos">Ver todos</button>'}</div>${aviso}
       ${lista.slice(0, 8).map((a) => `<div class="agora-linha"><span class="conexao ${a.bloqueio ? 'off' : a.online ? 'ok' : 'off'}"><i></i></span>
         <span><b>${esc(funcaoDoAparelho(a))}</b><small>${esc(quemUsa(a))} · ${esc(situacaoDoAparelho(a))}</small></span></div>`).join('')}
       ${lista.length > 8 ? `<p class="sub">E mais ${lista.length - 8}.</p>` : ''}
     </section>`;
+  }
+  /** 2.17 (PC): as anotações mais recentes do dia, a mais nova primeiro: hora, quem e a folha. */
+  function blocoUltimasAnotacoes(todos) {
+    const ultimas = todos.filter((r) => !r.apagado).sort((a, b) => b.atualizadoEm - a.atualizadoEm).slice(0, 8);
+    if (!ultimas.length) return '';
+    return `<section class="bloco ultimas-anotacoes"><h2>Últimas anotações</h2><ul>${ultimas.map((r) => `<li>
+      <span class="hora">${new Date(r.atualizadoEm).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</span>
+      <span><b>${esc(r.operador || 'Sem nome')}</b><small>${esc((prancheta(r.prancheta) || {}).nome || r.prancheta)}</small></span></li>`).join('')}</ul></section>`;
   }
   /** Atalhos para as outras telas, só os que a pessoa pode usar. */
   function blocoIrPara() {

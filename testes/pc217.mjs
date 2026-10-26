@@ -118,6 +118,63 @@ export async function testarEntrarPC217(nav, g) {
   }
 }
 
+/** Task 5: painel do PC pela nuvem com os aparelhos ao vivo, as últimas anotações e o Escritório (só ver). */
+export async function testarPainelPC217(nav, g) {
+  fs.mkdirSync(FOTOS, { recursive: true });
+  const n = await ligarNuvemSQLite(8372, SEGREDO, 'leitura-ficticia-pc217b');
+  const c = await centralNode(8373, pastaTemporaria('pc217-painel'));
+  const pc = await nav.novoAparelho('pc', TAMANHOS.pcGrande);
+  try {
+    const agora = Date.now();
+    const dia = new Date(agora - 10 * 3600000).toISOString().slice(0, 10); // dia de produção: fuso -3 e a virada às 07:00
+    const reg = (prancheta, chave, operador, valores, min) => ({ id: `${dia}|${prancheta}|${chave}`, data: dia, prancheta, chave: String(chave), operador, valores, atualizadoEm: agora - min * 60000, seq: 0 });
+    const regs = [reg('hid_anexo1', 1, 'Felipe', { brix: '18', inicio: '08:00' }, 30), reg('caldeira', 8, 'José', { pressao: '6' }, 20), reg('ins_cal', 9, 'Felipe', { qtd: '2' }, 10)].map((r, i) => ({ ...r, seq: i + 1 }));
+    const aparelhos = [
+      { id: 'tab-hid', nome: 'Tablet da Hidrólise', papel: 'hidrolise', setor: 'hidrolise', operador: 'Felipe', pessoa: '', versao: '2.17.0', vistoEm: agora - 20000 },
+      { id: 'tab-cal', nome: 'Tablet da Caldeira', papel: 'caldeira', setor: 'caldeira', operador: '', pessoa: '', versao: '2.16.1', vistoEm: agora - 10 * 60000 },
+    ];
+    igual((await n.pedir('/central/enviar', { senha: SEGREDO, corpo: { geracao: 'pc217b', registros: regs, pessoas: PESSOAS, aparelhos } })).status, 200);
+    await pc.antesDeAbrir(cfgInicial(n.url));
+    await pc.ir(c.url + '/?nuvem=1');
+    await pc.esperar('!!document.querySelector("#nuvem-nome option[value=lucas]")', 15000, 'nomes');
+    await pc.avaliar(`(() => { document.getElementById('nuvem-nome').value = 'lucas'; document.getElementById('nuvem-senha').value = '2468'; return 1; })()`);
+    await pc.tocar('.entrar-cartao button[type=submit]');
+    await pc.esperar('!!document.querySelector(".menu-pc") && Object.values(registros).some((r) => r.prancheta === "caldeira")', 20000, 'painel com as anotações');
+    await teste(g, 'aparelhos ao vivo pela nuvem: um verde (Felipe na Hidrólise) e um cinza; número de ligados no alto', async () => {
+      await pc.esperar('document.querySelectorAll(".aparelhos-agora .agora-linha").length === 2', 15000, 'aparelhos agora');
+      igual(await pc.avaliar('document.querySelectorAll(".aparelhos-agora .conexao.ok").length'), 1);
+      certo(/Felipe/.test(await pc.avaliar('document.querySelector(".aparelhos-agora").innerText')), 'quem opera');
+      igual(await pc.avaliar('document.querySelector("[data-num=ligados] b").textContent'), '1');
+      await pc.foto(path.join(FOTOS, 'painel-pc.png'));
+    });
+    await teste(g, 'últimas anotações do dia: quem, folha e hora, a mais nova primeiro', async () => {
+      const linhas = await pc.avaliar('[...document.querySelectorAll(".ultimas-anotacoes li")].map((l) => l.innerText.replace(/\\s+/g, " "))');
+      certo(linhas.length === 3, 'três anotações: ' + JSON.stringify(linhas));
+      certo(/Felipe/.test(linhas[0]) && /Cal/i.test(linhas[0]), 'a mais nova (cal do Felipe) primeiro: ' + linhas[0]);
+    });
+    await teste(g, 'central sem mandar a lista há mais de 5 min: "sem sinal da central"', async () => {
+      n.consultar(`UPDATE info SET valor = '${agora - 6 * 60000}' WHERE chave = 'aparelhosEm' RETURNING chave`);
+      await pc.avaliar('(() => { sync.nuvemEm = 0; sincronizarNuvem(); return 1; })()');
+      await pc.esperar('document.querySelector(".aparelhos-agora") && document.querySelector(".aparelhos-agora").innerText.includes("sem sinal da central")', 15000, 'sem sinal');
+      igual(await pc.avaliar('document.querySelectorAll(".aparelhos-agora .conexao.ok").length'), 0, 'ninguém verde sem sinal');
+    });
+    await teste(g, 'Escritório pela nuvem: Cálculos e Rastreamento abrem direto, sem Salvar, e Enviar abre os formatos', async () => {
+      await pc.tocar('[data-a="esc-abrir"][data-t="esc-calculos"]');
+      await pc.esperar('document.body.innerText.includes("Hidrolisado e vinho")', 10000, 'cálculos');
+      certo(!(await pc.avaliar('!!document.querySelector("[data-a=esc-salvar], [data-a=esc-entrar]")')), 'cálculos sem salvar nem pedir senha');
+      await pc.tocar('[data-a="voltar"]');
+      await pc.tocar('[data-a="esc-abrir"][data-t="esc-rastreamento"]');
+      await pc.esperar('document.body.innerText.includes("Insumos utilizados")', 10000, 'rastreamento');
+      certo(!(await pc.avaliar('!!document.querySelector("[data-a=esc-salvar], [data-a=esc-entrar]")')), 'rastreamento sem salvar');
+      await pc.foto(path.join(FOTOS, 'escritorio-pc.png'));
+      await pc.tocar('[data-a="esc-arquivo"]');
+      await pc.esperar('!!document.querySelector(".modal")', 8000, 'enviar');
+      await pc.tocar('.modal [data-k="x"]').catch(() => {});
+    });
+    certo(!pc.erros.length, pc.erros.join(' | '));
+  } finally { await pc.fechar().catch(() => {}); await c.desligar(); await n.desligar(); }
+}
+
 /** Task 7: notificação rápida com ×, ícone por tipo e tempo na tela. */
 export async function testarNotificacoes217(nav, g) {
   const c = await centralNode(8367, pastaTemporaria('pc217-toast'));
@@ -171,6 +228,7 @@ if (import.meta.url === pathToFileURL(process.argv[1]).href) {
     if (!so || so === 'nivel') await testarNivelNaTela217(nav, g);
     if (!so || so === 'toast') await testarNotificacoes217(nav, g);
     if (!so || so === 'entrar') await testarEntrarPC217(nav, g);
+    if (!so || so === 'painel') await testarPainelPC217(nav, g);
   } finally { await nav.fechar(); }
   resumo([g]);
 }

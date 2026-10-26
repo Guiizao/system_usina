@@ -63,6 +63,14 @@
 /* computador (2.15): a tela grande mostra mais coisa, quase de ponta a ponta */
 :root[data-pc="1"] main.painel-chefe, :root[data-pc="1"] main:not([class]) { max-width: 1880px; }
 :root[data-pc="1"] main.graficos { max-width: 1880px; }
+/* 2.17 (PC): últimas anotações do dia e o aviso de sem sinal da central (pela nuvem) */
+.ultimas-anotacoes ul { list-style: none; margin: 0; padding: 0; display: grid; }
+.ultimas-anotacoes li { display: flex; align-items: center; gap: 12px; padding: 8px 0; border-top: 1px solid var(--linha-clara); }
+.ultimas-anotacoes li:first-child { border-top: 0; }
+.ultimas-anotacoes .hora { flex: none; font-weight: 700; font-variant-numeric: tabular-nums; color: var(--tinta-2); }
+.ultimas-anotacoes li > span:last-child { display: grid; min-width: 0; }
+.ultimas-anotacoes small { color: var(--tinta-2); }
+.aviso-sinal { display: flex; align-items: center; gap: 8px; color: var(--ambar-texto); font-weight: 700; }
 .grade-acoes { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-top: 10px; }
 .grade-acoes button {
   display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; min-height: 78px; padding: 6px;

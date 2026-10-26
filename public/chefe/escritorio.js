@@ -97,7 +97,10 @@
       <span class="num-esc">${val === '' || val == null ? '—' : esc(numBr(val))}${unidade && val !== '' ? ` <small>${esc(unidade)}</small>` : ''}</span>
       <button class="btn pequeno" data-a="esc-campo" data-c="${c}" data-r="${esc(rotulo)}">Mudar</button></div>`;
   }
-  const atalhosEsc = (v, extra = '') => `<button class="atalho ${v.sujo ? 'destaque' : ''}" data-a="esc-salvar">${ico('certo')}<span>Salvar</span></button>${extra}`;
+  // 2.17: pela nuvem é só ver: dá para mudar os números para enviar ou imprimir, mas salvar é no tablet chefe
+  const atalhosEsc = (v, extra = '') => (cfg.soNuvem ? '' : `<button class="atalho ${v.sujo ? 'destaque' : ''}" data-a="esc-salvar">${ico('certo')}<span>Salvar</span></button>`) + extra;
+  const botaoSalvarEsc = () => (cfg.soNuvem ? '</div><p class="sub">Pela nuvem: dá para mudar os números e enviar ou imprimir; salvar é no tablet chefe.</p>'
+    : `<button class="btn primario" data-a="esc-salvar">${ico('certo')} Salvar</button></div>`);
   function telaEscCalculos(v) {
     const x = valoresDaTela(v);
     return `${cabecalho('Cálculos da produção', `Lote ${x.lote} · ${fmtData(x.fechamento)} 07:00`, true, atalhosEsc(v))}
@@ -113,7 +116,7 @@
           ${linhaEsc(x, 'alcool.producao', 'Produção de álcool', 'L', true)}${linhaEsc(x, 'volumeDestilado', 'Volume destilado', 'L')}
           ${linhaEsc(x, 'vinhaca.producao', 'Produção de vinhaça', 'L', true)}</section>
         <div class="linha-botoes"><button class="btn" data-a="esc-recalcular">${ico('relogio')} Refazer com as anotações de agora</button>
-          <button class="btn primario" data-a="esc-salvar">${ico('certo')} Salvar</button></div>
+          ${botaoSalvarEsc()}
       </main>`;
   }
   /** Célula da folha: mostra o valor e abre para mudar. */
@@ -159,7 +162,7 @@
           <button class="btn" data-a="esc-arquivo">${ico('enviar')} Enviar (PDF, Excel ou XML)</button>
           <button class="btn" data-a="esc-folha">${ico('imprimir')} Imprimir a folha</button>
           <button class="btn" data-a="esc-etiqueta">${ico('documento')} Etiqueta das bombonas</button>
-          <button class="btn primario" data-a="esc-salvar">${ico('certo')} Salvar</button></div>
+          ${botaoSalvarEsc()}
       </main>`;
   }
   /** Muda um campo: número com vírgula, data no calendário, ou texto. */

@@ -269,6 +269,11 @@
         if (!r.ok) return; // 409: a nuvem é de outra central (zerada ou trocada); espera falar com a central
         const d = await r.json();
         if (cfg.nuvemToken !== token || cfg.nuvemUrl !== url) return;
+        // 2.17: quem entrou pela nuvem recebe a lista dos aparelhos da usina (o painel do PC mostra quem está ligado)
+        if (Array.isArray(d.aparelhos)) {
+          const j = JSON.stringify([d.aparelhos, d.aparelhosEm]);
+          if (j !== sync.aparelhosNuvemJson) { sync.aparelhosNuvemJson = j; sync.aparelhosNuvem = d.aparelhos; sync.aparelhosNuvemEm = Number(d.aparelhosEm) || 0; mudou = true; }
+        }
         versaoNaSincronizacao(d.telas); // 2.16: sem a central, quem avisa da versão nova é a nuvem
         lista.forEach((x) => { const local = registros[x.id]; if (local && local.atualizadoEm === x.atualizadoEm) local.naNuvem = x.atualizadoEm; });
         for (const rec of d.registros || []) {
