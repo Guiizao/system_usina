@@ -6,6 +6,7 @@
  * Daqui sai a API só de leitura para o sistema do escritório (a mesma da central) e as atualizações do aplicativo.
  * Sem a central, os aparelhos trocam pendências pela nuvem; a central confere quando volta.
  *
+ *   GET  /aparelho/pessoas   nomes de quem pode entrar pela nuvem   (sem token)
  *   POST /aparelho/entrar    senha pessoal libera leitura remota    (sem token)
  *   POST /aparelho/sync      os aparelhos enviam e puxam anotações   (X-Aparelho + Bearer HMAC)
  *   POST /central/enviar     a central manda as anotações novas      (Authorization: Bearer <SEGREDO_CENTRAL>)
@@ -68,6 +69,14 @@ const tokenDoAparelho = (segredo, aparelho) => assinar(segredo, 'aparelho|' + ap
    ou tirar Relatórios e Escritório tira o acesso; e ela nunca vale como a chave de um tablet (mesmo com o número dele). */
 const FUNCOES_NA_NUVEM = ['relatorios', 'escritorio'];
 const veNaNuvem = (p) => !!(p && p.nuvem && p.nuvem.selado && Array.isArray(p.funcoes) && p.funcoes.some((f) => FUNCOES_NA_NUVEM.includes(f)));
+async function pessoasDaNuvem(req, env) {
+  if (req.method !== 'GET') return responder(405, { erro: 'Use GET' });
+  // conferência ainda sem selo (chegou na 2.16.0) também aparece: ela é selada na primeira entrada
+  const { results } = await env.DB.prepare("SELECT json FROM pessoas WHERE json_extract(json, '$.nuvem') IS NOT NULL").all();
+  const pessoas = results.map((r) => JSON.parse(r.json)).filter((p) => veNaNuvem(p) || (p.nuvem.verificador && veNaNuvem({ ...p, nuvem: { selado: 1 } })))
+    .map(({ id, nome }) => ({ id, nome })).sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR') || a.id.localeCompare(b.id));
+  return responder(200, { pessoas });
+}
 const tokenDeLeitura = (segredo, aparelho, p) => assinar(segredo, `leitura|${aparelho}|${p.id}|${p.nuvem.selado}`);
 // a conferência da senha fica selada com o segredo da central (que não está no banco): o banco sozinho não revela o PIN
 const selar = (segredo, verificador) => assinar(segredo, 'senha|' + verificador);
@@ -96,16 +105,17 @@ async function entrar(req, env) {
   if (req.method !== 'POST') return responder(405, { erro: 'Use POST' });
   let corpo;
   try { corpo = await corpoFila(req, 1024); } catch (status) { return responder(status === 413 ? 413 : 400, { erro: status === 413 ? 'Máximo de 1 KB por entrada' : 'JSON inválido' }); }
-  const { aparelho, pin } = corpo;
-  if (!idAparelho(aparelho) || typeof pin !== 'string' || !/^\d{4,8}$/.test(pin)) return responder(400, { erro: 'Aparelho ou senha inválidos' });
+  const { aparelho, pin, pessoa: pessoaId } = corpo;
+  if (!idAparelho(aparelho) || typeof pin !== 'string' || !/^\d{4,8}$/.test(pin)
+    || (pessoaId !== undefined && !idAparelho(pessoaId))) return responder(400, { erro: 'Aparelho, pessoa ou senha inválidos' });
   if (!env.SEGREDO_CENTRAL) return responder(503, { erro: 'Nuvem não configurada' });
   if (await env.DB.prepare('SELECT id FROM bloqueios WHERE id = ?').bind(aparelho).first()) return responder(423, { erro: 'bloqueado' });
   // CF-Connecting-IP é preenchido pela Cloudflare, nunca X-Forwarded-For do cliente.
   // IP primeiro: um IP já bloqueado não consegue criar linhas para milhares de aparelhos inventados.
   const agora = Date.now(), geral = 'todos:' + Math.floor(agora / 3600000);
-  const chaves = ['ip:' + (req.headers.get('CF-Connecting-IP') || 'sem-ip'), 'aparelho:' + aparelho, geral];
+  const chaves = ['ip:' + (req.headers.get('CF-Connecting-IP') || 'sem-ip'), 'aparelho:' + aparelho, ...(pessoaId !== undefined ? ['pessoa:' + pessoaId] : []), geral];
   for (let i = 0; i < chaves.length; i++) {
-    const ok = i < 2 ? await reservarTentativa(env, chaves[i], agora) : await reservarTentativa(env, geral, agora, LIMITE_GERAL_POR_HORA, [3600000, 3600000]);
+    const ok = chaves[i] === geral ? await reservarTentativa(env, geral, agora, LIMITE_GERAL_POR_HORA, [3600000, 3600000]) : await reservarTentativa(env, chaves[i], agora);
     if (!ok) {
       for (const c of chaves.slice(0, i)) await devolverTentativa(env, c).run();
       return responder(429, { erro: 'Muitas tentativas. Aguarde o desbloqueio.' });
@@ -113,7 +123,10 @@ async function entrar(req, env) {
   }
   const enc = new TextEncoder();
   const chave = await crypto.subtle.importKey('raw', enc.encode(pin), 'PBKDF2', false, ['deriveBits']);
-  const { results } = await env.DB.prepare("SELECT json FROM pessoas WHERE json_extract(json, '$.nuvem') IS NOT NULL").all();
+  const consulta = pessoaId === undefined
+    ? env.DB.prepare("SELECT json FROM pessoas WHERE json_extract(json, '$.nuvem') IS NOT NULL")
+    : env.DB.prepare("SELECT json FROM pessoas WHERE id = ? AND json_extract(json, '$.nuvem') IS NOT NULL").bind(pessoaId);
+  const { results } = await consulta.all();
   const lista = results.map((l) => JSON.parse(l.json));
   // conferência que chegou antes de ser selada (a 2.16 do dia 21/10): sela agora e não guarda mais a outra
   const antigas = lista.filter((p) => p.nuvem.verificador && !p.nuvem.selado);
@@ -205,7 +218,7 @@ async function fila(req, env, confirmar, sync = false) {
     if (corpo.geracao && acesso.geracao && corpo.geracao !== acesso.geracao) return responder(409, { geracao: acesso.geracao });
   }
   if (lista.length && !leitor) await gravarPendentes(env, aparelho, corpo.geracao || '', lista);
-  if (sync) return puxarAparelho(env, aparelho, corpo, recusados);
+  if (sync) return puxarAparelho(env, aparelho, corpo, recusados, !!leitor);
   return responder(200, { ok: true, recebidos: leitor ? 0 : lista.length, recusados });
 }
 
@@ -238,8 +251,14 @@ async function telasPublicadas(env) {
   } catch { return null; } // um pacote ausente não interrompe a sincronização
 }
 /** Dois cursores independentes: só avançam sobre os itens efetivamente entregues. */
-async function puxarAparelho(env, aparelho, corpo, recusados = []) {
+async function puxarAparelho(env, aparelho, corpo, recusados = [], leitor = false) {
   const resposta = { registros: [], recusados, seq: corpo.desdeSeq || 0, ordem: corpo.desdeOrdem || 0, mais: false, telas: await telasPublicadas(env) };
+  if (leitor) {
+    const { results } = await env.DB.prepare("SELECT chave, valor FROM info WHERE chave IN ('aparelhos', 'aparelhosEm')").all();
+    const info = Object.fromEntries(results.map((r) => [r.chave, r.valor]));
+    resposta.aparelhos = JSON.parse(info.aparelhos || '[]');
+    resposta.aparelhosEm = Number(info.aparelhosEm) || 0;
+  }
   const { results } = await env.DB.prepare(`SELECT json, seq AS cursor, 0 AS fonte FROM
       (SELECT json, seq FROM registros WHERE seq > ? AND data >= ? ORDER BY seq LIMIT 501)
     UNION ALL SELECT json, ordem AS cursor, 1 AS fonte FROM
@@ -265,11 +284,20 @@ async function puxarAparelho(env, aparelho, corpo, recusados = []) {
 }
 
 /* ---------- a central manda as anotações ---------- */
+const TEXTOS_APARELHO = ['id', 'nome', 'papel', 'setor', 'operador', 'pessoa', 'versao'];
+function aparelhosValidos(lista) {
+  return Array.isArray(lista) && lista.length <= 200 && lista.every((a) => a && typeof a === 'object' && !Array.isArray(a)
+    && idAparelho(a.id) && TEXTOS_APARELHO.every((k) => typeof a[k] === 'string' && a[k].length <= 80)
+    && Number.isSafeInteger(a.vistoEm) && a.vistoEm >= 0
+    && Object.keys(a).every((k) => k === 'vistoEm' || TEXTOS_APARELHO.includes(k)));
+}
 async function receber(req, env) {
   let corpo;
   try { corpo = await req.json(); } catch (e) { return responder(400, { erro: 'JSON inválido' }); }
+  if (!corpo || typeof corpo !== 'object' || Array.isArray(corpo)) return responder(400, { erro: 'JSON inválido' });
   const lista = Array.isArray(corpo.registros) ? corpo.registros : null;
   if (!lista || lista.length > MAX_POR_ENVIO) return responder(400, { erro: `mande de 0 a ${MAX_POR_ENVIO} anotações por vez` });
+  if ('aparelhos' in corpo && !aparelhosValidos(corpo.aparelhos)) return responder(400, { erro: 'Lista de aparelhos inválida (máximo 200, textos até 80 caracteres)' });
   // Dias de produção para os aparelhos, incluindo avisos; a API do escritório continua filtrando os internos.
   const regs = lista.filter((r) => r && typeof r.id === 'string' && leitura.ehDia(r.data) && r.prancheta !== 'registro' && Number.isFinite(Number(r.seq)));
   // aparelhos bloqueados: a central manda a lista inteira quando ela muda (vazia = ninguém bloqueado).
@@ -307,8 +335,10 @@ async function receber(req, env) {
   // a central foi zerada (Apagar todos os dados do sistema) ou é outra central: a cópia começa de novo
   if (geracao && info.geracao && geracao !== info.geracao) {
     consultas.push(env.DB.prepare('DELETE FROM registros'), env.DB.prepare('DELETE FROM dias'), env.DB.prepare('DELETE FROM pessoas'));
+    consultas.push(env.DB.prepare("DELETE FROM info WHERE chave IN ('aparelhos', 'aparelhosEm')"));
   }
   const novasInfo = { geracao, ultimoEnvio: String(Date.now()) };
+  if ('aparelhos' in corpo) { novasInfo.aparelhos = JSON.stringify(corpo.aparelhos); novasInfo.aparelhosEm = novasInfo.ultimoEnvio; }
   if (corpo.forms && typeof corpo.forms === 'object') {
     // senha não fica na nuvem (as centrais até a 2.10 mandavam o forms.js inteiro, com a pinAdmin)
     const forms = Object.assign({}, corpo.forms);
@@ -411,6 +441,7 @@ export default {
       if (p === '/' || p === '') {
         return new Response('Nuvem das Pranchetas Digitais da Ubirálcool: no ar.\n', { headers: { 'Content-Type': 'text/plain; charset=utf-8' } });
       }
+      if (p === '/aparelho/pessoas') return await pessoasDaNuvem(req, env);
       if (p === '/aparelho/entrar') return await entrar(req, env);
       if (p === '/aparelho/sync') return await fila(req, env, false, true);
       if (p === '/fila' || p === '/fila/confirmar') return await fila(req, env, p === '/fila/confirmar');

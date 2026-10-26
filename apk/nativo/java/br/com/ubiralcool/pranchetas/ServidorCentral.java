@@ -2081,6 +2081,22 @@ public class ServidorCentral {
           JSONArray regs = new JSONArray();
           for (JSONObject r : lote) regs.put(r);
           JSONObject corpo = new JSONObject().put("geracao", getGeracao()).put("medidas", medidas).put("registros", regs);
+          // Só uma foto por minuto, inclusive entre lotes, envios antecipados e reinícios.
+          synchronized (this) {
+            if (vez == 0 && System.currentTimeMillis() - n.optLong("aparelhosEnviadosEm") >= 60000L) {
+              JSONArray lista = listaDeAparelhos(), foto = new JSONArray();
+              for (int i = 0; i < Math.min(200, lista.length()); i++) {
+                JSONObject a = lista.getJSONObject(i), copia = new JSONObject().put("vistoEm", a.optLong("vistoEm"));
+                for (String campo : new String[] { "id", "nome", "papel", "setor", "operador", "pessoa", "versao" }) {
+                  String texto = a.optString(campo);
+                  copia.put(campo, texto.length() > 80 ? texto.substring(0, 80) : texto);
+                }
+                foto.put(copia);
+              }
+              corpo.put("aparelhos", foto);
+              n.put("aparelhosEnviadosEm", System.currentTimeMillis());
+            }
+          }
           if (formsMudou) corpo.put("forms", forms);
           if (!pessoasHash.equals(n.optString("pessoasHash"))) corpo.put("pessoas", pessoas);
           // com a revisão: o aparelho só aceita a resposta da nuvem se ela for mais nova que o bloqueio que ele já tem
@@ -3177,7 +3193,8 @@ public class ServidorCentral {
       String ip = a != null && !a.optString("ip").isEmpty() ? a.optString("ip") : v.optString("ip");
       String versao = a != null && !a.optString("versao").isEmpty() ? a.optString("versao") : v.optString("versao");
       lista.add(new JSONObject()
-          .put("id", id).put("papel", papel).put("operador", a != null ? a.optString("operador") : "").put("ip", ip).put("versao", versao)
+          .put("id", id).put("papel", papel).put("setor", "central".equals(papel) ? "" : papel).put("vistoEm", visto)
+          .put("operador", a != null ? a.optString("operador") : "").put("ip", ip).put("versao", versao)
           .put("nome", nomeDoAparelho(id)).put("pessoa", pessoa != null ? pessoa.optString("nome") : "").put("teto", tetoDoAparelho(id))
           .put("info", info != null ? info : JSONObject.NULL).put("desde", v.has("desde") ? (Object) v.optLong("desde") : JSONObject.NULL)
           .put("online", a != null && agora - visto < 30000)
