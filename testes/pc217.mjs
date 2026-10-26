@@ -175,6 +175,55 @@ export async function testarPainelPC217(nav, g) {
   } finally { await pc.fechar().catch(() => {}); await c.desligar(); await n.desligar(); }
 }
 
+/** Task 6: logo do U na interface (a folha impressa continua com a logo completa) e a abertura do programa do Windows. */
+export async function testarLogoEAbertura217(nav, g) {
+  fs.mkdirSync(FOTOS, { recursive: true });
+  const c = await centralNode(8374, pastaTemporaria('pc217-logo'));
+  const aparelhos = [];
+  const UA_ELECTRON = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) PranchetasUbiralcool/2.17.0 Chrome/140.0 Electron/44.5.1 Safari/537.36';
+  try {
+    await teste(g, 'ícones gerados do U: 192 e 512 px; a logo da interface é o logo-u.svg', async () => {
+      for (const t of [192, 512]) {
+        const b = fs.readFileSync(path.join(APP, 'public', 'icons', `icon-${t}.png`));
+        igual([b.readUInt32BE(16), b.readUInt32BE(20)], [t, t]);
+      }
+      certo(/<svg[^>]+viewBox="0 0 100 100"/.test(fs.readFileSync(path.join(APP, 'public', 'icons', 'logo-u.svg'), 'utf8')), 'svg');
+    });
+    const tab = await nav.novoAparelho('tablet', TAMANHOS.tablet); aparelhos.push(tab);
+    await teste(g, 'tablet: topo com o U e sem abertura; a folha impressa continua com a logo completa', async () => {
+      await tab.ir(c.url + '/?demo&papel=central', 'typeof render === "function"');
+      await dormir(400);
+      certo((await tab.avaliar('document.querySelector(".topo img.logo").getAttribute("src")')).endsWith('logo-u.svg'), 'topo');
+      certo(await tab.avaliar('document.getElementById("abertura").hidden'), 'sem abertura no tablet');
+      certo(fs.readFileSync(path.join(APP, 'public', 'chefe', 'exportar.js'), 'utf8').includes("'icons/logo.png'"), 'documento impresso com a logo da empresa');
+    });
+    const pc = await nav.novoAparelho('windows', TAMANHOS.pcGrande); aparelhos.push(pc);
+    await nav.cdp('Emulation.setUserAgentOverride', { userAgent: UA_ELECTRON }, pc.sessionId);
+    await teste(g, 'programa do Windows: a abertura aparece, o U se monta e some sozinha em até 1,8 s', async () => {
+      await pc.ir(c.url + '/?nuvem=1', '!!document.getElementById("abertura") && !document.getElementById("abertura").hidden');
+      for (const ms of [300, 800]) { await dormir(ms === 300 ? 150 : 500); await pc.foto(path.join(FOTOS, `abertura-${ms}ms.png`)); }
+      certo((await pc.avaliar('getComputedStyle(document.querySelector("#abertura img")).animationName')).includes('aberturaLogo'), 'o U anima');
+      await pc.esperar('document.getElementById("abertura").hidden', 1800, 'abertura sumiu');
+      certo((await pc.avaliar('document.querySelector(".entrar-cartao img.entrar-logo").getAttribute("src")')).endsWith('logo-u.svg'), 'logo na tela de entrar');
+      await pc.foto(path.join(FOTOS, 'abertura-depois.png'));
+      await pc.recarregar();
+      await dormir(300);
+      certo(await pc.avaliar('document.getElementById("abertura").hidden'), 'recarregar (ex.: depois de uma queda) não repete a abertura');
+    });
+    const calmo = await nav.novoAparelho('windows calmo', TAMANHOS.computador); aparelhos.push(calmo);
+    await nav.cdp('Emulation.setUserAgentOverride', { userAgent: UA_ELECTRON }, calmo.sessionId);
+    await nav.cdp('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-reduced-motion', value: 'reduce' }] }, calmo.sessionId);
+    await teste(g, 'menos movimento no Windows: a abertura some rápido', async () => {
+      await calmo.ir(c.url + '/?nuvem=1', '!!document.getElementById("abertura")');
+      await calmo.esperar('document.getElementById("abertura").hidden', 800, 'some em até 0,8 s');
+    });
+    for (const a of aparelhos) certo(!a.erros.length, a.erros.join(' | '));
+  } finally {
+    for (const a of aparelhos) await a.fechar().catch(() => {});
+    await c.desligar();
+  }
+}
+
 /** Task 7: notificação rápida com ×, ícone por tipo e tempo na tela. */
 export async function testarNotificacoes217(nav, g) {
   const c = await centralNode(8367, pastaTemporaria('pc217-toast'));
@@ -229,6 +278,7 @@ if (import.meta.url === pathToFileURL(process.argv[1]).href) {
     if (!so || so === 'toast') await testarNotificacoes217(nav, g);
     if (!so || so === 'entrar') await testarEntrarPC217(nav, g);
     if (!so || so === 'painel') await testarPainelPC217(nav, g);
+    if (!so || so === 'logo') await testarLogoEAbertura217(nav, g);
   } finally { await nav.fechar(); }
   resumo([g]);
 }

@@ -116,6 +116,16 @@
     }
   }
 
+  /** 2.17: abertura do programa do Windows, uma vez por vez que ele abre (recarregar depois de uma queda não repete):
+      o U da Ubirálcool se monta e o nome sobe (design/abertura.css). Não pega toque nenhum. */
+  function mostrarAbertura() {
+    if (!/Electron\//.test(navigator.userAgent)) return;
+    try { if (sessionStorage.getItem('abertura')) return; sessionStorage.setItem('abertura', '1'); } catch (e) { /* sem a memória da sessão: mostra */ }
+    const el = document.getElementById('abertura');
+    el.hidden = false;
+    setTimeout(() => { el.classList.add('saindo'); setTimeout(() => { el.hidden = true; }, 220); }, movimentoReduzido() ? 250 : 1250);
+  }
+
   aplicarTema();
   ajustarEscala();
   document.documentElement.toggleAttribute('data-cheia', !!cfg.telaCheia);
@@ -135,6 +145,7 @@
     pilha = [telaInicial()];
     if (cfg.papel && (cfg.chave || cfg.demo) && !ehCentral() && !ehEscritorio() && !operadorAtual()) pilha.push({ tela: 'operador' });
     render(true);
+    mostrarAbertura();
     lerInfoDoAparelho().finally(sincronizar);
     setTimeout(() => conferirNaNuvem(true), 4000);
     setTimeout(verificarAvisos, 800); // aviso que já estava guardado neste aparelho

@@ -4,7 +4,7 @@ const CACHE = 'pranchetas-v21';
 // 2.16: o aplicativo está em pastas. Os scripts vêm da lista do index.html e os estilos da lista do styles.css,
 // então arquivo novo entra sozinho aqui.
 const FIXOS = ['./', 'index.html', 'styles.css', 'manifest.webmanifest',
-  'icons/icon-192.png', 'icons/icon-512.png', 'icons/logo.png', 'fonts/atkinson-hyperlegible-400.woff2', 'fonts/atkinson-hyperlegible-700.woff2',
+  'icons/icon-192.png', 'icons/icon-512.png', 'icons/logo.png', 'icons/logo-u.svg', 'fonts/atkinson-hyperlegible-400.woff2', 'fonts/atkinson-hyperlegible-700.woff2',
   'fonts/atkinson-pdf-400.ttf', 'fonts/atkinson-pdf-700.ttf'];
 const listados = async (arquivo, padrao) => [...(await (await fetch(arquivo, { cache: 'no-store' })).text()).matchAll(padrao)].map((m) => m[1]);
 

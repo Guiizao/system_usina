@@ -19,7 +19,7 @@
     const abertos = veNoChefe('avisos') ? avisosEmAberto().length : 0;
     const quem = pessoaAtual();
     return `<nav class="menu-pc" aria-label="Menu do painel">
-      <div class="menu-marca"><img src="icons/logo.png" alt=""><div><b>Pranchetas</b><small>${cfg.soNuvem ? 'Painel pela nuvem' : 'Painel do escritório'}</small></div></div>
+      <div class="menu-marca"><img src="icons/logo-u.svg" alt=""><div><b>Pranchetas</b><small>${cfg.soNuvem ? 'Painel pela nuvem' : 'Painel do escritório'}</small></div></div>
       ${item('abrir-painel', 'casa', 'Visão geral', naTela('central'))}
       ${veNoChefe('corrigir') || veNoChefe('relatorios') ? `<p class="menu-titulo">Setores</p>
         ${setores().map((s) => item('abrir-setor', s.icone, esc(s.nome), setorAberto === s.id, `data-id="${s.id}"`)).join('')}` : ''}

@@ -40,7 +40,7 @@
     const vazio = nuvemForm.buscando ? 'Buscando os nomes…' : nuvemForm.erro || 'Ninguém entra pela nuvem ainda';
     return `${cabecalho('Pranchetas digitais', 'Painel pela nuvem', false)}
       <main class="tela-entrar-nuvem"><form class="entrar-cartao" data-form="nuvem-entrar">
-        <div class="entrar-topo"><img class="entrar-logo" src="icons/logo.png" alt="">
+        <div class="entrar-topo"><img class="entrar-logo" src="icons/logo-u.svg" alt="">
           <button type="button" class="btn pequeno" data-a="nuvem-servidor">${ico('servidor')} Servidor</button></div>
         <h1>Entrar</h1>
         <p class="sub">Painel da usina pela nuvem, com a mesma senha do tablet chefe.</p>
