@@ -8,6 +8,10 @@
 .form-pessoa { display: grid; gap: 10px; margin: 6px 0 8px; }
 .form-pessoa label { display: grid; gap: 4px; font-weight: 700; font-size: 17px; }
 .form-pessoa label small { font-weight: 400; color: var(--tinta-2); }
+/* 2.17: "Vale em" (aparelhos fixos da pessoa) */
+.vale-em { display: grid; gap: 8px; margin-top: 6px; }
+.vale-em > b { font-size: 18px; }
+.vale-em .sub { margin: 0; }
 .form-pessoa input { min-height: 48px; font-size: 19px; padding: 0 12px; border-radius: 10px; border: 2px solid var(--linha); background: var(--papel); color: var(--tinta); }
 .chips.funcoes { max-height: 34vh; overflow: auto; }
 .chips.funcoes .chip-liga { min-height: 42px; font-size: 15px; padding: 0 12px; text-align: left; }

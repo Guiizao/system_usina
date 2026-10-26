@@ -26,13 +26,19 @@
 #toast {
   position: fixed; z-index: 200; top: calc(env(safe-area-inset-top, 0px) + 10px); left: 12px; right: 12px; margin: 0 auto;
   width: fit-content; min-width: min(340px, calc(100% - 24px)); max-width: min(640px, calc(100% - 24px));
-  display: flex; align-items: center; gap: 14px; padding: 14px 22px 14px 14px; border-radius: 18px;
+  display: flex; align-items: center; gap: 14px; padding: 14px 10px 14px 14px; border-radius: 18px;
   background: var(--grafite); color: var(--branco); font-size: 21px; font-weight: 700; line-height: 1.3; text-align: left;
   box-shadow: 0 12px 32px var(--sombra-forte); animation: descer .22s ease-out;
 }
-#toast > svg.ico { flex: none; width: 42px; height: 42px; padding: 8px; border-radius: 50%; background: var(--verde); color: var(--branco); stroke-width: 2.6; }
-#toast.erro > svg.ico { background: var(--ambar); color: var(--ambar-tinta); }
-#toast > span { flex: 1; min-width: 0; overflow-wrap: break-word; }
+/* 2.17: ícone por tipo (certo, erro, atenção, informação) e o × para fechar */
+#toast > .toast-ico { flex: none; display: grid; place-items: center; width: 42px; height: 42px; border-radius: 50%; background: var(--verde); color: var(--branco); }
+#toast > .toast-ico svg.ico { width: 26px; height: 26px; stroke-width: 2.6; }
+#toast.erro > .toast-ico { background: var(--vermelho); }
+#toast.aviso > .toast-ico { background: var(--ambar); color: var(--ambar-tinta); }
+#toast.info > .toast-ico { background: var(--azul-registro); }
+#toast > .toast-texto { flex: 1; min-width: 0; overflow-wrap: break-word; }
+#toast > .toast-x { flex: none; display: grid; place-items: center; width: 44px; height: 44px; border-radius: 50%; color: inherit; opacity: .7; }
+#toast > .toast-x:hover { opacity: 1; }
 @keyframes descer { from { opacity: 0; transform: translateY(-16px); } to { opacity: 1; transform: none; } }
 @media (prefers-reduced-motion: reduce) { #toast { animation: none; } }
 

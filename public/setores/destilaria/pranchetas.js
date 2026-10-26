@@ -12,7 +12,9 @@ window.USINA.setores.push({
 Object.assign(window.USINA.pranchetas, {
     /* ---------------- FERMENTAÇÃO ---------------- */
     ins_lactrol: insumo('FERMENTAÇÃO - ANTIBIÓTICO LACTROL', 'Antibiótico Lactrol', ['mL', 'L']),
-    ins_ureia: insumo('URÉIA PECUÁRIA', 'Uréia Pecuária', ['kg', 'g']),
+    // 2.17: a uréia é medida em canecas (780 g cada, somadas em kg para o escritório). Linha nova começa em canecas
+    // (unidadeNova) e grava a unidade; anotação antiga sem unidade continua kg (unidade).
+    ins_ureia: Object.assign(insumo('URÉIA PECUÁRIA', 'Uréia Pecuária', ['canecas', 'kg', 'g']), { unidade: 'kg', unidadeNova: 'canecas' }),
 
     /* ---------------- DESTILARIA ---------------- */
     destilaria: {

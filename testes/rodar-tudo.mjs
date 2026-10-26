@@ -34,6 +34,8 @@ import { testarNuvem, temWrangler } from './nuvem.mjs';
 import { testarPessoas } from './pessoas.mjs';
 import { testarPedidos210 } from './pedidos210.mjs';
 import { testarAjustes2161 } from './ajustes2161.mjs';
+import { testarTotais217 } from './totais217.mjs';
+import { testarNivelNaTela217, testarNotificacoes217, testarEntrarPC217, testarPainelPC217, testarLogoEAbertura217 } from './pc217.mjs';
 import { testarSeguranca } from './seguranca.mjs';
 import { testarPedidos211 } from './pedidos211.mjs';
 import { testarNiveis } from './niveis212.mjs';
@@ -199,6 +201,8 @@ try {
     await testarAjustes2161(nav, ligar, porta, g);
     grupos.push(g);
   }
+  // 4j3. versão 2.17: o escritório vê a cal e a uréia em kg; o operário continua em copos e canecas
+  { const g = novoGrupo('Escritório em kg (2.17)'); await testarTotais217(g); grupos.push(g); }
   // 4k. versão 2.11: aparelhos (quem usa, nome no Android, modelo, endereço) e bloqueio, direto na central e no aplicativo
   for (const [nome, ligar, porta] of [['computador', (p, d, x) => centralNode(p, d, undefined, x), 8253], ['tablet chefe', centralJava, 8254]]) {
     const g = novoGrupo('Bloqueio e informações dos aparelhos, direto na central do ' + nome);
@@ -295,6 +299,22 @@ try {
     });
   }
   grupos.push(gh);
+  // 4r. versão 2.17: nível pela pessoa (duas centrais), nuvem com nomes e aparelhos, segurança sem janela (processos próprios)
+  const g217 = novoGrupo('Versão 2.17: nível pela pessoa, nuvem e segurança');
+  for (const [nome, arq] of [['nível pela pessoa e aparelho fixo, nas duas centrais', 'nivel217.mjs'],
+    ['nuvem: lista de nomes, entrada por pessoa e aparelhos ao vivo, nas duas centrais', 'nuvem217.mjs'], ['segurança do Windows e do cliente (sem janela)', 'seguranca216.mjs']]) {
+    await teste(g217, nome, async () => {
+      const r = spawnSync(process.execPath, [path.join(APP, 'testes', arq)], { cwd: APP, encoding: 'utf8', timeout: 900000 });
+      const fim = ((r.stdout || '').match(/\d+ de \d+ testes passaram.*|"total":\d+,"passaram":\d+,"falharam":\d+/g) || []).pop() || '';
+      certo(r.status === 0, `${arq}: ${fim || (r.stderr || '').slice(-300)}`);
+      return fim;
+    });
+  }
+  grupos.push(g217);
+  // 4s. versão 2.17: as telas novas (liberar sem nível, Vale em, notificação, entrar no PC, painel do PC, logo e abertura)
+  { const g = novoGrupo('Telas da 2.17');
+    for (const f of [testarNivelNaTela217, testarNotificacoes217, testarEntrarPC217, testarPainelPC217, testarLogoEAbertura217]) await f(nav, g);
+    grupos.push(g); }
   // 5. extras
   const g5 = novoGrupo('Leitura de foto, impressão e aplicativo sem rede');
   const c5 = await centralNode(8295);

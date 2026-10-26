@@ -22,11 +22,15 @@ export async function entrarComoChefe(a) {
 export async function liberarSePedir(a, nivel) {
   // a central responde se este aparelho já é tablet chefe (fica o nível) ou abre a janela de liberar; com a máquina
   // carregada (bateria inteira) isso passa de 2,5 s, então espera o que vier primeiro
-  try { await a.esperar('!!document.querySelector(".modal .opcoes-nivel") || !!(JSON.parse(localStorage.getItem("usina.cfg") || "{}").nivelChefe)', 10000); } catch { return false; }
-  if (!(await a.avaliar('!!document.querySelector(".modal .opcoes-nivel")'))) return false;
-  if (nivel) await a.tocar(`.modal [data-k="n:${nivel}"]`);
+  try { await a.esperar('!!document.querySelector(".modal .liberar-chefe") || !!(JSON.parse(localStorage.getItem("usina.cfg") || "{}").nivelChefe)', 10000); } catch { return false; }
+  if (!(await a.avaliar('!!document.querySelector(".modal .liberar-chefe")'))) return false;
+  // 2.17: a janela não pergunta o nível (fica no 2); outro nível, o teste pede à central como o administrador faria
   await a.tocar('.modal [data-k="ok"]');
   await a.teclar(teclasDaSenha());
+  if (nivel && nivel !== 2) {
+    await a.esperar('!!JSON.parse(localStorage.getItem("usina.cfg") || "{}").nivelChefe', 10000, 'liberar o tablet chefe');
+    await a.avaliar(`postJson('api/chefes', { acao: 'liberar', pin: ${JSON.stringify(SENHA_ENCARREGADO)}, nivel: ${nivel} }).then((r) => r.json()).then((d) => { cfg.nivelChefe = d.nivel; salvarCfg(); return d.nivel; })`);
+  }
   // espera a central responder (o nível fica guardado) e a janela fechar, para nada cair em cima do próximo toque
   await a.esperar('(() => { const c = JSON.parse(localStorage.getItem("usina.cfg") || "{}"); return !!c.nivelChefe && !document.querySelector(".modal"); })()', 10000, 'liberar o tablet chefe');
   await a.avaliar('(() => { const t = document.getElementById("toast"); if (t && !t.hidden) t.click(); })()');

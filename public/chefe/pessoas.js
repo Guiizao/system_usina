@@ -80,25 +80,20 @@
      só o dono; o 1 ou o 2, quem libera tablets chefe (o administrador). Devolve a senha usada, para já entrar com ela
      (null: entrar pedindo a senha; undefined: não liberou). */
   const nomeDoNivelChefe = (n) => ((C.niveisDoAparelho || {})[n] || {}).nome || `Nível ${n}`;
+  // 2.17: liberar não pergunta o nível. O que cada um faz aqui vem de quem entra (e dos aparelhos fixos da pessoa);
+  // o administrador muda o nível do aparelho em Aparelhos (o 3 só o dono)
   async function liberarEsteAparelho() {
-    const niveis = C.niveisDoAparelho || {};
-    let escolhido = 2;
-    const resp = await abrirModal(`<h3>Liberar este aparelho como tablet chefe</h3>
-      <p class="dica">Escolha o que este tablet chefe vai poder fazer. Depois, quem libera tablets chefe (o administrador) digita a senha. O nível 3 só o dono do sistema libera.</p>
-      <div class="opcoes-nivel">${[1, 2, 3].map((n) => `<button class="nivel-op" data-k="n:${n}"><b>${esc(nomeDoNivelChefe(n))}</b><span>${esc((niveis[n] || {}).texto || '')}</span></button>`).join('')}</div>
+    const resp = await abrirModal(`<div class="liberar-chefe"><h3>Liberar este aparelho como tablet chefe</h3>
+      <p class="dica">Quem libera tablets chefe (o administrador ou o dono) digita a senha. Depois, o que dá para fazer aqui vem de quem entra.</p></div>
       <div class="linha-botoes"><button class="btn pequeno" data-k="recuperar">Sou o dono e perdi a senha ou o tablet</button></div>
       <div class="acoes-modal"><button class="btn" data-k="x">Cancelar</button><button class="btn primario" data-k="ok">Continuar</button></div>`,
-    (k, b, fechar, f) => {
-      if (k === 'x') return fechar(undefined);
-      if (k === 'recuperar') return fechar('recuperar');
-      if (k.startsWith('n:')) { escolhido = Number(k.slice(2)); f.querySelectorAll('[data-k^="n:"]').forEach((x) => x.classList.toggle('sel', x.dataset.k === k)); return; }
-      if (k === 'ok') fechar(escolhido);
-    }, { classe: 'largo com-niveis', aoAbrir: (f) => f.querySelector('[data-k="n:2"]').classList.add('sel') });
+    (k, b, fechar) => fechar(k === 'x' ? undefined : k));
     if (resp === undefined) return undefined;
     if (resp === 'recuperar') return recuperarDono();
-    const pin = await pedirSenhaModal(`Senha para liberar o ${nomeDoNivelChefe(resp)}`, resp === 3 ? 'Só a senha do dono do sistema libera o nível 3.' : 'A senha de quem libera tablets chefe (o administrador).');
+    const pin = await pedirSenhaModal('Senha para liberar', 'A senha de quem libera tablets chefe (o administrador ou o dono).');
     if (pin === undefined) return undefined;
-    const r = await postJson('api/chefes', { acao: 'liberar', pin, nivel: resp }, 10000).catch(() => null);
+    // nível 2 dito com todas as letras: a central 2.16 (tablet chefe ainda sem o APK novo) exige o nível
+    const r = await postJson('api/chefes', { acao: 'liberar', pin, nivel: 2 }, 10000).catch(() => null);
     if (!r) { toast('Não consegui falar com a central', 'erro'); return undefined; }
     const d = await r.json().catch(() => ({}));
     if (!r.ok) { toast(d.erro || 'A central recusou', 'erro'); return undefined; }
@@ -362,12 +357,26 @@
   const chipsDeFuncoes = (marcadas, prefixo) => `<div class="chips funcoes">${C.funcoes.map((f) => `<button class="chip-liga ${marcadas.has(f.id) ? 'sel' : ''}" data-k="${prefixo}:${f.id}">${marcadas.has(f.id) ? ico('certo') : ico('fechar')} ${esc(f.nome)}</button>`).join('')}</div>`;
   async function editarPessoa(v, id) {
     const atual = id ? (v.lista.pessoas.find((p) => p.id === id) || null) : null;
-    const estado = { nivel: atual ? atual.nivel : 'encarregado', extras: Object.assign({}, atual ? atual.extras : {}), ativo: atual ? atual.ativo : true };
+    const estado = { nivel: atual ? atual.nivel : 'encarregado', extras: Object.assign({}, atual ? atual.extras : {}), ativo: atual ? atual.ativo : true,
+      fixos: new Set(atual && atual.aparelhos ? atual.aparelhos : []) };
+    estado.soFixos = estado.fixos.size > 0;
+    // 2.17: os aparelhos que a central conhece (tablets chefe e de setor), para "Vale em" (fora deles a pessoa só consulta)
+    const vistos = (sync.status && sync.status.aparelhos) || [];
+    const ids = [...new Set([...Object.keys(v.lista.aparelhos || {}), ...vistos.map((a) => a.id)])];
+    const chefes = ids.map((id) => {
+      const a = (v.lista.aparelhos || {})[id] || {}, x = vistos.find((y) => y.id === id) || {};
+      return { id, nome: a.nome || x.nome || (x.papel && x.papel !== 'central' ? `Tablet: ${(setorPorId(x.papel) || {}).nome || x.papel}` : id.slice(0, 8)) };
+    });
     const marcadas = () => funcoesDe({ nivel: estado.nivel, extras: estado.extras });
     const desenhar = (f) => {
       f.querySelectorAll('[data-k^="n:"]').forEach((b) => b.classList.toggle('sel', b.dataset.k === 'n:' + estado.nivel));
       f.querySelector('#funcoes-pessoa').innerHTML = estado.nivel === 'administrador' ? '<p class="sub">O administrador pode tudo, inclusive pessoas e permissões.</p>' : chipsDeFuncoes(marcadas(), 'f');
       f.querySelector('[data-k="ativo"]').classList.toggle('sel', estado.ativo);
+      f.querySelectorAll('[data-k^="v:"]').forEach((b) => b.classList.toggle('sel', b.dataset.k === (estado.soFixos ? 'v:fixos' : 'v:todos')));
+      f.querySelector('#fixos-pessoa').hidden = !estado.soFixos;
+      f.querySelector('#fixos-pessoa').innerHTML = chefes.length
+        ? chefes.map((a) => `<button data-k="a:${esc(a.id)}" class="chip-liga ${estado.fixos.has(a.id) ? 'sel' : ''}">${ico(estado.fixos.has(a.id) ? 'certo' : 'fechar')} ${esc(a.nome)}</button>`).join('')
+        : '<p class="sub">Nenhum tablet chefe liberado ainda.</p>';
     };
     const resp = await abrirModal(`<h3>${atual ? `Mudar ${esc(atual.nome)}` : 'Cadastrar pessoa'}</h3>
       <div class="form-pessoa">
@@ -376,6 +385,10 @@
         <div class="segmentos quebra">${Object.entries(C.niveis).map(([k, n]) => `<button data-k="n:${k}">${esc(n.nome)}</button>`).join('')}</div>
         <div id="funcoes-pessoa"></div>
         <div class="chips"><button class="chip-liga" data-k="ativo">${ico('certo')} Pode entrar</button></div>
+        <div class="vale-em"><b>Vale em</b>
+          <div class="segmentos"><button data-k="v:todos">Qualquer aparelho</button><button data-k="v:fixos">Só nos aparelhos fixos</button></div>
+          <div class="chips" id="fixos-pessoa"></div>
+          <p class="sub">Em outro aparelho (inclusive o tablet de um setor), a pessoa entra só para consultar.</p></div>
       </div>
       <div class="acoes-modal"><button class="btn" data-k="x">Cancelar</button><button class="btn primario" data-k="ok">Salvar</button></div>`,
     async (k, b, fechar, f) => {
@@ -389,13 +402,16 @@
         return desenhar(f);
       }
       if (k === 'ativo') { estado.ativo = !estado.ativo; return desenhar(f); }
+      if (k.startsWith('v:')) { estado.soFixos = k === 'v:fixos'; return desenhar(f); }
+      if (k.startsWith('a:')) { const id = k.slice(2); if (estado.fixos.has(id)) estado.fixos.delete(id); else estado.fixos.add(id); return desenhar(f); }
       if (k !== 'ok') return;
       const nome = f.querySelector('#p-nome').value.trim();
       const pin = f.querySelector('#p-pin').value.trim();
       if (!nome) return toast('Escreva o nome', 'erro');
       if (pin && !/^\d{4,8}$/.test(pin)) return toast('A senha tem de 4 a 8 números', 'erro');
       if (!atual && !pin) return toast('Escolha a senha da pessoa', 'erro');
-      const r = await postJson('api/pessoas', { acao: 'salvar', pessoa: { id: atual ? atual.id : '', nome, nivel: estado.nivel, extras: estado.nivel === 'administrador' ? {} : estado.extras, ativo: estado.ativo, pin } }, 15000).catch(() => null);
+      if (estado.soFixos && !estado.fixos.size) return toast('Escolha pelo menos um aparelho (ou "Qualquer aparelho")', 'erro');
+      const r = await postJson('api/pessoas', { acao: 'salvar', pessoa: { id: atual ? atual.id : '', nome, nivel: estado.nivel, extras: estado.nivel === 'administrador' ? {} : estado.extras, ativo: estado.ativo, pin, aparelhos: estado.soFixos ? [...estado.fixos] : [] } }, 15000).catch(() => null);
       if (!r) return toast('Não consegui falar com a central', 'erro');
       const d = await r.json().catch(() => ({}));
       if (!r.ok) return toast(d.erro || 'A central recusou', 'erro');

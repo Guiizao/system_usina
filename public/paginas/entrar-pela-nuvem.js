@@ -11,45 +11,89 @@
    * As anotações chegam pela sincronização da nuvem que a versão 2.14 já usa (cfg.nuvemUrl e cfg.nuvemToken).
    * ========================================================= */
   const FUNCOES_NA_NUVEM = ['relatorios', 'escritorio'];
-  const nuvemForm = { url: '' };
+  // 2.17: entra escolhendo o nome (a lista vem da nuvem) e digitando a senha; o endereço fica na aba Servidor
+  const nuvemForm = { url: '', pessoas: null, erro: '', buscando: false };
+
+  /** Os nomes de quem pode entrar pela nuvem (só id e nome). Sem achar a nuvem, a tela diz por quê. */
+  async function carregarNomesDaNuvem() {
+    const url = nuvemForm.url.replace(/\/+$/, '');
+    // trocaram o servidor no meio da busca: a resposta desta (do endereço velho) não vale mais
+    const velha = () => nuvemForm.url.replace(/\/+$/, '') !== url;
+    nuvemForm.buscando = true; nuvemForm.erro = '';
+    try {
+      if (!enderecoNuvemSeguro(url)) throw new Error('endereço');
+      // rede presa: desiste em 8 s e diz por quê (em vez de ficar em "Buscando")
+      const parar = new AbortController(), relogio = setTimeout(() => parar.abort(), 8000);
+      const r = await fetch(url + '/aparelho/pessoas', { cache: 'no-store', redirect: 'error', signal: parar.signal }).finally(() => clearTimeout(relogio));
+      const d = await r.json();
+      if (velha()) return;
+      if (!r.ok || !Array.isArray(d.pessoas)) throw new Error('resposta');
+      nuvemForm.pessoas = d.pessoas;
+    } catch (e) {
+      if (velha()) return;
+      nuvemForm.pessoas = null;
+      nuvemForm.erro = enderecoNuvemSeguro(url) ? 'Sem internet: não achei a nuvem.' : 'Confira o endereço do servidor (começa com https://).';
+    }
+    nuvemForm.buscando = false;
+    if (view().tela === 'nuvem-entrar') render(true);
+  }
 
   function telaNuvemEntrar() {
     if (!nuvemForm.url) nuvemForm.url = cfg.nuvemUrl || C.nuvemPadrao || '';
-    alvos = [{ id: 'nuvem-url', label: 'Endereço da nuvem', type: 'text', get: () => nuvemForm.url, set: (x) => { nuvemForm.url = x.trim(); } }];
-    contextoEdicao = 'entrar pela nuvem';
-    const conteudo = `<div class="boas-vindas conectar">
-        <header><div><h1>Entrar pela nuvem</h1>
-        <p>Use a mesma senha do tablet chefe. Pela nuvem você vê o painel, os relatórios e o escritório; corrigir as folhas continua no tablet chefe.</p></div></header>
-        ${grupoQuadros(alvos)}
-        <div class="linha-botoes">
-          <button class="btn primario" data-a="nuvem-entrar">${ico('cadeado')} Entrar com a minha senha</button>
-          ${params.get('nuvem') ? '' : `<button class="btn" data-a="voltar-conectar">${ico('wifi')} Conectar na rede da usina</button>`}
-        </div>
-        <p class="sub">Depois de atualizar o tablet chefe, cada pessoa entra uma vez nele: é aí que a senha passa a valer pela nuvem.</p>
-        <p class="autoria">Pranchetas Digitais ${VERSAO} · ${esc(AUTORIA)}</p>
-      </div>`;
-    return `${cabecalho('Pranchetas digitais', 'Painel pela nuvem', false)}${telaEdicao(conteudo)}`;
+    if (!nuvemForm.pessoas && !nuvemForm.erro && !nuvemForm.buscando) carregarNomesDaNuvem();
+    alvos = []; ed.alvoId = null;
+    const lista = nuvemForm.pessoas || [], sem = !lista.length;
+    const vazio = nuvemForm.buscando ? 'Buscando os nomes…' : nuvemForm.erro || 'Ninguém entra pela nuvem ainda';
+    return `${cabecalho('Pranchetas digitais', 'Painel pela nuvem', false)}
+      <main class="tela-entrar-nuvem"><form class="entrar-cartao" data-form="nuvem-entrar">
+        <div class="entrar-topo"><img class="entrar-logo" src="icons/logo-u.svg" alt="">
+          <button type="button" class="btn pequeno" data-a="nuvem-servidor">${ico('servidor')} Servidor</button></div>
+        <h1>Entrar</h1>
+        <p class="sub">Painel da usina pela nuvem, com a mesma senha do tablet chefe.</p>
+        <label>Nome<select id="nuvem-nome" ${sem ? 'disabled' : ''}>${sem ? `<option>${esc(vazio)}</option>`
+          : `<option value="">Escolha o seu nome</option>${lista.map((p) => `<option value="${esc(p.id)}" ${p.id === cfg.ultimaPessoaNuvem ? 'selected' : ''}>${esc(p.nome)}</option>`).join('')}`}</select></label>
+        ${nuvemForm.erro ? `<p class="aviso-entrar">${ico('alerta')} <span>${esc(nuvemForm.erro)}</span> <button type="button" class="btn pequeno" data-a="nuvem-nomes">Tentar de novo</button></p>` : ''}
+        <label>Senha<input id="nuvem-senha" type="password" inputmode="numeric" maxlength="8" autocomplete="current-password" ${sem ? 'disabled' : ''}></label>
+        <button class="btn primario largo" type="submit" ${sem ? 'disabled' : ''}>${ico('cadeado')} Entrar</button>
+        ${params.get('nuvem') ? '' : `<button type="button" class="btn largo" data-a="voltar-conectar">${ico('wifi')} Conectar na rede da usina</button>`}
+        <p class="sub">Pela nuvem você vê o painel, os relatórios e o escritório; corrigir as folhas continua no tablet chefe.</p>
+      </form>
+      <p class="autoria">Pranchetas Digitais ${VERSAO} · ${esc(AUTORIA)}</p></main>`;
   }
+  /** Aba Servidor: o endereço da nuvem (já vem preenchido; só muda se o Guilherme pedir). */
+  async function servidorDaNuvem() {
+    const url = await textoLivre({ titulo: 'Servidor (nuvem)', dica: 'Já vem preenchido. Só mude se o responsável pelo sistema pedir.', valor: nuvemForm.url, tipo: 'url', max: 300 });
+    if (url === undefined || !url) return;
+    nuvemForm.url = url.trim(); nuvemForm.pessoas = null; nuvemForm.erro = '';
+    carregarNomesDaNuvem();
+  }
+  // Enter no campo da senha também entra
+  document.addEventListener('submit', (e) => { if (e.target.matches('[data-form="nuvem-entrar"]')) { e.preventDefault(); entrarPelaNuvem(); } });
 
   async function entrarPelaNuvem() {
     const url = nuvemForm.url.replace(/\/+$/, '');
     // https, ou a nuvem de teste neste mesmo computador (http://127.0.0.1)
-    if (!enderecoNuvemSeguro(url)) return toast('Confira o endereço da nuvem (começa com https://)', 'erro');
-    const pin = await pedirSenhaModal('Sua senha', 'A mesma que você usa no tablet chefe.');
-    if (!pin) return;
+    if (!enderecoNuvemSeguro(url)) return toast('Confira o endereço do servidor (começa com https://)', 'erro');
+    const pessoa = (document.getElementById('nuvem-nome') || {}).value || '';
+    const pin = ((document.getElementById('nuvem-senha') || {}).value || '').trim();
+    if (!pessoa) return toast('Escolha o seu nome', 'aviso');
+    if (!/^\d{4,8}$/.test(pin)) return toast('A senha tem de 4 a 8 números', 'aviso');
     let r, d = {};
     try {
-      r = await fetch(url + '/aparelho/entrar', { method: 'POST', cache: 'no-store', redirect: 'error', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ aparelho: cfg.deviceId, pin }) });
+      r = await fetch(url + '/aparelho/entrar', { method: 'POST', cache: 'no-store', redirect: 'error', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ aparelho: cfg.deviceId, pin, pessoa }) });
       d = await r.json().catch(() => ({}));
     } catch (e) { return toast('Sem internet ou endereço errado: não achei a nuvem.', 'erro'); }
     if (r.status === 429) return toast(d.erro || 'Muitas senhas erradas. Espere um pouco e tente de novo.', 'erro');
     if (r.status === 423) return toast('Este aparelho está bloqueado pelo administrador.', 'erro');
-    if (!r.ok || !d.token || !d.pessoa) return toast(r.status === 401 ? 'Senha não confere. Se você acabou de ganhar a senha, entre uma vez no tablet chefe.' : (d.erro || 'A nuvem recusou a entrada'), 'erro');
+    if (!r.ok || !d.token || !d.pessoa) {
+      const s = document.getElementById('nuvem-senha'); if (s) { s.value = ''; s.focus(); }
+      return toast(r.status === 401 ? 'Senha não confere. Se você acabou de ganhar a senha, entre uma vez no tablet chefe.' : (d.erro || 'A nuvem recusou a entrada'), 'erro');
+    }
     const funcoes = (d.pessoa.funcoes || []).filter((f) => FUNCOES_NA_NUVEM.includes(f));
     Object.assign(cfg, {
       soNuvem: true, nuvemUrl: url, nuvemToken: d.token, papel: 'central', chave: null, demo: false,
       pessoa: Object.assign({}, d.pessoa, { funcoes }), pessoaTurno: turnoDaPessoa(),
-      nuvemSeq: null, nuvemOrdem: 0, geracao: d.geracao || cfg.geracao || '',
+      nuvemSeq: null, nuvemOrdem: 0, geracao: d.geracao || cfg.geracao || '', ultimaPessoaNuvem: pessoa,
     });
     salvarCfg();
     toast(`${d.pessoa.nome} entrou pela nuvem`);

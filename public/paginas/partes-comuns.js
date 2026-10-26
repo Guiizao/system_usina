@@ -12,7 +12,7 @@
     const escuro = cfg.tema === 'escuro';
     const configurado = cfg.papel && (cfg.chave || cfg.demo);
     return `<header class="topo">
-        ${podeVoltar ? `<button class="voltar" data-a="voltar">${ico('voltar')}<span>Voltar</span></button>` : '<img class="logo" src="icons/logo.png" alt="Ubirálcool">'}
+        ${podeVoltar ? `<button class="voltar" data-a="voltar">${ico('voltar')}<span>Voltar</span></button>` : '<img class="logo" src="icons/logo-u.svg" alt="Ubirálcool">'}
         <div class="titulo ${String(titulo).length > 17 ? 'longo' : ''}"><div class="titulo-linha"><b>${esc(titulo)}</b><em class="turno-topo" id="turno-topo">${esc(turnoAtual().nome)}</em></div>${subtitulo ? `<span id="subtitulo-topo">${esc(subtitulo)}</span>` : ''}</div>
         ${atalhos ? `<div class="atalhos">${atalhos}</div>` : ''}
         <div class="relogio"><b id="relogio">${horaAgora()}</b></div>
