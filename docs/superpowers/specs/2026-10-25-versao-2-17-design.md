@@ -23,7 +23,7 @@ Deixar o sistema pronto para entrar em produção com mais tablets (Galaxy Tab A
 - O limite do aparelho (teto, tela Aparelhos) continua valendo por cima.
 - Tela Pessoas e permissões: "Vale em: qualquer aparelho / só nos aparelhos fixos" com a lista dos tablets chefe conhecidos.
 - Aparelho já liberado continua com o nível que tem até alguém mudar: nada quebra ao atualizar.
-- `server.js` e `ServidorCentral.java` iguais; a nuvem recebe `aparelhos` junto com a pessoa (para o PC pela nuvem seguir a mesma regra).
+- `server.js` e `ServidorCentral.java` iguais. A nuvem não precisa da lista: pela nuvem já é só ver.
 - Pronto quando: o Lucas com aparelho fixo A entra no tablet B e só vê; no A tem o nível dele; teste nas duas centrais.
 
 ## 3. Entrar no PC por nome e senha
