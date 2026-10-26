@@ -17,6 +17,8 @@
   /** Os nomes de quem pode entrar pela nuvem (só id e nome). Sem achar a nuvem, a tela diz por quê. */
   async function carregarNomesDaNuvem() {
     const url = nuvemForm.url.replace(/\/+$/, '');
+    // trocaram o servidor no meio da busca: a resposta desta (do endereço velho) não vale mais
+    const velha = () => nuvemForm.url.replace(/\/+$/, '') !== url;
     nuvemForm.buscando = true; nuvemForm.erro = '';
     try {
       if (!enderecoNuvemSeguro(url)) throw new Error('endereço');
@@ -24,9 +26,11 @@
       const parar = new AbortController(), relogio = setTimeout(() => parar.abort(), 8000);
       const r = await fetch(url + '/aparelho/pessoas', { cache: 'no-store', redirect: 'error', signal: parar.signal }).finally(() => clearTimeout(relogio));
       const d = await r.json();
+      if (velha()) return;
       if (!r.ok || !Array.isArray(d.pessoas)) throw new Error('resposta');
       nuvemForm.pessoas = d.pessoas;
     } catch (e) {
+      if (velha()) return;
       nuvemForm.pessoas = null;
       nuvemForm.erro = enderecoNuvemSeguro(url) ? 'Sem internet: não achei a nuvem.' : 'Confira o endereço do servidor (começa com https://).';
     }

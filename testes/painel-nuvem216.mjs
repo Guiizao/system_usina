@@ -43,12 +43,13 @@ export async function testarPainelNuvem216(g) {
 
     // 2. o painel do computador entra pela nuvem com a senha do Lucas
     const pc = await nav.novoAparelho('pc', TAMANHOS.pcGrande);
+    // já abre com a nuvem do teste (sem buscar os nomes na nuvem de verdade)
+    await pc.antesDeAbrir(`if (!localStorage.getItem('usina.cfg')) localStorage.setItem('usina.cfg', JSON.stringify({ nuvemUrl: ${JSON.stringify(n.url)} }));`);
     await teste(g, 'o painel do PC entra pela nuvem com a senha e recebe as anotações', async () => {
       await pc.ir(c.url + '/?nuvem=1');
       // 2.17: entra escolhendo o nome e digitando a senha; a lista vem da nuvem do teste
       await pc.esperar('!!document.querySelector(".entrar-cartao")', 15000, 'tela de entrar pela nuvem');
       await pc.foto(path.join(FOTOS, '1-entrar-pela-nuvem.png'));
-      await pc.avaliar(`(() => { nuvemForm.url = ${JSON.stringify(n.url)}; nuvemForm.pessoas = null; nuvemForm.erro = ''; render(true); return 1; })()`);
       await pc.esperar('!!document.querySelector("#nuvem-nome option[value=lucas]")', 15000, 'nomes da nuvem');
       await pc.avaliar(`(() => { document.getElementById('nuvem-nome').value = 'lucas'; document.getElementById('nuvem-senha').value = ${JSON.stringify(PIN)}; return 1; })()`);
       await pc.tocar('.entrar-cartao button[type=submit]');

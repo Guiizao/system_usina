@@ -98,10 +98,10 @@ export async function testarRastreamento213(grupo) {
     igual(v.tanques.h1.folga, .5); igual(v.tanques.h2.folga, .25); igual(v.tanques.s1.folga, 0); igual(v.tanques.d11.folga, 1.25);
     igual(v.tanques.f1.folga, ''); igual(v.tanques.h1.ph, ''); igual(v.origem['tanques.f1.folga'], '');
   });
-  await teste(grupo, 'insumos convertem mL/L e g/kg; copos e documentos distintos são preservados', () => {
+  await teste(grupo, 'insumos convertem mL/L e g/kg; copos de cal em kg (2.17); documentos distintos são preservados', () => {
     const v = exemplo(forms()).valores;
     igual(v.insumos.lphera, { qtd: 1.5, unidade: 'L', lote: 'L1 / L2', validade: '2027-10-01 / 2027-11-01', nf: '111 / 222', fornecedor: 'Empresa A / Empresa B' });
-    igual(v.insumos.cal.qtd, 3); igual(v.insumos.cal.unidade, 'copos'); igual(v.insumos.ureia.qtd, 1.5); igual(v.insumos.ureia.unidade, 'kg');
+    igual(v.insumos.cal.qtd, 2.04); igual(v.insumos.cal.unidade, 'kg'); igual(v.insumos.ureia.qtd, 1.5); igual(v.insumos.ureia.unidade, 'kg');
     for (const k of ['amersite', 'cloro', 'soda']) igual(v.insumos[k].qtd, '');
   });
   await teste(grupo, 'matéria-prima agrupa produto, converte gramas e mantém NFs/fornecedores', () => {

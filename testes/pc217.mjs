@@ -123,6 +123,15 @@ export async function testarEntrarPC217(nav, g) {
       await preso.ir(c.url + '/?nuvem=1');
       await preso.esperar('document.body.innerText.includes("Sem internet: não achei a nuvem")', 11000, 'desistiu');
     });
+    // trocar o servidor com a busca antiga ainda presa: a resposta velha (que desiste em 8 s) não apaga os nomes novos
+    await teste(g, 'trocar o servidor no meio da busca: a resposta da busca antiga é descartada', async () => {
+      await preso.ir(c.url + '/?nuvem=1');
+      await preso.esperar('nuvemForm.buscando', 5000, 'busca presa');
+      await preso.avaliar(`(() => { nuvemForm.url = ${JSON.stringify(n.url)}; nuvemForm.pessoas = null; carregarNomesDaNuvem(); return 1; })()`);
+      await preso.esperar('!!document.querySelector("#nuvem-nome option[value=lucas]")', 8000, 'nomes do servidor novo');
+      await dormir(9000);
+      certo(await preso.avaliar('!!document.querySelector("#nuvem-nome option[value=lucas]") && !nuvemForm.erro'), 'os nomes continuam');
+    });
     parado.closeAllConnections(); parado.close();
     for (const a of aparelhos) certo(!a.erros.length, a.erros.join(' | '));
   } finally {

@@ -42,7 +42,9 @@ export async function testarTurno216(g) {
     igual(r.total.insumos.filter((x) => x.prancheta === 'ins_cal').map((x) => [x.unidade, x.quantidade]), [['kg', 3]]);
     igual(r.total.insumos.filter((x) => x.prancheta === 'ins_lphera').map((x) => [x.unidade, x.quantidade]), [['mL', 1510]]);
     const copos = leitura.criar(C).totais({ de: data, ate: data, dias: [data] }, [reg(data, 'ins_cal', 7, { qtd: '2', unidade: 'copos' })]);
-    igual(copos.total.insumos.find((x) => x.prancheta === 'ins_cal').unidade, 'copos');
+    // 2.17: o escritório vê os copos de cal em kg (680 g cada)
+    const cal = copos.total.insumos.find((x) => x.prancheta === 'ins_cal');
+    igual([cal.unidade, cal.quantidade], ['kg', 1.36]);
   });
   for (const [nome, ligar, porta] of [['Node', centralNode, 8840], ['Java', centralJava, 8841]]) {
     const destino = await base44Falso(porta + 10), extras = { TURNO_AGORA: String(em('15:59')), TURNO_INTERVALO_MS: '150' };

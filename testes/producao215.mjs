@@ -144,13 +144,15 @@ export async function testarProducao(ligar, porta, grupo) {
       igual((await sync(tabletSetor, [folha('caldeira', 'fila')], { papel: null, aparelho: '' })).recusados.length, 0);
       igual(cfgDisco().setoresAparelhos[tabletSetor.aparelho].atual, 'caldeira');
     });
-    await teste(grupo, 'setor: aparelho antigo sem vínculo adota declaração; folhas fora dos setores mantêm a regra', async () => {
+    await teste(grupo, 'setor: aparelho antigo sem vínculo adota declaração; folhas fora dos setores mantêm a regra; folha só do chefe, não (2.17)', async () => {
       const cli = await conectarTeste(c.url, c.codigo());
       await sync(cli);
       certo(!cfgDisco().setoresAparelhos[cli.aparelho], 'antigo ainda sem setor');
       igual((await sync(cli, [folha('hid_anexo1', 'migrada')], { papel: 'hidrolise' })).recusados.length, 0);
       igual(cfgDisco().setoresAparelhos[cli.aparelho].atual, 'hidrolise');
-      igual((await sync(cli, [folha('avisos-recibo', 'recibo'), folha('med_dornas', 'pendente-chefe')], { papel: 'hidrolise' })).recusados.length, 0);
+      igual((await sync(cli, [folha('avisos-recibo', 'recibo')], { papel: 'hidrolise' })).recusados.length, 0);
+      // 2.17 (revisão do Codex): Vinho e Fermentação só o tablet chefe anota; o tablet de setor fica com a anotação e o motivo
+      igual((await sync(cli, [folha('med_dornas', 'pendente-chefe')], { papel: 'hidrolise' })).recusados[0].motivo, 'sem_permissao');
     });
     await teste(grupo, 'setor: senha sem ajustes/usina não troca; troca autorizada conserva só pendências anteriores', async () => {
       await p(tabletSetor, '/api/pessoas', { acao: 'verificar', pin: '3333' });
