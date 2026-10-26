@@ -469,6 +469,14 @@ async function enviarParaNuvem() {
       const lote = pend.slice(0, NUVEM_LOTE);
       if (vez > 0 && !lote.length && n.pessoasHash === pessoasHash && n.formsHash === formsHash && n.medidasHash === medidasHash && (bloqueiosDemais || n.bloqueiosHash === bloqueiosHash)) { n.arquivosEnviados = true; n.faltam = 0; break; }
       const corpo = { geracao: config.geracao, medidas, registros: lote };
+      // A foto atualiza mesmo sem anotações; lotes e envios antecipados não a repetem no mesmo minuto.
+      if (vez === 0 && Date.now() - (n.aparelhosEnviadosEm || 0) >= 60000) {
+        corpo.aparelhos = listaDeAparelhos().slice(0, 200).map((a) => ({
+          ...Object.fromEntries(['id', 'nome', 'papel', 'setor', 'operador', 'pessoa', 'versao'].map((k) => [k, String(a[k] || '').slice(0, 80)])),
+          vistoEm: a.vistoEm,
+        }));
+        n.aparelhosEnviadosEm = Date.now();
+      }
       if (n.formsHash !== formsHash) corpo.forms = forms;
       if (n.pessoasHash !== pessoasHash) corpo.pessoas = pessoas;
       // com a revisão: o aparelho só aceita a resposta da nuvem se ela for mais nova que o bloqueio que ele já tem
@@ -857,7 +865,8 @@ function listaDeAparelhos() {
     const b = config.bloqueios[id];
     const pessoa = papel === 'central' && pessoaDoAparelho(id) ? pessoaDoAparelho(id).nome : '';
     return {
-      id, papel, operador: a ? a.operador || '' : '', ip: (a && a.ip) || v.ip || '', versao: (a && a.versao) || v.versao || '',
+      id, papel, setor: papel === 'central' ? '' : papel, vistoEm: visto,
+      operador: a ? a.operador || '' : '', ip: (a && a.ip) || v.ip || '', versao: (a && a.versao) || v.versao || '',
       nome: nomeDoAparelho(id), pessoa, teto: tetoDoAparelho(id), info: (a && a.info) || v.info || null, desde: v.desde || null,
       online: !!a && agora - a.vistoEm < 30000, minutos: visto ? Math.round((agora - visto) / 60000) : null,
       bloqueio: b ? { em: b.em, modo: b.modo, apagar: !!b.apagar, por: b.por || '' } : null,
