@@ -246,6 +246,40 @@ export async function testarLogoEAbertura217(nav, g) {
   }
 }
 
+/** 2.17.1: o teclado do computador nas janelas (senha com teclas na tela; Enter salva o texto). */
+export async function testarTecladoDoPC217(nav, g) {
+  const c = await centralNode(8377, pastaTemporaria('pc217-teclado'));
+  const a = await nav.novoAparelho('teclado do pc', TAMANHOS.computador);
+  // tecla de verdade (como no teclado), não clique
+  const tecla = async (key) => {
+    const vk = { Backspace: 8, Enter: 13, Delete: 46 }[key];
+    await nav.cdp('Input.dispatchKeyEvent', vk ? { type: 'rawKeyDown', key, code: key, windowsVirtualKeyCode: vk } : { type: 'keyDown', key, text: key }, a.sessionId);
+    await nav.cdp('Input.dispatchKeyEvent', { type: 'keyUp', key, ...(vk ? { windowsVirtualKeyCode: vk } : {}) }, a.sessionId);
+    await dormir(60);
+  };
+  try {
+    await a.ir(c.url + '/?demo&papel=central', 'typeof pedirSenhaModal === "function"');
+    await teste(g, 'senha pelo teclado do computador: números, Backspace, Delete e Enter', async () => {
+      await a.avaliar(`(() => { window.__senha = 'aberta'; pedirSenhaModal('Teste').then((s) => { window.__senha = s; }); return 1; })()`);
+      await a.esperar('!!document.querySelector(".modal .teclas")', 3000, 'janela da senha');
+      for (const k of ['9', '9', 'Delete', '1', '2', '3', '4', 'Backspace', '5']) await tecla(k);
+      igual(await a.avaliar('document.querySelector(".modal .visor").textContent'), '••••');
+      await tecla('Enter');
+      await a.esperar('window.__senha !== "aberta"', 3000, 'Enter confirmou');
+      igual(await a.avaliar('window.__senha'), '1235');
+    });
+    await teste(g, 'campo de texto da janela: Enter salva', async () => {
+      await a.avaliar(`(() => { window.__txt = 'aberta'; textoLivre({ titulo: 'Operadores' }).then((s) => { window.__txt = s; }); return 1; })()`);
+      await a.esperar('document.activeElement && document.activeElement.id === "txt"', 3000, 'campo com o cursor');
+      await a.digitar('Ana e Bruno');
+      await tecla('Enter');
+      await a.esperar('window.__txt !== "aberta"', 3000, 'Enter salvou');
+      igual(await a.avaliar('window.__txt'), 'Ana e Bruno');
+    });
+    certo(!a.erros.length, a.erros.join(' | '));
+  } finally { await a.fechar().catch(() => {}); await c.desligar(); }
+}
+
 /** Task 7: notificação rápida com ×, ícone por tipo e tempo na tela. */
 export async function testarNotificacoes217(nav, g) {
   const c = await centralNode(8367, pastaTemporaria('pc217-toast'));
@@ -301,6 +335,7 @@ if (import.meta.url === pathToFileURL(process.argv[1]).href) {
     if (!so || so === 'entrar') await testarEntrarPC217(nav, g);
     if (!so || so === 'painel') await testarPainelPC217(nav, g);
     if (!so || so === 'logo') await testarLogoEAbertura217(nav, g);
+    if (!so || so === 'teclado') await testarTecladoDoPC217(nav, g);
   } finally { await nav.fechar(); }
   const r = resumo([g]);
   console.log(`

@@ -35,7 +35,7 @@ import { testarPessoas } from './pessoas.mjs';
 import { testarPedidos210 } from './pedidos210.mjs';
 import { testarAjustes2161 } from './ajustes2161.mjs';
 import { testarTotais217 } from './totais217.mjs';
-import { testarNivelNaTela217, testarNotificacoes217, testarEntrarPC217, testarPainelPC217, testarLogoEAbertura217 } from './pc217.mjs';
+import { testarNivelNaTela217, testarNotificacoes217, testarEntrarPC217, testarPainelPC217, testarLogoEAbertura217, testarTecladoDoPC217 } from './pc217.mjs';
 import { testarSeguranca } from './seguranca.mjs';
 import { testarPedidos211 } from './pedidos211.mjs';
 import { testarNiveis } from './niveis212.mjs';
@@ -313,7 +313,7 @@ try {
   grupos.push(g217);
   // 4s. versão 2.17: as telas novas (liberar sem nível, Vale em, notificação, entrar no PC, painel do PC, logo e abertura)
   { const g = novoGrupo('Telas da 2.17');
-    for (const f of [testarNivelNaTela217, testarNotificacoes217, testarEntrarPC217, testarPainelPC217, testarLogoEAbertura217]) await f(nav, g);
+    for (const f of [testarNivelNaTela217, testarNotificacoes217, testarEntrarPC217, testarPainelPC217, testarLogoEAbertura217, testarTecladoDoPC217]) await f(nav, g);
     grupos.push(g); }
   // 5. extras
   const g5 = novoGrupo('Leitura de foto, impressão e aplicativo sem rede');
