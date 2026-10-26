@@ -2227,6 +2227,7 @@ public class ServidorCentral {
   private static JSONObject pessoaPublica(JSONObject p) throws Exception {
     JSONObject extras = p.optJSONObject("extras");
     return new JSONObject().put("id", p.optString("id")).put("nome", p.optString("nome")).put("nivel", p.optString("nivel"))
+        .put("aparelhos", p.optJSONArray("aparelhos") != null ? p.optJSONArray("aparelhos") : new JSONArray())
         .put("extras", extras != null ? extras : new JSONObject()).put("ativo", ativa(p)).put("temSenha", !p.optString("resumo").isEmpty());
   }
 
@@ -2488,6 +2489,17 @@ public class ServidorCentral {
         // o dono só o próprio dono muda; e ele continua administrador e ativo (versão 2.12)
         if (ehDono(existente) && !ehDono(quem)) { enviarJson(saida, 403, new JSONObject().put("erro", "Só o dono do sistema muda os dados dele")); return; }
         if (ehDono(existente) && (!"administrador".equals(nivel) || !ativo)) { enviarJson(saida, 400, new JSONObject().put("erro", "O dono do sistema continua administrador e ativo")); return; }
+        // Aplicativo antigo não manda a lista: preserva o vínculo; [] o remove explicitamente.
+        JSONArray fixos = d.has("aparelhos") ? d.optJSONArray("aparelhos") : existente == null ? new JSONArray() : existente.optJSONArray("aparelhos");
+        if (!d.has("aparelhos") && fixos == null) fixos = new JSONArray();
+        if (fixos == null || fixos.length() > 50) { enviarJson(saida, 400, new JSONObject().put("erro", "Aparelhos inválidos")); return; }
+        for (int i = 0; i < fixos.length(); i++) {
+          Object id = fixos.opt(i);
+          if (!(id instanceof String) || ((String) id).isEmpty() ||
+              !(objetoDaConfig("aparelhosChefe").has((String) id) || objetoDaConfig("aparelhosVistos").has((String) id))) {
+            enviarJson(saida, 400, new JSONObject().put("erro", "Aparelhos inválidos")); return;
+          }
+        }
         int admins = 0;
         for (int i = 0; i < l.length(); i++) {
           JSONObject x = l.optJSONObject(i);
@@ -2516,8 +2528,9 @@ public class ServidorCentral {
         String antesNome = existente == null ? "" : existente.optString("nome"), antesNivel = existente == null ? "" : existente.optString("nivel");
         boolean antesAtivo = existente == null || ativa(existente);
         String antesExtras = existente == null || existente.optJSONObject("extras") == null ? "{}" : existente.optJSONObject("extras").toString();
+        String antesAparelhos = existente == null || existente.optJSONArray("aparelhos") == null ? "[]" : existente.optJSONArray("aparelhos").toString();
         JSONObject p = existente != null ? existente : new JSONObject().put("id", "p" + sorteiaChave().substring(0, 8)).put("criadoEm", System.currentTimeMillis());
-        p.put("nome", nome).put("nivel", nivel).put("extras", extras).put("ativo", ativo);
+        p.put("nome", nome).put("nivel", nivel).put("extras", extras).put("aparelhos", fixos).put("ativo", ativo);
         if (!pin.isEmpty()) guardarSenha(p, pin);
         agendarNuvem();
         if (existente == null) l.put(p);
@@ -2537,6 +2550,7 @@ public class ServidorCentral {
           if (!antesNivel.equals(nivel)) partes.add("mudou " + nome + " de " + nomeNivel.get(antesNivel) + " para " + nomeNivel.get(nivel));
           if (antesAtivo != ativo) partes.add((ativo ? "reativou " : "desativou ") + nome);
           if (!antesExtras.equals(extras.toString())) partes.add("mudou as funções de " + nome);
+          if (!antesAparelhos.equals(fixos.toString())) partes.add("mudou os aparelhos fixos de " + nome);
           if (!pin.isEmpty()) partes.add("trocou a senha de " + nome);
         }
         if (!partes.isEmpty()) registrar("configuracao", quem.optString("nome") + " " + String.join(", ", partes), quem.optString("nome"), aqui, null);
@@ -2694,11 +2708,19 @@ public class ServidorCentral {
   }
 
   /** O que quem está no aparelho pode fazer nele: a pessoa, o nível do aparelho e o limite dele. */
+  /** 2.17: fora dos aparelhos fixos da pessoa ela só consulta: o aparelho (chefe ou de setor) não ganha o nível dela. */
+  private synchronized Set<String> funcoesDaPessoaNoAparelho(JSONObject p, String aparelho) {
+    JSONArray fixos = p == null ? null : p.optJSONArray("aparelhos");
+    if (fixos == null || fixos.length() == 0) return funcoesDaPessoa(p);
+    for (int i = 0; i < fixos.length(); i++) if (aparelho.equals(fixos.optString(i))) return funcoesDaPessoa(p);
+    return new HashSet<>(funcoesDoNivelDePessoa("consulta"));
+  }
+
   private synchronized Set<String> funcoesNoAparelho(String aparelho) throws Exception {
     JSONObject p = pessoaDoAparelho(aparelho);
     int nivel = nivelDoAparelho(aparelho);
     if (p == null || nivel == 0 || (nivel == 3 && !ehDono(p))) return new HashSet<>();
-    Set<String> s = funcoesDaPessoa(p);
+    Set<String> s = funcoesDaPessoaNoAparelho(p, aparelho);
     if (nivel != 3) {
       JSONObject cfg = registros.optJSONObject("config|sistema|geral");
       JSONObject valores = cfg == null || cfg.optBoolean("apagado") ? null : cfg.optJSONObject("valores");
@@ -2754,7 +2776,7 @@ public class ServidorCentral {
     if (l == null || System.currentTimeMillis() > (Long) l[1]) return new HashSet<>();
     JSONObject p = pessoaPorId((String) l[0]);
     // no tablet de setor a senha só abre os ajustes dele (os operadores), seja de quem for: o resto é do tablet chefe
-    Set<String> s = p != null && ativa(p) ? funcoesDaPessoa(p) : new HashSet<>();
+    Set<String> s = p != null && ativa(p) ? funcoesDaPessoaNoAparelho(p, aparelho) : new HashSet<>();
     s.retainAll(FUNCOES_NO_SETOR);
     return s;
   }
@@ -2801,7 +2823,7 @@ public class ServidorCentral {
   private synchronized JSONObject permissoesDoAparelho(String aparelho, JSONObject pessoaVerificada) throws Exception {
     int nivel = nivelDoAparelho(aparelho);
     JSONObject p = pessoaVerificada != null ? pessoaVerificada : pessoaDoAparelho(aparelho);
-    Set<String> f = pessoaVerificada != null && nivel == 0 ? funcoesDaPessoa(pessoaVerificada) : funcoesNoAparelho(aparelho);
+    Set<String> f = pessoaVerificada != null && nivel == 0 ? funcoesDaPessoaNoAparelho(pessoaVerificada, aparelho) : funcoesNoAparelho(aparelho);
     JSONArray lista = new JSONArray();
     List<String> ordem = new ArrayList<>(f);
     Collections.sort(ordem);
@@ -3021,7 +3043,7 @@ public class ServidorCentral {
         enviarJson(saida, 403, new JSONObject().put("erro", "Senha errada"));
         return;
       }
-      int nivel = pedido.optInt("nivel", 0);
+      int nivel = pedido.has("nivel") ? pedido.optInt("nivel", 0) : ehDono(pessoa) ? 3 : 2;
       if (nivel < 1 || nivel > 3) { enviarJson(saida, 400, new JSONObject().put("erro", "Nível inválido")); return; }
       // nível 3 só o dono; 1 ou 2, quem libera tablets chefe (administrador, ou quem ganhou a função) ou o dono
       if (nivel == 3 ? !ehDono(pessoa) : !funcoesDaPessoa(pessoa).contains("chefes")) {
