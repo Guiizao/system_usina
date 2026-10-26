@@ -333,10 +333,9 @@ const porTamanho = {};
 telas.forEach((t) => { (porTamanho[t.tamanho] = porTamanho[t.tamanho] || []).push(t); });
 for (const [tam, lista] of Object.entries(porTamanho)) {
   await teste(g6, `${tam}: ${lista.length} telas sem texto cortado, sem rolagem para o lado e sem erro`, async () => {
-    const ruins = lista.filter((t) => t.falhou || t.erros.length || t.problemas.some((p) => p.tipo !== 'botao-pequeno'));
-    certo(!ruins.length, ruins.map((t) => `${t.tela}: ${t.falhou || t.erros[0] || t.problemas.filter((p) => p.tipo !== 'botao-pequeno').map((p) => p.tipo + ' ' + p.texto).slice(0, 2).join('; ')}`).join(' | ').slice(0, 600));
-    const pequenos = lista.reduce((s, t) => s + t.problemas.filter((p) => p.tipo === 'botao-pequeno').length, 0);
-    return pequenos ? `${pequenos} botões abaixo de 34 px (aceitável só no celular deitado)` : '';
+    // 2.17.1: botão abaixo de 34 px também conta (antes o celular deitado tinha 300 e o teste aceitava)
+    const ruins = lista.filter((t) => t.falhou || t.erros.length || t.problemas.length);
+    certo(!ruins.length, ruins.map((t) => `${t.tela}: ${t.falhou || t.erros[0] || t.problemas.map((p) => p.tipo + ' ' + p.texto).slice(0, 2).join('; ')}`).join(' | ').slice(0, 600));
   });
 }
 grupos.push(g6);
