@@ -50,4 +50,4 @@ function semearApk(origem, destino) {
   }
 }
 
-module.exports = { lerVersao, semearApk };
+module.exports = { lerVersao, semearApk, maisNova };

@@ -1,15 +1,17 @@
 /* Pranchetas Digitais - © 2026 Guilherme. */
 /* Programa do Windows (2.16, decisão do Guilherme): o painel administrativo pela nuvem. A central continua no tablet
    chefe; o computador não liga central, não abre porta no firewall e não entrega APK. Ele só mostra as telas que vêm
-   dentro do programa (servidas aqui mesmo, num endereço local) e a pessoa entra com a sua senha pela nuvem. */
+   dentro do programa ou as atualizadas com assinatura (2.18), num endereço local. A pessoa entra pela nuvem. */
 const { app, BrowserWindow, Menu, Tray, dialog, shell, nativeImage, session } = require('electron');
 const fs = require('node:fs');
 const http = require('node:http');
 const path = require('node:path');
+const { AtualizadorTelas } = require('./atualizar-telas');
+const { lerVersao } = require('./pacote');
 
 const raiz = app.isPackaged ? __dirname : path.resolve(__dirname, '..');
 const publico = path.join(raiz, 'public');
-let janela, bandeja, saindo = false, endereco = '';
+let janela, bandeja, atualizador, saindo = false, endereco = '', arquivoFalhou = false;
 
 const TIPOS = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8',
   '.png': 'image/png', '.svg': 'image/svg+xml', '.json': 'application/json', '.webmanifest': 'application/manifest+json',
@@ -18,19 +20,27 @@ const TIPOS = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; ch
 /** As telas do programa num endereço só deste computador (127.0.0.1, porta escolhida pelo Windows): nada fica aberto na rede. */
 function servirTelas() {
   return new Promise((resolve, reject) => {
-    const publicoReal = fs.realpathSync(publico);
     const servidor = http.createServer((req, res) => {
+      // Mantém a mesma versão durante toda a resposta, mesmo se terminar um download.
+      const ativa = atualizador && atualizador.ativa;
+      const pasta = ativa ? ativa.pasta : publico;
+      let publicoReal;
+      try { publicoReal = fs.realpathSync(pasta); } catch { res.writeHead(404); return res.end(); }
       // endereço com % quebrado (ex.: /%E0%A4%A) não pode derrubar o programa
       let rel;
       try { rel = decodeURIComponent(new URL(req.url, 'http://x').pathname); } catch { res.writeHead(400); return res.end(); }
       if (rel === '/') rel = '/index.html';
-      const alvo = path.normalize(path.join(publico, rel));
-      if (!alvo.startsWith(publico + path.sep)) { res.writeHead(403); return res.end(); }
+      const alvo = path.normalize(path.join(pasta, rel));
+      if (!alvo.startsWith(pasta + path.sep)) { res.writeHead(403); return res.end(); }
       fs.realpath(alvo, (erro, real) => {
         if (erro) { res.writeHead(404); return res.end('Não encontrado'); }
         if (!real.startsWith(publicoReal + path.sep)) { res.writeHead(403); return res.end(); }
         fs.readFile(real, (erro, dados) => {
           if (erro) { res.writeHead(404); return res.end('Não encontrado'); }
+          // Confere os bytes que vão na resposta, não uma leitura anterior do arquivo gravável.
+          if (ativa && !atualizador.confere(ativa, path.relative(pasta, alvo).split(path.sep).join('/'), dados)) {
+            arquivoFalhou = true; res.writeHead(403); return res.end();
+          }
           res.writeHead(200, { 'Content-Type': TIPOS[path.extname(alvo)] || 'application/octet-stream', 'Cache-Control': 'no-cache' });
           res.end(dados);
         });
@@ -55,6 +65,9 @@ function externo(url) {
 const local = (url) => { try { return new URL(url).origin === endereco; } catch { return false; } };
 
 async function ligar() {
+  atualizador = new AtualizadorTelas({ publico,
+    destino: path.join(process.env.LOCALAPPDATA || path.join(app.getPath('appData'), '..', 'Local'), 'Pranchetas'),
+    versao: app.isPackaged ? app.getVersion() : lerVersao(publico) });
   endereco = await servirTelas();
   // O Chromium do Electron derruba a página quando o service worker grava no cache ("bad IPC message, CacheStorageCache"):
   // aqui ele não faz falta. Apaga o que ficou de uma versão anterior (as anotações guardadas na página ficam).
@@ -74,7 +87,10 @@ async function ligar() {
   janela.on('unresponsive', () => registro('a janela parou de responder'));
   // a página caiu: anota e abre de novo (até 3 vezes, para não ficar em volta)
   let quedas = 0;
-  janela.webContents.on('render-process-gone', (e, d) => { registro('a página caiu', JSON.stringify(d)); if (++quedas <= 3) setTimeout(() => janela.reload(), 500); });
+  janela.webContents.on('render-process-gone', (e, d) => {
+    registro('a página caiu', JSON.stringify(d));
+    if (!carregando && ++quedas <= 3) setTimeout(() => carregarPainel().catch(() => {}), 500);
+  });
   janela.on('close', (evento) => { if (!saindo) { evento.preventDefault(); janela.hide(); } });
   janela.webContents.setWindowOpenHandler(({ url }) => { if (local(url)) janela.loadURL(url).catch(() => {}); else externo(url); return { action: 'deny' }; });
   janela.webContents.on('will-navigate', (evento, url) => { if (!local(url)) { evento.preventDefault(); externo(url); } });
@@ -91,10 +107,62 @@ async function ligar() {
     { label: 'Sair', click: () => app.quit() },
   ]));
   bandeja.on('double-click', abrir);
+  let carregando = false, conferindo = false;
+  const comPrazo = (promessa, ms) => {
+    let timer;
+    return Promise.race([promessa, new Promise((_, rejeitar) => { timer = setTimeout(() => rejeitar(new Error('A tela não abriu a tempo')), ms); })])
+      .finally(() => clearTimeout(timer));
+  };
+  async function carregarPainel() {
+    if (carregando) return;
+    carregando = true;
+    try {
+      // Até duas tentativas da atualização, depois uma das telas internas.
+      for (let tentativa = 0; tentativa < 3; tentativa++) {
+        const nova = atualizador.ativa;
+        arquivoFalhou = false;
+        atualizador.iniciarAbertura();
+        try {
+          await comPrazo((async () => {
+            // ?nuvem=1: começa em Entrar pela nuvem.
+            await janela.loadURL(endereco + '/?nuvem=1');
+            if (nova) {
+              await new Promise((r) => setTimeout(r, 5000));
+              const ok = await janela.webContents.executeJavaScript('!!document.querySelector("#app main")?.textContent.trim()');
+              if (!ok || arquivoFalhou) throw new Error('A tela nova não abriu');
+            }
+          })(), 20000);
+          atualizador.confirmarAbertura();
+          abrir(); return;
+        } catch (erro) {
+          if (!nova) throw erro;
+          atualizador.falhou();
+          registro('telas', atualizador.ativa ? 'tentando novamente' : 'voltando para as internas');
+        }
+      }
+    } finally { carregando = false; }
+  }
+  async function conferirTelas() {
+    if (conferindo || carregando || saindo) return;
+    conferindo = true;
+    try {
+      // Só o endereço público: não leva PIN nem token ao processo principal ou ao download.
+      const nuvem = await comPrazo(janela.webContents.executeJavaScript(`(() => {
+        try { return JSON.parse(localStorage.getItem('usina.cfg') || '{}').nuvemUrl || window.USINA?.nuvemPadrao || ''; }
+        catch { return ''; }
+      })()`), 10000);
+      if (nuvem && await atualizador.atualizar(nuvem)) {
+        registro('telas', 'atualização verificada');
+        await carregarPainel();
+      }
+    } catch { registro('telas', 'atualização indisponível ou recusada'); }
+    finally { conferindo = false; }
+  }
   registro('abrindo', endereco);
-  // ?nuvem=1: a primeira tela é "Entrar pela nuvem" (não a de conectar na rede da usina)
-  await janela.loadURL(endereco + '/?nuvem=1');
-  abrir();
+  await carregarPainel();
+  void conferirTelas();
+  const intervalo = setInterval(conferirTelas, 30 * 60000);
+  intervalo.unref();
 }
 
 if (!app.requestSingleInstanceLock()) app.quit();

@@ -101,7 +101,7 @@ function pacoteDasTelas() {
   juntar(origem, '');
   const contexto = { window: {} };
   vm.runInNewContext(fs.readFileSync(path.join(PUBLICO, 'config', 'novidades.js'), 'utf8'), contexto);
-  const pacote = Buffer.from(JSON.stringify({ versao, apkMinimo: process.env.APK_MINIMO || versaoDoNativo(), criadoEm: new Date().toISOString(), novidades: contexto.window.NOVIDADES || [], arquivos }, null, 1));
+  const pacote = Buffer.from(JSON.stringify({ versao, apkMinimo: process.env.APK_MINIMO || versaoDoNativo(), windowsMinimo: process.env.WINDOWS_MINIMO || '2.18.0', criadoEm: new Date().toISOString(), novidades: contexto.window.NOVIDADES || [], arquivos }, null, 1));
   const assinatura = crypto.sign('sha256', pacote, privada).toString('base64'); // ECDSA P-256, formato DER (o Java confere do mesmo jeito)
   fs.writeFileSync(path.join(origem, 'pacote.json'), pacote);
   fs.writeFileSync(path.join(origem, 'pacote.sig'), assinatura);

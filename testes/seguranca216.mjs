@@ -21,13 +21,15 @@ export async function testarWindowsSeguranca216(g) {
   const janela = { webContents: { on: (n, f) => eventos[n] = f, setWindowOpenHandler: (f) => eventos.abrir = f },
     on() {}, setMenu() {}, loadURL: async () => {}, isMinimized: () => false, show() {}, focus() {} };
   const electron = { app: { isPackaged: true, requestSingleInstanceLock: () => false, quit() {}, getPath: () => pasta,
-    getLoginItemSettings: () => ({}) }, BrowserWindow: function () { return janela; },
+    getLoginItemSettings: () => ({}), getVersion: () => '2.18.0' }, BrowserWindow: function () { return janela; },
     session: { defaultSession: { clearStorageData: async () => {} } },
     nativeImage: { createFromPath: () => ({ resize: () => ({}) }) },
     Tray: function () { this.setToolTip = this.setContextMenu = this.on = () => {}; }, Menu: { buildFromTemplate: (x) => x },
     shell: { openExternal: async (url) => externos.push(url) }, dialog: { showErrorBox() {} } };
-  const ctx = vm.createContext({ __dirname: pasta, URL, setTimeout, require: (nome) => nome === 'electron' ? electron
-    : nome === 'node:http' ? { createServer: (...args) => { const s = http.createServer(...args); servidores.push(s); return s; } } : require(nome) });
+  const requireWindows = createRequire(new URL('../windows/main.js', import.meta.url));
+  const ctx = vm.createContext({ __dirname: pasta, URL, setTimeout, clearTimeout,
+    setInterval: () => ({ unref() {} }), process: { env: { LOCALAPPDATA: pasta } }, require: (nome) => nome === 'electron' ? electron
+    : nome === 'node:http' ? { createServer: (...args) => { const s = http.createServer(...args); servidores.push(s); return s; } } : requireWindows(nome) });
   try {
     vm.runInContext(fonte('windows/main.js'), ctx);
     await vm.runInContext('ligar()', ctx);
