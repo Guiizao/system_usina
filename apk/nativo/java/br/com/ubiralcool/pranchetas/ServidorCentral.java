@@ -688,16 +688,17 @@ public class ServidorCentral {
         }
         if ("/api/base44".equals(caminho) && "POST".equals(metodo)) {
           String acaoBase44 = acaoDoPedido(corpo);
-          if ("configurar".equals(acaoBase44) && !podeNoAparelho(aparelho, "integracoes")) { negar(saida, "integracoes"); return; }
+          if ("configurar".equals(acaoBase44) && !podeNoAparelho(aparelho, "sistema")) { negar(saida, "integracoes"); return; }
           // Envio automático e manual exigem a função da sessão atual.
           if ("enviar".equals(acaoBase44) && !podeNoAparelho(aparelho, "integracoes") && !podeAparelhoSozinho(aparelho, "integracoes")) { negar(saida, "integracoes"); return; }
-          apiBase44(corpo, saida);
+          apiBase44(corpo, aparelho, saida);
           return;
         }
         if ("/api/nuvem".equals(caminho) && "POST".equals(metodo)) {
           String acaoNuvem = acaoDoPedido(corpo);
-          if (("configurar".equals(acaoNuvem) || "enviar".equals(acaoNuvem)) && !podeNoAparelho(aparelho, "integracoes")) { negar(saida, "integracoes"); return; }
-          apiNuvem(corpo, nivelDoAparelho(aparelho) > 0, saida);
+          if ("configurar".equals(acaoNuvem) && !podeNoAparelho(aparelho, "sistema")) { negar(saida, "sistema"); return; }
+          if (("enviar".equals(acaoNuvem)) && !podeNoAparelho(aparelho, "integracoes")) { negar(saida, "integracoes"); return; }
+          apiNuvem(corpo, aparelho, nivelDoAparelho(aparelho) > 0, saida);
           return;
         }
         if ("/api/chefes".equals(caminho) && "POST".equals(metodo)) { apiChefes(corpo, aparelho, saida); return; }
@@ -848,7 +849,7 @@ public class ServidorCentral {
           if (!f.contains("escritorio")) { recusados.put(new JSONObject().put("id", r.optString("id")).put("motivo", "sem_permissao")); continue; }
         } else if (nivelAqui > 0 && !"registro".equals(prancheta) && !"avisos-recibo".equals(prancheta)) {
           // tablet chefe: a função de quem está dentro (a mesma que a tela pede)
-          String motivo = motivoNoChefe(idCifrado, prancheta);
+          String motivo = motivoNoChefe(idCifrado, r, atual);
           if (!motivo.isEmpty()) { recusados.put(new JSONObject().put("id", r.optString("id")).put("motivo", motivo)); continue; }
         } else if ("avisos".equals(prancheta)) {
           // aviso só sai do tablet chefe
@@ -859,7 +860,7 @@ public class ServidorCentral {
           recusados.put(new JSONObject().put("id", r.optString("id")).put("motivo", "sem_permissao")); continue;
         }
         // tablet de setor não muda os campos que são só do escritório (NF, lote, validade...), nem de dia antigo
-        if (nivelAqui == 0 && r.optJSONObject("valores") != null) {
+        if (nivelAqui == 0 && r.optJSONObject("valores") != null && !funcoesNoSetor(idCifrado).contains("escritorio")) {
           List<String> soEscritorio = camposSoDoEscritorio(prancheta);
           if (!soEscritorio.isEmpty()) {
             JSONObject valores = r.optJSONObject("valores");
@@ -1833,7 +1834,7 @@ public class ServidorCentral {
     return r;
   }
 
-  private void apiBase44(byte[] corpo, OutputStream saida) throws Exception {
+  private void apiBase44(byte[] corpo, String aparelho, OutputStream saida) throws Exception {
     JSONObject pedido = new JSONObject(new String(corpo, StandardCharsets.UTF_8));
     String acao = pedido.optString("acao");
     JSONObject b = base44();
@@ -1847,10 +1848,12 @@ public class ServidorCentral {
       synchronized (this) {
         // só os dias depois de ligar vão sozinhos (os anteriores o escritório já lançou à mão)
         if (!endereco.isEmpty() && !endereco.equals(b.optString("url")) && ehDia(pedido.optString("desde"))) b.put("desde", pedido.optString("desde"));
+        if (!endereco.equals(b.optString("url"))) b.put("segredo", "");
         b.put("url", endereco);
         if (pedido.opt("segredo") instanceof String) { String s = pedido.optString("segredo").trim(); b.put("segredo", s.length() > 200 ? s.substring(0, 200) : s); }
         salvarConfig();
       }
+      registrar("configuracao", pessoaDoAparelho(aparelho).optString("nome") + " configurou o Base44", pessoaDoAparelho(aparelho).optString("nome"), nomeDoAparelho(aparelho), null);
       enviarJson(saida, 200, estadoBase44(true));
       return;
     }
@@ -1868,11 +1871,13 @@ public class ServidorCentral {
       int status = 0;
       String erro = "", texto = "";
       try {
-        HttpURLConnection con = (HttpURLConnection) new URL(b.optString("url")).openConnection();
+        String url, segredo;
+        synchronized (this) { url = b.optString("url"); segredo = b.optString("segredo"); }
+        HttpURLConnection con = (HttpURLConnection) new URL(url).openConnection();
         con.setConnectTimeout(15000); con.setReadTimeout(20000);
         con.setRequestMethod("POST"); con.setDoOutput(true);
         con.setRequestProperty("Content-Type", "application/json");
-        con.setRequestProperty("X-Pranchetas-Segredo", b.optString("segredo"));
+        con.setRequestProperty("X-Pranchetas-Segredo", segredo);
         try (OutputStream o = con.getOutputStream()) { o.write(dados.toString().getBytes(StandardCharsets.UTF_8)); }
         status = con.getResponseCode();
         InputStream resp = status >= 400 ? con.getErrorStream() : con.getInputStream();
@@ -2190,7 +2195,7 @@ public class ServidorCentral {
     }
   }
 
-  private void apiNuvem(byte[] corpo, boolean deChefe, OutputStream saida) throws Exception {
+  private void apiNuvem(byte[] corpo, String aparelho, boolean deChefe, OutputStream saida) throws Exception {
     JSONObject pedido = new JSONObject(new String(corpo, StandardCharsets.UTF_8));
     String acao = pedido.optString("acao");
     JSONObject n = nuvem();
@@ -2207,7 +2212,7 @@ public class ServidorCentral {
       }
       synchronized (this) {
         if (!endereco.equals(n.optString("url"))) {
-          n.put("url", endereco).put("seq", 0L).put("arquivosEnviados", false).put("conferida", false).put("formsHash", "").put("medidasHash", "").put("pessoasHash", "")
+          n.put("url", endereco).put("segredo", "").put("seq", 0L).put("arquivosEnviados", false).put("conferida", false).put("formsHash", "").put("medidasHash", "").put("pessoasHash", "")
            .put("erro", "").put("ultimoEnvio", 0L).put("faltam", 0L);
         }
         if (pedido.opt("segredo") instanceof String) {
@@ -2216,6 +2221,7 @@ public class ServidorCentral {
         }
         salvarConfig();
       }
+      registrar("configuracao", pessoaDoAparelho(aparelho).optString("nome") + " configurou a Nuvem", pessoaDoAparelho(aparelho).optString("nome"), nomeDoAparelho(aparelho), null);
       try {
         if (relogioNuvem != null) {
           relogioNuvem.schedule(this::enviarParaNuvem, 500, java.util.concurrent.TimeUnit.MILLISECONDS);
@@ -2274,7 +2280,7 @@ public class ServidorCentral {
       for (String f : funcoes) listaFuncoes.put(f);
       JSONObject copia = new JSONObject().put("id", p.optString("id")).put("nome", p.optString("nome"))
         .put("nivel", p.optString("nivel")).put("ativo", true).put("funcoes", listaFuncoes);
-      if (p.optJSONObject("nuvem") != null) copia.put("nuvem", new JSONObject(p.getJSONObject("nuvem").toString()));
+      if (!p.optBoolean("pedeTrocarSenha") && p.optJSONObject("nuvem") != null) copia.put("nuvem", new JSONObject(p.getJSONObject("nuvem").toString()));
       saida.put(copia);
     }
     return saida;
@@ -2286,8 +2292,7 @@ public class ServidorCentral {
   private synchronized JSONArray pessoas() throws Exception {
     JSONArray l = config.optJSONArray("pessoas");
     if (l == null) {
-      JSONObject forms = config.optJSONObject("nuvemForms");
-      String pin = forms != null && !forms.optString("pinAdmin").isEmpty() ? forms.optString("pinAdmin") : "159357";
+      String pin = "159357";
       JSONObject p = new JSONObject().put("id", "p" + sorteiaChave().substring(0, 8)).put("nome", "Guilherme").put("nivel", "administrador")
           .put("extras", new JSONObject()).put("ativo", true).put("criadoEm", System.currentTimeMillis());
       l = new JSONArray().put(guardarSenha(p, pin));
@@ -2330,7 +2335,7 @@ public class ServidorCentral {
     JSONObject s = objetoDaConfig("sessoes").optJSONObject(aparelho);
     if (s == null) return null;
     JSONObject p = pessoaPorId(s.optString("pessoaId"));
-    return p != null && ativa(p) ? p : null;
+    return p != null && ativa(p) && !p.optBoolean("pedeTrocarSenha") ? p : null;
   }
 
   private synchronized Object tetoDoAparelho(String aparelho) throws Exception {
@@ -2511,6 +2516,22 @@ public class ServidorCentral {
         enviarJson(saida, 403, new JSONObject().put("erro", "Senha errada"));
         return;
       }
+      if (ehDono(pessoa) && (pessoa.optBoolean("pedeTrocarSenha") || "159357".equals(pin))) {
+        String nova = pedido.optString("novaSenha");
+        if (!(pedido.opt("novaSenha") instanceof String) || !nova.matches("\\d{4,8}") || "159357".equals(nova)) { enviarJson(saida, 403, new JSONObject().put("erro", "Troque a senha inicial do dono").put("pedeTrocarSenha", true)); return; }
+        synchronized (this) {
+          // Outra troca concorrente não pode reaproveitar a senha inicial já revogada.
+          if (!resumoDaSenha(pin, pessoa.optString("sal")).equals(pessoa.optString("resumo"))) { enviarJson(saida, 403, new JSONObject().put("erro", "Senha errada")); return; }
+          if (pessoaDaSenha(nova) != null) { enviarJson(saida, 400, new JSONObject().put("erro", "Essa senha já é de outra pessoa. Escolha outra.")); return; }
+          guardarSenha(pessoa, nova); pessoa.remove("pedeTrocarSenha");
+          JSONObject sessoes = objetoDaConfig("sessoes");
+          List<String> tirar = new ArrayList<>();
+          for (Iterator<String> it = sessoes.keys(); it.hasNext(); ) { String id = it.next(); if (pessoa.optString("id").equals(sessoes.getJSONObject(id).optString("pessoaId"))) tirar.add(id); }
+          for (String id : tirar) sessoes.remove(id);
+          salvarConfig(); agendarNuvem();
+        }
+        registrar("configuracao", pessoa.optString("nome") + " trocou a senha inicial", pessoa.optString("nome"), aqui, null);
+      }
       if ("entrar".equals(acao)) {
         // só entra pessoa em tablet chefe liberado; no nível 3, só o dono (versão 2.12)
         int nivel = nivelDoAparelho(aparelho);
@@ -2566,6 +2587,7 @@ public class ServidorCentral {
         JSONObject existente = d.optString("id").isEmpty() ? null : pessoaPorId(d.optString("id"));
         if (!d.optString("id").isEmpty() && existente == null) { enviarJson(saida, 404, new JSONObject().put("erro", "Pessoa não encontrada")); return; }
         // o dono só o próprio dono muda; e ele continua administrador e ativo (versão 2.12)
+        if (ehDono(existente) && "159357".equals(d.optString("pin"))) { enviarJson(saida, 400, new JSONObject().put("erro", "Escolha uma senha diferente da inicial")); return; }
         if (ehDono(existente) && !ehDono(quem)) { enviarJson(saida, 403, new JSONObject().put("erro", "Só o dono do sistema muda os dados dele")); return; }
         if (ehDono(existente) && (!"administrador".equals(nivel) || !ativo)) { enviarJson(saida, 400, new JSONObject().put("erro", "O dono do sistema continua administrador e ativo")); return; }
         // Aplicativo antigo não manda a lista: preserva o vínculo; [] o remove explicitamente.
@@ -2747,6 +2769,15 @@ public class ServidorCentral {
       config.put("niveisMigrados", System.currentTimeMillis());
       mudou = true;
     }
+    JSONObject donoInicial = pessoaPorId(config.optString("donoId"));
+    if (donoInicial != null && resumoDaSenha("159357", donoInicial.optString("sal")).equals(donoInicial.optString("resumo"))) {
+      donoInicial.put("pedeTrocarSenha", true); donoInicial.remove("nuvem");
+      JSONObject sessoes = objetoDaConfig("sessoes");
+      List<String> tirar = new ArrayList<>();
+      for (Iterator<String> it = sessoes.keys(); it.hasNext(); ) { String id = it.next(); if (donoInicial.optString("id").equals(sessoes.getJSONObject(id).optString("pessoaId"))) tirar.add(id); }
+      for (String id : tirar) sessoes.remove(id);
+      mudou = true;
+    }
     if (mudou) salvarConfig();
   }
 
@@ -2855,7 +2886,7 @@ public class ServidorCentral {
     if (l == null || System.currentTimeMillis() > (Long) l[1]) return new HashSet<>();
     JSONObject p = pessoaPorId((String) l[0]);
     // no tablet de setor a senha só abre os ajustes dele (os operadores), seja de quem for: o resto é do tablet chefe
-    Set<String> s = p != null && ativa(p) ? funcoesDaPessoaNoAparelho(p, aparelho) : new HashSet<>();
+    Set<String> s = p != null && ativa(p) && !p.optBoolean("pedeTrocarSenha") ? funcoesDaPessoaNoAparelho(p, aparelho) : new HashSet<>();
     s.retainAll(FUNCOES_NO_SETOR);
     return s;
   }
@@ -3055,12 +3086,28 @@ public class ServidorCentral {
   /** Anotação que chegou de um tablet chefe: a mesma função que a tela pede, de quem está dentro dele (aviso: avisos;
       Vinho e Fermentação: anotar; folhas dos setores: corrigir). Sem ninguém dentro: "sem_sessao" (o
       aparelho guarda a anotação e manda de novo quando alguém entrar). */
-  private synchronized String motivoNoChefe(String aparelho, String prancheta) throws Exception {
+  private synchronized String motivoNoChefe(String aparelho, JSONObject r, JSONObject guardado) throws Exception {
+    String prancheta = r.optString("prancheta");
     if (pessoaDoAparelho(aparelho) == null) return "sem_sessao";
     Set<String> f = funcoesNoAparelho(aparelho);
     if ("avisos".equals(prancheta)) return f.contains("avisos") ? "" : "sem_permissao";
     if (PRANCHETAS_SO_DO_CHEFE.contains(prancheta)) return f.contains("anotar") ? "" : "sem_permissao";
-    return f.contains("corrigir") ? "" : "sem_permissao";
+    return f.contains("corrigir") || (f.contains("escritorio") && soMudouEscritorio(r, guardado)) ? "" : "sem_permissao";
+  }
+
+  private boolean soMudouEscritorio(JSONObject r, JSONObject guardado) throws Exception {
+    List<String> permitidos = camposSoDoEscritorio(r.optString("prancheta"));
+    if (permitidos.isEmpty() || r.optBoolean("apagado") || (guardado != null && guardado.optBoolean("apagado"))) return false;
+    JSONObject antes = guardado == null ? null : guardado.optJSONObject("valores"), depois = r.optJSONObject("valores");
+    JSONObject em = r.optJSONObject("camposEm"), emAntes = guardado == null ? null : guardado.optJSONObject("camposEm");
+    if (guardado != null && !r.optString("operador").equals(guardado.optString("operador"))) return false;
+    Set<String> chaves = new HashSet<>();
+    for (JSONObject o : new JSONObject[] { antes, depois, em }) if (o != null) for (Iterator<String> it = o.keys(); it.hasNext(); ) chaves.add(it.next());
+    for (String k : chaves) if (!permitidos.contains(k)) {
+      Object a = antes == null ? null : antes.opt(k), b = depois == null ? null : depois.opt(k);
+      if (!java.util.Objects.equals(a, b) || (em == null ? 0 : em.optLong(k)) != (emAntes == null ? 0 : emAntes.optLong(k))) return false;
+    }
+    return true;
   }
 
   /** A anotação guardada de um dia antigo, no BackupUsina (cada dia lido uma vez por sincronização). */
@@ -3090,6 +3137,7 @@ public class ServidorCentral {
     JSONObject daFolha = folhas == null ? null : folhas.optJSONObject(pid);
     JSONArray abertos = daFolha == null ? null : daFolha.optJSONArray("_operador");
     if (abertos != null) for (int i = 0; i < abertos.length(); i++) liberados.add(abertos.optString(i));
+    if (!liberados.contains("verificado")) l.add("verificado");
     JSONArray esc = p.optJSONArray("camposEscritorio");
     if (esc != null) for (int i = 0; i < esc.length(); i++) { JSONObject c = esc.optJSONObject(i); if (c != null && !liberados.contains(c.optString("id"))) l.add(c.optString("id")); }
     return l;
@@ -3169,7 +3217,8 @@ public class ServidorCentral {
             if (x == null || x == dono || x.optString("resumo").isEmpty()) continue;
             if (resumoDaSenha(nova, x.optString("sal")).equals(x.optString("resumo"))) { enviarJson(saida, 400, new JSONObject().put("erro", "Essa senha já é de outra pessoa. Escolha outra.")); return; }
           }
-          guardarSenha(dono, nova);
+          if ("159357".equals(nova)) { enviarJson(saida, 400, new JSONObject().put("erro", "Escolha uma senha diferente da inicial")); return; }
+          guardarSenha(dono, nova); dono.remove("pedeTrocarSenha");
           agendarNuvem();
         }
         dono.put("nivel", "administrador").put("ativo", true);
@@ -3350,6 +3399,7 @@ public class ServidorCentral {
     String id = pedido.optString("id");
     if (id.length() > 80) id = id.substring(0, 80);
     if (id.isEmpty() || (!aparelhos.containsKey(id) && !objetoDaConfig("aparelhosVistos").has(id))) { enviarJson(saida, 404, new JSONObject().put("erro", "Aparelho não encontrado")); return; }
+    if (nivelDoAparelho(id) == 3 && !ehDono(quem)) { negar(saida, "sistema"); return; }
     String nome = nomeDoAparelho(id), aqui = nomeDoAparelho(aparelho), nomeQuem = quem.optString("nome");
     String acao = pedido.optString("acao");
     if ("bloquear".equals(acao)) {

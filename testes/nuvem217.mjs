@@ -8,7 +8,7 @@ import { pbkdf2Sync, createHmac } from 'node:crypto';
 import { ligarNuvemSQLite } from './nuvem-sqlite.mjs';
 import { centralNode, centralJava } from './servidores.mjs';
 import { conectarTeste } from './cifra.mjs';
-import { novoGrupo, teste, igual, certo, resumo } from './teste.mjs';
+import { novoGrupo, teste, igual, certo, resumo, SENHA_ENCARREGADO } from './teste.mjs';
 
 const SEGREDO = 'segredo-ficticio-nuvem217';
 const g = novoGrupo('Nuvem 2.17 (SQLite, Node e Java)');
@@ -129,6 +129,8 @@ try {
           info: { modelo: 'Android privado' }, registros: [] } });
         igual(r.status, 200);
         inicio = envios.length;
+        await c.api('/api/chefes', { acao: 'liberar', pin: SENHA_ENCARREGADO, nivel: 3 });
+        await c.api('/api/pessoas', { acao: 'entrar', pin: SENHA_ENCARREGADO });
         await c.api('/api/nuvem', { acao: 'configurar', url: 'http://127.0.0.1:8371', segredo: SEGREDO });
         const envio = await c.api('/api/nuvem', { acao: 'enviar' }); certo(!envio.erro, envio.erro);
         const foto = envios.slice(inicio).find((x) => x.aparelhos)?.aparelhos;

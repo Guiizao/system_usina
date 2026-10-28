@@ -61,7 +61,8 @@ Log 'Preparando as tabelas do banco...'
 # atualizacao do aplicativo: o APK e o versao.json que o gerar-apk.ps1 deixou em apk\saida
 $saidaApk = Join-Path $aqui '..\apk\saida'
 if ((Test-Path "$saidaApk\versao.json") -and (Test-Path "$saidaApk\pranchetas.apk")) {
-  Copy-Item "$saidaApk\pranchetas.apk", "$saidaApk\versao.json" "$aqui\publico\atualizacao" -Force
+  if (-not (Test-Path "$saidaApk\versao.sig")) { throw "Falta versao.sig: gere o APK assinado antes de publicar" }
+  Copy-Item "$saidaApk\pranchetas.apk", "$saidaApk\versao.json", "$saidaApk\versao.sig" "$aqui\publico\atualizacao" -Force
   $v = (Get-Content "$saidaApk\versao.json" -Raw | ConvertFrom-Json).versao
   Log "A versao $v do aplicativo vai junto (os tablets atualizam por ela)."
 }

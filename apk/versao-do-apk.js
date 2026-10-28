@@ -32,7 +32,10 @@ if (process.argv[2] === 'gradle') {
   const novidades = contexto.window.NOVIDADES || [];
   if (!novidades.length || novidades[0].versao !== versao) throw new Error(`faltam as novidades da versão ${versao} em public/config/novidades.js`);
   const info = { versao, codigo, tamanho: apk.length, sha256: crypto.createHash('sha256').update(apk).digest('hex'), novidades };
-  fs.writeFileSync(path.join(__dirname, 'saida', 'versao.json'), JSON.stringify(info, null, 2));
+  const manifesto = Buffer.from(JSON.stringify(info, null, 2));
+  const { privada } = chaveDasTelas();
+  fs.writeFileSync(path.join(__dirname, 'saida', 'versao.json'), manifesto);
+  fs.writeFileSync(path.join(__dirname, 'saida', 'versao.sig'), crypto.sign('sha256', manifesto, privada).toString('base64'));
   console.log(`saida\\versao.json: versão ${versao}, ${(apk.length / 1048576).toFixed(1)} MB`);
 } else if (process.argv[2] === 'chave') {
   const { publica } = chaveDasTelas();
