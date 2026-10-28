@@ -84,7 +84,8 @@
     const h = new Date().getHours();
     if (!dentroDoHorario(hor, h)) return null; // fora do horário de trabalho do setor
     const data = dataProducao();
-    const falta = pranchetasDo(cfg.papel).filter((pid) => prancheta(pid).tipo === 'grade' && !pegar(data, pid, h));
+    // 2.18: folha marcada "parada hoje" neste aparelho (ex.: Caldeira 2 desligada) não pede leitura
+    const falta = pranchetasDo(cfg.papel).filter((pid) => prancheta(pid).tipo === 'grade' && !pegar(data, pid, h) && !(cfg.paradas || {})[`${data}|${pid}`]);
     return falta.length ? { id: `${data}|${h}`, h, falta } : null;
   }
   function tocar(freq, tipo, vezes, volume) {

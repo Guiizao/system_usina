@@ -447,7 +447,8 @@
       contextoEdicao = `leitura das ${rotuloHora(chave)}`;
       seletor = seletorDeHoras(chave, hoje, (h) => !!porHora[h], () => 'feita');
       const reg = porHora[chave];
-      cabecalhoForm = `<span class="aviso">${esc(turnoDaHora(chave, turnosDaPrancheta(v.pid)).nome)}</span>${reg ? `<span class="aviso ok">${ico('certo')} Anotada por ${esc(reg.operador || 'sem nome')}</span>` : ''}`;
+      const parada = hoje && !ehCentral() && (cfg.paradas || {})[`${data}|${v.pid}`];
+      cabecalhoForm = `<span class="aviso">${esc(turnoDaHora(chave, turnosDaPrancheta(v.pid)).nome)}</span>${reg ? `<span class="aviso ok">${ico('certo')} Anotada por ${esc(reg.operador || 'sem nome')}</span>` : ''}${hoje && !ehCentral() ? `<button class="btn pequeno" data-a="parada-hoje">${parada ? 'Voltou a funcionar' : 'Parada hoje'}</button>` : ''}`;
       rotuloSalvar = `Salvar leitura das ${rotuloHora(chave)}`;
       const regs = listar(data, v.pid);
       folha = () => `<div class="turnos">${turnosDaPrancheta(v.pid).map((t) => {

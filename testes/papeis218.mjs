@@ -273,6 +273,22 @@ export async function testarRascunho218(nav, g) {
   } finally { await a.fechar(); await c.desligar(); }
 }
 
+/** T9: folha hora a hora parada no dia (Caldeira 2) não pede leitura no lembrete. */
+export async function testarParada218(nav, g) {
+  const c = await centralNode(8393, pastaTemporaria('p218-parada'));
+  const a = await nav.novoAparelho('caldeira', TAMANHOS.tablet);
+  try {
+    await teste(g, 'Caldeira 2 "parada hoje": o lembrete só cobra a Caldeira 1', async () => {
+      await a.ir(c.url + '/?demo&papel=caldeira&op=Alberto&lembrete=1', '!!document.querySelector("#lembrete:not([hidden])")');
+      await a.avaliar(`(() => { ir({ tela: 'prancheta', pid: 'caldeira_2' }); return 1; })()`);
+      await a.tocar('[data-a="parada-hoje"]');
+      const p = await a.avaliar('JSON.stringify(horaPendente())').then(JSON.parse);
+      certo(p && !p.falta.includes('caldeira_2') && p.falta.includes('caldeira'), 'pendentes: ' + JSON.stringify(p));
+    });
+    certo(!a.erros.length, a.erros.join(' | '));
+  } finally { await a.fechar(); await c.desligar(); }
+}
+
 if (import.meta.url === pathToFileURL(process.argv[1]).href) {
   const nav = await abrirNavegador();
   const g = novoGrupo('Versão 2.18: revisão por papéis');
@@ -289,6 +305,7 @@ if (import.meta.url === pathToFileURL(process.argv[1]).href) {
     if (!so || so === 'senha') await testarSenhaInicial218(nav, g);
     if (!so || so === 'pc') await testarAjustesPC218(nav, g);
     if (!so || so === 'rascunho') await testarRascunho218(nav, g);
+    if (!so || so === 'parada') await testarParada218(nav, g);
   } finally { await nav.fechar(); }
   const r = resumo([g]);
   console.log(`\n${r.passaram} de ${r.total} testes passaram${r.falharam ? `, ${r.falharam} falharam` : ''}`);

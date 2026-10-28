@@ -666,6 +666,14 @@
         return;
       }
       case 'sair-nuvem': return sairDaNuvem();
+      case 'parada-hoje': {
+        // 2.18: só neste aparelho e só hoje: cala o lembrete daquela folha (ex.: Caldeira 2 desligada)
+        const k = `${dataProducao()}|${v.pid}`, d = dataProducao();
+        cfg.paradas = Object.fromEntries(Object.entries(cfg.paradas || {}).filter(([x]) => x.startsWith(d + '|')));
+        if (cfg.paradas[k]) delete cfg.paradas[k]; else cfg.paradas[k] = true;
+        salvarCfg(); toast(cfg.paradas[k] ? `${prancheta(v.pid).nome}: parada hoje. O lembrete não cobra esta folha.` : `${prancheta(v.pid).nome} voltou a funcionar.`, 'info');
+        verificarLembrete(); return render();
+      }
       case 'exemplo': if (!cfg.demo) return; preencherExemplo(); toast('Dados de exemplo adicionados'); return render();
       case 'limpar-tudo': {
         const aviso = pendentes() ? `Atenção: ${contar(pendentes(), 'anotação ainda não chegou', 'anotações ainda não chegaram')} na central.` : 'O que já foi enviado continua guardado na central.';
