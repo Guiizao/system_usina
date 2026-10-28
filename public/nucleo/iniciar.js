@@ -94,6 +94,7 @@
     }
     if (params.get('modal') === 'lembrete-horario') escolherHorarioLembrete('destilaria');
     if (params.get('modal') === 'conexao') verConexao();
+    if (!params.get('tela') && operadorAtual() && !ehCentral()) voltarAoRascunho();
     if (params.get('modal') === 'codigo-trocado') avisarCodigoTrocado({ id: 'demo', em: Date.now() - 40 * 60000, quem: 'Fernando', aparelho: 'Tablet do escritório' });
     if (params.get('modal') === 'nivel') editarNivelChefe(1);
     if (params.get('aviso') && cfg.papel && !ehCentral() && operadorAtual()) {
@@ -145,6 +146,7 @@
     pilha = [telaInicial()];
     if (cfg.papel && (cfg.chave || cfg.demo) && !ehCentral() && !ehEscritorio() && !operadorAtual()) pilha.push({ tela: 'operador' });
     render(true);
+    if (operadorAtual() && !ehCentral()) voltarAoRascunho();
     mostrarAbertura();
     lerInfoDoAparelho().finally(sincronizar);
     setTimeout(() => conferirNaNuvem(true), 4000);

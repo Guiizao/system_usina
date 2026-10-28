@@ -65,6 +65,27 @@
     return versao(pegar(data, pid, chave));
   }
 
+  /* 2.18: o que foi digitado e não salvo fica guardado no aparelho (o Android pode fechar o app no meio) e volta ao abrir.
+     Se a linha mudou pela rede enquanto isso, vale a anotação nova e o guardado é descartado. */
+  let rascunhoGuardado = '';
+  function guardarRascunhoAberto() {
+    const v = view();
+    const txt = v && v.tela === 'prancheta' && rascunhoSujo() ? JSON.stringify({ papel: cfg.papel, pid: v.pid, data: dataDaView(v), chave: rascunho.chave,
+      valores: rascunho.valores, extras: rascunho.extras, fonte: fonteDaFolha(prancheta(v.pid), v.pid, dataDaView(v), rascunho.chave) }) : '';
+    if (txt === rascunhoGuardado) return;
+    rascunhoGuardado = txt;
+    try { if (txt) localStorage.setItem('usina.rascunho', txt); else localStorage.removeItem('usina.rascunho'); } catch (e) { /* sem espaço: segue sem guardar */ }
+  }
+  function voltarAoRascunho() {
+    let s = null;
+    try { s = JSON.parse(localStorage.getItem('usina.rascunho') || 'null'); } catch (e) { /* guardado estragado */ }
+    if (!s || s.papel !== cfg.papel || s.data !== dataProducao() || !prancheta(s.pid)) return;
+    ir({ tela: 'prancheta', pid: s.pid, chave: s.chave });
+    if (!rascunho || String(rascunho.chave) !== String(s.chave) || fonteDaFolha(prancheta(s.pid), s.pid, s.data, s.chave) !== s.fonte) return;
+    Object.assign(rascunho, { valores: s.valores, extras: s.extras });
+    render();
+    toast('Voltou o que estava sendo anotado. Falta salvar.', 'info');
+  }
   function prepararRascunho(v) {
     const p = prancheta(v.pid);
     const data = dataDaView(v);

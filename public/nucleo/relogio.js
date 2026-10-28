@@ -41,6 +41,7 @@
       });
       if (mudou) atualizarEdicao();
     }
+    guardarRascunhoAberto();
     const d = dataProducao(), t = turnoAtual().id, h = new Date().getHours();
     fechamentoDoDia(d);
     travarPorInatividade();

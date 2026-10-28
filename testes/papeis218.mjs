@@ -256,6 +256,23 @@ export async function testarAjustesPC218(nav, g) {
   } finally { await a.fechar(); await c.desligar(); }
 }
 
+/** T7: o que foi digitado e não salvo volta quando o aplicativo é fechado e aberto de novo. */
+export async function testarRascunho218(nav, g) {
+  const c = await centralNode(8392, pastaTemporaria('p218-rascunho'));
+  const a = await nav.novoAparelho('hidrólise', TAMANHOS.tablet);
+  try {
+    await teste(g, 'Brix 19 digitado sem salvar: ao reabrir volta na mesma dorna com o 19', async () => {
+      await a.ir(c.url + '/?demo&papel=hidrolise&op=Guilherme', 'typeof dornasDoDia === "function" && !!document.querySelector("#app main")');
+      const k = await a.avaliar(`(() => { const l = dornasDoDia(dataProducao(), 'hid_anexo1'); const k = Math.max(0, ...l.map((r) => Number(r.chave))) + 1; ir({ tela: 'prancheta', pid: 'hid_anexo1', chave: k }); return k; })()`);
+      await a.tocar('[data-quadro="brix"]'); await a.teclar(['1', '9']);
+      await dormir(1500);
+      await a.recarregar();
+      await a.esperar(`view().tela === 'prancheta' && rascunho && Number(rascunho.chave) === ${k} && rascunho.valores.brix === '19'`, 8000, 'voltar na dorna com o Brix 19');
+    });
+    certo(!a.erros.length, a.erros.join(' | '));
+  } finally { await a.fechar(); await c.desligar(); }
+}
+
 if (import.meta.url === pathToFileURL(process.argv[1]).href) {
   const nav = await abrirNavegador();
   const g = novoGrupo('Versão 2.18: revisão por papéis');
@@ -271,6 +288,7 @@ if (import.meta.url === pathToFileURL(process.argv[1]).href) {
     if (!so || so === 'turno') await testarTurnoEAviso218(nav, g);
     if (!so || so === 'senha') await testarSenhaInicial218(nav, g);
     if (!so || so === 'pc') await testarAjustesPC218(nav, g);
+    if (!so || so === 'rascunho') await testarRascunho218(nav, g);
   } finally { await nav.fechar(); }
   const r = resumo([g]);
   console.log(`\n${r.passaram} de ${r.total} testes passaram${r.falharam ? `, ${r.falharam} falharam` : ''}`);
