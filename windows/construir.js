@@ -13,7 +13,8 @@ async function construir() {
   fs.rmSync(pacote, { recursive: true, force: true });
   fs.mkdirSync(pacote, { recursive: true });
   // 2.16: o programa é só o painel pela nuvem: vai o main.js e as telas (sem a central, sem o APK dos tablets)
-  fs.copyFileSync(path.join(__dirname, 'main.js'), path.join(pacote, 'main.js'));
+  for (const arquivo of ['main.js', 'atualizar-telas.js', 'pacote.js'])
+    fs.copyFileSync(path.join(__dirname, arquivo), path.join(pacote, arquivo));
   fs.cpSync(path.join(raiz, 'public'), path.join(pacote, 'public'), { recursive: true });
   // como no APK: as partes do aplicativo viram um app.js só, embaralhado (quem abrir o instalador não lê o código)
   const { execFileSync } = require('node:child_process');
