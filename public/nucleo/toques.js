@@ -190,7 +190,8 @@
         return;
       }
       case 'admin': {
-        if (!(await (ehCentral() ? exigir('ajustes') : verificarNoSetor('ajustes')))) return;
+        // 2.18: no PC pela nuvem os ajustes são só deste computador (letra, cores, versão, sair): sem senha
+        if (!cfg.soNuvem && !(await (ehCentral() ? exigir('ajustes') : verificarNoSetor('ajustes')))) return;
         return ir({ tela: 'admin' });
       }
       case 'abrir-prancheta': return ir({ tela: 'prancheta', pid: b.dataset.id });
@@ -664,6 +665,7 @@
         }
         return;
       }
+      case 'sair-nuvem': return sairDaNuvem();
       case 'exemplo': if (!cfg.demo) return; preencherExemplo(); toast('Dados de exemplo adicionados'); return render();
       case 'limpar-tudo': {
         const aviso = pendentes() ? `Atenção: ${contar(pendentes(), 'anotação ainda não chegou', 'anotações ainda não chegaram')} na central.` : 'O que já foi enviado continua guardado na central.';

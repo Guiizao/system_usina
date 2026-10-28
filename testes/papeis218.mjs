@@ -237,6 +237,25 @@ export async function testarSenhaInicial218(nav, g) {
   } finally { await a.fechar(); await c.desligar(); }
 }
 
+/** T12: o PC pela nuvem tem Ajustes (letra, cores, versão, novidades, nuvem e Sair). */
+export async function testarAjustesPC218(nav, g) {
+  const c = await centralNode(8391, pastaTemporaria('p218-pc'));
+  const a = await nav.novoAparelho('PC', TAMANHOS.computador);
+  try {
+    await teste(g, 'PC pela nuvem: botão Ajustes com versão, letra, nuvem e Sair, sem pedir senha', async () => {
+      await a.ir(c.url + '/?demo&papel=central', 'typeof render === "function" && !!document.querySelector("#app main")');
+      await a.avaliar('(() => { cfg.soNuvem = true; cfg.nuvemUrl = "https://nuvem.exemplo"; cfg.pessoa = { id: "lucas", nome: "Lucas", funcoes: ["relatorios"] }; pilha = [telaInicial()]; render(true); return 1; })()');
+      await a.tocar('[data-a="admin"]');
+      const t = await a.avaliar('document.querySelector("main").innerText');
+      for (const x of ['Versão', 'Tamanho das letras', 'nuvem.exemplo', 'Lucas']) certo(t.includes(x), 'faltou ' + x);
+      certo(await a.existe('[data-a="sair-nuvem"]'), 'faltou o Sair');
+      certo(!t.includes('Este aparelho é'), 'mostrou a troca de função do tablet');
+      await a.foto('testes/saida/papeis218/pc-ajustes.png');
+    });
+    certo(!a.erros.length, a.erros.join(' | '));
+  } finally { await a.fechar(); await c.desligar(); }
+}
+
 if (import.meta.url === pathToFileURL(process.argv[1]).href) {
   const nav = await abrirNavegador();
   const g = novoGrupo('Versão 2.18: revisão por papéis');
@@ -251,6 +270,7 @@ if (import.meta.url === pathToFileURL(process.argv[1]).href) {
     if (!so || so === 'escritorio') await testarEscritorio218(nav, g);
     if (!so || so === 'turno') await testarTurnoEAviso218(nav, g);
     if (!so || so === 'senha') await testarSenhaInicial218(nav, g);
+    if (!so || so === 'pc') await testarAjustesPC218(nav, g);
   } finally { await nav.fechar(); }
   const r = resumo([g]);
   console.log(`\n${r.passaram} de ${r.total} testes passaram${r.falharam ? `, ${r.falharam} falharam` : ''}`);

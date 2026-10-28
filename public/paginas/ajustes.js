@@ -6,7 +6,28 @@
   /* =========================================================
    * Ajustes deste aparelho (com a senha do encarregado)
    * ========================================================= */
+  /** 2.18: ajustes do computador pela nuvem (o programa do Windows atualiza as telas sozinho pela nuvem). */
+  function telaAjustesNuvem() {
+    const seg = (a, atual, ops) => `<div class="segmentos">${ops.map(([x, rot]) => `<button class="${atual === x ? 'sel' : ''}" data-a="${a}" data-valor="${x}">${rot}</button>`).join('')}</div>`;
+    return `${topo('Ajustes', 'Deste computador', true)}
+      <main class="config"><div class="config-grade">
+        <section class="bloco"><h2>${ico('tamanho')} Tela</h2>
+          <h3>Tamanho das letras e botões</h3>${seg('escala', cfg.escala || 'normal', [['menor', 'Menor'], ['normal', 'Normal'], ['maior', 'Maior']])}
+          <h3 style="margin-top:14px">Cores</h3>${seg('tema-fixo', cfg.tema === 'escuro' ? 'escuro' : 'claro', [['claro', `${ico('sol')} Claro`], ['escuro', `${ico('lua')} Escuro`]])}
+        </section>
+        <section class="bloco"><h2>${ico('instalar')} Aplicativo</h2>
+          <dl class="kv"><dt>Versão</dt><dd>${VERSAO}</dd></dl>
+          <p class="sub">O programa do Windows pega as telas novas sozinho pela nuvem quando abre.</p>
+          <div class="linha-botoes"><button class="btn pequeno" data-a="novidades">Novidades desta versão</button></div>
+        </section>
+        <section class="bloco"><h2>${ico('servidor')} Nuvem</h2>
+          <dl class="kv"><dt>Endereço</dt><dd>${esc(cfg.nuvemUrl || '')}</dd><dt>Entrou como</dt><dd>${esc((cfg.pessoa || {}).nome || '')}</dd></dl>
+          <div class="linha-botoes"><button class="btn pequeno" data-a="sair-nuvem">${ico('voltar')} Sair</button></div>
+        </section>
+      </div></main>`;
+  }
   function telaAdmin(v) {
+    if (cfg.soNuvem) return telaAjustesNuvem();
     const s = setorPorId(cfg.papel);
     const ops = s ? operadoresDo(s.id) : [];
     const aberto = v.abertos && s && v.abertos[s.id];

@@ -18,7 +18,7 @@
         <div class="relogio"><b id="relogio">${horaAgora()}</b></div>
         ${atualizacao.nova ? `<button class="tema atualizar" data-a="atualizacao" aria-label="Atualizar o aplicativo para a versão ${esc(atualizacao.nova.versao)}">${ico('instalar')}<span>Atualizar</span></button>` : ''}
         ${configurado ? `<button class="tema status-con" id="status-con" data-a="status-con" aria-label="Conexão: central e nuvem">${luzesConexao()}</button>` : ''}
-        ${configurado && (view() || {}).tela !== 'admin' ? `<button class="tema" data-a="admin" aria-label="Ajustes do aparelho">${ico('ajustes')}<span>Ajustes</span></button>` : ''}
+        ${(configurado || (cfg.soNuvem && cfg.pessoa)) && (view() || {}).tela !== 'admin' ? `<button class="tema" data-a="admin" aria-label="Ajustes do aparelho">${ico('ajustes')}<span>Ajustes</span></button>` : ''}
         <button class="tema" data-a="tema" aria-label="${escuro ? 'Mudar para tela clara' : 'Mudar para tela escura'}">${ico(escuro ? 'sol' : 'lua')}<span>${escuro ? 'Claro' : 'Escuro'}</span></button>
       </header>`;
   }
