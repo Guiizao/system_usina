@@ -304,7 +304,9 @@ try {
   for (const [nome, arq] of [['nível pela pessoa e aparelho fixo, nas duas centrais', 'nivel217.mjs'],
     ['nuvem: lista de nomes, entrada por pessoa e aparelhos ao vivo, nas duas centrais', 'nuvem217.mjs'], ['segurança do Windows e do cliente (sem janela)', 'seguranca216.mjs'],
     ['revisão do Codex: setor, nível 3 do dono, uréia e recuperar o dono, nas duas centrais', 'revisao217.mjs'],
-    ['2.17.1: dois aparelhos na mesma linha juntam campo a campo (Node, Java, nuvem e aparelho)', 'juncao2171.mjs'], ['2.17.1: Sair revoga a chave da nuvem', 'sair2171.mjs']]) {
+    ['2.17.1: dois aparelhos na mesma linha juntam campo a campo (Node, Java, nuvem e aparelho)', 'juncao2171.mjs'], ['2.17.1: Sair revoga a chave da nuvem', 'sair2171.mjs'],
+    ['2.18: segurança das centrais (nuvem, senha inicial, nível 3, APK assinado, escritório)', 'seguranca218.mjs'], ['2.18: kg em tudo e rastreamento na API', 'api218.mjs'],
+    ['2.18: programa do Windows se atualiza pelo pacote assinado', 'windows218.mjs'], ['2.18: revisão por papéis (operador, encarregado, escritório, PC)', 'papeis218.mjs']]) {
     await teste(g217, nome, async () => {
       const r = spawnSync(process.execPath, [path.join(APP, 'testes', arq)], { cwd: APP, encoding: 'utf8', timeout: 900000 });
       const fim = ((r.stdout || '').match(/\d+ de \d+ testes passaram.*|"total":\d+,"passaram":\d+,"falharam":\d+/g) || []).pop() || '';

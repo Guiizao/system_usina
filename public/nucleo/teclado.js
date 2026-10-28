@@ -154,7 +154,7 @@
     }
     if (a.type === 'check') {
       const marcado = !vazio(a.get());
-      return `${cab}<div class="opcoes-painel"><button data-ed="marcar" class="${marcado ? 'sel' : ''}">${marcado ? `${ico('certo')} Marcado OK` : 'Toque para marcar OK'}</button>
+      return `${cab}<div class="opcoes-painel"><button data-ed="marcar" class="${marcado ? 'sel' : ''}">${marcado ? 'Desmarcar' : 'Toque para marcar OK'}</button>
         ${marcado ? '<p class="dica-painel">Toque de novo para desmarcar.</p>' : ''}</div>${nav}`;
     }
 

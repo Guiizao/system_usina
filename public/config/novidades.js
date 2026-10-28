@@ -4,6 +4,20 @@
    Depois do sinal de igual vem JSON puro, porque o servidor do tablet chefe (Java) também lê este arquivo. */
 window.NOVIDADES = [
   {
+    "versao": "2.18.0",
+    "data": "2026-10-28",
+    "itens": [
+      "Caldeira e destilarias: a folha abre e acompanha a hora atual (antes podia gravar na hora anterior).",
+      "O lembrete da hora toca mesmo com o tablet travado; folha parada no dia (ex.: Caldeira 2) não pede leitura.",
+      "Dois toques rápidos no Enviar não terminam mais a dorna; o teclado mostra o aviso completo e pergunta antes de salvar valor muito fora.",
+      "O que foi digitado e não salvo volta ao abrir o aplicativo de novo; na troca de turno, o que estava aberto é salvo.",
+      "Tablet chefe: painel com o que ficou fora do limite e as horas sem leitura; o escritório salva lote e NF das folhas de insumo.",
+      "Longe da central, o Conferir da Conexão busca na nuvem na hora e diz o motivo quando não dá.",
+      "Computador: Ajustes (letra, cores, versão, sair) e as telas novas chegam sozinhas pela nuvem.",
+      "Segurança: a senha inicial do dono precisa ser trocada; nuvem e Base44 só o dono configura."
+    ]
+  },
+  {
     "versao": "2.17.1",
     "data": "2026-10-26",
     "itens": [

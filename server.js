@@ -1769,7 +1769,7 @@ async function rotaProtegida(req, res, url, ip) {
         if (!podeTentarProgramador(req.aparelho)) return json(res, 429, { erro: 'Muitas senhas erradas. Espere um minuto.' });
         if (!(await senhaDoProgramador(corpo.senha))) { errouProgramador(req.aparelho); return json(res, 403, { erro: 'senha do programador errada' }); }
         const agora = new Date();
-        const carimbo = agora.toISOString().slice(0, 16).replace(/[-:T]/g, '');
+        const carimbo = [agora.getFullYear(), agora.getMonth() + 1, agora.getDate(), agora.getHours(), agora.getMinutes()].map((n) => String(n).padStart(2, '0')).join(''); // hora local, como no Java
         fs.writeFileSync(path.join(PASTAS.backup, `antes-de-zerar-${carimbo}.json`), JSON.stringify(Object.values(db.registros), null, 1));
         let apagados = 0;
         Object.keys(db.registros).forEach((id) => { if (db.registros[id].data !== 'config') { delete db.registros[id]; apagados += 1; } });
