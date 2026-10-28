@@ -12,7 +12,7 @@
   function telaRelatorios(v) {
     const guardados = new Map((v.dias || []).map((d) => [d.data, d.arquivos || []]));
     const dias = [...new Set([...(v.diasComDados || []), ...guardados.keys()])].sort().reverse();
-    return `${cabecalho('Relatórios', 'Um por dia, com todos os setores', true, `<button class="atalho" data-a="gerar-hoje">${ico('planilha')}<span>Gerar agora</span></button>`)}
+    return `${cabecalho('Relatórios', 'Um por dia, com todos os setores', true, cfg.soNuvem ? '' : `<button class="atalho" data-a="gerar-hoje">${ico('planilha')}<span>Gerar agora</span></button>`)}
       <main>
         ${cfg.demo || cfg.soNuvem ? `<p class="sub">${cfg.soNuvem ? 'Pela nuvem: os dias que chegaram a este computador.' : 'Demonstração: os dias anotados neste aparelho.'} Na usina, o Excel de cada dia fica guardado no servidor.</p>` : ''}
         ${!cfg.demo && !v.carregado ? '<p class="sub">Buscando os relatórios...</p>' : ''}

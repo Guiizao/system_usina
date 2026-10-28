@@ -42,7 +42,9 @@
     if (b.closest('.menu-pc') && pilha.length > 1) pilha = [pilha[0]];
     // tablet chefe: confere se quem está usando pode fazer isso (e pede a senha se ninguém entrou)
     if (ehCentral() && PRECISA[a]) {
-      const f = PRECISA[a] === 'folha' ? (soDoChefe(v.pid) ? 'anotar' : 'corrigir') : PRECISA[a];
+      let f = PRECISA[a] === 'folha' ? (soDoChefe(v.pid) ? 'anotar' : 'corrigir') : PRECISA[a];
+      // 2.18: o escritório salva os campos dele na folha de insumo (lote, NF, validade) sem corrigir o que o setor anotou
+      if (a === 'salvar' && f === 'corrigir' && rascunho && prancheta(v.pid).tipo === 'insumo' && JSON.stringify(rascunho.valores) === JSON.stringify(rascunho.original) && veNoChefe('escritorio')) f = 'escritorio';
       if (!(await exigir(f))) return;
     }
     switch (a) {
@@ -222,6 +224,8 @@
       }
       case 'salvar': {
         if (!exigeOperador()) return;
+        const muitoFora = alvos.filter((x) => x.type === 'num' && x.get && !vazio(x.get()) && ((x.min != null && parseFloat(x.get()) < x.min) || (x.max != null && parseFloat(x.get()) > x.max)));
+        if (muitoFora.length && !(await confirmar('Confira antes de salvar', `${listaE(muitoFora.map((x) => `${x.label} ${fmtNum(x.get())} (esperado de ${fmtNum(x.min)} a ${fmtNum(x.max)})`))}. Parece erro de digitação.`, 'Salvar assim'))) return;
         const nomesAutorizar = quemPrecisaAutorizar();
         if (nomesAutorizar.length && !(await autorizar(nomesAutorizar))) return;
         if (!salvarRascunho(false, { autorizado: true })) return;

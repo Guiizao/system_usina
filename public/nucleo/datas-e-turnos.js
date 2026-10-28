@@ -54,7 +54,7 @@
       if (bate) lista.push({ nivel: a.nivel || 'alerta', texto: a.texto, curto: a.curto || a.texto });
     });
     const fora = (c.min != null && n < c.min) || (c.max != null && n > c.max);
-    if (fora && !lista.length) lista.push({ nivel: 'alerta', texto: `Valor muito fora (esperado de ${fmtNum(c.min)} a ${fmtNum(c.max)}). Confira.`, curto: `${c.labelCurto || c.label} ${c.min != null && n < c.min ? 'baixo' : 'alto'}` });
+    if (fora) lista.push({ nivel: 'alerta', texto: `Valor muito fora (esperado de ${fmtNum(c.min)} a ${fmtNum(c.max)}). Confira.`, curto: `${c.labelCurto || c.label} ${c.min != null && n < c.min ? 'baixo' : 'alto'}` });
     return lista;
   }
   const nivelDe = (c, v) => { const l = avisosDe(c, v); return l.some((x) => x.nivel === 'alerta') ? 'fora' : l.length ? 'atencao' : ''; };

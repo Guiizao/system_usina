@@ -56,7 +56,12 @@
     }
     if (t !== ultimoTurno) {
       ultimoTurno = t;
-      if (cfg.papel && !ehCentral() && !ehEscritorio() && podeRedesenhar()) { pilha = [telaInicial(), { tela: 'operador' }]; rascunho = null; render(true); }
+      if (cfg.papel && !ehCentral() && !ehEscritorio()) {
+        // 2.18: com o teclado aberto, o que foi digitado vai no nome de quem saiu (antes ficava parado e ia no nome dele depois)
+        if (modalAberto()) fecharModalAtual();
+        if (rascunhoSujo()) salvarRascunho(true);
+        pilha = [telaInicial(), { tela: 'operador' }]; rascunho = null; ed.alvoId = null; render(true);
+      }
     } else if (h !== ultimaHora) {
       const v = view(), atual = v.chave != null ? v.chave : rascunho && rascunho.chave;
       // 2.18: a folha hora a hora parada na hora que acabou passa para a hora nova (antes gravava na hora velha).

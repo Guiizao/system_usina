@@ -194,7 +194,7 @@
   }
   /** Folha igual ao papel: imprime ou monta o arquivo com o que está salvo (salva antes, se mudou). */
   async function arquivoEsc(v, formato) {
-    if ((v.sujo || !rastreioGuardado(v.data)) && !(await salvarEsc(v))) return null;
+    if (!cfg.soNuvem && (v.sujo || !rastreioGuardado(v.data)) && !(await salvarEsc(v))) return null;
     const nome = `Rastreamento_${somarDias(v.data, 1)}`;
     if (formato === 'xml') return new File([gerarXml(v.data, [PID_RASTREIO])], nome + '.xml', { type: MIME.xml });
     if (formato === 'pdf') { const pecas = await pecasPdf(); return new File([window.criarPdf([papel().folha(PID_RASTREIO, v.data)], Object.assign({ fmtNum, titulo: nome }, pecas))], nome + '.pdf', { type: MIME.pdf }); }
@@ -219,7 +219,7 @@
     if (destino) compartilhar(destino, somarDias(v.data, 1), arquivo);
   }
   async function imprimirFolhaEsc(v) {
-    if ((v.sujo || !rastreioGuardado(v.data)) && !(await salvarEsc(v))) return;
+    if (!cfg.soNuvem && (v.sujo || !rastreioGuardado(v.data)) && !(await salvarEsc(v))) return;
     imprimirHtml(window.ModelosPapel.paraHtml(papel().folha(PID_RASTREIO, v.data), 'icons/logo.png', fmtNum), `Rastreamento ${fmtData(somarDias(v.data, 1))}`);
   }
 
@@ -256,7 +256,7 @@
       </div></div>`;
   }
   async function etiquetaEsc(v) {
-    if ((v.sujo || !rastreioGuardado(v.data)) && !(await salvarEsc(v))) return;
+    if (!cfg.soNuvem && (v.sujo || !rastreioGuardado(v.data)) && !(await salvarEsc(v))) return;
     const x = valoresDoDia(v.data);
     const volumes = C.rastreamento.etiqueta.volumes;
     let volume = volumes[0], qtd = 1;

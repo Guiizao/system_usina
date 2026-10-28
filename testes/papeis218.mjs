@@ -15,7 +15,7 @@ export async function testarHora218(nav, g) {
   try {
     await a.relogioFalso();
     await a.ir(c.url + '/?demo&papel=caldeira&op=Alberto', 'typeof irPara === "function" || !!document.querySelector("#app main")');
-    // 20h, 21h e 22h estão no mesmo turno (15h às 23h): a troca de turno não entra no teste
+    // 20h, 21h e 22h estão no mesmo turno (16h às 24h): a troca de turno não entra no teste
     await a.irParaHora(20, 10);
     // ir para as 20h é troca de turno (pede o nome) e conta como tempo sem mexer (trava em 30 min): o teste
     // espera a troca, põe o Alberto no turno novo e marca atividade adiante
@@ -162,6 +162,59 @@ export async function testarPainel218(nav, g) {
   } finally { await a.fechar(); await c.desligar(); }
 }
 
+/** T6, T14: escritório pela nuvem não "salva" o rastreamento; no tablet chefe ele salva os campos dele da folha de insumo. */
+export async function testarEscritorio218(nav, g) {
+  const c = await centralNode(8387, pastaTemporaria('p218-esc'));
+  const a = await nav.novoAparelho('escritório', TAMANHOS.computador);
+  try {
+    await teste(g, 'pela nuvem: arquivo do rastreamento não chama o salvar e o "Gerar agora" some', async () => {
+      await a.ir(c.url + '/?demo&papel=central&funcoes=relatorios,escritorio', 'typeof arquivoEsc === "function"');
+      const chamou = await a.avaliar(`(async () => { cfg.soNuvem = true; let n = 0; salvarEsc = async () => { n++; return true; };
+        try { await arquivoEsc({ data: dataProducao(), sujo: true }, 'pdf'); } catch (e) { /* só importa se salvou */ } return n; })()`);
+      igual(chamou, 0, 'chamou o salvar pela nuvem');
+      await a.avaliar('(() => { ir({ tela: "relatorios" }); return 1; })()');
+      await dormir(800);
+      certo(!(await a.existe('[data-a="gerar-hoje"]')), 'o Gerar agora aparece pela nuvem');
+    });
+    await teste(g, 'escritório (sem corrigir) salva o lote da folha de insumo', async () => {
+      await a.ir(c.url + '/?demo&papel=central&funcoes=relatorios,escritorio&tela=prancheta&pid=ins_cal', '!!rascunho');
+      const campo = await a.avaliar(`(() => { const id = prancheta('ins_cal').camposEscritorio[0].id; rascunho.extras.meta = Object.assign({}, rascunho.extras.meta, { [id]: 'L-123' }); return id; })()`);
+      await a.tocar('[data-a="salvar"]');
+      await a.esperar(`((registros[dataProducao() + '|ins_cal|meta'] || {}).valores || {})['${campo}'] === 'L-123'`, 5000, 'gravar o lote');
+    });
+    certo(!a.erros.length, a.erros.join(' | '));
+  } finally { await a.fechar(); await c.desligar(); }
+}
+
+/** T8, T10: troca de turno com o teclado aberto e o aviso completo no teclado. */
+export async function testarTurnoEAviso218(nav, g) {
+  const c = await centralNode(8388, pastaTemporaria('p218-turno'));
+  const a = await nav.novoAparelho('hidrólise', TAMANHOS.tablet);
+  const novaDorna = `(() => { const l = dornasDoDia(dataProducao(), 'hid_anexo1'); const k = Math.max(0, ...l.map((r) => Number(r.chave))) + 1; ir({ tela: 'prancheta', pid: 'hid_anexo1', chave: k }); return k; })()`;
+  try {
+    await a.relogioFalso();
+    await a.ir(c.url + '/?demo&papel=hidrolise&op=Guilherme', 'typeof dornasDoDia === "function" && !!document.querySelector("#app main")');
+    await teste(g, 'teclado: BHX 45 mostra o texto do aviso e o Salvar pergunta antes', async () => {
+      await a.avaliar(novaDorna);
+      await a.tocar('[data-quadro="bhx"]'); await a.teclar(['4', '5']);
+      certo((await a.avaliar('document.querySelector(".painel").innerText')).includes('esperado de 3 a 40'), 'o teclado não diz o esperado');
+      await a.tocar('[data-ed="ocultar"]'); await a.tocar('[data-a="salvar"]');
+      await a.esperar('!!document.querySelector(".modal") && document.querySelector(".modal").innerText.includes("Salvar assim")', 3000, 'perguntar antes de salvar');
+      await a.tocar('.modal [data-k="nao"]');
+    });
+    await teste(g, 'virada de turno com o teclado aberto: salva no nome de quem saiu e pede o nome', async () => {
+      await a.irParaHora(15, 59, 40); await dormir(1500); // o 2º turno começa às 16h
+      await a.avaliar('(() => { ultimaAtividade = Date.now() + 6 * 3600000; cfg.op = { nome: "Guilherme", chave: chaveTurno() }; salvarCfg(); return 1; })()');
+      const k = await a.avaliar(novaDorna);
+      await a.tocar('[data-quadro="brix"]'); await a.teclar(['1', '9']);
+      await a.irParaHora(16, 0, 5);
+      await a.esperar(`(() => { const r = pegar(dataProducao(), 'hid_anexo1', ${k}); return !!r && r.valores.brix === '19' && r.operador === 'Guilherme'; })()`, 5000, 'salvar a dorna no nome do Guilherme');
+      await a.esperar('view().tela === "operador"', 3000, 'pedir o nome');
+    });
+    certo(!a.erros.length, a.erros.join(' | '));
+  } finally { await a.fechar(); await c.desligar(); }
+}
+
 if (import.meta.url === pathToFileURL(process.argv[1]).href) {
   const nav = await abrirNavegador();
   const g = novoGrupo('Versão 2.18: revisão por papéis');
@@ -173,6 +226,8 @@ if (import.meta.url === pathToFileURL(process.argv[1]).href) {
     if (!so || so === 'exemplo') await testarExemplo218(nav, g);
     if (!so || so === 'nuvem') await testarNuvemNaHora218(nav, g);
     if (!so || so === 'painel') await testarPainel218(nav, g);
+    if (!so || so === 'escritorio') await testarEscritorio218(nav, g);
+    if (!so || so === 'turno') await testarTurnoEAviso218(nav, g);
   } finally { await nav.fechar(); }
   const r = resumo([g]);
   console.log(`\n${r.passaram} de ${r.total} testes passaram${r.falharam ? `, ${r.falharam} falharam` : ''}`);

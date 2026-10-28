@@ -183,6 +183,7 @@
         <div class="visor ${nivel} ${a.type === 'text' ? 'texto' : ''} ${ed.texto.length > 4 && a.type === 'num' ? 'longo' : ''}">${mostrarNoVisor(a)}${unidade ? `<small>${esc(unidade)}</small>` : ''}</div>
         ${maisMenos ? '<button class="mm" data-ed="+" aria-label="Aumentar">+</button>' : ''}
       </div>
+      ${avisos.length ? `<p class="alerta-texto ${nivel === 'fora' ? '' : 'atencao'}">${ico('alerta')}<span>${esc(avisos.map((x) => x.texto).join(' '))}</span></p>` : ''}
       ${a.calculo && a.calculo() ? `<p class="calc-painel">Volume: <b>${esc(a.calculo())}</b></p>` : ''}
       ${a.dica ? `<p class="dica-painel">${esc(a.dica)}</p>` : ''}
       ${a.sugestao ? `<p class="dica-painel">${esc(a.sugestao)}</p>` : ''}
