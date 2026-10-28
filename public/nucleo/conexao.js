@@ -241,9 +241,9 @@
         && (u.protocol === 'https:' || (u.protocol === 'http:' && ['127.0.0.1', 'localhost'].includes(u.hostname)));
     } catch { return false; }
   }
-  async function sincronizarNuvem() {
+  async function sincronizarNuvem(forcar) {
     if (cfg.demo || !enderecoNuvemSeguro(cfg.nuvemUrl) || !cfg.nuvemToken || sync.enviandoNuvem) return;
-    if (Date.now() - (cfg.ultimoContato || 0) < 2 * 60000 || Date.now() - (sync.nuvemEm || 0) < 20000) return;
+    if (!forcar && (Date.now() - (cfg.ultimoContato || 0) < 2 * 60000 || Date.now() - (sync.nuvemEm || 0) < 20000)) return;
     if (sync.nuvemAntiga) return mandarParaNuvem();
     sync.enviandoNuvem = true; sync.nuvemEm = Date.now();
     const token = cfg.nuvemToken, url = cfg.nuvemUrl;
@@ -259,6 +259,8 @@
           body: JSON.stringify({ registros: corpo, geracao: cfg.geracao || '', desdeSeq: cfg.nuvemSeq || 0, desdeOrdem: cfg.nuvemOrdem || 0, desdeDia: primeiroDiaGuardado() }),
         });
         if (cfg.nuvemToken !== token || cfg.nuvemUrl !== url) return;
+        // 2.18: a janela Conexão diz por que a nuvem não troca (antes só a luz, que ficava acesa com a chave recusada)
+        sync.nuvemErro = r.ok ? '' : r.status === 401 ? 'A nuvem recusou a chave deste aparelho: ligue-o uma vez no Wi-Fi da central' : `A nuvem respondeu ${r.status}`;
         marcarNuvem(r.status < 500);
         if (r.status === 404) { sync.nuvemAntiga = true; sync.enviandoNuvem = false; sync.nuvemEm = 0; return mandarParaNuvem(); }
         if (r.status === 423) { conferirNaNuvem(true); return; } // bloqueado: a nuvem diz como
@@ -284,7 +286,7 @@
         if (!d.mais) break;
       }
       if (mudou) { podar(); salvarRegistros(); }
-    } catch (e) { marcarNuvem(false); /* sem internet: tenta de novo depois */ } finally { sync.enviandoNuvem = false; }
+    } catch (e) { sync.nuvemErro = 'Sem internet ou a nuvem não respondeu'; marcarNuvem(false); /* tenta de novo depois */ } finally { sync.enviandoNuvem = false; }
     if (mudou && ['central', 'inicio', 'prancheta', 'aparelhos'].includes(view().tela)) { if (podeRedesenhar()) render(); else redesenharDepois = true; }
     atualizarConexao();
   }

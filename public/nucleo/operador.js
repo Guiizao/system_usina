@@ -30,6 +30,7 @@
     if (modalAberto()) fecharModalAtual();
     if (rascunhoSujo()) salvarRascunho(true);
     registrar('entrada', `${operadorAtual()} saiu do ${nomeDesteAparelho()} (ficou ${C.minutosSemMexer || 30} minutos sem mexer)`);
+    cfg.opTravado = { chave: chaveTurno() }; // 2.18: travou sem mexer: o lembrete da hora continua neste turno
     cfg.op = null; salvarCfg();
     rascunho = null; ed.alvoId = null;
     pilha = [telaInicial(), { tela: 'operador', travado: true }];

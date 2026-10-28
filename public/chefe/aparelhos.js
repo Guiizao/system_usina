@@ -133,11 +133,15 @@
     abrirModal(`<h3>Conexão deste aparelho</h3>
       <div class="status-linhas">
         ${linha(c, 'Central', cfg.demo ? 'demonstração' : desde(cfg.ultimoContato))}
-        ${cfg.nuvemUrl ? linha(n, 'Nuvem (internet)', desde(sync.nuvem && sync.nuvem.em)) : '<div class="status-linha"><i></i><div><b>Nuvem (internet): sem endereço</b><small>Ligue este aparelho uma vez no Wi-Fi da central para ele receber o endereço da nuvem.</small></div></div>'}
+        ${cfg.nuvemUrl ? linha(n && !sync.nuvemErro, 'Nuvem (internet)', desde(sync.nuvem && sync.nuvem.em) + (sync.nuvemErro ? `. ${sync.nuvemErro}` : '')) : '<div class="status-linha"><i></i><div><b>Nuvem (internet): sem endereço</b><small>Ligue este aparelho uma vez no Wi-Fi da central para ele receber o endereço da nuvem.</small></div></div>'}
       </div>
       <p class="dica">${p ? `${contar(p, 'anotação esperando', 'anotações esperando')} a central${nuvemLeva() ? `; ${contar(faltamNaNuvem(), 'falta', 'faltam')} subir para a nuvem` : ''}.` : 'Nenhuma anotação esperando.'} Pode anotar com as duas desligadas: fica guardado aqui e vai sozinho quando uma delas voltar.</p>
       <div class="acoes-modal"><button class="btn" data-k="conferir">Conferir agora</button><button class="btn primario" data-k="ok">Entendi</button></div>`,
-    (k, b, fechar) => { if (k === 'conferir') { sincronizar(); conferirNaNuvem(true); toast('Conferindo...'); } fechar(); });
+    (k, b, fechar) => {
+      // 2.18: longe da central (outra rede) o Conferir troca com a nuvem na hora, sem esperar os 2 minutos
+      if (k === 'conferir') { Promise.resolve(sincronizar()).finally(() => { if (!centralLigada()) sincronizarNuvem(true); }); conferirNaNuvem(true); toast('Conferindo...'); }
+      fechar();
+    });
   }
 
   /* ---------- Tela do aparelho bloqueado ---------- */

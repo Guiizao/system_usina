@@ -10,8 +10,11 @@
   const dataDaView = (v) => v.data || dataProducao();
   /** Última linha aberta em cada folha, para voltar nela ao trocar de aba. */
   const lembrar = {};
+  // 2.18: na folha hora a hora de hoje a linha lembrada vale só até a hora virar (depois abre na hora atual)
+  const horaAHora = (pid) => !['dornas', 'medicao', 'fermentacao'].includes(prancheta(pid).tipo);
+  const chaveLembrar = (data, pid) => `${data}|${pid}` + (horaAHora(pid) && data === dataProducao() ? `|${new Date().getHours()}` : '');
   function chavePadrao(p, pid, data) {
-    const lembrada = lembrar[`${data}|${pid}`];
+    const lembrada = lembrar[chaveLembrar(data, pid)];
     if (lembrada != null) return lembrada;
     // volume de vinho: o primeiro grupo que ainda não foi medido hoje
     if (p.tipo === 'medicao') return (gruposDaMedicao().find((g) => !pegar(data, pid, g.id)) || gruposDaMedicao()[0]).id;
@@ -482,7 +485,7 @@
     // medição: cada dorna tem folga, Brix e fermentando lado a lado, então o bloco precisa de mais largura
     if (p.tipo === 'medicao') quadros = quadros.replace('<div class="grupos">', '<div class="grupos grupos-largos">');
     const conteudo = antesDosQuadros + quadros;
-    lembrar[`${data}|${v.pid}`] = chave;
+    lembrar[chaveLembrar(data, v.pid)] = chave;
     let rodape = `<button class="btn primario" data-a="salvar">${ico('certo')} ${esc(rotuloSalvar)}</button>`;
     if (p.tipo === 'fermentacao' && anotaComoSetor(v.pid)) {
       const [acao, icone, texto] = {

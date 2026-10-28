@@ -66,7 +66,7 @@
             <p class="sub" style="margin:0 0 8px">Apagar os dados deste aparelho tira daqui as anotações e a função dele (para usar em outro setor, por exemplo). O que já foi enviado continua na central.</p>
             <div class="linha-botoes">
               <button class="btn pequeno" data-a="compartilhar" data-destino="outros">${ico('compartilhar')} Compartilhar folhas de hoje</button>
-              <button class="btn pequeno" data-a="exemplo">Preencher com dados de exemplo</button>
+              ${cfg.demo ? '<button class="btn pequeno" data-a="exemplo">Preencher com dados de exemplo</button>' : ''}
               <button class="btn pequeno perigo" data-a="limpar-tudo">${ico('lixeira')} Apagar dados deste aparelho</button></div>
           </section>
         </div>

@@ -79,7 +79,8 @@
   const textoHorario = (hor) => (hor.de === hor.ate ? 'o dia todo' : `das ${pad2(hor.de)}h às ${pad2(hor.ate)}h`);
   function horaPendente() {
     const hor = cfg.papel ? horarioLembrete(cfg.papel) : null;
-    if (!hor || ehCentral() || !setorPorId(cfg.papel) || !operadorAtual()) return null;
+    const travado = cfg.opTravado && cfg.opTravado.chave === chaveTurno();
+    if (!hor || ehCentral() || !setorPorId(cfg.papel) || (!operadorAtual() && !travado)) return null;
     const h = new Date().getHours();
     if (!dentroDoHorario(hor, h)) return null; // fora do horário de trabalho do setor
     const data = dataProducao();
@@ -125,7 +126,7 @@
     const nomes = p.falta.map((pid) => prancheta(pid).nome).join(' e ');
     el.hidden = false;
     el.classList.toggle('urgente', !!urgente);
-    el.innerHTML = `${ico(urgente ? 'alerta' : 'relogio')}<span><b>${urgente ? 'Ainda falta a leitura' : 'Hora de anotar a leitura'} das ${pad2(p.h)}:00</b> ${esc(nomes)}</span>
+    el.innerHTML = `${ico(urgente ? 'alerta' : 'relogio')}<span><b>${urgente ? 'Ainda falta a leitura' : 'Hora de anotar a leitura'} das ${pad2(p.h)}:00</b> ${operadorAtual() ? '' : 'Toque no seu nome e anote: '}${esc(nomes)}</span>
       <button class="btn" data-pid="${p.falta[0]}" data-h="${p.h}">Anotar agora</button>`;
   }
   function verificarLembrete() {

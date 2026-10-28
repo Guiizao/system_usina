@@ -2,6 +2,7 @@
  * © 2026 Guilherme. Todos os direitos reservados. Uso somente com autorização do autor (veja LICENCA.txt). */
 /* Parte do aplicativo: no navegador cada parte é um arquivo; no APK elas viram um app.js só (apk/juntar-app.js). */
 'use strict';
+  let ultimoEnvioDorna = 0;
 
   /* =========================================================
    * Toques
@@ -195,7 +196,7 @@
       case 'aba': {
         const nova = { tela: 'prancheta', pid: b.dataset.id, data: v.data, monitor: v.monitor };
         const ch = v.tela === 'prancheta' ? chaveParaAba(v, b.dataset.id) : undefined;
-        if (ch != null) { nova.chave = ch; lembrar[`${dataDaView(v)}|${b.dataset.id}`] = ch; }
+        if (ch != null) { nova.chave = ch; lembrar[chaveLembrar(dataDaView(v), b.dataset.id)] = ch; }
         return ir(nova, true);
       }
       // saindo do Monitorar num dia anterior, o tablet do setor volta para a folha de hoje
@@ -231,6 +232,7 @@
       }
       case 'enviar-dorna': {
         if (!exigeOperador()) return;
+        ultimoEnvioDorna = Date.now();
         const p = prancheta(v.pid);
         const data = dataDaView(v);
         const k = Number(rascunho.chave);
@@ -246,7 +248,7 @@
         return render();
       }
       case 'terminar-dorna': {
-        if (!exigeOperador()) return;
+        if (!exigeOperador() || Date.now() - ultimoEnvioDorna < 2000) return;
         const p = prancheta(v.pid);
         const data = dataDaView(v);
         const k = Number(b.dataset.chave);
@@ -298,7 +300,7 @@
           if (p.vemDe) { apagar(data, v.pid, k); somarInsumosDoDia(data); } else apagarDorna(data, v.pid, k);
           registrar('anotacao', `${quemEstaAqui()} apagou ${prancheta(v.pid).nome} Nº ${k}`);
           toast(`Dorna Nº ${k} apagada`); rascunho = null; ed.alvoId = null;
-          delete lembrar[`${data}|${v.pid}`];
+          delete lembrar[chaveLembrar(data, v.pid)];
           pilha[pilha.length - 1] = Object.assign({}, v, { chave: undefined }); render(true);
         }
         return;
@@ -658,7 +660,7 @@
         }
         return;
       }
-      case 'exemplo': preencherExemplo(); toast('Dados de exemplo adicionados'); return render();
+      case 'exemplo': if (!cfg.demo) return; preencherExemplo(); toast('Dados de exemplo adicionados'); return render();
       case 'limpar-tudo': {
         const aviso = pendentes() ? `Atenção: ${contar(pendentes(), 'anotação ainda não chegou', 'anotações ainda não chegaram')} na central.` : 'O que já foi enviado continua guardado na central.';
         if (centralNoTablet()) return toast('Este aparelho é o servidor da usina. Desligue o servidor antes de apagar os dados dele.', 'erro');

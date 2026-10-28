@@ -57,6 +57,13 @@
     if (t !== ultimoTurno) {
       ultimoTurno = t;
       if (cfg.papel && !ehCentral() && !ehEscritorio() && podeRedesenhar()) { pilha = [telaInicial(), { tela: 'operador' }]; rascunho = null; render(true); }
-    } else if (h !== ultimaHora && podeRedesenhar() && ['inicio', 'central'].includes(view().tela)) render();
+    } else if (h !== ultimaHora) {
+      const v = view(), atual = v.chave != null ? v.chave : rascunho && rascunho.chave;
+      // 2.18: a folha hora a hora parada na hora que acabou passa para a hora nova (antes gravava na hora velha).
+      // Vale com o teclado aberto, desde que nada tenha sido digitado.
+      if (v.tela === 'prancheta' && horaAHora(v.pid) && dataDaView(v) === dataProducao() && !modalAberto() && !rascunhoSujo() && Number(atual) === ultimaHora) {
+        pilha[pilha.length - 1] = Object.assign({}, v, { chave: h }); rascunho = null; ed.alvoId = null; render();
+      } else if (podeRedesenhar() && ['inicio', 'central'].includes(v.tela)) render();
+    }
     ultimaHora = h;
   }, 1000);
