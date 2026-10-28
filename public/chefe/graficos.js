@@ -70,7 +70,9 @@
     const ys = gr.series.flatMap((s) => s.pontos.map((p) => p.y));
     const cab = `<div class="graf-cab"><b>${esc(gr.titulo)}</b>${gr.unidade ? `<small>${esc(gr.unidade)}</small>` : ''}</div>`;
     if (!ys.length) return `<div class="grafico vazio ${compacto ? 'compacto' : ''}">${cab}<div class="graf-corpo graf-vazio"><p class="sub">Nada anotado ainda ${gr.rotulosX ? 'nesta semana' : 'neste dia'}.</p></div></div>`;
-    const perto = gr.faixas.filter((f) => f.valor >= Math.min(...ys) - (Math.max(...ys) - Math.min(...ys) + 2) && f.valor <= Math.max(...ys) + (Math.max(...ys) - Math.min(...ys) + 2));
+    // a linha do limite entra quando está perto dos pontos; a folga cresce com o valor (Brix 28 mostra a linha dos 25)
+    const folga = Math.max(Math.max(...ys) - Math.min(...ys) + 2, Math.max(...ys.map(Math.abs)) * 0.25);
+    const perto = gr.faixas.filter((f) => f.valor >= Math.min(...ys) - folga && f.valor <= Math.max(...ys) + folga);
     let min = Math.min(...ys, ...perto.map((f) => f.valor)), max = Math.max(...ys, ...perto.map((f) => f.valor));
     if (max - min < 1) { min -= 1; max += 1; }
     const passo = [0.1, 0.2, 0.5, 1, 2, 5, 10, 20, 50, 100, 200, 500, 1000, 2000, 5000].find((s) => (max - min) / s <= 4) || 10000;

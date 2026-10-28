@@ -38,18 +38,18 @@
             }).join('')}
             ${cs.medicao ? `<div class="linha-botoes"><button class="btn pequeno" data-a="medidas-planilha">Voltar para as medidas da planilha</button></div>` : ''}
           </section>
-          <section class="bloco" id="bloco-base44">
+          ${pode('integracoes') ? `<section class="bloco" id="bloco-base44">
             <h2>${ico('escritorio')} Totais do dia no Base44</h2>
             ${htmlBase44()}
-          </section>
+          </section>` : ''}
           ${pode('integracoes') ? `<section class="bloco" id="bloco-turnos">
             <h2>${ico('enviar')} Totais ao fim do turno</h2>
             ${htmlEnvioTurnos()}
           </section>` : ''}
-          <section class="bloco" id="bloco-nuvem">
+          ${pode('integracoes') ? `<section class="bloco" id="bloco-nuvem">
             <h2>${ico('servidor')} Nuvem (internet)</h2>
             ${htmlNuvem()}
-          </section>
+          </section>` : ''}
           <section class="bloco">
             <h2>${ico('camera')} Ler folha de papel</h2>
             <p class="sub">A foto da folha de papel vira anotação. Quando todos estiverem no tablet, dá para desligar: o botão some do tablet chefe.</p>
@@ -65,11 +65,11 @@
             ${htmlAparelhos()}
             <div class="linha-botoes"><button class="btn pequeno" data-a="aparelhos">${ico('wifi')} Ver todos os aparelhos</button><button class="btn pequeno" data-a="ver-erros">${ico('alerta')} Ver erros dos aparelhos</button></div>
           </section>
-          <section class="bloco">
+          ${pode('integracoes') ? `<section class="bloco">
             <h2>${ico('lixeira')} Apagar todos os dados do sistema</h2>
             <p class="sub" style="margin:0 0 10px">Apaga as anotações de todos os setores, na central e em todos os tablets. Operadores, senhas, contatos e listas continuam. Uma cópia fica em BackupUsina. Pede a senha do programador.</p>
             <div class="linha-botoes"><button class="btn pequeno perigo" data-a="zerar-tudo">${ico('lixeira')} Apagar todos os dados do sistema</button></div>
-          </section>
+          </section>` : ''}
         </div>
         <h2 style="margin-top:8px">Setores</h2>
         <div class="config-grade">${todosSetores.map((s) => {

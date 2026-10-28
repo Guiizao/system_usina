@@ -49,6 +49,7 @@
 
         <div class="central-grade">
           <section>
+            ${veNoChefe('corrigir') || veNoChefe('relatorios') ? blocoForaDoLimite(data) : ''}
             ${veNoChefe('corrigir') || veNoChefe('relatorios') ? `<h2>Setores</h2>
             <div class="setores-grade">${lista.map((s) => {
               const regs = s.pranchetas.flatMap(folhasDe).flatMap((pid) => listar(data, pid)).sort((a, b) => b.atualizadoEm - a.atualizadoEm);
@@ -152,6 +153,24 @@
     </section>`;
   }
   /** 2.17 (PC): as anotações mais recentes do dia, a mais nova primeiro: hora, quem e a folha. */
+  /** 2.18: o que ficou fora do limite no dia (antes o encarregado só via abrindo folha por folha). */
+  function blocoForaDoLimite(data) {
+    const lista = [];
+    setores().forEach((s) => s.pranchetas.flatMap(folhasDe).forEach((pid) => {
+      const p = prancheta(pid);
+      if (!['dornas', 'grade', 'fermentacao'].includes(p.tipo)) return;
+      listar(data, pid).filter((r) => !r.apagado).forEach((r) => ((p.tipo === 'grade' ? p.itens : p.campos) || []).forEach((c) => {
+        const v = r.valores[c.id];
+        if (nivelDe(c, v) !== 'fora') return;
+        lista.push({ em: r.atualizadoEm, onde: `${p.nome} · ${p.tipo === 'grade' ? rotuloHora(r.chave) : `Nº ${r.chave}`}`, txt: `${c.label} ${fmtCampo(c, v)}`, quem: r.operador || '' });
+      }));
+    }));
+    if (!lista.length) return '';
+    lista.sort((a, b) => b.em - a.em);
+    return `<section class="bloco ultimas-anotacoes fora-limite"><h2>${ico('alerta')} Fora do limite (${lista.length})</h2><ul>${lista.slice(0, 8).map((x) => `<li>
+      <span class="hora">${new Date(x.em).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</span>
+      <span><b class="fora">${esc(x.txt)}</b><small>${esc(x.onde)}${x.quem ? ` · ${esc(x.quem)}` : ''}</small></span></li>`).join('')}</ul></section>`;
+  }
   function blocoUltimasAnotacoes(todos) {
     const ultimas = todos.filter((r) => !r.apagado).sort((a, b) => b.atualizadoEm - a.atualizadoEm).slice(0, 8);
     if (!ultimas.length) return '';

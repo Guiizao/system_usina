@@ -62,7 +62,15 @@
     const h = new Date().getHours();
     // setor que ainda não começou o dia não conta como pendência (antes aparecia "falta a leitura" em setor parado)
     if (!feitas) return { texto: hoje ? 'Nenhuma leitura hoje' : 'Nenhuma leitura neste dia' };
-    if (hoje && !pegar(data, pid, h)) return { texto: `Falta a leitura das ${rotuloHora(h)}. Feitas: ${feitas} de 24`, estado: 'pendente' };
+    // 2.18: conta as horas que já passaram no dia (antes só a hora de agora: 9 horas vazias davam "0 pendências"),
+    // dentro do horário do lembrete do setor quando ele existe
+    const hor = horarioLembrete((setorDaPrancheta(pid) || {}).id);
+    const faltam = [];
+    for (let x = C.inicioDoDia; hoje; x = (x + 1) % 24) {
+      if ((!hor || dentroDoHorario(hor, x)) && !pegar(data, pid, x)) faltam.push(x);
+      if (x === h) break;
+    }
+    if (faltam.length) return { texto: `Falta a leitura das ${faltam.length > 3 ? `${rotuloHora(faltam[0])} e mais ${faltam.length - 1}` : listaE(faltam.map(rotuloHora))}. Feitas: ${feitas} de 24`, estado: 'pendente' };
     return { texto: `${feitas} de 24 leituras feitas`, estado: 'feito' };
   }
   const iconeDaPrancheta = (pid) => { const p = prancheta(pid); if (p.tipo === 'medicao') return 'regua'; if (p.tipo === 'fermentacao') return 'tanque'; return p.tipo === 'insumo' || p.tipo === 'juntas' ? 'balanca' : p.tipo === 'grade' ? 'relogio' : setorDaPrancheta(pid).icone; };

@@ -129,6 +129,39 @@ export async function testarNuvemNaHora218(nav, g) {
   } finally { await a.fechar(); await b.fechar(); await c.desligar().catch(() => {}); await n.desligar(); }
 }
 
+/** T5 e T11: o painel do encarregado mostra o que ficou fora do limite e as horas sem leitura; a Usina esconde o que ele não pode. */
+export async function testarPainel218(nav, g) {
+  const c = await centralNode(8385, pastaTemporaria('p218-painel'));
+  const a = await nav.novoAparelho('tablet chefe', TAMANHOS.tablet);
+  try {
+    await a.relogioFalso();
+    await a.ir(c.url + '/?demo&papel=central', 'typeof resumoPrancheta === "function" && !!document.querySelector("#app main")');
+    await a.irParaHora(16, 18);
+    await dormir(1500);
+    await teste(g, 'painel: Brix 28 aparece em "Fora do limite" com o valor e quem anotou', async () => {
+      await a.avaliar(`(() => { gravar(dataProducao(), 'hid_anexo1', 99, { brix: '28' }, { operador: 'Felipe' }); pilha = [telaInicial()]; render(true); return 1; })()`);
+      const t = await a.avaliar('(document.querySelector(".fora-limite") || {}).innerText || ""');
+      certo(t.includes('28') && t.includes('Felipe'), 'faltou a faixa com o Brix 28: ' + t.slice(0, 200));
+    });
+    await teste(g, 'pendências: Caldeira 2 só com a leitura das 16h conta as horas que passaram', async () => {
+      const r = await a.avaliar(`(() => { const d = dataProducao();
+        listar(d, 'caldeira_2').forEach((x) => { delete registros[x.id]; });
+        gravar(d, 'caldeira_2', 16, { pressao: '6' }, { operador: 'Alberto' });
+        return JSON.stringify(resumoPrancheta('caldeira_2', d)); })()`).then(JSON.parse);
+      igual(r.estado, 'pendente', 'estado da Caldeira 2: ' + r.texto);
+    });
+    await teste(g, 'gráfico com um ponto muito acima do limite: a linha do limite aparece', async () => {
+      const h = await a.avaliar(`htmlDoGrafico({ titulo: 'Brix', unidade: '', series: [{ nome: 'Brix', pontos: [{ x: 600, y: 28 }] }], faixas: [{ valor: 25, nivel: 'alerta', texto: 'Brix alto' }] })`);
+      certo(h.includes('graf-faixa'), 'a linha do limite sumiu');
+    });
+    await teste(g, 'Usina do encarregado: sem Base44, Nuvem e Apagar tudo', async () => {
+      await a.ir(c.url + '/?demo&papel=central&funcoes=corrigir,relatorios,usina,avisos&tela=config', '!!document.querySelector("#app main")');
+      for (const s of ['#bloco-base44', '#bloco-nuvem', '[data-a="zerar-tudo"]']) certo(!(await a.existe(s)), s + ' aparece para o encarregado');
+    });
+    certo(!a.erros.length, a.erros.join(' | '));
+  } finally { await a.fechar(); await c.desligar(); }
+}
+
 if (import.meta.url === pathToFileURL(process.argv[1]).href) {
   const nav = await abrirNavegador();
   const g = novoGrupo('Versão 2.18: revisão por papéis');
@@ -139,6 +172,7 @@ if (import.meta.url === pathToFileURL(process.argv[1]).href) {
     if (!so || so === 'dorna') await testarToqueDuplo218(nav, g);
     if (!so || so === 'exemplo') await testarExemplo218(nav, g);
     if (!so || so === 'nuvem') await testarNuvemNaHora218(nav, g);
+    if (!so || so === 'painel') await testarPainel218(nav, g);
   } finally { await nav.fechar(); }
   const r = resumo([g]);
   console.log(`\n${r.passaram} de ${r.total} testes passaram${r.falharam ? `, ${r.falharam} falharam` : ''}`);
