@@ -79,11 +79,13 @@
       linhasDeHora(ler(data, pid)).forEach((r) => {
         const n = parseFloat(r.valores.qtd);
         if (isNaN(n)) return;
-        const u = r.valores.unidade || p.unidade || '';
-        soma[u] = (soma[u] || 0) + n;
+        const original = r.valores.unidade || p.unidade || '';
+        const conversao = (C.somarEm || {})[original];
+        const u = conversao ? conversao.unidade : original;
+        soma[u] = (soma[u] || 0) + n * (conversao ? conversao.fator : 1);
       });
       const unidades = Object.keys(soma);
-      if (!unidades.length) itens.push({ setor: s.nome, insumo: p.nome, folha: pid, quantidade: 0, unidade: p.unidade || '' });
+      if (!unidades.length) itens.push({ setor: s.nome, insumo: p.nome, folha: pid, quantidade: 0, unidade: ((C.somarEm || {})[p.unidade] || {}).unidade || p.unidade || '' });
       unidades.forEach((u) => itens.push({ setor: s.nome, insumo: p.nome, folha: pid, quantidade: Math.round(soma[u] * 100) / 100, unidade: u }));
     }));
     return itens;

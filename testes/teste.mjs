@@ -1,9 +1,8 @@
 /* Pranchetas Digitais - © 2026 Guilherme. Todos os direitos reservados. Uso somente com autorização do autor (veja LICENCA.txt). */
 /* Um jeito simples de escrever e contar os testes. */
-import fs from 'node:fs';
 
-/** Senha do encarregado, lida do forms.js (os testes não guardam a senha em outro lugar). */
-export const SENHA_ENCARREGADO = (fs.readFileSync(new URL('../public/config/forms.js', import.meta.url), 'utf8').match(/pinAdmin:\s*'(\d+)'/) || [])[1];
+/** Senha fictícia do dono já configurado nas centrais de teste; não vem do pacote público. */
+export const SENHA_ENCARREGADO = '271828';
 /** Teclas para digitar a senha do encarregado e confirmar. */
 export const teclasDaSenha = () => [...SENHA_ENCARREGADO.split(''), 'ok'];
 /** Tablet chefe (versão 2.9): entra com a senha do administrador (a central nova cadastra o Guilherme com ela). */

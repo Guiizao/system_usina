@@ -96,7 +96,11 @@ function criar(C, medidasAtuais, opcoes = {}) {
       { hora: horaDaChave(r.chave), quantidade: valorDe({ type: 'num' }, r.valores.qtd), unidade: r.valores.unidade || p.unidade || null },
       r.conferir ? { conferir: true } : {}, base(r), { campos: camposDe(extras, r.valores, data) }));
     const soma = {};
-    linhas.forEach((l) => { if (typeof l.quantidade === 'number') soma[l.unidade || ''] = (soma[l.unidade || ''] || 0) + l.quantidade; });
+    linhas.forEach((l) => {
+      const conversao = (C.somarEm || {})[l.unidade];
+      const unidade = conversao ? conversao.unidade : l.unidade || '';
+      if (typeof l.quantidade === 'number') soma[unidade] = (soma[unidade] || 0) + l.quantidade * (conversao ? conversao.fator : 1);
+    });
     const meta = (regs.find((r) => r.chave === 'meta') || { valores: {} }).valores;
     return { insumo: p.nome, total: Object.entries(soma).map(([u, q]) => ({ quantidade: Math.round(q * 100) / 100, unidade: u || null })), lote: meta.lote || null, verificadoPor: meta.verificado || null, linhas };
   }
@@ -150,13 +154,14 @@ function criar(C, medidasAtuais, opcoes = {}) {
         return Object.assign({ id: pid, nome: p.nome, codigo: p.codigo || null, titulo: (p.papel && p.papel.titulo) || p.titulo || p.nome, tipo: p.tipo }, MONTAR[p.tipo] ? MONTAR[p.tipo](p, porFolha[pid] || [], data, s) : {});
       }),
     }));
-    const insumos = setores.flatMap((s) => s.pranchetas.filter((p) => p.tipo === 'insumo').flatMap((p) => (p.total.length ? p.total : [{ quantidade: 0, unidade: pranchetas[p.id].unidade || null }]).map((t) => ({ setor: s.nome, prancheta: p.id, insumo: p.nome, quantidade: t.quantidade, unidade: t.unidade }))));
+    const insumos = setores.flatMap((s) => s.pranchetas.filter((p) => p.tipo === 'insumo').flatMap((p) => (p.total.length ? p.total : [{ quantidade: 0, unidade: ((C.somarEm || {})[pranchetas[p.id].unidade] || {}).unidade || pranchetas[p.id].unidade || null }]).map((t) => ({ setor: s.nome, prancheta: p.id, insumo: p.nome, quantidade: t.quantidade, unidade: t.unidade }))));
     const med = setores.flatMap((s) => s.pranchetas).find((p) => p.tipo === 'medicao');
     return {
       empresa: C.empresa, data,
       periodo: { inicio: iso(momento(data, C.inicioDoDia, fuso)), fim: iso(momento(somarDias(data, 1), C.inicioDoDia, fuso) - 1000) },
       totais: { insumos, ...(med ? { vinhoDaProducaoLitros: med.totalDeVinhoDaProducaoLitros } : {}) },
       setores,
+      rastreamento: (porFolha.rastreamento || []).map(registro),
     };
   }
 
@@ -170,13 +175,21 @@ function criar(C, medidasAtuais, opcoes = {}) {
     const campos = {};
     lista.forEach((c) => { if (!vistos.has(c.id)) { vistos.add(c.id); campos[c.id] = campo(c, r.valores[c.id], r.data); } });
     return Object.assign({ id: r.id, seq: r.seq, data: r.data, setor: s ? s.id : r.setor || null, prancheta: r.prancheta, chave: r.chave, apagado: !!r.apagado }, base(r),
-      { campos: p && (p.tipo === 'medicao' || p.tipo === 'fermentacao') ? r.valores : campos });
+      { campos: r.prancheta === 'rastreamento' || (p && (p.tipo === 'medicao' || p.tipo === 'fermentacao')) ? r.valores : campos });
   }
 
   /** O esquema: o que é cada setor, prancheta e campo. */
   function esquema() {
     const desc = (c) => Object.assign({ id: c.id, rotulo: c.label, tipo: { num: 'numero', time: 'hora', choice: 'opcao', check: 'marca', text: 'texto' }[c.type] || c.type }, c.unidade ? { unidade: c.unidade } : {}, c.dec ? { casasDecimais: c.dec } : {}, c.novo === true ? { novo: true } : {}, c.arquivado === true ? { arquivado: true } : {});
     return {
+      rastreamento: { id: 'rastreamento', nome: 'Rastreamento de lotes', chave: 'dia',
+        descricao: 'Valores salvos pelo Escritório, sem recalcular; em /registros e /dias, dentro de campos. Ausente quando não foi salvo.',
+        campos: { fechamento: 'data', lote: 'texto', alcool: { producao: 'L', lote: 'texto', validade: 'data' },
+          vinhaca: { producao: 'L', lote: 'texto', validade: 'data' }, volumeDestilado: 'L', pi: { hidrolise: 'L', vinho: 'L' },
+          calculo: 'parâmetros dos cálculos', hidrolise: 'pH, Brix e temperatura', alcoolParam: 'INPM, GL e acidez',
+          tanques: 'Brix, pH e folga por tanque', insumos: 'quantidade, unidade, lote, validade, NF e fornecedor por insumo',
+          mp: 'matérias-primas (kg)', lenha: 'lenha (m³)', operadores: 'lista de nomes', encarregado: 'texto',
+          origem: 'origem de cada valor', salvoPor: 'texto', salvoEm: 'milissegundos desde 1970' } },
       empresa: C.empresa, diaDeProducao: `das ${pad2(C.inicioDoDia)}:00 às ${pad2((C.inicioDoDia + 23) % 24)}:59 do dia seguinte`,
       turnos: C.turnos.map((t) => ({ nome: t.nome, inicio: `${pad2(t.inicio)}:00`, fim: `${pad2(t.fim % 24)}:00` })),
       setores: C.setores.map((s) => ({
@@ -187,7 +200,7 @@ function criar(C, medidasAtuais, opcoes = {}) {
           const campos = p.tipo === 'insumo' ? [{ id: 'qtd', label: 'Quantidade', type: 'num' }, ...(p.camposOperador || []), ...(p.camposEscritorio || []).filter((c) => !(p.camposOperador || []).some((o) => o.id === c.id))]
             : p.tipo === 'grade' ? p.itens : p.tipo === 'medicao' ? p.parametros : p.campos || [];
           return Object.assign({ id: pid, nome: p.nome, codigo: p.codigo || null, tipo: p.tipo, linhaPor: { dornas: 'dorna', insumo: 'hora', grade: 'hora', medicao: 'grupo de dornas', fermentacao: 'enchimento' }[p.tipo] || null, campos: campos.map(desc) },
-            p.tipo === 'insumo' ? { unidades: p.unidades || [p.unidade] } : {},
+            p.tipo === 'insumo' ? { unidades: p.unidades || [p.unidade], conversoesDosTotais: Object.fromEntries([...(p.unidades || []), p.unidade].filter((u) => (C.somarEm || {})[u]).map((u) => [u, C.somarEm[u]])) } : {},
             p.tipo === 'medicao' ? { grupos: medidas().grupos.map((g) => ({ id: g.id, nome: g.nome, unidade: g.unidade || 'L', dornas: g.dornas.map((d) => ({ id: d.id, nome: d.nome, alturaM: d.altura, areaDaBaseM2: d.area })) })) } : {});
         }),
       })),

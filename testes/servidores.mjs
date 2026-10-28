@@ -4,6 +4,7 @@ import { spawn, execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import crypto from 'node:crypto';
 import { dormir } from './navegador.mjs';
 import { conectarTeste } from './cifra.mjs';
 import { SENHA_ENCARREGADO } from './teste.mjs';
@@ -25,6 +26,24 @@ export const SENHA_PROGRAMADOR_TESTE = '24682468';
 const HASH_TESTE = 'pbkdf2$600000$eca09b6f4e096eed6a6b4bc6d7ad3de4$c236989776ddd876e1035cc4d8696150908b24fff8e70ea34b476475092e374f'; // PBKDF2 (versão 2.12), como o da senha de verdade
 
 export function pastaTemporaria(nome) { return fs.mkdtempSync(path.join(os.tmpdir(), `pranchetas-${nome}-`)); }
+
+// As suítes antigas começam com o dono já configurado. seguranca218 usa DONO_INICIAL
+// para testar a primeira entrada real e a migração da senha de fábrica.
+function prepararDono(pasta, extras) {
+  if (extras.DONO_INICIAL) return;
+  const arquivo = path.join(pasta, 'ServidorUsina', 'config.json');
+  const cfg = fs.existsSync(arquivo) ? JSON.parse(fs.readFileSync(arquivo, 'utf8')) : {};
+  if (Array.isArray(cfg.pessoas)) return;
+  cfg.chave ||= crypto.randomBytes(18).toString('hex');
+  cfg.codigo ||= '218218';
+  const sal = crypto.randomBytes(16).toString('hex');
+  let h = crypto.createHash('sha256').update(sal + ':' + SENHA_ENCARREGADO).digest();
+  for (let i = 0; i < 20000; i++) h = crypto.createHmac('sha256', h).update(SENHA_ENCARREGADO).digest();
+  cfg.pessoas = [{ id: 'dono-teste', nome: 'Guilherme', nivel: 'administrador', ativo: true, extras: {}, sal, resumo: h.toString('hex'),
+    nuvem: { sal, iteracoes: 1000, verificador: crypto.pbkdf2Sync(SENHA_ENCARREGADO, sal, 1000, 32, 'sha256').toString('hex') } }];
+  fs.mkdirSync(path.dirname(arquivo), { recursive: true });
+  fs.writeFileSync(arquivo, JSON.stringify(cfg));
+}
 
 /** Um aparelho de teste conectado na central (pelo código, com a conexão embaralhada, como o aplicativo).
     api(rota, corpo) devolve o JSON; se o código for trocado, conecta de novo. */
@@ -50,6 +69,7 @@ function comCliente(central) {
 
 /** Central do computador. Devolve { url, pasta, codigo(), chave(), api(), reiniciar(), desligar() }. */
 export async function centralNode(porta, pasta = pastaTemporaria('node'), publico, extras = {}) {
+  prepararDono(pasta, extras);
   let proc;
   const ligar = async () => {
     proc = spawn(process.execPath, [path.join(APP, 'server.js')], { env: Object.assign({}, process.env, { PORTA: String(porta), PASTA_DADOS: pasta, ENDERECO: '127.0.0.1', SENHA_PROGRAMADOR_HASH: HASH_TESTE, ATUALIZACAO_ONLINE: '' }, publico ? { PASTA_PUBLICA: publico } : {}, extras), stdio: 'ignore' });
@@ -67,6 +87,7 @@ export async function centralNode(porta, pasta = pastaTemporaria('node'), public
 
 /** Central do tablet chefe (o mesmo ServidorCentral.java do APK), rodando no computador com peças do Android simuladas. */
 export async function centralJava(porta, pasta = pastaTemporaria('java'), extras = {}) {
+  prepararDono(pasta, extras);
   const pastaJava = path.join(APP, 'testes', 'java');
   const saida = path.join(pastaJava, 'saida');
   const fontes = [];

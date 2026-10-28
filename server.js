@@ -293,7 +293,10 @@ async function buscarAtualizacaoOnline() {
   try {
     // as telas (atualização rápida) ficam do lado: .../atualizacao/ e .../telas/
     await buscarTelasOnline(new URL('../telas/', raiz).href).catch((e) => console.log('  Telas pela internet: ' + e.message));
-    const v = JSON.parse((await baixarDaInternet(raiz + 'versao.json', 1024 * 1024)).toString('utf8'));
+    const manifesto = await baixarDaInternet(raiz + 'versao.json', 1024 * 1024);
+    const assinatura = (await baixarDaInternet(raiz + 'versao.sig', 4096)).toString('utf8');
+    if (!assinaturaConfere(manifesto, assinatura)) throw new Error('o APK da internet não tem a assinatura certa');
+    const v = JSON.parse(manifesto.toString('utf8'));
     const atual = versaoDoApk();
     if (!v.versao || numeroDaVersao(v.versao) <= numeroDaVersao(atual ? atual.versao : '0')) return;
     const apk = await baixarDaInternet(new URL(v.url || 'pranchetas.apk', raiz).href, 300 * 1024 * 1024);
@@ -461,7 +464,7 @@ async function enviarParaNuvem() {
     const pessoas = config.pessoas.filter((p) => p.ativo !== false).map((p) => ({
       id: p.id, nome: p.nome, nivel: p.nivel, ativo: true,
       funcoes: [...funcoesDaPessoa(p)].filter((f) => !['conexao', 'sistema'].includes(f)).sort(),
-      ...(p.nuvem ? { nuvem: p.nuvem } : {}),
+      ...(!p.pedeTrocarSenha && p.nuvem ? { nuvem: p.nuvem } : {}),
     }));
     const pessoasHash = resumoHash(pessoas);
     // aparelhos bloqueados: longe da usina, o aparelho pergunta na nuvem (versão 2.11).
@@ -532,8 +535,7 @@ const guardarSenhaNuvem = (pin) => {
 };
 if (!Array.isArray(config.pessoas)) {
   // primeira vez: o administrador é o Guilherme, com a senha que já era a do encarregado
-  let pin = '159357';
-  try { pin = String(carregarPranchetas().pinAdmin || pin); } catch (e) { /* fica a de sempre */ }
+  const pin = '159357';
   config.pessoas = [Object.assign({ id: 'p' + crypto.randomBytes(4).toString('hex'), nome: 'Guilherme', nivel: 'administrador', extras: {}, ativo: true, criadoEm: Date.now(), nuvem: guardarSenhaNuvem(pin) }, guardarSenha(pin))];
   salvarConfig();
 }
@@ -542,7 +544,7 @@ if (!config.aparelhosChefe) config.aparelhosChefe = {};
 if (!config.aparelhosVistos) config.aparelhosVistos = {};
 const pessoaPublica = (p) => ({ id: p.id, nome: p.nome, nivel: p.nivel, extras: p.extras || {}, aparelhos: p.aparelhos || [], ativo: p.ativo !== false, temSenha: !!p.resumo });
 const pessoaDaSenha = (pin) => config.pessoas.find((p) => p.ativo !== false && p.resumo && mesmoSegredo(resumoDaSenha(String(pin), p.sal), p.resumo));
-const pessoaDoAparelho = (id) => { const s = config.sessoes[id]; return s ? config.pessoas.find((p) => p.id === s.pessoaId && p.ativo !== false) || null : null; };
+const pessoaDoAparelho = (id) => { const s = config.sessoes[id]; return s ? config.pessoas.find((p) => p.id === s.pessoaId && p.ativo !== false && !p.pedeTrocarSenha) || null : null; };
 const tetoDoAparelho = (id) => { const a = config.aparelhosChefe[id]; return a && Array.isArray(a.teto) ? a.teto : null; };
 let formsDaCentral = null;
 const formsLidas = () => formsDaCentral || (formsDaCentral = carregarPranchetas());
@@ -577,6 +579,14 @@ const niveisDoForms = () => { try { return formsLidas().niveis || {}; } catch (e
 if (!config.donoId) {
   const dono = config.pessoas.find((p) => p.nivel === 'administrador' && p.ativo !== false) || config.pessoas.find((p) => p.nivel === 'administrador');
   if (dono) { config.donoId = dono.id; salvarConfig(); }
+}
+// 2.18: também protege centrais antigas que ainda usam a senha de fábrica.
+const donoInicial = config.pessoas.find((p) => p.id === config.donoId);
+if (donoInicial && mesmoSegredo(resumoDaSenha('159357', donoInicial.sal), donoInicial.resumo)) {
+  donoInicial.pedeTrocarSenha = true;
+  delete donoInicial.nuvem;
+  Object.keys(config.sessoes).forEach((id) => { if (config.sessoes[id].pessoaId === donoInicial.id) delete config.sessoes[id]; });
+  salvarConfig();
 }
 // migração única: o que a central já conhecia como tablet chefe antes da 2.12 vira nível 2 (nada muda para quem já usa)
 if (!config.niveisMigrados) {
@@ -640,7 +650,7 @@ const FUNCOES_NO_SETOR = ['ajustes', 'usina', 'escritorio'];
 function funcoesNoSetor(aparelho) {
   const l = liberadosNoSetor[aparelho];
   if (!l || Date.now() > l.ate) return new Set();
-  const s = funcoesDaPessoaNoAparelho(config.pessoas.find((p) => p.id === l.pessoaId && p.ativo !== false), aparelho);
+  const s = funcoesDaPessoaNoAparelho(config.pessoas.find((p) => p.id === l.pessoaId && p.ativo !== false && !p.pedeTrocarSenha), aparelho);
   return new Set([...s].filter((f) => FUNCOES_NO_SETOR.includes(f)));
 }
 /** Setor vem da conexão, nunca de r.setor. O histórico permite escoar a fila anterior à troca. */
@@ -771,12 +781,22 @@ const pranchetasSoDoChefe = () => { try { return formsLidas().setores.filter((s)
  * Anotação que chegou de um tablet chefe: a mesma função que a tela pede, de quem está dentro dele.
  * Sem ninguém dentro: 'sem_sessao' (o aparelho guarda a anotação e manda de novo quando alguém entrar).
  */
-function motivoNoChefe(aparelho, r) {
+function motivoNoChefe(aparelho, r, guardado) {
   if (!pessoaDoAparelho(aparelho)) return 'sem_sessao';
   const f = funcoesNoAparelho(aparelho);
   if (r.prancheta === 'avisos') return f.has('avisos') ? '' : 'sem_permissao';
   if (pranchetasSoDoChefe().includes(r.prancheta)) return f.has('anotar') ? '' : 'sem_permissao';
-  return f.has('corrigir') ? '' : 'sem_permissao';
+  return f.has('corrigir') || (f.has('escritorio') && soMudouEscritorio(r, guardado)) ? '' : 'sem_permissao';
+}
+// A função Escritório não permite alterar quantidade, autoria nem apagar a linha.
+function soMudouEscritorio(r, guardado) {
+  const permitidos = camposSoDoEscritorio(r.prancheta);
+  if (!permitidos.length || r.apagado || guardado?.apagado) return false;
+  const antes = guardado?.valores || {}, depois = r.valores || {};
+  if (guardado && r.operador !== guardado.operador) return false;
+  return [...new Set([...Object.keys(antes), ...Object.keys(depois), ...Object.keys(r.camposEm || {})])].every((k) =>
+    permitidos.includes(k) || (JSON.stringify(antes[k]) === JSON.stringify(depois[k]) &&
+      (r.camposEm?.[k] || 0) === (guardado?.camposEm?.[k] || 0)));
 }
 /** Campos do escritório de cada folha de insumo que o operador não preenche (o tablet do setor não muda). */
 function camposSoDoEscritorio(pid) {
@@ -786,7 +806,7 @@ function camposSoDoEscritorio(pid) {
   const cs = db.registros['config|sistema|geral'];
   const folhas = cs && !cs.apagado && cs.valores ? cs.valores.folhas || {} : {};
   const liberados = new Set([...(p.camposOperador || []).map((c) => c.id), ...((folhas[pid] || {})._operador || [])]);
-  return (p.camposEscritorio || []).map((c) => c.id).filter((id) => !liberados.has(id));
+  return [...(p.camposEscritorio || []).map((c) => c.id), 'verificado'].filter((id) => !liberados.has(id));
 }
 
 /* ---------- Registro do sistema (versão 2.9) ----------
@@ -1294,7 +1314,7 @@ function sincronizar(corpo, aparelho, ip) {
       if (!f.has('escritorio')) { recusados.push({ id: r.id, motivo: 'sem_permissao' }); continue; }
     } else if (nivelAqui && !['registro', 'avisos-recibo'].includes(r.prancheta)) {
       // tablet chefe: a função de quem está dentro (a mesma que a tela pede)
-      const motivo = motivoNoChefe(aparelho, r);
+      const motivo = motivoNoChefe(aparelho, r, guardadaDe(r));
       if (motivo) { recusados.push({ id: r.id, motivo }); continue; }
     } else if (r.prancheta === 'avisos') {
       // aviso só sai do tablet chefe
@@ -1302,7 +1322,7 @@ function sincronizar(corpo, aparelho, ip) {
     }
     if (!nivelAqui && r.data !== 'config' && !podeFolhaNoSetor(aparelho, r)) { recusados.push({ id: r.id, motivo: 'sem_permissao' }); continue; }
     // tablet de setor não muda os campos que são só do escritório (NF, lote, validade...), nem de dia antigo
-    if (!nivelAqui && r.valores) {
+    if (!nivelAqui && r.valores && !funcoesNoSetor(aparelho).has('escritorio')) {
       const soEscritorio = camposSoDoEscritorio(r.prancheta);
       if (soEscritorio.length) {
         const guardado = guardadaDe(r);
@@ -1368,6 +1388,16 @@ async function rotaProtegida(req, res, url, ip) {
           if (t.length >= 5) return json(res, 429, { erro: 'Muitas senhas erradas. Espere um minuto.' });
           const pessoa = /^\d{4,8}$/.test(String(corpo.pin || '')) ? pessoaDaSenha(corpo.pin) : null;
           if (!pessoa) { t.push(agora); registrar('entrada', `Senha errada no ${aqui}`, { aparelho: aqui }); return json(res, 403, { erro: 'Senha errada' }); }
+          if (ehDono(pessoa) && (pessoa.pedeTrocarSenha || String(corpo.pin) === '159357')) {
+            const nova = corpo.novaSenha;
+            if (typeof nova !== 'string' || !/^\d{4,8}$/.test(nova) || nova === '159357') return json(res, 403, { erro: 'Troque a senha inicial do dono', pedeTrocarSenha: true });
+            if (pessoaDaSenha(nova)) return json(res, 400, { erro: 'Essa senha já é de outra pessoa. Escolha outra.' });
+            Object.assign(pessoa, guardarSenha(nova), { nuvem: guardarSenhaNuvem(nova) });
+            delete pessoa.pedeTrocarSenha;
+            Object.keys(config.sessoes).forEach((id) => { if (config.sessoes[id].pessoaId === pessoa.id) delete config.sessoes[id]; });
+            salvarConfig(); agendarNuvem();
+            registrar('configuracao', `${pessoa.nome} trocou a senha inicial`, { quem: pessoa.nome, aparelho: aqui });
+          }
           if (corpo.acao === 'entrar') {
             // só entra pessoa em tablet chefe liberado; no nível 3, só o dono (versão 2.12)
             const nivel = nivelDoAparelho(req.aparelho);
@@ -1394,6 +1424,7 @@ async function rotaProtegida(req, res, url, ip) {
         if (corpo.acao === 'lista') return lista();
         if (corpo.acao === 'salvar') {
           const d = corpo.pessoa || {};
+          if (d.id === config.donoId && String(d.pin) === '159357') return json(res, 400, { erro: 'Escolha uma senha diferente da inicial' });
           const nome = String(d.nome || '').trim().slice(0, 40);
           if (!nome) return json(res, 400, { erro: 'Falta o nome' });
           if (!NIVEIS_VALIDOS.includes(d.nivel)) return json(res, 400, { erro: 'Nível inválido' });
@@ -1503,10 +1534,11 @@ async function rotaProtegida(req, res, url, ip) {
           if (!dono) return json(res, 409, { erro: 'O sistema não tem dono cadastrado' });
           const nova = corpo.novaSenha == null || corpo.novaSenha === '' ? null : String(corpo.novaSenha);
           if (nova !== null) {
-            if (!/^\d{4,8}$/.test(nova)) return json(res, 400, { erro: 'A senha tem de 4 a 8 números' });
+            if (!/^\d{4,8}$/.test(nova) || nova === '159357') return json(res, 400, { erro: 'A senha tem de 4 a 8 números' });
             if (config.pessoas.some((x) => x !== dono && x.resumo && mesmoSegredo(resumoDaSenha(nova, x.sal), x.resumo))) return json(res, 400, { erro: 'Essa senha já é de outra pessoa. Escolha outra.' });
             Object.assign(dono, guardarSenha(nova));
             dono.nuvem = guardarSenhaNuvem(nova);
+            delete dono.pedeTrocarSenha;
             agendarNuvem();
           }
           Object.assign(dono, { nivel: 'administrador', ativo: true });
@@ -1554,6 +1586,7 @@ async function rotaProtegida(req, res, url, ip) {
         if (!id || !(aparelhos[id] || config.aparelhosVistos[id])) return json(res, 404, { erro: 'Aparelho não encontrado' });
         const nome = nomeDoAparelho(id);
         const aqui = nomeDoAparelho(req.aparelho);
+        if (nivelDoAparelho(id) === 3 && !ehDono(quem)) return negar(res, 'sistema');
         if (corpo.acao === 'bloquear') {
           if (id === req.aparelho) return json(res, 400, { erro: 'Não dá para bloquear o aparelho que você está usando' });
           const modo = corpo.modo === 'senha' ? 'senha' : 'trava';
@@ -1598,13 +1631,15 @@ async function rotaProtegida(req, res, url, ip) {
         const corpo = JSON.parse(await lerCorpo(req, 100000));
         const n = config.nuvem;
         if (corpo.acao === 'estado' || corpo.acao === 'forms') return json(res, 200, estadoNuvem()); // o computador lê o forms.js sozinho
-        if ((corpo.acao === 'configurar' || corpo.acao === 'enviar') && !podeNoAparelho(req.aparelho, 'integracoes')) return negar(res, 'integracoes');
+        if (corpo.acao === 'configurar' && !podeNoAparelho(req.aparelho, 'sistema')) return negar(res, 'sistema');
+        if (corpo.acao === 'enviar' && !podeNoAparelho(req.aparelho, 'integracoes')) return negar(res, 'integracoes');
         if (corpo.acao === 'configurar') {
           const endereco = String(corpo.url || '').trim().replace(/\/+$/, '');
           if (endereco && !/^https:\/\/[^\s/]+\.[^\s]+$/i.test(endereco) && !/^http:\/\/127\.0\.0\.1:\d+$/.test(endereco)) return json(res, 400, { erro: 'Endereço inválido. Ele começa com https://' });
-          if (endereco !== n.url) Object.assign(n, { url: endereco, seq: 0, arquivosEnviados: false, conferida: false, formsHash: '', pessoasHash: '', medidasHash: '', erro: '', ultimoEnvio: 0, faltam: 0 });
+          if (endereco !== n.url) Object.assign(n, { url: endereco, segredo: '', seq: 0, arquivosEnviados: false, conferida: false, formsHash: '', pessoasHash: '', medidasHash: '', erro: '', ultimoEnvio: 0, faltam: 0 });
           if (typeof corpo.segredo === 'string') { n.segredo = corpo.segredo.trim().slice(0, 200); n.conferida = false; n.erro = ''; }
           salvarConfig();
+          registrar('configuracao', `${pessoaDoAparelho(req.aparelho).nome} configurou a Nuvem`, { aparelho: nomeDoAparelho(req.aparelho) });
           agendarNuvem(500);
           return json(res, 200, estadoNuvem());
         }
@@ -1633,15 +1668,17 @@ async function rotaProtegida(req, res, url, ip) {
         const corpo = JSON.parse(await lerCorpo(req, 2 * 1024 * 1024));
         const b = config.base44;
         if (corpo.acao === 'estado') return json(res, 200, estadoBase44(true));
-        if (corpo.acao === 'configurar' && !podeNoAparelho(req.aparelho, 'integracoes')) return negar(res, 'integracoes');
+        if (corpo.acao === 'configurar' && !podeNoAparelho(req.aparelho, 'sistema')) return negar(res, 'sistema');
         if (corpo.acao === 'configurar') {
           const endereco = String(corpo.url || '').trim();
           if (endereco && !/^https?:\/\/[^\s/]+\.[^\s]+$/i.test(endereco) && !/^http:\/\/127\.0\.0\.1:\d+\//.test(endereco)) return json(res, 400, { erro: 'Endereço inválido. Ele começa com https://' });
           // só os dias depois de ligar vão sozinhos (os anteriores o escritório já lançou à mão)
           if (endereco && endereco !== b.url && ehDia(corpo.desde)) b.desde = corpo.desde;
+          if (endereco !== b.url) b.segredo = '';
           b.url = endereco;
           if (typeof corpo.segredo === 'string') b.segredo = corpo.segredo.trim().slice(0, 200);
           salvarConfig();
+          registrar('configuracao', `${pessoaDoAparelho(req.aparelho).nome} configurou o Base44`, { aparelho: nomeDoAparelho(req.aparelho) });
           return json(res, 200, estadoBase44(true));
         }
         if (corpo.acao === 'enviar') {

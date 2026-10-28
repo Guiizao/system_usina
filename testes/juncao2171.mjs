@@ -6,7 +6,7 @@ import Juncao from '../public/nucleo/juncao.js';
 import { centralNode, centralJava } from './servidores.mjs';
 import { conectarTeste } from './cifra.mjs';
 import { ligarNuvemSQLite } from './nuvem-sqlite.mjs';
-import { novoGrupo, teste, igual, certo, resumo } from './teste.mjs';
+import { novoGrupo, teste, igual, certo, resumo, SENHA_ENCARREGADO } from './teste.mjs';
 
 const g = novoGrupo('Junção 2.17.1 (Node, Java, nuvem e aparelho)');
 const dia = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
@@ -217,6 +217,8 @@ try {
       });
       await teste(g, `${nome}: central volta, junta pendências e publica a mesma linha para todos`, async () => {
         const r = registro('volta'); await enviar(a, [r]); await enviar(b, []);
+        await c.api('/api/chefes', { acao: 'liberar', pin: SENHA_ENCARREGADO, nivel: 3 });
+        await c.api('/api/pessoas', { acao: 'entrar', pin: SENHA_ENCARREGADO });
         await c.api('/api/nuvem', { acao: 'configurar', url: n.url, segredo });
         await c.api('/api/nuvem', { acao: 'enviar' });
         await syncNuvem('a', [editar(r, 'a', 'ph', '6', 200)]); await syncNuvem('b', [editar(r, 'b', 'brix', '11', 300)]);
