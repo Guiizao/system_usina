@@ -83,7 +83,6 @@ window.USINA = {
 
   // Senha de emergência dos ajustes dos tablets dos setores, quando a central não responde (é a do administrador).
   // Com a central, quem entra é cada pessoa com a sua senha (Pessoas e permissões, no tablet chefe).
-  resumoAdmin: 'ba723435a66e490530c3efdfeac868e06fde6e35dcc43fa8528fb1b2c9411ef5',
 
   // Pessoas do escritório (versão 2.9): o que cada nível pode fazer no tablet chefe.
   // O administrador ajusta por pessoa (ligar ou desligar uma função) e por tablet chefe (o que aquele aparelho deixa fazer).

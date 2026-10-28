@@ -55,7 +55,7 @@
   async function entrarNoChefe(pinPronto) {
     const pin = pinPronto || await pedirSenhaModal('Quem está usando?', 'Digite a sua senha. Ela diz quem você é.');
     if (pin === undefined) return false;
-    const r = await postJson('api/pessoas', { acao: 'entrar', pin }, 10000).catch(() => null);
+    const r = await postSenha('entrar', pin, 10000);
     if (!r) { toast('Não consegui falar com a central', 'erro'); return false; }
     const d = await r.json().catch(() => ({}));
     if (!r.ok) {
@@ -169,13 +169,24 @@
     render();
   }
   /** Tablet de setor (ajustes, liberar operador): a central confere a senha. Sem a central, só a senha de emergência. */
+  /** 2.18: entrar com a senha; na primeira entrada do dono a central pede a troca da senha de fábrica, e aqui se escolhe a nova. */
+  async function postSenha(acao, pin, ms) {
+    const r = await postJson('api/pessoas', { acao, pin }, ms).catch(() => null);
+    if (!r || r.status !== 403 || !(await r.clone().json().catch(() => ({}))).pedeTrocarSenha) return r;
+    const nova = await pedirSenhaModal('Troque a senha inicial', 'Primeira entrada do dono: escolha uma senha nova, de 4 a 8 números.');
+    if (nova === undefined) return r;
+    if ((await pedirSenhaModal('Repita a senha nova', 'Digite a mesma senha de novo.')) !== nova) { toast('As duas senhas não são iguais. Tente de novo.', 'erro'); return r; }
+    return postJson('api/pessoas', { acao, pin, novaSenha: nova }, ms).catch(() => null);
+  }
   async function verificarNoSetor(f, titulo, dica) {
     const pin = await pedirSenhaModal(titulo, dica);
     if (pin === undefined) return false;
-    const r = cfg.demo ? null : await postJson('api/pessoas', { acao: 'verificar', pin }, 6000).catch(() => null);
+    // demonstração: qualquer senha entra (os dados são só deste aparelho)
+    if (cfg.demo) return /^\d{4,8}$/.test(pin);
+    const r = await postSenha('verificar', pin, 6000);
     if (!r) {
-      if (pin === C.pinAdmin) return true;
-      toast(cfg.demo ? 'Senha errada' : 'Sem a central: só a senha do administrador funciona agora', 'erro');
+      // 2.18: sem a senha universal no aplicativo (a de fábrica servia em qualquer tablet, para sempre)
+      toast('Sem a central a senha não pode ser conferida. Tente quando a central voltar.', 'erro');
       return false;
     }
     const d = await r.json().catch(() => ({}));

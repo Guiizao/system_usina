@@ -24,7 +24,7 @@
     if (pin === undefined) return false;
     let nome = 'Demonstração';
     if (!cfg.demo) {
-      const r = await postJson('api/pessoas', { acao: 'verificar', pin }, 6000).catch(() => null);
+      const r = await postSenha('verificar', pin, 6000);
       if (!r) { toast('Sem a central: o Escritório precisa dela para conferir a senha', 'erro'); return false; }
       const d = await r.json().catch(() => ({}));
       if (!r.ok) { toast(d.erro || 'Senha errada', 'erro'); return false; }

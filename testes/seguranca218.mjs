@@ -172,7 +172,8 @@ if (!process.argv[2] || process.argv[2] === 'node') {
     const forms = fs.readFileSync(path.join(APP, 'public/config/forms.js'), 'utf8');
     certo(!forms.includes(inicial) && !/pinAdmin\s*:/.test(forms), 'PIN não pode sair no pacote');
     const ctx = { window: {} }; usinaNoContexto(ctx);
-    igual(ctx.window.USINA.resumoAdmin, crypto.createHash('sha256').update(inicial).digest('hex'));
+    // 2.18 (Claude): nem o resumo vai (SHA-256 de 6 números se desfaz em segundos); o app não confere senha sem a central
+    certo(!('resumoAdmin' in ctx.window.USINA), 'o resumo da senha não pode ir no pacote');
   });
   const pasta = pastaTemporaria('apk218');
   const keys = crypto.generateKeyPairSync('ec', { namedCurve: 'P-256' });

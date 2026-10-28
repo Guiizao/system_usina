@@ -215,6 +215,28 @@ export async function testarTurnoEAviso218(nav, g) {
   } finally { await a.fechar(); await c.desligar(); }
 }
 
+/** X2 no aplicativo: a central pede a troca da senha inicial do dono; o aplicativo pede a nova duas vezes e entra. */
+export async function testarSenhaInicial218(nav, g) {
+  const c = await centralNode(8390, pastaTemporaria('p218-senha'), undefined, { DONO_INICIAL: 1 });
+  const a = await nav.novoAparelho('tablet', TAMANHOS.tablet);
+  const digitar = async (pin) => { await a.esperar('!!document.querySelector(".modal .teclas")', 5000, 'janela da senha'); await a.teclar([...pin.split(''), 'ok']); };
+  try {
+    await teste(g, 'senha de fábrica do dono: pede a nova (duas vezes) e a central passa a aceitar só a nova', async () => {
+      await a.ir(c.url + '/', 'document.querySelector("[data-quadro=\\"codigo\\"]")');
+      await a.tocar('[data-quadro="codigo"]'); await a.teclar(c.codigo().split('')); await a.tocar('[data-ed="ocultar"]');
+      await a.tocar('[data-a="conectar"]');
+      await a.tocar('[data-a="papel"][data-id="hidrolise"]', null, { esperarMs: 15000 });
+      await a.avaliar(`(() => { window.__r = 'esperando'; postSenha('verificar', '159357', 6000).then((r) => { window.__r = r ? r.status : null; }); return 1; })()`);
+      await digitar('4321');
+      await digitar('4321');
+      await a.esperar('window.__r !== "esperando"', 8000, 'entrar com a senha nova');
+      igual(await a.avaliar('window.__r'), 200);
+      igual(await a.avaliar(`postJson('api/pessoas', { acao: 'verificar', pin: '159357' }, 6000).then((r) => r.status)`), 403, 'a senha de fábrica ainda entra');
+    });
+    certo(!a.erros.length, a.erros.join(' | '));
+  } finally { await a.fechar(); await c.desligar(); }
+}
+
 if (import.meta.url === pathToFileURL(process.argv[1]).href) {
   const nav = await abrirNavegador();
   const g = novoGrupo('Versão 2.18: revisão por papéis');
@@ -228,6 +250,7 @@ if (import.meta.url === pathToFileURL(process.argv[1]).href) {
     if (!so || so === 'painel') await testarPainel218(nav, g);
     if (!so || so === 'escritorio') await testarEscritorio218(nav, g);
     if (!so || so === 'turno') await testarTurnoEAviso218(nav, g);
+    if (!so || so === 'senha') await testarSenhaInicial218(nav, g);
   } finally { await nav.fechar(); }
   const r = resumo([g]);
   console.log(`\n${r.passaram} de ${r.total} testes passaram${r.falharam ? `, ${r.falharam} falharam` : ''}`);

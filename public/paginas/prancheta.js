@@ -539,10 +539,11 @@
       const op = setor ? operadorPorNome(setor.id, nome) : null;
       const comSenha = !!(op && op.senha);
       if (!comSenha && pode('corrigir')) continue; // operador sem senha: quem entrou no tablet chefe autoriza (fica no registro)
-      const s = await pedirSenhaModal(comSenha ? `Senha de ${nome}` : 'Senha do encarregado',
-        comSenha ? `Para mudar o que ${nome} anotou, ${nome} digita a senha. Assim os dois ficam sabendo da alteração.` : `${nome} não tem senha cadastrada: o encarregado autoriza a alteração.`);
+      // 2.18: sem a senha universal: operador sem senha só é corrigido por quem entrou com a função Corrigir
+      if (!comSenha) { toast(`${nome} não tem senha: entre no tablet chefe com quem pode corrigir.`, 'erro'); return false; }
+      const s = await pedirSenhaModal(`Senha de ${nome}`, `Para mudar o que ${nome} anotou, ${nome} digita a senha. Assim os dois ficam sabendo da alteração.`);
       if (s === undefined) return false;
-      if (comSenha ? embaralharSenha(nome, s) !== op.senha : s !== C.pinAdmin) { toast('Senha errada. A alteração não foi salva.', 'erro'); return false; }
+      if (embaralharSenha(nome, s) !== op.senha) { toast('Senha errada. A alteração não foi salva.', 'erro'); return false; }
     }
     return true;
   }
