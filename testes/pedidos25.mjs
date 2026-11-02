@@ -7,7 +7,7 @@
  */
 import http from 'node:http';
 import { TAMANHOS, dormir } from './navegador.mjs';
-import { teste, certo, igual, entrarComoChefe, senhaSeAparecer } from './teste.mjs';
+import { teste, certo, igual, entrarComoChefe, senhaSeAparecer, SENHA_ENCARREGADO } from './teste.mjs';
 
 /** Base44 de mentira: guarda cada envio. responder = status que ele devolve (200, 401...). */
 export async function base44Falso(porta) {
@@ -81,7 +81,9 @@ export async function testarBase44Central(central, porta, grupo) {
       const e = await api('/api/base44', { acao: 'estado' });
       igual(e.enviados[diaProducao(2)].erro, 'O Base44 recusou o segredo'); igual(e.enviados[diaProducao(3)].ok, false);
       await api('/api/base44', { acao: 'configurar', url: b44.url });
-      igual((await api('/api/base44', { acao: 'estado' })).temSegredo, true, 'trocar o endereço apagou o segredo');
+      // 2.18: trocar o endereço apaga o segredo (senão ele iria para o endereço novo)
+      igual((await api('/api/base44', { acao: 'estado' })).temSegredo, false, 'trocar o endereço devia apagar o segredo');
+      await api('/api/base44', { acao: 'configurar', url: b44.url, segredo: 'SEGREDO-TESTE-123' });
     });
     await teste(grupo, 'central reiniciada: endereço, segredo e dias enviados continuam', async () => {
       await dormir(600);
@@ -130,7 +132,7 @@ export async function testarPedidos25(nav, ligar, porta, grupo, { correcao = tru
       const x = await esperarBase44((r) => r.corpo && r.corpo.data === ontem, 'totais de ontem', 40000);
       igual(x.segredo, 'SEGREDO-APP', 'segredo');
       igual(lphera(x).quantidade, 100, 'LPHERA');
-      igual(x.corpo.itens.find((i) => i.folha === 'ins_cal').quantidade, 3, 'Cal');
+      igual(x.corpo.itens.find((i) => i.folha === 'ins_cal').quantidade, 2.04, 'Cal em kg (2.18): 3 copos x 0,68');
       certo(x.corpo.itens.every((i) => i.setor && i.insumo && typeof i.quantidade === 'number'), 'item sem setor, nome ou número');
       certo(/TOTAIS DO DIA/.test(x.corpo.resumo || ''), 'sem o resumo do dia');
       igual(b44.recebidos.filter((r) => r.corpo.data === diaProducao(0)).length, 0, 'mandou o dia que ainda não fechou');
@@ -145,6 +147,10 @@ export async function testarPedidos25(nav, ligar, porta, grupo, { correcao = tru
     }
     await teste(grupo, 'configurações da usina: situação de cada dia, mandar de novo e criar o segredo', async () => {
       await semNotificacao(esc);
+      // 2.18: configurar o Base44 é só do dono, no nível 3
+      await esc.avaliar(`postJson('api/chefes', { acao: 'liberar', pin: ${JSON.stringify(SENHA_ENCARREGADO)}, nivel: 3 }).then((r) => r.json()).then((d) => { cfg.nivelChefe = d.nivel; salvarCfg(); render(); return 1; })`);
+      await dormir(500); // o nível mudou: a sessão acaba e o dono entra de novo
+      await esc.avaliar(`entrarNoChefe(${JSON.stringify(SENHA_ENCARREGADO)}).then(() => 1)`);
       await esc.tocar('[data-a="config"]');
       await senhaSeAparecer(esc);
       // o endereço aparece encurtado (só o nome do site): aqui, 127.0.0.1

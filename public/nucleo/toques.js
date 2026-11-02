@@ -28,7 +28,7 @@
     'aviso-enviar': 'avisos', 'aviso-cancelar': 'avisos', 'ler-folha': 'ler_folha', 'leitura-salvar': 'ler_folha',
     config: 'usina', 'medida-grupo': 'usina', 'medidas-planilha': 'usina', contato: 'usina', 'lista-add': 'usina', 'lista-remove': 'usina',
     'setor-liga': 'usina', 'prancheta-liga': 'usina', 'lembrete-liga': 'usina', 'lembrete-horario': 'usina', 'turnos-setor': 'usina', 'op-add': 'usina', 'op-senha': 'usina', 'op-remove': 'usina',
-    'nuvem-url': 'integracoes', 'nuvem-segredo': 'integracoes', 'nuvem-enviar': 'integracoes', 'base44-url': 'integracoes', 'base44-segredo': 'integracoes', 'base44-enviar': 'integracoes',
+    'nuvem-url': 'sistema', 'nuvem-segredo': 'sistema', 'nuvem-enviar': 'integracoes', 'base44-url': 'sistema', 'base44-segredo': 'sistema', 'base44-enviar': 'integracoes',
     'turnos-url': 'integracoes', 'turnos-segredo': 'integracoes', 'turnos-ligar': 'integracoes', 'turnos-enviar': 'integracoes', 'turnos-atualizar': 'integracoes',
     'novo-codigo': 'conexao',
     graficos: 'relatorios', folhas: 'folhas', 'folha-campo': 'folhas', 'folha-unidades': 'folhas',

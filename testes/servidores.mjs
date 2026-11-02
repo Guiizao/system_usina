@@ -36,11 +36,11 @@ function prepararDono(pasta, extras) {
   if (Array.isArray(cfg.pessoas)) return;
   cfg.chave ||= crypto.randomBytes(18).toString('hex');
   cfg.codigo ||= '218218';
-  const sal = crypto.randomBytes(16).toString('hex');
+  const sal = crypto.randomBytes(16).toString('hex'), salNuvem = crypto.randomBytes(16).toString('hex');
   let h = crypto.createHash('sha256').update(sal + ':' + SENHA_ENCARREGADO).digest();
   for (let i = 0; i < 20000; i++) h = crypto.createHmac('sha256', h).update(SENHA_ENCARREGADO).digest();
   cfg.pessoas = [{ id: 'dono-teste', nome: 'Guilherme', nivel: 'administrador', ativo: true, extras: {}, sal, resumo: h.toString('hex'),
-    nuvem: { sal, iteracoes: 1000, verificador: crypto.pbkdf2Sync(SENHA_ENCARREGADO, sal, 1000, 32, 'sha256').toString('hex') } }];
+    nuvem: { sal: salNuvem, iteracoes: 1000, verificador: crypto.pbkdf2Sync(SENHA_ENCARREGADO, salNuvem, 1000, 32, 'sha256').toString('hex') } }];
   fs.mkdirSync(path.dirname(arquivo), { recursive: true });
   fs.writeFileSync(arquivo, JSON.stringify(cfg));
 }
@@ -60,6 +60,16 @@ function comCliente(central) {
     return cli;
   };
   central.api = async (rota, corpo) => {
+    // 2.18: nuvem e Base44 só o dono configura, no nível 3: sobe só para isso (o nível 3 é só do dono, as suítes ficam no 2)
+    if (corpo && corpo.acao === 'configurar' && ['/api/nuvem', '/api/base44'].includes(rota)) {
+      const c = await central.cliente(), nivel = (n) => c.pedir('/api/chefes', { corpo: { acao: 'liberar', pin: SENHA_ENCARREGADO, nivel: n } });
+      await nivel(3);
+      await c.pedir('/api/pessoas', { corpo: { acao: 'entrar', pin: SENHA_ENCARREGADO } });
+      const r = await c.pedir(rota, { corpo });
+      await nivel(2);
+      await c.pedir('/api/pessoas', { corpo: { acao: 'entrar', pin: SENHA_ENCARREGADO } });
+      return r.json;
+    }
     let r = await (await central.cliente()).pedir(rota, { corpo });
     if (r.status === 401 && r.fora) { cli = null; r = await (await central.cliente()).pedir(rota, { corpo }); }
     return r.json;

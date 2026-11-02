@@ -1645,6 +1645,8 @@ async function rotaProtegida(req, res, url, ip) {
         }
         if (corpo.acao === 'enviar') {
           if (!n.url || !n.segredo) return json(res, 400, { erro: 'Cadastre o endereço e a senha da nuvem' });
+          // um envio agendado pode estar no meio: espera, para o "mandar agora" mandar de verdade (como o Java)
+          while (enviandoNuvem) await new Promise((r) => setTimeout(r, 100));
           await enviarParaNuvem();
           return json(res, 200, estadoNuvem());
         }
