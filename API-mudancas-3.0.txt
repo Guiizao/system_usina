@@ -1,0 +1,98 @@
+PRANCHETAS UBIRÁLCOOL - API DA VERSÃO 3.0 (03/11/2026)
+
+Aqui tem as duas partes: o envio para a sua função producao-receber, que é novo, e a leitura pelos GET, que continua e teve alguns ajustes.
+
+
+1. ENVIO PARA A PRODUCAO-RECEBER
+
+Está desligado. Só ligo depois da sua confirmação.
+
+Quando
+Todo dia, entre 07:00 e 07:10, vai o dia de produção que fechou às 06:59.
+Se alguém corrigir ou lançar algo em um dia já enviado, o dia vai de novo, inteiro, não importa a idade dele. Substitua o que você tem, não some.
+Se der erro, tentamos de novo a cada 10 minutos.
+Vão no máximo 5 dias a cada 10 minutos. Numa carga de dias passados, o resto vai nas voltas seguintes.
+
+Como
+POST no endereço da sua função, que precisa ser https
+Content-Type: application/json
+X-Pranchetas-Segredo: a chave combinada
+Não mandamos o cabeçalho Authorization.
+Responda com HTTP 2xx em até 20 segundos. Redirecionamento ou qualquer outra resposta conta como erro.
+
+O que vem no corpo
+Um dia por envio. Hoje o maior dá 42 KB e a média fica em 29 KB.
+{
+  "empresa": "UBIRÁLCOOL ÁLCOOL DE CEREAIS",
+  "de": "2026-10-30",
+  "ate": "2026-10-30",
+  "dias": [ { "data": "2026-10-30", "insumos": [ ... ], "dornasFinalizadas": 12 } ],
+  "total": { "insumos": [ ... ], "dornasFinalizadas": 12 },
+  "turnoEncerrado": { "id": 3, "nome": "3º Turno", "inicio": 0, "fim": 7 },
+  "producao": { o mesmo de GET /api/v1/dias/2026-10-30: todas as áreas, folhas e campos }
+}
+Tirando os dois últimos campos, é o mesmo de GET /api/v1/totais?dia=2026-10-30.
+Para saber o que é cada código de campo, use GET /api/v1/esquema.
+
+O que vai e o que não vai
+Vai a produção, com o nome do operador de cada anotação, como já vem na leitura.
+Não vão pessoas, senhas, permissões, código de conexão, histórico do sistema nem avisos internos. Isso fica só no banco das Pranchetas.
+
+
+2. LEITURA (GET)
+
+Endereço: https://pranchetas-nuvem.guiizao.workers.dev
+Cabeçalho: Authorization: Bearer <senha de leitura>
+A senha é a mesma de antes. A API só lê.
+
+GET /api/v1/esquema
+Setores, folhas e campos (id, nome, tipo e unidade).
+
+GET /api/v1/dias?de=2026-10-01&ate=2026-11-02
+Os dias que têm anotação: { "dias": [ { "data": "2026-11-02", "anotacoes": 41 } ] }
+
+GET /api/v1/dias/2026-11-02
+O dia de produção inteiro, das 07:00 às 06:59 do dia seguinte, por setor e por folha.
+
+GET /api/v1/totais?dia=2026-11-02
+GET /api/v1/totais?de=2026-10-01&ate=2026-11-02
+Totais do dia, ou de um período de até 62 dias.
+
+GET /api/v1/registros?desde=0&limite=500
+O que mudou depois do número "desde". Guarde o "seq" da resposta e mande no próximo pedido. Se vier "maisDepois": true, chame de novo. O limite vai de 1 a 2000.
+
+Erros: 401 senha errada ou faltando; 400 data fora do formato ou período maior que 62 dias; 404 rota que não existe; 405 a API só aceita GET.
+
+
+3. O QUE MUDOU NA LEITURA DESDE O TEXTO DA 2.17
+
+A numeração do "desde" recomeçou
+A migração para a 3.0 numerou tudo de novo, e hoje vai até 3919. Se o seu sistema guarda esse número, zere e leia desde=0 uma vez.
+
+Tem anotação nova em dias antigos
+Entraram dias que estavam só nos backups, e em 03/11 lancei folhas de papel de 20/10 a 02/11. O banco tem dados desde 23/09/2026. Vale ler de novo os dias que você já tinha guardado.
+
+Totais do /api/v1/dias/AAAA-MM-DD agora convertidos
+Em "totais.insumos" e no "total" de cada folha, g, copos e canecas viram kg, e L vira mL, como já era no /api/v1/totais. Exemplo: 4 copos de cal aparecem como 2,72 kg.
+Nas linhas continua como o operador anotou, com a unidade junto.
+
+Duas coisas novas no esquema
+"conversoesDosTotais" nas folhas de insumo, com o fator de cada unidade. Exemplo na uréia: { "canecas": { "unidade": "kg", "fator": 0.78 } }.
+"rastreamento", que descreve os dados de rastreamento de lotes.
+
+Rastreamento de lotes
+O /api/v1/dias/AAAA-MM-DD ganhou a lista "rastreamento", vazia quando o escritório não salvou nada naquele dia. O /api/v1/registros também traz essas linhas.
+
+Total por quadro
+No /api/v1/dias/AAAA-MM-DD, uma folha pode trazer "saidas" quando o dono marcou total em algum quadro:
+"saidas": [ { "id": "x_vazao", "rotulo": "Vazão", "tipoDeTotal": "soma", "total": 14.5, "unidade": "L/h" } ]
+"tipoDeTotal" pode ser soma, media ou ultimo. Sem total marcado, o campo não vem.
+
+Folhas e campos podem mudar sem versão nova
+O dono agora cria área, folha e campo pelo aplicativo, e eles aparecem sozinhos no esquema e no dia.
+Folha removida de vez sai do esquema e do dia, mas o que já foi anotado nela continua vindo no /api/v1/registros.
+Folha só desligada continua aparecendo. Campo arquivado vem com "arquivado": true no esquema. Campo marcado para não sair na API não aparece.
+Por isso, não trate a lista como fixa. Folha ou campo que você não conhece: ignore, sem dar erro.
+
+Não mudou
+As rotas, a senha e o /api/v1/totais continuam iguais.
