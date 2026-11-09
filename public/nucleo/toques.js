@@ -383,12 +383,13 @@
       case 'leitura-cel': return corrigirCelula(v, Number(b.dataset.i), b.dataset.c);
       case 'leitura-salvar': return salvarLeitura(v);
       case 'relatorio-enviar': return enviarDia(b.dataset.data);
-      case 'relatorio-abrir': return ir({ tela: 'central', data: b.dataset.data });
+      case 'relatorio-abrir': return ir({ tela: 'central', data: b.dataset.data, temArquivo: b.dataset.arq ? b.dataset.data : '' });
       case 'relatorios-mais': v.quantos = (v.quantos || DIAS_NA_LISTA) + DIAS_NA_LISTA; return render();
       case 'relatorio-apagar': {
         if (!(await confirmar(`Apagar o arquivo de ${fmtData(b.dataset.data)}?`, 'O Excel e o XML guardados deste dia são apagados. As anotações continuam no sistema e dá para gerar o arquivo de novo.', 'Apagar', true))) return;
         const r = await postJson('api/relatorio-apagar', { data: b.dataset.data }).catch(() => null);
         toast(r && r.ok ? 'Arquivo apagado' : 'Não consegui apagar o arquivo', r && r.ok ? 'ok' : 'erro');
+        if (r && r.ok) v.temArquivo = '';
         v.carregado = false; return render();
       }
       case 'gerar-hoje': {

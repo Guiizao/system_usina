@@ -73,7 +73,6 @@
 :root[data-dispositivo="celular"] .boas-vindas h1 { font-size: 24px; }
 :root[data-dispositivo="celular"] .boas-vindas header p { font-size: 16px; }
 :root[data-dispositivo="celular"] .config-grade { grid-template-columns: minmax(0, 1fr); }
-:root[data-dispositivo="celular"] .pessoas > div { flex-wrap: wrap; }
 /* Barra de cima no celular: o título pode ir em duas linhas em vez de cortar.
    A hora já aparece na barra do próprio celular; só volta quando a tela cheia esconde essa barra. */
 :root[data-dispositivo="celular"] .topo .titulo b { font-size: 16px; line-height: 1.15; white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: normal; }

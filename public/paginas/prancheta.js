@@ -216,7 +216,10 @@
     });
     if (ehCentral()) {
       p.camposEscritorio.filter((c) => !operadorPreenche(p, c.id)).forEach((c) => lista.push({ id: c.id, label: c.label, type: 'text', get: () => val[c.id], set: (x) => { val[c.id] = x; } }));
-      lista.push({ id: 'operador', label: 'Nome operador', type: 'text', get: () => rascunho.extras.operador, set: (x) => { rascunho.extras.operador = x; } });
+      // 3.1: com operadores cadastrados, escolhe na lista; o nome que já está (mesmo fora dela) continua como opção
+      const nomes = operadoresDo((setorDaPrancheta(view().pid) || {}).id).map((o) => o.nome);
+      lista.push(Object.assign({ id: 'operador', label: 'Nome operador', get: () => rascunho.extras.operador, set: (x) => { rascunho.extras.operador = x; } },
+        nomes.length ? { type: 'choice', opcoes: [...new Set([...nomes, rascunho.extras.operador].filter(Boolean))] } : { type: 'text' }));
       lista.push({ id: 'meta_lote', label: 'Lote da folha', type: 'text', get: () => rascunho.extras.meta.lote, set: (x) => { rascunho.extras.meta.lote = x; } });
       lista.push({ id: 'meta_verificado', label: 'Verificado por', type: 'text', get: () => rascunho.extras.meta.verificado, set: (x) => { rascunho.extras.meta.verificado = x; } });
     }

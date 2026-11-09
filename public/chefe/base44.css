@@ -15,7 +15,7 @@
 .chip-item button svg.ico { width: 18px; height: 18px; }
 .chip-item button:active { background: var(--vermelho-fundo); color: var(--vermelho); }
 .chip-liga { display: inline-flex; align-items: center; gap: 8px; min-height: 50px; padding: 0 16px; border-radius: 10px; background: var(--papel-2); border: 2px dashed var(--linha); font-size: 17px; font-weight: 700; color: var(--tinta-2); }
-.chip-liga svg.ico { width: 18px; height: 18px; }
+.chip-liga svg.ico { flex: none; width: 18px; height: 18px; }
 .chip-liga.sel { border: 2px solid var(--verde); background: var(--verde-fundo); color: var(--verde-escuro); }
 .setor-config-cab { display: flex; align-items: center; gap: 12px; margin-bottom: 6px; }
 .setor-config-cab .desenho { width: 46px; height: 46px; display: grid; place-items: center; border-radius: 8px; background: var(--papel-2); }
@@ -32,6 +32,8 @@
 .pessoas { display: grid; gap: 6px; }
 .pessoas > div { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 6px 8px 6px 12px; border-radius: 8px; background: var(--papel-2); }
 .pessoas .nome { display: flex; align-items: center; gap: 8px; min-width: 0; font-size: 18px; }
+.pessoas .nome svg.ico, .pessoas .nome small { flex: none; }
+.pessoas .nome b { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .pessoas .nome small { font-size: 14px; color: var(--tinta-2); margin-left: 4px; }
 .pessoas .nome small.sem-senha { color: var(--ambar-texto); }
 .pessoas .acoes { display: flex; gap: 6px; flex: none; }

@@ -48,6 +48,7 @@
           </div>
         </div>
 
+        ${v.temArquivo === data && veNoChefe('relatorios') ? `<div class="linha-botoes"><button class="btn pequeno perigo" data-a="relatorio-apagar" data-data="${data}">${ico('lixeira')} Apagar o arquivo</button></div>` : ''}
         <div class="central-grade">
           <section>
             ${veNoChefe('corrigir') || veNoChefe('relatorios') ? blocoForaDoLimite(data) : ''}

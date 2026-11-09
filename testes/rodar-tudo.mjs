@@ -346,7 +346,7 @@ grupos.push(g6);
 
 // versão 3.0: banco no centro, sala ao vivo, tabelas novas, sem perder dado e leitor de folhas (cada uma sobe o que precisa)
 const g30 = novoGrupo('Versão 3.0');
-for (const arq of ['fase0-30.mjs', 'banco30.mjs', 'sala30.mjs', 'sessao31.mjs', 'soma31.mjs', 'tabelas30.mjs', 'aovivo30.mjs', 'sem-nuvem30.mjs', 'usina30.mjs', 'leitor30.mjs', 'menus30.mjs']) {
+for (const arq of ['fase0-30.mjs', 'banco30.mjs', 'sala30.mjs', 'sessao31.mjs', 'soma31.mjs', 'relatorios31.mjs', 'teclado31.mjs', 'tabelas30.mjs', 'aovivo30.mjs', 'sem-nuvem30.mjs', 'usina30.mjs', 'leitor30.mjs', 'menus30.mjs']) {
   await teste(g30, arq, async () => {
     const x = spawnSync(process.execPath, [path.join(APP, 'testes', arq)], { cwd: APP, encoding: 'utf8', timeout: 900000 });
     certo(x.status === 0, (x.stdout || '').split('\n').filter((l) => /FALHOU/.test(l)).join(' | ') || x.stderr || `saiu com ${x.status}`);

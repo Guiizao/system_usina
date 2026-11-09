@@ -30,6 +30,9 @@
     ed.texto = textoInicial(a); ed.digitou = false;
     atualizarEdicao(antes && antes !== id ? [antes, id] : [id]);
   }
+  const ACENTOS = ['AÁÃÂÀ', 'EÉÊ', 'IÍ', 'OÓÕÔ', 'UÚ'];
+  /** As letras e os símbolos no padrão do celular: as duas páginas usam o mesmo painel largo. */
+  const telaDeLetras = () => painelVisivel() && (alvoAtual() || {}).type === 'text';
   const passoDo = (a) => a.passo || Math.pow(10, -(a.dec || 0));
   /** Ralo (2.16): a caixinha + do lado de "Anote o peso do bag" guarda o peso deste bag (ele sobe pequeno no quadro)
       e deixa o quadro pronto para o próximo, com o teclado aberto nele. */
@@ -120,6 +123,7 @@
     } else if (a.type === 'text') {
       if (k === 'apagar') s = s.slice(0, -1);
       else if (k === 'espaco') s += ' ';
+      else if (k === 'acento') { const g = s && ACENTOS.find((x) => x.includes(s.slice(-1))); if (g) s = s.slice(0, -1) + g[(g.indexOf(s.slice(-1)) + 1) % g.length]; }
       else if (k.length === 1 && s.length < (a.max || 80) && !(a.soLetras && !/\p{L}/u.test(k))) s += k.toUpperCase();
       ed.texto = s; a.set(s);
     }
@@ -164,17 +168,21 @@
     const maisMenos = (a.type === 'num' || a.type === 'time') && !a.semMaisMenos;
     const unidade = a.unidade || (a.getUnidade ? a.getUnidade() : '');
     let teclas;
-    if (ed.letras) {
-      const letras = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
-      teclas = `<div class="teclas letras">${letras.map((l) => `<button data-ed="${l}">${l}</button>`).join('')}
-        <button data-ed="espaco" class="span2 menor">Espaço</button><button data-ed="abc" class="escura">123</button><button data-ed="apagar" aria-label="Apagar">${ico('apagar')}</button></div>`;
+    const umaTecla = (l) => `<button data-ed="${l}">${l}</button>`;
+    const apagar = (cls) => `<button data-ed="apagar" class="${cls}" aria-label="Apagar">${ico('apagar')}</button>`;
+    if (a.type === 'text' && ed.letras) {
+      teclas = `<div class="teclas letras">${[...'QWERTYUIOPASDFGHJKLÇ'].map(umaTecla).join('')}
+        <button data-ed="-" class="l3">-</button>${[...'ZXCVBNM'].map(umaTecla).join('')}${apagar('l3 escura')}
+        <button data-ed="abc" class="l3 menor escura">123</button>${umaTecla(',')}<button data-ed="acento" class="menor escura" aria-label="Acento na última letra">´~</button><button data-ed="espaco" class="l8 menor">Espaço</button>${umaTecla('.')}<button data-ed="limpar" class="l3 menor">Limpar</button></div>`;
+    } else if (a.type === 'text') {
+      teclas = `<div class="teclas letras">${[..."1234567890-/:;()%+=°.,?!'#*_"].map(umaTecla).join('')}${apagar('l4 escura')}
+        <button data-ed="abc" class="l4 menor escura">ABC</button><button data-ed="espaco" class="l12 menor">Espaço</button><button data-ed="limpar" class="l4 menor">Limpar</button></div>`;
     } else {
       const sep = a.type === 'ip' ? '.' : ',';
       const temSep = a.type === 'ip' || (a.type === 'num' && (a.dec || 0) > 0);
       teclas = `<div class="teclas">${[7, 8, 9, 4, 5, 6, 1, 2, 3].map((n) => `<button data-ed="${n}">${n}</button>`).join('')}
         ${temSep ? `<button data-ed="${sep}">${sep}</button>` : '<button data-ed="limpar" class="menor">Limpar</button>'}
         <button data-ed="0">0</button><button data-ed="apagar" aria-label="Apagar">${ico('apagar')}</button>
-        ${a.type === 'text' ? '<button data-ed="abc" class="escura span2">ABC letras</button><button data-ed="limpar" class="menor">Limpar</button>' : ''}
 </div>`;
     }
     return `${cab}
@@ -233,11 +241,11 @@
     const box = document.querySelector('.edicao');
     if (!box) return;
     // o teclado abriu ou fechou (ou trocou para letras): a coluna muda de largura, então tudo é refeito
-    const trocouPainel = box.classList.contains('com-painel') !== painelVisivel() || box.classList.contains('modo-letras') !== (painelVisivel() && ed.letras);
+    const trocouPainel = box.classList.contains('com-painel') !== painelVisivel() || box.classList.contains('modo-letras') !== telaDeLetras();
     // e a linha escolhida volta para o meio do seletor
     if (box.classList.contains('com-painel') !== painelVisivel()) rolarDepois = true;
     box.classList.toggle('com-painel', painelVisivel());
-    box.classList.toggle('modo-letras', painelVisivel() && ed.letras);
+    box.classList.toggle('modo-letras', telaDeLetras());
     const tudo = trocouPainel || !mexidos;
     const refeitos = [];
     document.querySelectorAll('[data-grupo]').forEach((g) => {
@@ -358,7 +366,7 @@
   }
   function telaEdicao(conteudo, rodape, fixoTopo) {
     // as abas e o seletor ficam presos no alto; só os quadros rolam, se precisar
-    return `<div class="edicao ${painelVisivel() ? 'com-painel' : ''} ${painelVisivel() && ed.letras ? 'modo-letras' : ''}">
+    return `<div class="edicao ${painelVisivel() ? 'com-painel' : ''} ${telaDeLetras() ? 'modo-letras' : ''}">
       <div class="coluna">${fixoTopo ? `<div class="barra-trabalho">${fixoTopo}</div>` : ''}<main>${conteudo}</main>${rodape ? `<div class="rodape">${rodape}</div>` : ''}</div>
       <aside class="painel" id="painel">${htmlPainel()}</aside></div>`;
   }

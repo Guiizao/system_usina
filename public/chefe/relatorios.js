@@ -25,10 +25,9 @@
             <div class="relatorio-cab"><span class="escolha-ico">${ico('planilha')}</span>
               <div><b>Folhas de ${fmtData(d)}</b><small>${diaSemana(d)}${d === dataProducao() ? ' (hoje)' : ''}${cfg.soNuvem ? '' : ` · ${excel ? 'Excel guardado em RelatoriosUsina' : 'ainda sem Excel guardado'}`}</small></div></div>
             <div class="linha-botoes">
-              <button class="btn pequeno primario" data-a="relatorio-abrir" data-data="${d}">${ico('seta')} Abrir e corrigir</button>
+              <button class="btn pequeno primario" data-a="relatorio-abrir" data-data="${d}" data-arq="${(guardados.get(d) || []).length ? 1 : ''}">${ico('seta')} Abrir e corrigir</button>
               <button class="btn pequeno" data-a="relatorio-enviar" data-data="${d}">${ico('enviar')} Enviar ou imprimir</button>
               <button class="btn pequeno" data-a="relatorio-resumo" data-data="${d}">${ico('documento')} Resumo</button>
-              ${(guardados.get(d) || []).length ? `<button class="btn pequeno perigo" data-a="relatorio-apagar" data-data="${d}">${ico('lixeira')} Apagar o arquivo</button>` : ''}
             </div></section>`;
         }).join('')}</div>
         ${todos.length > dias.length ? `<div class="linha-botoes"><button class="btn" data-a="relatorios-mais">${ico('mais')} Ver dias mais antigos</button></div>` : ''}

@@ -86,9 +86,13 @@
 .fichas button.largo { flex: 1; display: inline-flex; align-items: center; justify-content: center; gap: 8px; }
 
 .teclas { flex: 1 1 auto; display: grid; gap: 8px; grid-template-columns: repeat(3, 1fr); grid-auto-rows: minmax(46px, 1fr); }
-.teclas.letras { grid-template-columns: repeat(5, 1fr); grid-auto-rows: minmax(48px, 1fr); }
+.teclas.letras { grid-template-columns: repeat(20, minmax(0, 1fr)); gap: 5px; grid-auto-rows: minmax(48px, 1fr); }
 .teclas button { border-radius: 8px; background: var(--papel-2); border: 2px solid var(--linha-clara); font-size: 36px; font-weight: 700; text-align: center; display: flex; align-items: center; justify-content: center; }
-.teclas.letras button { font-size: 26px; }
+.teclas.letras button { font-size: 24px; grid-column: span 2; padding: 0; min-width: 0; }
+.teclas.letras .l3 { grid-column: span 3; }
+.teclas.letras .l4 { grid-column: span 4; }
+.teclas.letras .l8 { grid-column: span 8; }
+.teclas.letras .l12 { grid-column: span 12; }
 .teclas button:active { background: var(--verde-fundo); border-color: var(--verde); }
 .teclas button.menor { font-size: 19px; }
 .teclas button.escura { background: var(--grafite); color: var(--branco); border-color: var(--grafite); font-size: 20px; }
