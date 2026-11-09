@@ -340,7 +340,8 @@
       case 'ia-acao': return iaConfirmar(Number(b.dataset.i));
       case 'ia-arquivo': return iaArquivo(Number(b.dataset.i), b.dataset.t);
       case 'ia-cancelar': ia.msgs[Number(b.dataset.i)].acao = null; return render();
-      case 'pn-periodo': v.periodo = Number(b.dataset.n); return render();
+      case 'pn-periodo': v.periodo = Number(b.dataset.n); v.barra = null; return render();
+      case 'pn-barra': v.barra = Number(b.dataset.k); return render();
       case 'setores-cel': return ir({ tela: 'setores-cel', data: dataProducao() });
       case 'mais-cel': return ir({ tela: 'mais-cel' });
       case 'relatorio-resumo': return verResumo(b.dataset.data);

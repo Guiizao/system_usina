@@ -80,7 +80,7 @@
     const atual = Number(pnDia(dia).alcool) || 0;
     const melhor = Math.max(atual, ...Array.from({ length: 6 }, (_, i) => Number(pnDia(somarDias(dia, -i - 1)).alcool) || 0));
     const f = melhor > 0 ? atual / melhor : 0;
-    return `<svg class="pn-tanque" viewBox="0 0 104 122" role="img" aria-label="${pnNum(f * 100)}% do melhor dia dos últimos 7"><defs><clipPath id="pn-tk"><path d="M12 24V100a40 12 0 0 0 80 0V24a40 12 0 0 1-80 0Z"/></clipPath></defs>
+    return `<svg class="pn-tanque ${f < 0.5 ? 'baixo' : ''}" viewBox="0 0 104 122" role="img" aria-label="${pnNum(f * 100)}% do melhor dia dos últimos 7"><defs><clipPath id="pn-tk"><path d="M12 24V100a40 12 0 0 0 80 0V24a40 12 0 0 1-80 0Z"/></clipPath></defs>
       <path class="corpo" d="M12 24V100a40 12 0 0 0 80 0V24"/><g clip-path="url(#pn-tk)"><g class="liquido" style="transform:translateY(${((1 - f) * 76).toFixed(1)}px)"><path class="onda" d="M-62 46q13-5 26 0t26 0 26 0 26 0 26 0 26 0 26 0V130H-62Z"/></g></g>
       <ellipse class="boca" cx="52" cy="24" rx="40" ry="12"/><ellipse class="fundo" cx="52" cy="24" rx="30" ry="8"/><text x="54" y="84" text-anchor="middle">${pnNum(f * 100)}%</text><text class="leg" x="54" y="97" text-anchor="middle">do melhor dia</text></svg>`;
   }
@@ -106,7 +106,7 @@
       const aparelho = cfg.demo || soVer() ? '' : disp ? (disp.bloqueio ? 'Bloqueado' : disp.online ? `Ligado${disp.operador ? `, ${disp.operador}` : ''}` : situacaoDoAparelho(disp)) : 'Tablet não conectado';
       const hora = regs[0] ? new Date(regs[0].atualizadoEm).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '';
       const nAlertas = alertas.filter((a) => a.setor === s.id).length;
-      const situacao = nAlertas ? ['r', contar(nAlertas, 'alerta', 'alertas')] : pends ? ['a', `Faltam ${pends}`] : regs.length ? ['v', 'Em dia'] : ['n', 'Sem anotação'];
+      const situacao = nAlertas ? ['r', contar(nAlertas, 'alerta', 'alertas')] : pends ? ['a', `${pends === 1 ? 'Falta' : 'Faltam'} ${pends}`] : regs.length ? ['v', 'Em dia'] : ['n', 'Sem anotação'];
       return { s, quem, hora, feitas, total: folhas.length, situacao, agora, aparelho };
     });
   }
@@ -157,30 +157,86 @@
 
   /* ===== Celular ===== */
   const pnSaudacao = () => { const p = pessoaAtual(); return p ? `Olá, ${esc(String(p.nome).split(' ')[0])}` : 'Olá'; };
+  /** Cada etapa diz em palavras como está; entre duas etapas anotadas o líquido corre no cano. */
+  function pnCaminho(dia) {
+    const d = pnDia(dia), st = new Map(pnSetoresAgora(dia).map((x) => [x.s.id, x]));
+    const fala = (id, tem) => {
+      const x = st.get(id);
+      if (!tem) return ['vazio', 'Sem anotação neste dia'];
+      return [x && 'ar'.includes(x.situacao[0]) ? 'falta' : '', `${x ? x.situacao[1] : 'Anotado'}${x && x.hora ? `, última às ${x.hora}` : ''}`];
+    };
+    const etapas = [['balanca', 'Pesagem', fala('ralo', d.mp !== ''), pnComUn(d.mp, 'kg')], ['tanque', 'Hidrólise', fala('hidrolise', d.hidrolisado !== ''), pnComUn(d.hidrolisado, 'L')], ['regua', 'Vinho', fala('vinho', d.vinho !== ''), pnComUn(d.vinho, 'L')],
+      ['fabrica', 'Destilaria', d.destilaria !== '' && d.nova === '' ? ['falta', 'Falta a Nova Destilaria'] : fala('destilaria', d.alcool !== ''), pnComUn(d.alcool, 'L')],
+      ['coluna', 'Álcool', d.alcool === '' ? ['vazio', 'Sem anotação neste dia'] : ['', d.conferido ? 'Conferido no escritório' : 'Calculado, não conferido'], pnComUn(d.alcool, 'L')]];
+    return `<ul class="pn-cam">${etapas.map(([icone, nome, [estado, texto], valor], i) => `<li class="${estado}${i && estado !== 'vazio' && etapas[i - 1][2][0] !== 'vazio' ? ' cheio' : ''}" style="--p:${i}"><span>${ico(icone)}</span><div><b>${nome}</b><small>${esc(texto)}</small></div><strong>${valor}</strong></li>`).join('')}</ul>`;
+  }
+  function pnColunas(v, dia) {
+    const n = v.periodo || 7, serie = pnSerie(dia, n), vals = serie.map((p) => Number(p.alcool) || 0), max = Math.max(1, ...vals), soma = vals.reduce((a, b) => a + b, 0), comDado = vals.filter(Boolean).length;
+    const media = comDado ? soma / comDado : 0, melhor = vals.indexOf(max), sel = Number.isInteger(v.barra) && v.barra < n ? v.barra : n - 1, dm = (p) => fmtData(p.dia).slice(0, 5);
+    // de 10 mil para cima o número inteiro não cabe na coluna: todas passam a mil litros
+    const emMil = max >= 10000, rotulo = (x) => (!x ? '-' : emMil ? (x / 1000).toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) : pnNum(x));
+    const passo = n <= 7 ? 1 : n <= 14 ? 2 : 5, comNumero = n === 7;
+    return `<div class="pn-resumo"><div><small>Total</small><b>${pnComUn(soma, 'L')}</b></div><div><small>Média por dia</small><b>${pnComUn(media, 'L')}</b></div><div><small>Melhor dia</small><b>${comDado ? dm(serie[melhor]) : '-'}</b></div></div>
+      <p class="pn-leitura">${dm(serie[sel])}: <b>${pnComUn(vals[sel] || '', 'L')}</b>${comNumero && emMil ? '<small>colunas em mil litros</small>' : ''}</p>
+      <div class="pn-graf" style="--rot:${comNumero ? 22 : 0}px;--vao:${n > 14 ? 2 : 6}px">${serie.map((p, i) => `<button class="${i === n - 1 ? 'hoje ' : ''}${i === melhor && comDado ? 'melhor ' : ''}${i === sel ? 'sel' : ''}" data-a="pn-barra" data-k="${i}" aria-label="${dm(p)}: ${pnComUn(vals[i] || '', 'L')}" style="--h:${(vals[i] ? Math.max(0.04, vals[i] / max) : 0.015).toFixed(3)}">${comNumero ? `<span>${rotulo(vals[i])}</span>` : ''}<i></i></button>`).join('')}${media ? `<div class="media" style="--h:${(media / max).toFixed(3)}"></div>` : ''}</div>
+      <div class="pn-graf-dias" style="--vao:${n > 14 ? 2 : 6}px">${serie.map((p, i) => `<span>${(n - 1 - i) % passo ? '' : fmtData(p.dia).slice(0, 2)}</span>`).join('')}</div>`;
+  }
   function telaInicioCel(v) {
     const data = v.data, dia = diaDoEscritorio(data), ve = pnVeProducao(), abertos = veNoChefe('avisos') ? avisosEmAberto().length : 0;
-    const ativos = aparelhosDoPainel().filter((a) => a.online && a.operador);
-    const pessoas = [...new Set(ativos.map((a) => a.operador))];
-    const d = pnDia(dia);
-    const etapa = (icone, nome, feito, falta) => `<div class="${falta ? 'a' : feito ? '' : 'o'}"><i>${ico(icone)}</i>${nome}</div>`;
+    const vistos = new Set(), agora = pnSetoresAgora(data);
+    const pessoas = aparelhosDoPainel().filter((a) => a.online && a.operador && !vistos.has(a.operador) && vistos.add(a.operador));
+    const linhaPessoa = (a) => { const x = agora.find((y) => y.s.id === a.papel); return `<div class="pn-lin"><em>${pnIniciais(a.operador)}</em><span><b>${esc(a.operador)}</b><small>${esc(funcaoDoAparelho(a))}</small></span>${x && x.hora ? `<time>última ${x.hora}</time>` : ''}</div>`; };
     return `<header class="pn-oi pn-e"><img src="icons/logo-u.svg" alt=""><div><b>${pnSaudacao()}</b><small>${esc(turnoAtual().nome)}, ${fmtData(data).slice(0, 5)}</small></div>
         <button class="pn-ic" data-a="avisos" aria-label="Avisos${abertos ? `, ${abertos} esperando` : ''}">${ico('sino')}${abertos ? '<span class="pt"></span>' : ''}</button></header>
-      <main class="pn-cel">
+      <main class="pn-cel cabe"><div class="pn-miolo">
         ${ve ? pnHeroi(dia, true) : ''}
-        ${ve ? `<section class="pn-c pn-e"><div class="cab"><h2>Linha de produção</h2>${d.alcool === '' ? '<mark class="a">Faltam leituras</mark>' : ''}</div>
-          <div class="pn-nos">${etapa('balanca', 'Pesagem', d.mp !== '')}${etapa('tanque', 'Hidrólise', d.hidrolisado !== '')}${etapa('regua', 'Vinho', d.vinho !== '')}${etapa('fabrica', 'Destilaria', d.alcool !== '', d.destilaria !== '' && d.nova === '')}${etapa('coluna', 'Álcool', d.alcool !== '')}</div></section>
-        <section class="pn-c pn-e"><div class="cab"><h2>Álcool por dia</h2>${pnPeriodos(v)}</div>${pnBarras(pnSerie(dia, v.periodo || 7))}</section>` : ''}
-        <section class="pn-c pn-e pn-agora"><div><b>Trabalhando agora</b><small>${pessoas.length ? contar(pessoas.length, 'pessoa', 'pessoas') : 'Ninguém ligado agora'}</small></div><span>${pessoas.slice(0, 4).map((n) => `<em>${pnIniciais(n)}</em>`).join('')}</span></section>
-      </main>`;
+        ${ve ? `<section class="pn-c pn-e" style="--o:1"><div class="cab"><h2>Caminho da produção</h2><small>do dia ${fmtData(dia).slice(0, 5)}</small></div>${pnCaminho(dia)}</section>
+        <section class="pn-c pn-e pn-solta" style="--min:226px;--cresce:3;--o:2"><div class="cab"><h2>Álcool por dia</h2>${pnPeriodos(v)}</div>${pnColunas(v, dia)}</section>` : ''}
+        <section class="pn-c pn-e pn-solta" style="--o:3"><div class="cab"><h2>Trabalhando agora</h2><small>${pessoas.length ? contar(pessoas.length, 'pessoa', 'pessoas') : ''}</small></div>${pessoas.length ? `<div class="pn-fila">${pessoas.map(linhaPessoa).join('')}</div>` : '<p class="pn-nada">Ninguém ligado agora</p>'}</section>
+      </div></main>`;
   }
+  let pnUltimaVista = 0;
   function telaSetoresCel(v) {
     if (!pnVeSetores()) return telaInicioCel(v);
-    const data = v.data || dataProducao(), lista = pnSetoresAgora(data), alertas = listaForaDoLimite(data), pendentes = lista.filter((x) => x.situacao[0] === 'a').length;
-    return `<header class="pn-oi pn-e"><div><b>Setores</b><small>${esc(turnoAtual().nome)}, ${fmtData(data).slice(0, 5)}</small></div>${pendentes ? `<mark class="a">${contar(pendentes, 'pendente', 'pendentes')}</mark>` : ''}</header>
-      <main class="pn-cel"><div class="pn-setores">${lista.map((x) => `<button class="pn-e ${x.situacao[0] === 'a' || x.situacao[0] === 'r' ? 'w' : ''}" data-a="abrir-setor" data-id="${x.s.id}"><i>${ico(x.s.icone)}</i><b>${esc(x.s.nome)}</b><small>${x.agora ? esc(x.agora) : x.quem ? `${esc(x.quem)}${x.hora ? `, ${x.hora}` : ''}` : x.situacao[1]}</small><u><s style="width:${x.total ? x.feitas / x.total * 100 : 0}%"></s></u></button>`).join('')}</div>
-        ${alertas.length ? `<section class="pn-c pn-e pn-alerta"><span>${ico('alerta')}</span><div><b>${alertas.length} fora do limite</b><small>${esc(alertas[0].onde)}</small></div></section>` : ''}
-        ${v.temArquivo === data && veNoChefe('relatorios') ? `<div class="linha-botoes"><button class="btn pequeno perigo" data-a="relatorio-apagar" data-data="${data}">${ico('lixeira')} Apagar o arquivo</button></div>` : ''}</main>`;
+    const data = v.data || dataProducao(), lista = pnSetoresAgora(data), alertas = listaForaDoLimite(data);
+    const hora = (t) => new Date(t).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+    const ligado = (x) => (x.aparelho ? /^Ligado/.test(x.aparelho) : !!x.quem);
+    const pessoas = new Set(aparelhosDoPainel().filter((a) => a.online && a.operador).map((a) => a.operador)).size;
+    const ultimas = lista.flatMap((x) => x.s.pranchetas.flatMap(folhasDe).flatMap((pid) => listar(data, pid))).filter((r) => !r.apagado).sort((a, b) => b.atualizadoEm - a.atualizadoEm).slice(0, 8);
+    const antes = pnUltimaVista; pnUltimaVista = Math.max(pnUltimaVista, ultimas.length ? ultimas[0].atualizadoEm : 0);
+    const cartao = (x, i) => `<button class="pn-e ${x.situacao[0]}" style="--o:${i + 1}" data-a="abrir-setor" data-id="${x.s.id}"><i>${ico(x.s.icone)}</i><b>${esc(x.s.nome)}</b><mark>${esc(x.situacao[1])}</mark><small class="${ligado(x) ? 'on' : ''}"><q></q>${esc(x.aparelho || x.quem || 'Sem anotação')}${x.situacao[0] === 'a' && x.agora ? `: ${x.agora.split('. ')[0]}` : x.hora ? `, última às ${x.hora}` : ''}</small><em>${x.feitas} de ${contar(x.total, 'folha', 'folhas')}</em><u><s style="width:${x.total ? x.feitas / x.total * 100 : 0}%"></s></u></button>`;
+    return `<header class="pn-oi pn-e"><div><b>Setores</b><small>${esc(turnoAtual().nome)}, ${fmtData(data).slice(0, 5)}</small></div></header>
+      <main class="pn-cel cabe"><div class="pn-miolo">
+        <div class="pn-tres pn-e"><div><b>${lista.filter(ligado).length} de ${lista.length}</b><small>tablets ligados</small></div><div><b>${pessoas}</b><small>${pessoas === 1 ? 'pessoa' : 'pessoas'} agora</small></div><div class="${alertas.length ? 'ruim' : ''}"><b>${alertas.length}</b><small>fora do limite</small></div></div>
+        <div class="pn-setores">${lista.map(cartao).join('')}</div>
+        ${alertas.length ? `<section class="pn-c pn-e pn-solta" style="--o:7"><div class="cab"><h2>Fora do limite</h2><small>${alertas.length} no dia</small></div><div class="pn-fila">${alertas.slice(0, 8).map((x) => `<div class="pn-lin fora"><time>${hora(x.em)}</time><span><b>${esc(x.txt)}</b><small>${esc(x.onde)}${x.quem ? `, ${esc(x.quem)}` : ''}</small></span></div>`).join('')}</div></section>` : ''}
+        <section class="pn-c pn-e pn-solta" style="--o:8"><div class="cab"><h2>Últimas anotações</h2></div>${ultimas.length ? `<div class="pn-fila">${ultimas.map((r) => `<div class="pn-lin ${antes && r.atualizadoEm > antes ? 'nova' : ''}"><time>${hora(r.atualizadoEm)}</time><span><b>${esc(r.operador || 'Sem nome')}</b><small>${esc((prancheta(r.prancheta) || {}).nome || '')}</small></span></div>`).join('')}</div>` : '<p class="pn-nada">Nada anotado neste dia</p>'}</section>
+        ${v.temArquivo === data && veNoChefe('relatorios') ? `<div class="linha-botoes"><button class="btn pequeno perigo" data-a="relatorio-apagar" data-data="${data}">${ico('lixeira')} Apagar o arquivo</button></div>` : ''}
+      </div></main>`;
   }
+  /* Celular: Início e Setores cabem sem rolar. O miolo encolhe só o necessário, em qualquer tamanho de tela;
+     abaixo de 74% a letra fica ruim de ler e a tela volta a rolar. Roda antes de pintar, então não pisca. */
+  function pnCaberNaTela() {
+    const m = document.querySelector('.pn-cel.cabe'), d = m && m.firstElementChild;
+    if (!d) return;
+    d.style.zoom = 1; d.style.minHeight = ''; d.style.setProperty('--pn-k', 1);
+    if (innerWidth > innerHeight) return; // deitado não cabe nem encolhendo: fica no tamanho normal e rola
+    const cabe = m.clientHeight;
+    let k = Math.min(1, cabe / m.scrollHeight);
+    for (;;) { k = Math.max(0.74, k); d.style.zoom = k; d.style.setProperty('--pn-k', k); if (k === 0.74 || m.scrollHeight <= cabe) break; k -= 0.02; }
+    d.style.minHeight = `${cabe / k}px`;
+  }
+  window.addEventListener('resize', pnCaberNaTela);
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(pnCaberNaTela);
+  function pnContar() {
+    const el = document.querySelector('.pn-cel .n1');
+    if (!el || !el.firstChild || matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    const alvo = Number(el.firstChild.nodeValue.replace(/\D/g, '')), ini = performance.now();
+    if (!alvo) return;
+    const passo = (t) => { if (!el.isConnected) return; const f = Math.min(1, (t - ini) / 700); el.firstChild.nodeValue = `${pnNum(alvo * (1 - (1 - f) ** 3))} `; if (f < 1) requestAnimationFrame(passo); };
+    requestAnimationFrame(passo);
+  }
+  function pnDepoisDeDesenhar() { pnCaberNaTela(); if (document.getElementById('app').classList.contains('troca')) pnContar(); }
   function telaMaisCel() {
     const p = pessoaAtual(), abertos = veNoChefe('avisos') ? avisosEmAberto().length : 0, dia = diaDoEscritorio(dataProducao());
     const tile = (a, icone, nome, extra = '', selo = 0) => `<button class="pn-e" data-a="${a}" ${extra}><i>${ico(icone)}</i>${nome}${selo ? `<em>${selo}</em>` : ''}</button>`;

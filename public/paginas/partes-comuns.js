@@ -92,5 +92,6 @@
     if (trocouDeTela) app.classList.add(outraTela ? 'troca' : 'troca-linha');
     arrumarQuadros();
     agendarCaber();
+    pnDepoisDeDesenhar();
     requestAnimationFrame(caberFolhas); // folha inteira na tela (monitoramento)
   }

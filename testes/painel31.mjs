@@ -87,7 +87,11 @@ try {
     await a.avaliar(`cfg.painelNovo = true; pilha = [telaInicial()]; render(true); 1`);
     igual(await a.avaliar(`[!!document.querySelector('.pn-heroi'), document.querySelectorAll('.pn-barra button, .pn-barra .vago').length]`), [true, 5]);
     await dormir(2800);
+    const naoRola = `(() => { const m = document.querySelector('.pn-cel.cabe'); return m.scrollHeight - m.clientHeight; })()`;
+    certo(await a.avaliar(naoRola) <= 1, 'o início cabe sem rolar');
+    certo(await a.avaliar(`(() => { const l = document.querySelector('.pn-graf .media'); return !l || [...document.querySelectorAll('.pn-graf button span')].every((s) => s.getBoundingClientRect().bottom <= l.getBoundingClientRect().top); })()`), 'o traço da média não passa em cima dos números');
     await a.tocar('.pn-barra [data-a="setores-cel"]');
+    certo(await a.avaliar(naoRola) <= 1, 'os setores cabem sem rolar');
     certo(await a.avaliar(`document.querySelectorAll('.pn-setores button').length === setores().length`), 'um cartão por setor');
     await a.tocar('.pn-setores [data-a="abrir-setor"]');
     igual(await a.avaliar(`!!document.querySelector('.pn-barra')`), false, 'sem barra na folha');
