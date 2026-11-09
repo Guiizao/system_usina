@@ -125,6 +125,18 @@ try {
     igual(await a.avaliar('[env.destino, env.nome, env.tipo, env.ini]'), ['baixar', 'producao-alcool.pdf', 'application/pdf', '%PDF']);
     await a.fechar();
   });
+  await teste(g, 'som: avançar toca um, voltar toca outro, e os dois desenham', async () => {
+    const a = await abrir('p18', TAMANHOS.computador, 'central', true);
+    await a.esperar('!!window.Aberturas', 8000, 'as aberturas');
+    await dormir(2800);
+    const iniciados = await a.avaliar(`(async () => { let n = 0; const s = OscillatorNode.prototype.start; OscillatorNode.prototype.start = function (...x) { n++; return s.apply(this, x); }; window.Aberturas.somDaTela(0); window.Aberturas.somDaTela(4); OscillatorNode.prototype.start = s; return n; })()`);
+    igual(iniciados, 2);
+    await a.avaliar(`window.sons = []; window.Aberturas.somDaTela = (i) => window.sons.push(i); ir({ tela: 'relatorios' }); 1`);
+    await a.tocar('[data-a="voltar"]');
+    await a.tocar('.menu-pc [data-a="relatorios"]');
+    igual(await a.avaliar('window.sons.filter((i) => i === 0 || i === 4)'), [4, 0]);
+    await a.fechar();
+  });
   await teste(g, 'trocar de pessoa limpa a conversa do assistente e descarta a resposta pendente', async () => {
     const a = await abrir('p14', TAMANHOS.computador, 'central', false);
     await a.avaliar(`cfg.demo = false; cfg.soNuvem = true; cfg.nuvemUrl = 'http://nuvem.invalid'; cfg.pessoa = { id: 'a', nome: 'Ana', funcoes: ['relatorios'] }; window.fetch = () => new Promise((ok) => { window.soltar = ok; }); abrirAssistente(); ia.msgs.push({ de: 'ia', texto: 'Produção 123' }); render(); 1`);

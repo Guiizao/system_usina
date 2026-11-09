@@ -126,12 +126,13 @@
     }
   }
 
-  /** Som das telas: 0 toque, 1 confirmar, 2 aviso, 3 erro. */
+  /** Som das telas: 0 avançar (a gota sobe), 1 confirmar, 2 aviso, 3 erro, 4 voltar (desce). */
   function somDoPainel(i) {
     if (!painelNovoAqui() || cfg.somDesligado || !window.Aberturas) return;
     window.Aberturas.somDaTela(i);
   }
-  document.addEventListener('pointerdown', (e) => { if (e.target.closest && e.target.closest('.btn, .atalho, [data-a]')) somDoPainel(0); }, true);
+  const TOQUE_DE_VOLTAR = '[data-a="voltar"], [data-a="voltar-conectar"], [data-a$="-cancelar"], [data-a="ia-fechar"], [data-k="x"], [data-k="nao"], [data-k="voltar"]';
+  document.addEventListener('pointerdown', (e) => { const b = e.target.closest && e.target.closest('.btn, .atalho, [data-a]'); if (b) somDoPainel(b.matches(TOQUE_DE_VOLTAR) ? 4 : 0); }, true);
   /** Sorteia uma das 10 aberturas (até 2 segundos); um toque pula. */
   async function aberturaNova() {
     const raiz = document.documentElement;
