@@ -308,7 +308,8 @@ export const auditarLayout = (minLetra = 11.5) => `(() => {
   document.querySelectorAll('button, [data-a], [data-k], [data-ed]').forEach((b) => {
     if (!visivel(b) || b.closest('.tabela-wrap, .folha-imp, .qr')) return;
     const bb = b.getBoundingClientRect();
-    if (Math.min(bb.width, bb.height) < 34) probs.push({ tipo: 'botao-pequeno', onde: nomeDe(b), texto: (b.textContent.trim() || b.getAttribute('aria-label') || '').slice(0, 30) + ' (' + Math.round(bb.width) + 'x' + Math.round(bb.height) + ')' });
+    // teclado de letras: dez teclas na largura do celular, como o teclado do próprio aparelho
+    if (bb.width < (b.closest('.teclas.letras') ? 30 : 34) || bb.height < 34) probs.push({ tipo: 'botao-pequeno', onde: nomeDe(b), texto: (b.textContent.trim() || b.getAttribute('aria-label') || '').slice(0, 30) + ' (' + Math.round(bb.width) + 'x' + Math.round(bb.height) + ')' });
   });
   return probs;
 })()`;

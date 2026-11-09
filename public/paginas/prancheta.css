@@ -30,6 +30,9 @@
 @media (min-width: 640px) and (orientation: landscape) {
   :root { --painel-w: clamp(320px, 32vw, 520px); }
   .edicao.com-painel { grid-template-columns: minmax(0, 1fr) var(--painel-w); }
+  /* 3.1: teclado de letras deitado: painel mais largo e teclas de altura normal, encostadas embaixo como no celular */
+  .edicao.com-painel.modo-letras { --painel-w: clamp(420px, 46vw, 640px); }
+  .painel > .teclas.letras { flex: none; margin-top: auto; grid-auto-rows: clamp(56px, calc(10dvh / var(--escala, 1)), 84px); }
 }
 /* Em pé (tablet ou celular): teclado encosta embaixo, com a altura do que tem dentro */
 @media (max-width: 639px), (orientation: portrait) {
@@ -86,7 +89,7 @@
 .fichas button.largo { flex: 1; display: inline-flex; align-items: center; justify-content: center; gap: 8px; }
 
 .teclas { flex: 1 1 auto; display: grid; gap: 8px; grid-template-columns: repeat(3, 1fr); grid-auto-rows: minmax(46px, 1fr); }
-.teclas.letras { grid-template-columns: repeat(20, minmax(0, 1fr)); gap: 5px; grid-auto-rows: minmax(48px, 1fr); }
+.teclas.letras { grid-template-columns: repeat(20, minmax(0, 1fr)); gap: 5px 3px; grid-auto-rows: minmax(48px, 1fr); }
 .teclas button { border-radius: 8px; background: var(--papel-2); border: 2px solid var(--linha-clara); font-size: 36px; font-weight: 700; text-align: center; display: flex; align-items: center; justify-content: center; }
 .teclas.letras button { font-size: 24px; grid-column: span 2; padding: 0; min-width: 0; }
 :root .teclas.letras button.menor { font-size: 15px; }

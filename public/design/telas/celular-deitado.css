@@ -50,7 +50,7 @@
   html:root[data-dispositivo] .teclas button { font-size: 21px; }
   html:root[data-dispositivo] .teclas button svg.ico { width: 24px; height: 24px; }
   html:root[data-dispositivo] .edicao.modo-letras { --painel-w: 440px; }
-  html:root[data-dispositivo] .teclas.letras { grid-auto-rows: minmax(30px, 1fr); }
+  html:root[data-dispositivo] .teclas.letras { grid-auto-rows: minmax(30px, 1fr); flex: 1 1 auto; margin-top: 0; }
   html:root[data-dispositivo] .teclas.letras button { font-size: 15px; }
   html:root[data-dispositivo] .teclas button.menor, html:root[data-dispositivo] .teclas button.escura { font-size: 13px; }
   html:root[data-dispositivo] .opcoes-painel { grid-auto-rows: minmax(44px, auto); gap: 6px; }
