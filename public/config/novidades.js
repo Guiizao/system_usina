@@ -18,7 +18,10 @@ window.NOVIDADES = [
       "Leitor de folhas: agora lê Destilaria e Nova Destilaria, descobre sozinho se a foto está deitada e aprende com as correções. O que veio do aprendido aparece marcado, para conferir.",
       "Folha de outro turno na Hidrólise e na Sacarificação: hora diferente continua a sequência do dia, mesmo que o papel diga linha 1. Hora igual é a mesma dorna e só preenche o que falta. O dia agora aceita até 60 dornas.",
       "Na leitura, quem tem permissão cadastra na hora o operador que faltava.",
-      "No celular, a chave Painel novo em Ajustes liga a abertura animada e os sons. Vem desligada. No computador o painel novo é o único, e o tablet continua como está."
+      "Painel novo no computador: visão geral com produção por dia, linha de produção, setores agora e fechamento do dia.",
+      "Painel novo no celular, com chave em Mais e em Ajustes (vem desligada): início, setores, relatórios e a barra embaixo com o botão verde do assistente. O tablet continua como está.",
+      "Assistente: pergunte sobre produção, folhas, avisos e relatórios. Responde só o que você pode ver e pede confirmação antes de imprimir, enviar ou avisar. Funciona para quem entrou pela nuvem.",
+      "Leitura de folha que ficou pela metade continua de onde parou, mesmo fechando o aplicativo."
     ]
   },
   {

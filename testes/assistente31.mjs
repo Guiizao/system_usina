@@ -101,6 +101,13 @@ try {
     certo(!JSON.stringify(entradaAI).includes('selo-falso'));
     igual(entradaAI.tools.length, 6);
   });
+  await caso('produção usa o número salvo no Escritório, como o painel', async () => {
+    registro('2026-11-03', 'destilaria', '7', { producao: 11 });
+    registro('2026-11-03', 'rastreamento', 'dia', { alcool: { producao: 50.5 } });
+    escolher('producao', { de: '2026-11-03', ate: '2026-11-03' });
+    igual((await pedir()).json.serie, [{ x: '2026-11-03', y: 50.5 }]);
+    escolher('producao', { de, ate });
+  });
   await caso('lista fixa: quem trabalhou usa operadores das anotações', async () => {
     escolher('quem_trabalha', { data: de });
     const r = await pedir({ corpo: { pergunta: 'Quem trabalhou em 01/11/2026?' } });

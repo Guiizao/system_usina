@@ -141,6 +141,10 @@ const TELAS = [
   ['chefe-registro', '&papel=central&tela=registro'],
   ['chefe-registro-entradas', '&papel=central&tela=registro', async (a) => { await a.tocar('[data-a="registro-tipo"][data-tipo="entrada"]'); await dormir(200); }],
   // versão 2.10: gráficos, folhas e avisos, PDF
+  ['novo-inicio', '&papel=central', async (a) => a.avaliar(`cfg.painelNovo = true; pilha = [telaInicial()]; render(true); 1`)],
+  ['novo-setores', '&papel=central', async (a) => a.avaliar(`cfg.painelNovo = true; ir({ tela: 'setores-cel', data: dataProducao() }); 1`)],
+  ['novo-mais', '&papel=central', async (a) => a.avaliar(`cfg.painelNovo = true; ir({ tela: 'mais-cel' }); 1`)],
+  ['novo-assistente', '&papel=central', async (a) => a.avaliar(`cfg.painelNovo = true; ia.msgs = [{ de: 'eu', texto: 'Quanto deu de álcool na semana?' }, { de: 'ia', titulo: 'Produção de álcool', texto: 'Álcool anotado nas duas destilarias.', linhas: [['Álcool (L)', 30760]], serie: [{ x: 1, y: 5910 }, { x: 2, y: 6280 }] }, { de: 'ia', texto: 'Confira os dados.', acao: { tipo: 'imprimir', resumo: 'Preparar impressão de relatório', dados: {} } }]; abrirAssistente(); 1`)],
   ['chefe-painel-graficos', '&papel=central', async (a) => a.avaliar('(document.querySelector(".graficos-painel") || document.body).scrollIntoView()')],
   ['chefe-graficos', '&papel=central&tela=graficos'],
   ['chefe-graficos-hidrolise', '&papel=central&tela=graficos&setor=hidrolise'],

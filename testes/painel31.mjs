@@ -81,6 +81,42 @@ try {
     igual(await a.avaliar('[cfg.painelNovo, document.documentElement.hasAttribute("data-painel-novo")]'), [false, false]);
     await a.fechar();
   });
+  await teste(g, 'celular com a chave: início novo, barra de 5; desligar volta ao painel de antes', async () => {
+    const a = await abrir('p11', TAMANHOS.celular, 'central', false);
+    igual(await a.avaliar(`[!!document.querySelector('.pn-heroi'), !!document.querySelector('.pn-barra')]`), [false, false]);
+    await a.avaliar(`cfg.painelNovo = true; pilha = [telaInicial()]; render(true); 1`);
+    igual(await a.avaliar(`[!!document.querySelector('.pn-heroi'), document.querySelector('.pn-barra').children.length]`), [true, 5]);
+    await dormir(2800);
+    await a.tocar('.pn-barra [data-a="setores-cel"]');
+    certo(await a.avaliar(`document.querySelectorAll('.pn-setores button').length === setores().length`), 'um cartão por setor');
+    await a.tocar('.pn-setores [data-a="abrir-setor"]');
+    igual(await a.avaliar(`!!document.querySelector('.pn-barra')`), false, 'sem barra na folha');
+    await a.avaliar(`ir({ tela: 'mais-cel' }); 1`);
+    await a.tocar('.pn-chave');
+    igual(await a.avaliar(`[cfg.painelNovo, document.documentElement.hasAttribute('data-painel-novo')]`), [false, false]);
+    await a.avaliar(`pilha = [telaInicial()]; render(true); 1`);
+    igual(await a.avaliar(`[!!document.querySelector('.pn-heroi'), !!document.querySelector('.pn-barra'), !!document.querySelector('.setores-grade')]`), [false, false, true]);
+    await a.fechar();
+  });
+  await teste(g, 'assistente: pergunta aparece, responde e o aviso só abre depois de confirmar', async () => {
+    const a = await abrir('p12', TAMANHOS.computador, 'central', false);
+    await a.tocar('.ia-busca');
+    igual(await a.avaliar(`!!document.querySelector('.ia-gaveta')`), true);
+    await a.avaliar(`ia.rascunho = 'Quanto deu?'; iaEnviar(); 1`);
+    await a.esperar(`document.querySelectorAll('.ia-resp').length === 1 && !ia.ocupado`, 5000, 'resposta');
+    await a.avaliar(`ia.msgs.push({ de: 'ia', texto: 'Confira.', acao: { tipo: 'aviso', resumo: 'Aviso', dados: { setor: 'caldeira', texto: 'Medir' } } }); render(); 1`);
+    igual(await a.avaliar('view().tela'), 'central', 'nada abriu antes de confirmar');
+    await a.tocar('[data-a="ia-acao"]');
+    await a.esperar(`view().tela === 'avisos'`, 5000, 'avisos');
+    igual(await a.avaliar('[view().tela, view().form.setor, view().form.texto, ia.aberto]'), ['avisos', 'caldeira', 'Medir', false]);
+    await a.fechar();
+  });
+  await teste(g, 'quem não vê produção não recebe os números no painel novo', async () => {
+    const a = await nav.novoAparelho('p13', TAMANHOS.computador);
+    await a.ir(url + 'central&funcoes=corrigir', 'document.querySelector("#app main")');
+    igual(await a.avaliar(`[!!document.querySelector('.pn-visao'), !!document.querySelector('.pn-heroi'), !!document.querySelector('.pn-linha')]`), [true, false, false]);
+    await a.fechar();
+  });
   await teste(g, 'as 10 aberturas desenham sem erro', async () => {
     const a = await abrir('p7', TAMANHOS.celular, 'central', true);
     await dormir(2800);
