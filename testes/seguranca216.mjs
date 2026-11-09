@@ -69,7 +69,7 @@ export async function testarWindowsSeguranca216(g) {
 
 function cliente() {
   const campos = { 'nuvem-nome': { value: 'pessoa-teste' }, 'nuvem-senha': { value: '2468', focus() {} } };
-  const ctx = vm.createContext({ URL, AbortController, setTimeout, clearTimeout, setInterval: () => 0, DEMO_IMG: false, NO_APK: false, cfg: { deviceId: 'pc-teste' }, window: {}, registros: {},
+  const ctx = vm.createContext({ URL, AbortController, setTimeout, clearTimeout, setInterval: () => 0, DEMO_IMG: false, NO_APK: false, matchMedia: () => ({ matches: false }), cfg: { deviceId: 'pc-teste' }, window: {}, registros: {},
     document: { addEventListener() {}, getElementById: (id) => campos[id] || null },
     pedirSenhaModal: async () => '2468', toast() {}, salvarCfg() {}, salvarRegistros() {}, marcarNuvem() {},
     atualizarConexao() {}, primeiroDiaGuardado: () => '2026-10-01', render() {}, turnoDaPessoa: () => 'turno',
@@ -138,7 +138,7 @@ export async function testarTextoSeguranca216(g) {
     let modal;
     const c = vm.createContext({ C: { inicioDoDia: 7 }, cfg: { soNuvem: true }, texto,
       pessoaAtual: () => ({ nome: texto }), ico: () => '', pode: () => true, soVer: () => false, avisosEmAberto: () => [],
-      setores: () => [{ id: 'setor', nome: texto, pranchetas: ['insumo'] }], diaFechado: () => '2026-10-20',
+      setores: () => [{ id: 'setor', nome: texto, pranchetas: ['insumo'] }], diaFechado: () => '2026-10-20', diaDoEscritorio: () => '2026-10-20', view: () => ({ tela: 'central' }),
       totaisPorTurno: () => totais, folhasDe: (p) => [p], prancheta: () => ({ nome: texto, tipo: 'insumo' }),
       resumoPrancheta: () => ({ texto }), listarPapel: () => [], buscarDia: async () => {},
       abrirModal: async (html) => { modal = html; return 'x'; }, fetch: async () => ({ arrayBuffer: async () => new ArrayBuffer(0) }) });
