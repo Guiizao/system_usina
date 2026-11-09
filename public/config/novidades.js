@@ -4,6 +4,17 @@
    Depois do sinal de igual vem JSON puro, porque o servidor do tablet chefe (Java) também lê este arquivo. */
 window.NOVIDADES = [
   {
+    "versao": "3.1.1",
+    "data": "2026-11-09",
+    "itens": [
+      "Assistente do painel novo: soma e faz gráfico de qualquer campo das folhas, de um dia, de um período ou hora a hora, e monta na conversa os botões para salvar em imagem ou PDF e enviar pelo WhatsApp.",
+      "Quando pedem algo que ele ainda não faz, o assistente avisa e anota o pedido. O dono pergunta a ele o que as pessoas pediram e ele ainda não faz e recebe a lista.",
+      "Painel novo: som de gota para avançar e toque macio para voltar.",
+      "Painel novo: fundo com cinco efeitos em movimento (ondas, vapor, bolhas, gotas e luz) que se revezam a cada 10 minutos.",
+      "Destilaria: a coluna das 7h da manhã seguinte fica no fim da folha do próprio dia, na tela, no papel e na planilha."
+    ]
+  },
+  {
     "versao": "3.1.0",
     "data": "2026-11-09",
     "itens": [
