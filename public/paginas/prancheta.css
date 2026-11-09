@@ -89,6 +89,7 @@
 .teclas.letras { grid-template-columns: repeat(20, minmax(0, 1fr)); gap: 5px; grid-auto-rows: minmax(48px, 1fr); }
 .teclas button { border-radius: 8px; background: var(--papel-2); border: 2px solid var(--linha-clara); font-size: 36px; font-weight: 700; text-align: center; display: flex; align-items: center; justify-content: center; }
 .teclas.letras button { font-size: 24px; grid-column: span 2; padding: 0; min-width: 0; }
+.teclas.letras button.menor { font-size: 15px; }
 .teclas.letras .l3 { grid-column: span 3; }
 .teclas.letras .l4 { grid-column: span 4; }
 .teclas.letras .l8 { grid-column: span 8; }
