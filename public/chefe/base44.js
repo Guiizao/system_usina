@@ -204,7 +204,7 @@
    * No aplicativo o arquivo vai direto para o WhatsApp ou para o e-mail.
    * No navegador usa o que o aparelho permitir.
    */
-  async function compartilhar(destino, data, arquivoPronto) {
+  async function compartilhar(destino, data, arquivoPronto, textoPronto) {
     const cs = configSistema();
     let alvo = destino;
     if (destino === 'escritorio') {
@@ -227,7 +227,7 @@
       data = escolha.dias[0];
       try { const m = await montarEnvio(escolha); arquivo = m.arquivo || null; resumo = m.texto || ''; } catch (e) { return toast('Não consegui montar o arquivo', 'erro'); }
     }
-    const texto = formato === 'texto' ? resumo : `Pranchetas Ubirálcool, folha de ${fmtData(data)}`;
+    const texto = textoPronto || formato === 'texto' ? textoPronto || resumo : `Pranchetas Ubirálcool, folha de ${fmtData(data)}`;
     const assunto = `Pranchetas Ubirálcool - ${fmtData(data)}`;
     // só o relatório com todos os setores fica guardado (um por dia, na pasta RelatoriosUsina)
     if (arquivo && !arquivoPronto && completo && formato !== 'pdf' && escolhidos.length === setores().length) guardarNaCentral(data, [arquivo]);

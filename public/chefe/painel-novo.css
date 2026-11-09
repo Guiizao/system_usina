@@ -173,6 +173,9 @@ main.escritorio.pn-producao { max-width: none; grid-template-columns: minmax(0, 
 .ia-dados td { padding: 4px 0; border-top: 1px solid var(--linha-clara); }
 .ia-dados td:last-child { text-align: right; font-weight: 700; white-space: nowrap; }
 .ia-dados .pn-barras { width: 40%; height: 90px; margin: 0; }
+.ia-grafico { margin-top: 10px; }
+.ia-grafico svg { display: block; width: 100%; height: auto; }
+.ia-arq { margin-top: 10px; }
 .ia-conf { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--linha-clara); }
 .ia-esperando { display: flex; gap: 6px; }
 .ia-esperando i { width: 10px; height: 10px; border-radius: 50%; background: var(--linha); animation: pn-pisca calc(.9s * var(--ritmo, 1)) ease-in-out infinite alternate; }

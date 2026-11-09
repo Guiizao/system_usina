@@ -99,7 +99,73 @@ try {
     igual(r.json.serie, [{ x: de, y: 15.5 }, { x: ate, y: 20 }]);
     certo(!JSON.stringify(r.json).includes('987654321'));
     certo(!JSON.stringify(entradaAI).includes('selo-falso'));
-    igual(entradaAI.tools.length, 6);
+    igual(entradaAI.tools.length, 8);
+  });
+  await caso('consulta soma por dia, exclui obs e apagados e só entrega números do servidor', async () => {
+    escolher('consulta', { folha: 'destilaria', campo: 'producao', de, ate });
+    const { json: r } = await pedir();
+    igual(r.titulo, 'Produção Álcool, soma por dia');
+    igual(r.linhas, [['Produção Álcool', 30.5]]);
+    igual(r.serie, [{ x: de, y: 10.5 }, { x: ate, y: 20 }]);
+    igual(r.consulta, { folha: 'destilaria', campo: 'producao', de, ate, por: 'dia', operacao: 'soma' });
+    igual(r.unidade, ''); certo(/^[a-zA-Z0-9_-]+$/.test(r.arquivo.nome));
+    certo(!JSON.stringify(r).includes('987654321'));
+    const prompt = entradaAI.messages[0].content;
+    certo(prompt.includes('Nunca escreva respostas nem números'));
+    certo(prompt.includes('use consulta'));
+    const catalogo = JSON.parse(prompt.split('Catálogo de folhas e campos numéricos: ')[1].split('. Datas são')[0]);
+    certo(catalogo.some((p) => p.pid === 'destilaria' && p.campos.some((c) => c.id === 'producao' && c.rotulo === 'Produção Álcool')));
+    certo(catalogo.every((p) => !['avisos', 'avisos-recibo', 'registro', 'rastreamento'].includes(p.pid)));
+  });
+  await caso('consulta média padrão por dia e operações explícitas sobre todas as leituras', async () => {
+    registro('2026-10-20', 'destilaria', '7', { inpm: 80, producao: 10 });
+    registro('2026-10-20', 'destilaria', '8', { inpm: 90, producao: 20 });
+    registro('2026-10-21', 'destilaria', '7', { inpm: 95, producao: 60 });
+    registro('2026-10-21', 'destilaria', '8', { inpm: 'inválido', producao: '' });
+    const base = { folha: 'destilaria', campo: 'inpm', de: '2026-10-20', ate: '2026-10-22' };
+    escolher('consulta', base);
+    let r = (await pedir()).json;
+    igual(r.serie, [{ x: base.de, y: 85 }, { x: '2026-10-21', y: 95 }, { x: base.ate, y: null }]);
+    igual(r.linhas, [['INPM (°)', 88.33]]); igual(r.unidade, '°'); igual(r.consulta.operacao, 'media');
+    escolher('consulta', { ...base, operacao: 'soma', por: 'total' });
+    r = (await pedir()).json;
+    igual(r.serie, [{ x: `${base.de} a ${base.ate}`, y: 265 }]); igual(r.linhas[0][1], 265);
+    escolher('consulta', { ...base, campo: 'producao', operacao: 'media' });
+    r = (await pedir()).json;
+    igual(r.linhas[0][1], 30); igual(r.serie.map((p) => p.y), [15, 60, null]);
+  });
+  await caso('consulta por hora em grade normaliza e ordena a hora da chave', async () => {
+    escolher('consulta', { folha: 'destilaria', campo: 'producao', de, ate, por: 'hora' });
+    const r = (await pedir()).json;
+    igual(r.serie, [{ x: `${de} 07:00`, y: 10.5 }, { x: `${ate} 07:00`, y: 20 }]);
+    igual(r.linhas[0][1], 30.5);
+  });
+  await caso('hora recusada em dornas ou acima de sete dias sem leitura do banco', async () => {
+    for (const args of [{ folha: 'hid_anexo1', campo: 'brix', de, ate, por: 'hora' },
+      { folha: 'destilaria', campo: 'producao', de, ate: '2026-11-08', por: 'hora' }]) {
+      escolher('consulta', args); const antes = leituras; const r = (await pedir()).json;
+      certo(r.texto.includes('por dia')); igual(r.arquivo, undefined); igual(leituras, antes);
+    }
+    escolher('consulta', { folha: 'destilaria', campo: 'producao', de, ate: '2026-11-07', por: 'hora' });
+    certo((await pedir()).json.serie.length > 0);
+  });
+  await caso('consulta sem leitura não oferece arquivo, inclusive só obs e apagados', async () => {
+    registro('2026-10-01', 'destilaria', 'obs', { producao: 99 });
+    registro('2026-10-01', 'destilaria', '7', { producao: 99 }, 'Ana', true);
+    registro('2026-10-01', 'destilaria', '8', { producao: 'inválido' });
+    for (const dia of ['2026-01-01', '2026-10-01']) {
+      escolher('consulta', { folha: 'destilaria', campo: 'producao', de: dia, ate: dia });
+      igual((await pedir()).json, { titulo: 'Produção Álcool, soma por dia', texto: 'Nada anotado nesse período.' });
+    }
+  });
+  await caso('consulta rejeita campos, folhas, argumentos e períodos inválidos antes de ler', async () => {
+    const base = { folha: 'destilaria', campo: 'producao', de, ate };
+    for (const alteracao of [{ campo: 'inexistente' }, { folha: 'inexistente' }, { folha: 'rastreamento' },
+      { folha: 'hid_anexo1', campo: 'inicio' }, { por: 'mes' }, { operacao: 'maxima' },
+      { de: '2026-02-30' }, { de: ate, ate: de }, { de: '2020-01-01' }, { valor: 999 }]) {
+      escolher('consulta', { ...base, ...alteracao }); const antes = leituras;
+      const r = (await pedir()).json; certo(r.texto.includes('ainda não')); igual(leituras, antes);
+    }
   });
   await caso('produção usa o número salvo no Escritório, como o painel', async () => {
     registro('2026-11-03', 'destilaria', '7', { producao: 11 });
@@ -129,7 +195,7 @@ try {
   await caso('todas as ferramentas recusam pessoa sem função antes da leitura', async () => {
     salvarPessoa({ ...p, extras: { relatorios: false, avisos: false } });
     for (const [nome, args] of [['producao', { de, ate }], ['folhas', { data: de, setor: 'destilaria' }],
-      ['quem_trabalha', { data: de }], ['avisos', { data: de }], ['relatorios', { de, ate }],
+      ['consulta', { folha: 'destilaria', campo: 'producao', de, ate }], ['quem_trabalha', { data: de }], ['avisos', { data: de }], ['relatorios', { de, ate }],
       ...['imprimir', 'enviar'].map((tipo) => ['preparar_acao', { tipo, de, ate }]),
       ['preparar_acao', { tipo: 'aviso', data: de, setor: 'destilaria', texto: 'oi' }]]) {
       const antes = leituras; escolher(nome, args);
@@ -195,6 +261,28 @@ try {
   await caso('dia sem anotação não inventa produção zero', async () => {
     escolher('producao', { de: '2026-01-01', ate: '2026-01-01' });
     const r = await pedir(); igual(r.json.linhas, [['Álcool (L)', 'Sem anotações']]); igual(r.json.serie[0].y, null);
+  });
+  await caso('o que ainda não faz: avisa, anota sem nome e só o dono vê o relatório', async () => {
+    db.exec('DELETE FROM assistente_pedidos');
+    executarAI = () => ({ choices: [{ message: { content: 'Não sei' } }] });
+    for (const pergunta of ['Qual o lote de ontem?', 'qual o lote de ontem?']) {
+      const r = await pedir({ corpo: { pergunta } });
+      certo(r.json.semFuncao); certo(r.json.texto.includes('ainda não'));
+    }
+    igual(Object.keys(db.prepare('SELECT * FROM assistente_pedidos LIMIT 1').get()).sort(), ['em', 'id', 'pergunta']);
+    escolher('pedidos_sem_resposta', {});
+    igual((await pedir({ corpo: { pergunta: 'O que pediram?' } })).json.texto, 'Você não tem permissão para consultar ou preparar isso.');
+    info('estado', { donoId: 'ana', aparelhosChefe: {}, setoresAparelhos: {} });
+    try {
+      const r = await pedir({ corpo: { pergunta: 'O que pediram?' } });
+      igual(r.json.linhas.length, 1); igual(r.json.linhas[0][1], '2 vezes');
+    } finally { info('estado', { donoId: 'dono', aparelhosChefe: {}, setoresAparelhos: {} }); }
+  });
+  await caso('insumo entra na consulta: soma a quantidade da folha', async () => {
+    registro(de, 'ins_cal', '07:00', { qtd: '4' }, 'Ana', false, 'hidrolise'); registro(de, 'ins_cal', '09:00', { qtd: '6,5' }, 'Ana', false, 'hidrolise');
+    escolher('consulta', { folha: 'ins_cal', campo: 'qtd', de, ate: de });
+    const r = (await pedir()).json;
+    igual(r.linhas[0][1], 10.5); igual(r.arquivo.nome.startsWith('ins_cal-qtd'), true);
   });
   await caso('20 por hora em dois aparelhos concorrentes; limite não chama AI', async () => {
     const antes = chamadas;

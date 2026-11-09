@@ -97,6 +97,12 @@ CREATE TABLE IF NOT EXISTS liberados_setor (
 );
 
 -- 3.0: o que já foi para o Servidor da Usina (só a produção de cada dia fechado)
+CREATE TABLE IF NOT EXISTS assistente_pedidos (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  em INTEGER NOT NULL,
+  pergunta TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS usina_envios (
   dia TEXT PRIMARY KEY,
   seq INTEGER NOT NULL DEFAULT 0,

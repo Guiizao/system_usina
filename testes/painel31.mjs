@@ -111,6 +111,20 @@ try {
     igual(await a.avaliar('[view().tela, view().form.setor, view().form.texto, ia.aberto]'), ['avisos', 'caldeira', 'Medir', false]);
     await a.fechar();
   });
+  await teste(g, 'assistente: gráfico na conversa, imagem e PDF prontos e WhatsApp pelo envio de sempre', async () => {
+    const a = await abrir('p17', TAMANHOS.computador, 'central', false);
+    await a.avaliar(`window.compartilhar = (destino, data, arq, texto) => { window.env = { destino, data, nome: arq.name, tipo: arq.type, tam: arq.size, texto }; arq.slice(0, 4).text().then((t) => { window.env.ini = t; }); }; ia.msgs = [{ de: 'ia', titulo: 'Produção Álcool, soma por dia', texto: 'Soma do período.', unidade: 'L', linhas: [['Soma (L)', 6453.54]], serie: [{ x: '2026-11-01', y: 3137.08 }, { x: '2026-11-02', y: null }, { x: '2026-11-03', y: 3316.46 }], arquivo: { nome: 'producao-alcool' }, consulta: { folha: 'destilaria', campo: 'producao', de: '2026-11-01', ate: '2026-11-03', por: 'dia', operacao: 'soma' } }]; abrirAssistente(); 1`);
+    await dormir(500); // a gaveta termina de deslizar
+    igual(await a.avaliar(`[document.querySelectorAll('.ia-grafico rect[rx]').length, document.querySelectorAll('[data-a="ia-arquivo"]').length]`), [2, 3]);
+    await a.tocar('[data-a="ia-arquivo"][data-t="whatsapp"]');
+    await a.esperar('!!(window.env && window.env.ini)', 5000, 'imagem pronta');
+    igual(await a.avaliar('[env.destino, env.data, env.nome, env.tipo, env.tam > 2000, env.ini.slice(1), env.texto]'), ['whatsapp', '2026-11-01', 'producao-alcool.png', 'image/png', true, 'PNG', 'Produção Álcool, soma por dia, 01/11/2026 a 03/11/2026']);
+    await a.avaliar('window.env = null; 1');
+    await a.tocar('[data-a="ia-arquivo"][data-t="pdf"]');
+    await a.esperar('!!(window.env && window.env.ini)', 8000, 'PDF pronto');
+    igual(await a.avaliar('[env.destino, env.nome, env.tipo, env.ini]'), ['baixar', 'producao-alcool.pdf', 'application/pdf', '%PDF']);
+    await a.fechar();
+  });
   await teste(g, 'trocar de pessoa limpa a conversa do assistente e descarta a resposta pendente', async () => {
     const a = await abrir('p14', TAMANHOS.computador, 'central', false);
     await a.avaliar(`cfg.demo = false; cfg.soNuvem = true; cfg.nuvemUrl = 'http://nuvem.invalid'; cfg.pessoa = { id: 'a', nome: 'Ana', funcoes: ['relatorios'] }; window.fetch = () => new Promise((ok) => { window.soltar = ok; }); abrirAssistente(); ia.msgs.push({ de: 'ia', texto: 'Produção 123' }); render(); 1`);

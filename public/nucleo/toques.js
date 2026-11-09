@@ -25,7 +25,7 @@
     salvar: 'folha', 'enviar-dorna': 'folha', 'terminar-dorna': 'folha', 'copiar-vemde': 'folha', 'apagar-linha': 'folha',
     'ferm-encher': 'anotar', 'ferm-terminou': 'anotar', 'ferm-volante': 'anotar', 'ferm-parar': 'anotar', 'ferm-esvaziou': 'anotar', 'ferm-apagar': 'anotar',
     compartilhar: 'relatorios', relatorios: 'relatorios', 'relatorio-enviar': 'relatorios', 'relatorio-apagar': 'relatorios', 'gerar-hoje': 'relatorios', imprimir: 'relatorios',
-    'aviso-enviar': 'avisos', 'aviso-cancelar': 'avisos', 'ler-folha': 'ler_folha', 'leitura-salvar': 'ler_folha',
+    'ia-arquivo': 'relatorios', 'aviso-enviar': 'avisos', 'aviso-cancelar': 'avisos', 'ler-folha': 'ler_folha', 'leitura-salvar': 'ler_folha',
     config: 'usina', 'medida-grupo': 'usina', 'medidas-planilha': 'usina', contato: 'usina', 'lista-add': 'usina', 'lista-remove': 'usina',
     'setor-liga': 'usina', 'prancheta-liga': 'usina', 'lembrete-liga': 'usina', 'lembrete-horario': 'usina', 'turnos-setor': 'usina', 'op-add': 'usina', 'op-senha': 'usina', 'op-remove': 'usina',
     'nuvem-url': 'sistema', 'nuvem-segredo': 'sistema', 'nuvem-enviar': 'integracoes', 'base44-url': 'sistema', 'base44-segredo': 'sistema', 'base44-enviar': 'integracoes',
@@ -338,6 +338,7 @@
       case 'ia-fechar': ia.aberto = false; return render();
       case 'ia-enviar': return iaEnviar();
       case 'ia-acao': return iaConfirmar(Number(b.dataset.i));
+      case 'ia-arquivo': return iaArquivo(Number(b.dataset.i), b.dataset.t);
       case 'ia-cancelar': ia.msgs[Number(b.dataset.i)].acao = null; return render();
       case 'pn-periodo': v.periodo = Number(b.dataset.n); return render();
       case 'setores-cel': return ir({ tela: 'setores-cel', data: dataProducao() });
