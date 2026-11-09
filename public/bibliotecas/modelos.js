@@ -70,7 +70,7 @@
     };
     const textoNum = (v) => (typeof v === 'number' ? fmtNum(String(v)) : v);
     // a hora conta no dia de produção (7h às 7h): o turno das 19h às 7h (2.13.4) fica inteiro
-    const horaNoDia = (h) => (h < C.inicioDoDia ? h + 24 : h);
+    const horaNoDia = (h) => (h < C.inicioDoDia ? h + 24 : Math.min(h, C.inicioDoDia + 23));
     const noTurno = (t, h) => horaNoDia(h) >= horaNoDia(t.inicio) && horaNoDia(h) < (t.fim <= C.inicioDoDia ? t.fim + 24 : t.fim);
     const operadoresDoTurno = (regs, t) => [...new Set(regs.filter((r) => /^\d+$/.test(r.chave)).filter((r) => noTurno(t, Number(r.chave))).map((r) => r.operador).filter(Boolean))].join(', ');
     /** Turnos do setor da folha (2.13.4): os 3 de sempre ou os 2 de 12 horas. */
@@ -250,16 +250,17 @@
       const p = ctx.prancheta(pid);
       const regs = ctx.listar(data, pid);
       const porHora = {}; ctx.linhasDeHora(regs).forEach((r) => { porHora[r.chave] = r; });
-      const parte1 = ctx.HORAS.slice(0, 12); const parte2 = ctx.HORAS.slice(12);
+      const todas = [...ctx.HORAS, C.inicioDoDia + 24]; // o papel vai de 7 até 7, e a última coluna é deste dia
+      const parte1 = todas.slice(0, 13); const parte2 = todas.slice(13);
       const linhaItem = (c, horas) => [c.papel || c.label, ...horas.map((h) => (porHora[h] ? valorCampo(c, porHora[h].valores[c.id]) : ''))];
       const turnos = turnosDa(pid).map((t) => ({ nome: t.nome, operador: operadoresDoTurno(regs, t), obs: (ctx.pegar(data, pid, 'obs' + t.id) || { valores: {} }).valores.texto || '' }));
       const dados = {
         cabecalho: [['Documento', 'CONTROLE DIÁRIO DA DESTILARIA'], ['Data', fmtData(data)]],
-        colunas: ['Itens /Horas', ...ctx.HORAS.map(String)],
-        linhas: p.itens.map((c) => ({ rotulo: c.papel || c.label, valores: linhaItem(c, ctx.HORAS) })),
+        colunas: ['Itens /Horas', ...todas.map((h) => String(h % 24))],
+        linhas: p.itens.map((c) => ({ rotulo: c.papel || c.label, valores: linhaItem(c, todas) })),
         rodape: turnos.flatMap((t) => [[t.nome, t.operador], ...(t.obs ? [[`${t.nome} - Obs`, t.obs]] : [])]),
       };
-      const n = 13;
+      const n = 14;
       const g = new Grade([22, ...parte1.map(() => 8)]);
       g.bloco(0, 0, 2, 1, '', BORDA);
       g.bloco(0, 2, 2, n - 1, 'CONTROLE DIÁRIO DA DESTILARIA', { b: true, sz: 16, al: 'c', borda: true });
@@ -271,10 +272,13 @@
         g.bloco(r, 1, r, n - 1, 'HORÁRIO', { b: true, sz: 10, al: 'c', borda: true });
         r++;
         g.set(r, 0, parte1 === horas ? 'Itens /Horas' : '', { b: true, sz: 10, al: 'l', borda: true });
-        horas.forEach((h, i) => g.set(r, i + 1, h, { b: true, sz: 10, al: 'c', borda: true }));
+        const sobra = () => { for (let i = horas.length + 1; i < n; i++) g.set(r, i, '', BORDA); }; // a segunda parte tem uma coluna a menos
+        horas.forEach((h, i) => g.set(r, i + 1, h % 24, { b: true, sz: 10, al: 'c', borda: true }));
+        sobra();
         r++;
         p.itens.forEach((c) => {
           linhaItem(c, horas).forEach((v, i) => g.set(r, i, v, i === 0 ? { b: true, sz: 8, al: 'l', borda: true } : Object.assign({ sz: 10, al: 'c', borda: true }, casas(c, v))));
+          sobra();
           g.altura(r, 26);
           r++;
         });

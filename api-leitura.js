@@ -85,12 +85,12 @@ function criar(C, medidasAtuais, opcoes = {}) {
     return saidas.length ? { saidas } : {};
   }
   const base = (r) => ({ id: r.id, operador: r.operador || null, atualizadoEm: iso(r.atualizadoEm), ...(r.alteradoPeloEscritorio ? { alteradoPeloEscritorio: { em: iso(r.alteradoPeloEscritorio.em), autorizadoPor: r.alteradoPeloEscritorio.autorizadoPor } } : {}) });
-  const horaDaChave = (k) => `${pad2(Number(k))}:00`;
-  const ordemNoDia = (h) => (Number(h) - C.inicioDoDia + 24) % 24;
+  const horaDaChave = (k) => `${pad2(Number(k) % 24)}:00`;
+  const ordemNoDia = (h) => (Number(h) >= 24 ? 24 : (Number(h) - C.inicioDoDia + 24) % 24);
   // turnos de cada setor (2.13.4): o padrão ou os 2 de 12 horas (C.turnosSetor vem da configuração da usina);
   // a hora conta no dia de produção, então o turno das 19h às 7h fica inteiro
   const turnosDo = (s) => (s && (C.turnosSetor || {})[s.id] === '12h' && C.turnos12h) || C.turnos;
-  const horaNoDia = (h) => (h < C.inicioDoDia ? h + 24 : h);
+  const horaNoDia = (h) => (h < C.inicioDoDia ? h + 24 : Math.min(h, C.inicioDoDia + 23));
   const turnoDaHora = (h, turnos = C.turnos) => turnos.find((t) => horaNoDia(h) >= horaNoDia(t.inicio) && horaNoDia(h) < (t.fim <= C.inicioDoDia ? t.fim + 24 : t.fim)) || turnos[0];
 
   /* ---------- cada tipo de prancheta ---------- */
@@ -117,7 +117,7 @@ function criar(C, medidasAtuais, opcoes = {}) {
   function folhaGrade(p, regs, data, s) {
     const turnos = turnosDo(s);
     return {
-      linhas: regs.filter((r) => /^\d+$/.test(r.chave)).sort((a, b) => ordemNoDia(a.chave) - ordemNoDia(b.chave)).map((r) => Object.assign({ hora: horaDaChave(r.chave), turno: turnoDaHora(Number(r.chave), turnos).nome }, base(r), { campos: camposDe(p.itens, r.valores, data) })),
+      linhas: regs.filter((r) => /^\d+$/.test(r.chave)).sort((a, b) => ordemNoDia(a.chave) - ordemNoDia(b.chave)).map((r) => Object.assign({ hora: horaDaChave(r.chave), turno: turnoDaHora(Number(r.chave), turnos).nome }, Number(r.chave) >= 24 ? { fimDaFolha: true } : {}, base(r), { campos: camposDe(p.itens, r.valores, data) })),
       observacoes: turnos.map((t) => ({ turno: t.nome, texto: ((regs.find((r) => r.chave === 'obs' + t.id) || { valores: {} }).valores.texto) || null })).filter((o) => o.texto),
     };
   }

@@ -15,7 +15,7 @@
   }
   const dependentesDe = (pid) => Object.keys(C.pranchetas).filter((x) => C.pranchetas[x].vemDe && C.pranchetas[x].vemDe.prancheta === pid);
   const dornasDoDia = (data, pid) => listar(data, pid).filter((r) => /^\d+$/.test(r.chave)).sort((a, b) => a.chave - b.chave);
-  const ordemNoDia = (h) => (h - C.inicioDoDia + 24) % 24;
+  const ordemNoDia = (h) => (h >= 24 ? 24 : (h - C.inicioDoDia + 24) % 24);
   const nomesDasHoras = (horas) => [...horas].sort((a, b) => ordemNoDia(a) - ordemNoDia(b)).map((h) => pad2(h) + 'h').join(', ');
 
   /** A Sacarificação acompanha a dorna de mesmo número da Hidrólise: cria a linha e copia horário, pH e Brix finais.

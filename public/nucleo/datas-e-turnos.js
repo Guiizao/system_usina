@@ -9,6 +9,9 @@
   const pad2 = (n) => String(n).padStart(2, '0');
   const isoData = (d) => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
   const HORAS = Array.from({ length: 24 }, (_, i) => (C.inicioDoDia + i) % 24);
+  /* O papel da Destilaria vai de 7 até 7: a última coluna (7h da manhã seguinte) é da folha do próprio dia e soma nele. */
+  const HORA_FIM = C.inicioDoDia + 24;
+  const horasDaFolha = (p) => (p && p.colunaDoFim ? [...HORAS, HORA_FIM] : HORAS);
   function dataProducao(agora = new Date()) {
     const d = new Date(agora);
     if (d.getHours() < C.inicioDoDia) d.setDate(d.getDate() - 1);
@@ -25,11 +28,11 @@
   const turnosDoSetor = (id) => ((configSistema().turnosSetor || {})[id] === '12h' && C.turnos12h) || C.turnos;
   const turnosDaPrancheta = (pid) => { const s = pid && setorDaPrancheta(pid); return s ? turnosDoSetor(s.id) : C.turnos; };
   const turnosAqui = () => (setorPorId(cfg.papel) ? turnosDoSetor(cfg.papel) : C.turnos);
-  const horaNoDia = (h) => (h < C.inicioDoDia ? h + 24 : h);
+  const horaNoDia = (h) => (h < C.inicioDoDia ? h + 24 : Math.min(h, C.inicioDoDia + 23));
   const turnoDaHora = (h, turnos = turnosAqui()) => turnos.find((t) => horaNoDia(h) >= horaNoDia(t.inicio) && horaNoDia(h) < (t.fim <= C.inicioDoDia ? t.fim + 24 : t.fim)) || turnos[0];
   const turnoAtual = () => turnoDaHora(new Date().getHours());
   const horaAgora = () => { const d = new Date(); return `${pad2(d.getHours())}:${pad2(d.getMinutes())}`; };
-  const rotuloHora = (h) => `${pad2(h)}:00`;
+  const rotuloHora = (h) => `${pad2(h % 24)}:00`;
   const rotuloHoraPapel = (h) => (h === 0 ? '24:00' : rotuloHora(h));
   const faixaTurno = (t) => `${pad2(t.inicio)}:00 às ${pad2(t.fim % 24)}:00`;
   const horaDoTexto = (hhmm) => (/^\d\d:\d\d$/.test(hhmm || '') ? Number(hhmm.slice(0, 2)) : null);

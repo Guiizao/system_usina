@@ -98,6 +98,14 @@ if (!process.argv.includes('--so-logica')) try {
     await pv('await document.fonts.ready; await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));');
   };
   await pv(`window.__v = { tela: 'escritorio', data: '${D}' }; registros = {}; window.__regs = ${JSON.stringify(regs)}; __regs.forEach((r) => { r.id = r.data + '|' + r.prancheta + '|' + r.chave; registros[r.id] = r; }); gravar('${D}', 'rastreamento', 'dia', Rastreamento.calcular(C, '${D}', __regs)); ir(__v);`);
+  await teste(g2, 'Destilaria: a coluna final das 7h fica na folha do próprio dia e no 3º turno', async () => {
+    const r = await pv(`const id = '${D}|destilaria|31'; registros[id] = { id, data: '${D}', prancheta: 'destilaria', chave: '31', valores: { producao: '180' }, operador: 'Miro' };
+      ir({ tela: 'prancheta', pid: 'destilaria', data: '${D}', monitor: true, chave: 31 }); await new Promise((f) => setTimeout(f, 150));
+      const f = papel().folha('destilaria', '${D}'), g = f.dados.linhas.find((l) => l.rotulo === 'PRODUÇÃO ÁLCOOL').valores;
+      const saida = { coluna: !!document.querySelector('[data-a="linha"][data-chave="31"]'), rotulo: rotuloHora(31), turno: turnoDaHora(31, C.turnos).id, colunas: f.dados.colunas.length, ultima: f.dados.colunas[25], valor: String(g[25]), nova: papel().folha('nova_destilaria', '${D}').dados.colunas.length, soma: Rastreamento.calcular(C, '${D}', Object.values(registros)).calculo.alcoolDestilaria, ordem: ordemNoDia(31) };
+      delete registros[id]; ir(__v); return saida;`);
+    igual(r, { coluna: true, rotulo: '07:00', turno: 3, colunas: 26, ultima: '7', valor: '180', nova: 25, soma: 280, ordem: 24 });
+  });
   await teste(g2, 'aviso "as folhas mudaram" aparece só com diferença', async () => {
     certo(!(await pv('return telaEscritorio(__v)')).includes('esc-atualizar'));
     await pv(`registros['${D}|destilaria|7'].valores.producao = '250'; render();`);

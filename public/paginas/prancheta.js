@@ -264,13 +264,13 @@
   }
   const classeCelula = (c, x) => nivelDe(c, x);
 
-  function seletorDeHoras(chave, hoje, feitaNaHora, legendaDaHora, conferirNaHora) {
+  function seletorDeHoras(chave, hoje, feitaNaHora, legendaDaHora, conferirNaHora, horas = HORAS) {
     const hAgora = new Date().getHours();
-    return `<div class="seletor">${HORAS.map((h) => {
+    return `<div class="seletor">${horas.map((h) => {
       const feita = feitaNaHora(h);
       const cls = h === chave ? 'sel' : conferirNaHora && conferirNaHora(h) ? 'atual' : hoje && h === hAgora && !feita ? 'atual' : feita ? 'feita' : '';
-      const legenda = feita ? legendaDaHora(h) : hoje && h === hAgora ? 'agora' : '';
-      return `<button data-a="linha" data-chave="${h}" class="${cls}" ${h === chave ? 'data-rolar-para' : ''}>${pad2(h)}h<small>${esc(legenda)}</small></button>`;
+      const legenda = feita ? legendaDaHora(h) : hoje && h === hAgora ? 'agora' : h === HORA_FIM ? 'fim' : '';
+      return `<button data-a="linha" data-chave="${h}" class="${cls}" ${h === chave ? 'data-rolar-para' : ''}>${pad2(h % 24)}h<small>${esc(legenda)}</small></button>`;
     }).join('')}</div>`;
   }
 
@@ -353,7 +353,7 @@
     }
     folhas.forEach((f) => {
       const pf = prancheta(f);
-      const ordem = (r) => (pf.tipo === 'dornas' ? Number(r.chave) : HORAS.indexOf(Number(r.chave)));
+      const ordem = (r) => (pf.tipo === 'dornas' ? Number(r.chave) : ordemNoDia(Number(r.chave)));
       const linhas = linhasDeHora(listar(data, f)).sort((a, b) => ordem(a) - ordem(b));
       (pf[window.Folhas.listaDe(pf)] || []).forEach((c) => {
         const t = window.Folhas.totalDoCampo(c, linhas.map((r) => r.valores[c.id]));
@@ -478,7 +478,7 @@
       const porHora = {};
       linhasDeHora(listar(data, v.pid)).forEach((r) => { porHora[r.chave] = r; });
       contextoEdicao = `leitura das ${rotuloHora(chave)}`;
-      seletor = seletorDeHoras(chave, hoje, (h) => !!porHora[h], () => 'feita');
+      seletor = seletorDeHoras(chave, hoje, (h) => !!porHora[h], () => 'feita', null, horasDaFolha(p));
       const reg = porHora[chave];
       const parada = hoje && !ehCentral() && (cfg.paradas || {})[`${data}|${v.pid}`];
       cabecalhoForm = `<span class="aviso">${esc(turnoDaHora(chave, turnosDaPrancheta(v.pid)).nome)}</span>${reg ? `<span class="aviso ok">${ico('certo')} Anotada por ${esc(reg.operador || 'sem nome')}</span>` : ''}${hoje && !ehCentral() ? `<button class="btn pequeno" data-a="parada-hoje">${parada ? 'Voltou a funcionar' : 'Parada hoje'}</button>` : ''}`;
@@ -490,8 +490,8 @@
           return `<div class="turno"><h3>${esc(t.nome)}, ${faixaTurno(t)}</h3><p><span>Operador:</span> ${esc(nomes.join(', ') || 'ninguém anotou')}</p><p><span>Observação:</span> ${esc(obs && obs.valores.texto ? obs.valores.texto : 'nenhuma')}</p></div>`;
         }).join('')}</div>
         <div class="folha" style="margin-top:12px">${cabecalhoFolha(p, data)}<div class="tabela-wrap"><table class="papel">
-          <thead><tr><th class="lateral">Itens / Horas</th>${HORAS.map((h) => `<th class="${h === chave ? 'sel' : ''} ${hoje && h === hAgora ? 'agora' : ''}">${h}</th>`).join('')}</tr></thead>
-          <tbody>${p.itens.map((c) => `<tr><td class="lateral">${esc(c.label)}</td>${HORAS.map((h) => { const x = porHora[h] ? porHora[h].valores[c.id] : ''; return `<td class="clicavel ${classeCelula(c, x)} ${h === chave ? 'sel' : ''}" data-a="linha" data-chave="${h}">${esc(fmtCampo(c, x))}</td>`; }).join('')}</tr>`).join('')}</tbody>
+          <thead><tr><th class="lateral">Itens / Horas</th>${horasDaFolha(p).map((h) => `<th class="${h === chave ? 'sel' : ''} ${hoje && h === hAgora ? 'agora' : ''}">${h % 24}</th>`).join('')}</tr></thead>
+          <tbody>${p.itens.map((c) => `<tr><td class="lateral">${esc(c.label)}</td>${horasDaFolha(p).map((h) => { const x = porHora[h] ? porHora[h].valores[c.id] : ''; return `<td class="clicavel ${classeCelula(c, x)} ${h === chave ? 'sel' : ''}" data-a="linha" data-chave="${h}">${esc(fmtCampo(c, x))}</td>`; }).join('')}</tr>`).join('')}</tbody>
         </table></div></div>`;
     } else {
       const porHora = {};

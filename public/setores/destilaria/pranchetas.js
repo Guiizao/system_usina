@@ -23,6 +23,7 @@ Object.assign(window.USINA.pranchetas, {
       codigo: 'Controle Diário',
       titulo: 'Controle Diário da Destilaria',
       papel: { modelo: 'destilaria' },
+      colunaDoFim: true,
       itens: [
         { id: 'temp_pe_a', label: 'Temp. pé da coluna A', labelCurto: 'Pé coluna A', unidade: '°C', type: 'num', dec: 1 },
         // produção e carregamento com vírgula desde a 2.11 (pedido de 05/10/2026)

@@ -172,7 +172,7 @@
     if (!turnosDoEnvio) return true;
     const p = prancheta(r.prancheta) || {};
     let h = null;
-    if ((p.tipo === 'grade' || p.tipo === 'insumo') && /^\d+$/.test(r.chave)) h = Number(r.chave) % 24;
+    if ((p.tipo === 'grade' || p.tipo === 'insumo') && /^\d+$/.test(r.chave)) h = horaNoDia(Number(r.chave)) % 24;
     else if (p.tipo === 'grade' && /^obs\d+$/.test(r.chave)) return turnosDoEnvio.has(Number(r.chave.slice(3)));
     else if (p.tipo === 'dornas') { const hora = (r.valores || {})[(p.envio || {}).inicio] || (r.valores || {}).inicio || (r.valores || {}).horario; if (/^\d{1,2}:\d{2}$/.test(hora || '')) h = Number(hora.split(':')[0]); }
     if (h === null) return true;
