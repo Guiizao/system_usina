@@ -13,10 +13,18 @@
     if (!p) return null;
     if (p.papel && p.papel.modelo === 'pop011') return pid === 'hid_anexo1' ? 'anexo1' : pid === 'hid_anexo2' ? 'anexo2' : null;
     if (p.tipo === 'insumo') return 'pop03';
+    if (p.papel && p.papel.modelo === 'caldeira' && !p.novaTabela) return 'caldeira';
     return null;
   }
   const folhasQueLeio = () => setores().flatMap((s) => s.pranchetas.flatMap(folhasDe).map((pid) => ({ pid, setor: s }))).filter((x) => moldeDaFolha(x.pid));
 
+  /** na Caldeira o papel é outro: 6K é 6 kgf, 42 é 42 °C, e a marca é OK ou um traço */
+  function specDaCaldeira(c) {
+    if (c.type === 'check') return { tipo: 'opcoes', exato: true, opcoes: ['OK'], formas: { OK: ['0K', 'K', 'X', 'V'] } };
+    if (c.type === 'choice') return { tipo: 'opcoes', exato: true, opcoes: opcoesDe(c) };
+    if (c.type === 'num') return { tipo: 'decimal', inteiro: true, min: c.min != null ? c.min : 0, max: c.max != null ? c.max : 200, sufixos: c.unidade === 'kgf' ? ['K', 'KG', 'KF', 'KGF'] : [] };
+    return specDoCampo(c);
+  }
   function specDoCampo(c) {
     if (!c) return { tipo: 'texto' };
     if (c.type === 'time') return { tipo: 'hora' };
@@ -36,10 +44,14 @@
       cols.qtd = { campo: 'qtd', rotulo: 'Quant.', spec: { tipo: 'quantidade', max: 999 }, numero: true, limiar: 0.9 };
       cols.fornecedor = { campo: 'fornecedor', rotulo: 'Fornecedor', spec: { tipo: 'texto' }, limiar: 0.95 };
       cols.operador = { campo: '_operador', rotulo: 'Operador', spec: pessoa, limiar: 0.95 };
+    } else if (molde === 'caldeira') {
+      p.itens.forEach((c) => { cols[c.id] = { campo: c.id, rotulo: c.labelCurto || c.label, spec: specDaCaldeira(c), c }; });
     } else {
       p.campos.forEach((c) => { cols[c.id] = { campo: c.id, rotulo: c.labelCurto || c.label, spec: specDoCampo(c), c }; });
       cols.responsavel = { campo: '_operador', rotulo: 'Responsável', spec: pessoa, limiar: 0.95 };
     }
+    // campo criado depois não existe no papel
+    Object.keys(cols).forEach((nome) => { if (!window.LeitorFolhas.MOLDES[molde].nomes.includes(nome)) delete cols[nome]; });
     return cols;
   }
   const minutosDoDia = (hhmm) => { const [h, m] = String(hhmm).split(':').map(Number); return ((h * 60 + m) - C.inicioDoDia * 60 + 1440) % 1440; };
@@ -56,10 +68,10 @@
   /** transforma o que a rede leu em valores da prancheta, linha por linha (com as horas em ordem) */
   function interpretarLeitura(pid, data, bruto) {
     const p = prancheta(pid); const cols = colunasDaLeitura(pid);
-    const insumo = p.tipo === 'insumo';
+    const porHora = p.tipo === 'insumo' || p.tipo === 'grade';
     let horaAnterior = null;
     const linhas = bruto.linhas.map((l) => {
-      const chave = insumo ? HORAS[l.m] : l.m + 1;
+      const chave = porHora ? HORAS[l.m] : l.m + 1;
       const celulas = {};
       Object.entries(cols).forEach(([nome, col]) => {
         const cel = l.celulas[nome];
@@ -95,12 +107,26 @@
       return { chave, celulas, riscos: Object.fromEntries(Object.keys(cols).map((n) => [n, !!(l.celulas[n] && l.celulas[n].risco)])) };
     });
     // coluna riscada de cima a baixo (sem valor): as pontas do risco não são o número 1
-    linhas.forEach((l, m) => Object.keys(cols).forEach((nome) => {
+    if (p.tipo !== 'grade') linhas.forEach((l, m) => Object.keys(cols).forEach((nome) => {
       const c = l.celulas[nome];
       if (!c || !['1', '11'].includes(String(c.valor))) return;
       const vizinho = [linhas[m - 1], linhas[m + 1]].some((x) => x && x.riscos[nome]);
       if (vizinho) Object.assign(c, { valor: '', confianca: 1, alternativas: [] });
     }));
+    // pressão muda devagar: na dúvida, sugere o valor das horas vizinhas, mas continua em amarelo para conferir
+    if (p.tipo === 'grade') Object.entries(cols).forEach(([nome, col]) => {
+      if (!col.spec.sufixos) return;
+      const contagem = {};
+      linhas.forEach((l) => { const c = l.celulas[nome]; if (c && c.valor !== '' && c.confianca >= 0.9) contagem[c.valor] = (contagem[c.valor] || 0) + 1; });
+      const comum = Object.keys(contagem).sort((a, b) => contagem[b] - contagem[a])[0];
+      if (comum === undefined) return;
+      bruto.linhas.forEach((b, i) => {
+        const c = linhas[i].celulas[nome], cel = b.celulas[nome];
+        if (!c || !cel || cel.vazia || c.confianca >= LIMIAR_CONFERIR) return;
+        const novo = window.LeitorFolhas.lerCelula(cel.r, col.spec, (v) => (v === comum ? 8 : 1));
+        if (novo.valor === comum) Object.assign(c, { valor: comum, confianca: Math.min(novo.confianca, LIMIAR_CONFERIR - 0.01), alternativas: novo.alternativas });
+      });
+    });
     linhas.forEach((l) => {
       l.temValor = Object.values(l.celulas).some((c) => c.valor !== '' && c.valor != null);
       l.existe = !!pegar(data, pid, l.chave);
@@ -180,6 +206,7 @@
         </div></main>`;
     }
     const L = v.leitura; const cols = Object.entries(L.colunas);
+    const porHora = p.tipo === 'insumo' || p.tipo === 'grade';
     const emDuvida = (nome, c) => c && c.tinta && c.confianca < ((L.colunas[nome] && L.colunas[nome].limiar) || LIMIAR_CONFERIR);
     const duvidas = L.linhas.reduce((s, l) => s + (l.temValor ? Object.entries(l.celulas).filter(([nome, c]) => emDuvida(nome, c)).length : 0), 0);
     const incluidas = L.linhas.filter((l) => l.incluir).length;
@@ -189,10 +216,10 @@
         <div class="aviso-leitura ${duvidas ? 'duvida' : 'ok'}">${ico(duvidas ? 'alerta' : 'certo')}
           <span>${duvidas ? `<b>${contar(duvidas, 'valor', 'valores')} em amarelo para conferir.</b> Toque no valor para corrigir.` : '<b>Leitura sem dúvidas.</b> Mesmo assim, confira antes de salvar.'} A foto de cada célula aparece em cima do valor lido.</span></div>
         ${visiveis.length ? `<div class="tabela-leitura"><table>
-          <thead><tr><th class="inc">Salvar</th><th>${p.tipo === 'insumo' ? 'Hora' : 'Nº'}</th>${cols.map(([, col]) => `<th>${esc(col.rotulo)}</th>`).join('')}</tr></thead>
+          <thead><tr><th class="inc">Salvar</th><th>${porHora ? 'Hora' : 'Nº'}</th>${cols.map(([, col]) => `<th>${esc(col.rotulo)}</th>`).join('')}</tr></thead>
           <tbody>${visiveis.map(([l, i]) => `<tr class="${l.incluir ? '' : 'fora'}">
             <td class="inc"><button class="marca-linha ${l.incluir ? 'sel' : ''}" data-a="leitura-linha" data-i="${i}" aria-label="Salvar esta linha">${l.incluir ? ico('certo') : ''}</button></td>
-            <td class="chave"><b>${p.tipo === 'insumo' ? rotuloHoraPapel(l.chave) : l.chave}</b>${l.existe ? '<small>já anotada</small>' : ''}</td>
+            <td class="chave"><b>${porHora ? rotuloHoraPapel(l.chave) : l.chave}</b>${l.existe ? '<small>já anotada</small>' : ''}</td>
             ${cols.map(([nome, col]) => { const c = l.celulas[nome] || { valor: '', confianca: 1 }; const duv = emDuvida(nome, c);
               return `<td><button class="cel-leitura ${duv ? 'duvida' : ''} ${c.valor === '' ? 'vazia' : ''}" data-a="leitura-cel" data-i="${i}" data-c="${nome}" data-conf="${Math.round((c.confianca || 0) * 100)}">
                 ${c.imagem ? `<img src="${c.imagem}" alt="">` : ''}<b>${esc(textoDoValor(col, c.valor)) || '&nbsp;'}</b></button></td>`; }).join('')}
@@ -264,8 +291,12 @@
       if (!Object.keys(valores).length) return;
       gravar(L.data, L.pid, l.chave, valores, { operador: operador || 'Lido da folha', origem: 'foto' });
       n++;
+      // 3.0: a folha da Hidrólise preenche o resto como no tablet: a Sacarificação da mesma dorna (os insumos vêm logo abaixo)
+      if (p.tipo === 'dornas') acompanharDorna(L.data, L.pid, Number(l.chave));
     });
+    const preencheuOutras = n && (p.tipo === 'dornas' || p.vemDe);
+    if (preencheuOutras) somarInsumosDoDia(L.data); // LPHERA, Cal, Saczyme e Antibiótico de cada hora, para o operador conferir
     registrar('anotacao', `${quemEstaAqui()} salvou ${contar(n, 'linha lida', 'linhas lidas')} da folha de papel (${(prancheta(v.pid) || {}).nome || ''})`);
-    toast(`${contar(n, 'linha salva', 'linhas salvas')} da folha de papel`);
+    toast(`${contar(n, 'linha salva', 'linhas salvas')} da folha de papel${p.tipo === 'dornas' && n ? '. Sacarificação e insumos preenchidos: confira' : preencheuOutras ? '. Insumos preenchidos: confira' : ''}`);
     ir({ tela: 'prancheta', pid: L.pid, data: L.data, monitor: true }, true);
   }

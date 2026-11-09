@@ -6,6 +6,11 @@
  * Por quadro:   label, labelCurto, unidade, min, max, dica, avisos (desde a 2.10)
  *               historico [{ate:'AAAA-MM-DD', unidade}]: a unidade de antes, até aquele dia (2.12; nada é convertido)
  *               dec (vírgula: 0, 1 ou 2 casas) e oculto (o operador não vê) - só o dono, num tablet chefe nível 3 (2.12)
+ *               saida {total: 'soma'|'media'|'ultimo', relatorio: false, api: false}: para onde o quadro vai (3.0)
+ * _areas:       {id: {nome}}: área (setor) nova, sem folhas no começo: as tabelas dela entram em _tabelas - só o dono (3.0).
+ * _tabelas:     {id: {nome, setor}}: tabela nova de um setor, hora a hora, só com campos novos - só o dono (3.0).
+ *               Desligar é pranchetasDesligadas: os dias anotados continuam guardados, e dá para ligar de novo.
+ * _removidas:   [id]: tabela removida de vez (só o dono): sai do setor, dos tablets e dos relatórios; o que foi anotado continua no banco e nas cópias (3.0).
  * Por folha:    _unidades (insumos, desde a 2.10)
  *               _operador [ids]: campos do escritório que o operador também preenche (insumos) - só o dono (2.12)
  *               _novos [{id, label, labelCurto, type, unidade, dec, opcoes, dica, arquivado}]: campos novos - só o dono (2.12)
@@ -15,7 +20,7 @@
  * a tela de anotar e a de mudar as folhas não mostram.
  */
 (function (raiz) {
-  const EDITAVEIS = ['label', 'labelCurto', 'unidade', 'min', 'max', 'dica', 'avisos', 'historico', 'dec', 'oculto'];
+  const EDITAVEIS = ['label', 'labelCurto', 'unidade', 'min', 'max', 'dica', 'avisos', 'historico', 'dec', 'oculto', 'saida'];
   const TIPOS_NOVOS = ['num', 'text', 'choice', 'time', 'check'];
   const copia = (x) => (x === undefined ? undefined : JSON.parse(JSON.stringify(x)));
   /** Onde ficam os quadros de cada tipo de folha (os que o dono pode mudar). */
@@ -33,6 +38,7 @@
       c.dec = [0, 1, 2].includes(Number(d.dec)) ? Number(d.dec) : 0;
       if (d.unidade) c.unidade = String(d.unidade).slice(0, 12);
     }
+    if (d.type === 'text' && d.soLetras) c.soLetras = true;
     if (d.type === 'choice') c.opcoes = (Array.isArray(d.opcoes) ? d.opcoes : []).map((o) => String(o).slice(0, 30)).filter(Boolean).slice(0, 20);
     if (d.arquivado) c.arquivado = true;
     return c;
@@ -44,6 +50,24 @@
    */
   function aplicar(forms, folhas, originais) {
     const f = folhas || {};
+    Object.entries(f._areas || {}).forEach(([id, d]) => {
+      const nome = String((d && d.nome) || '').slice(0, 30);
+      if (!/^a_[a-z0-9]{3,20}$/.test(id) || !nome || !forms.setores) return;
+      const area = forms.setores.find((x) => x.id === id);
+      if (area) area.nome = nome; else forms.setores.push({ id, nome, icone: 'fabrica', operadores: [], pranchetas: [] });
+    });
+    Object.entries(f._tabelas || {}).forEach(([pid, d]) => {
+      const nome = String((d && d.nome) || '').slice(0, 40);
+      const setor = (forms.setores || []).find((x) => x.id === (d && d.setor) && !x.soChefe);
+      if (!/^t_[a-z0-9]{3,20}$/.test(pid) || !nome || !setor || !forms.pranchetas) return;
+      forms.pranchetas[pid] = forms.pranchetas[pid] || { tipo: 'grade', novaTabela: true, itens: [], grupos: [] };
+      Object.assign(forms.pranchetas[pid], { nome, titulo: nome });
+      if (!setor.pranchetas.includes(pid)) setor.pranchetas.push(pid);
+    });
+    // removidas fica no setor: quem confere a permissão continua sabendo de quem era a folha
+    if (Array.isArray(f._removidas)) (forms.setores || []).forEach((s) => {
+      for (let i = s.pranchetas.length - 1; i >= 0; i--) if (f._removidas.includes(s.pranchetas[i])) s.removidas = [...new Set([...(s.removidas || []), ...s.pranchetas.splice(i, 1)])];
+    });
     Object.entries(forms.pranchetas || {}).forEach(([pid, p]) => {
       const nome = listaDe(p);
       // como a folha era no forms.js: as listas de quadros, os grupos e as unidades
@@ -87,7 +111,7 @@
         if (orig.grupos) {
           p.grupos = copia(orig.grupos);
           const ativos = novos.filter((c) => !c.arquivado);
-          if (ativos.length) p.grupos.push({ titulo: 'Outros', campos: ativos.map((c) => c.id) });
+          if (ativos.length) p.grupos.push({ titulo: p.novaTabela ? p.nome : 'Outros', campos: ativos.map((c) => c.id) });
         }
       }
       if (p.tipo === 'insumo') {
@@ -107,6 +131,17 @@
     return c.unidade || '';
   }
 
+  /** A saída de um quadro no dia: valores em ordem de hora; só o que foi anotado conta. Sem total, ou sem número: null. */
+  function totalDoCampo(c, valores) {
+    const tipo = c.saida && c.saida.total;
+    const anotados = valores.filter((v) => v !== '' && v != null);
+    if (!tipo || !anotados.length) return null;
+    if (tipo === 'ultimo') return anotados[anotados.length - 1];
+    const numeros = anotados.map(Number).filter(Number.isFinite);
+    if (!numeros.length) return null;
+    const soma = numeros.reduce((a, b) => a + b, 0);
+    return Math.round((tipo === 'soma' ? soma : soma / numeros.length) * 100) / 100;
+  }
   /** As unidades sugeridas na tela, por tipo (o dono também pode digitar outra). */
   const UNIDADES = [
     ['Temperatura', ['°C', '°F']],
@@ -117,7 +152,7 @@
     ['Outros', ['%', '°', 'pH', 'ppm']],
   ];
 
-  const Folhas = { aplicar, unidadeNoDia, campoNovo, listaDe, aceitaNovo, UNIDADES, EDITAVEIS };
+  const Folhas = { aplicar, unidadeNoDia, campoNovo, listaDe, aceitaNovo, totalDoCampo, UNIDADES, EDITAVEIS };
   if (typeof module === 'object' && module.exports) module.exports = Folhas;
   else raiz.Folhas = Folhas;
 })(typeof window !== 'undefined' ? window : this);

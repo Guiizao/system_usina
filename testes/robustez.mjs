@@ -2,7 +2,7 @@
 /*
  * O que acontece com o tempo e nas horas difíceis (revisão da versão 2.3):
  *   - 90 dias de uso: a memória do tablet não enche (antes enchia em uns 2 meses e o tablet parava de salvar);
- *   - dias com mais de 60 dias saem da memória da central e continuam no BackupUsina;
+ *   - dias com mais de 90 dias saem da memória da central e continuam no BackupUsina;
  *   - troca de turno e virada das 07:00 no meio da anotação: nada se perde e vai para o dia certo;
  *   - "Terminou a Nº X" não perde o que estava sendo anotado em outra dorna;
  *   - LPHERA confirmada volta para conferir quando entra outra dorna na mesma hora;
@@ -62,8 +62,8 @@ export async function testarRobustezCentral(ligar, porta, grupo) {
       const lista = (await pedir(`/api/registros?dia=${diasAtras(5)}`)).registros;
       igual(lista.map((r) => r.valores.pressao), ['7'], 'dia 5 atrás');
     });
-    await teste(grupo, 'dia com mais de 60 dias vai direto para o BackupUsina e volta quando o tablet chefe abre', async () => {
-      const velho = diasAtras(90);
+    await teste(grupo, 'dia com mais de 90 dias vai direto para o BackupUsina e volta quando o tablet chefe abre', async () => {
+      const velho = diasAtras(120);
       const r = await pedir('/api/sync', { aparelho: 't1', registros: [reg(velho, 'caldeira', 8, { pressao: '5' }), reg(velho, 'caldeira', 9, { pressao: '5.5' })] });
       igual(r.aceitos, 2, 'aceitos');
       certo(!(await pedir('/api/registros?desde=0')).registros.some((x) => x.data === velho), 'dia antigo ficou na memória da central');
@@ -78,7 +78,7 @@ export async function testarRobustezCentral(ligar, porta, grupo) {
       await c.desligar();
       const arquivo = path.join(c.pastaServidor, 'registros.json');
       const db = JSON.parse(fs.readFileSync(arquivo, 'utf8'));
-      const velho = diasAtras(75);
+      const velho = diasAtras(100);
       db.seq += 1;
       db.registros[`${velho}|destilaria|10`] = Object.assign(reg(velho, 'destilaria', 10, { inpm: '93.1' }), { seq: db.seq });
       fs.writeFileSync(arquivo, JSON.stringify(db));
@@ -111,11 +111,11 @@ export async function testarRobustezCentral(ligar, porta, grupo) {
       igual((await pedir('/api/registros?desde=0')).registros.find((x) => x.id === id3).valores.brix, '', 'quadro apagado pelo próprio aparelho');
     });
     let geracao = '';
-    await teste(grupo, 'tablet chefe trocado: a central nova aceita o que o aparelho tem (só logo depois de conectar)', async () => {
+    await teste(grupo, 'tablet chefe trocado: a central nova aceita o que o aparelho tem, com ou sem reconectar', async () => {
       geracao = (await pedir('/api/sync', { aparelho: 't1', registros: [] })).geracao;
       const semConectar = await pedir('/api/sync', { aparelho: 't2', geracao: 'de-outra-central', registros: [reg(diasAtras(0), 'caldeira', 11, { pressao: '6' })] });
-      certo(semConectar.zerar === true, 'aparelho de outra geração sem reconectar não foi mandado limpar');
-      const conectado = await pedir('/api/sync', { aparelho: 't2', geracao: 'de-outra-central', novaConexao: true, registros: [reg(diasAtras(0), 'caldeira', 11, { pressao: '6' })] });
+      certo(semConectar.ok && !semConectar.zerar && semConectar.aceitos === 1, 'a central recusou a geração desconhecida sem reconectar');
+      const conectado = await pedir('/api/sync', { aparelho: 't2', geracao: 'de-outra-central', novaConexao: true, registros: [reg(diasAtras(0), 'caldeira', 13, { pressao: '6' })] });
       certo(conectado.ok && conectado.aceitos === 1, 'a central nova recusou as anotações do aparelho: ' + JSON.stringify(conectado));
     });
     await teste(grupo, 'depois de zerar, a geração antiga é mandada limpar mesmo reconectando; os arquivos dos dias vão para uma pasta', async () => {
@@ -124,11 +124,11 @@ export async function testarRobustezCentral(ligar, porta, grupo) {
       const z = await pedir('/api/zerar', { confirmar: 'ZERAR', senha: SENHA_PROGRAMADOR_TESTE });
       certo(z.ok, 'não zerou');
       const r = await pedir('/api/sync', { aparelho: 't3', geracao, novaConexao: true, registros: [reg(diasAtras(0), 'caldeira', 12, { pressao: '6' })] });
-      certo(r.zerar === true, 'aceitou anotações de antes de zerar');
+      certo(r.zerar === true && r.zerada === true, 'não confirmou o zerar explícito');
       const soltos = fs.readdirSync(c.pastaBackup).filter((n) => /^\d{4}-\d{2}-\d{2}\.json$/.test(n));
       igual(soltos, [], 'arquivos de dias que ficaram soltos no BackupUsina');
       certo(fs.readdirSync(c.pastaBackup).some((n) => n.startsWith('antes-de-zerar-') && fs.statSync(path.join(c.pastaBackup, n)).isDirectory()), 'sem a pasta com os dias de antes de zerar');
-      igual((await pedir(`/api/registros?dia=${diasAtras(90)}`)).registros, [], 'dia antigo voltou depois de zerar');
+      igual((await pedir(`/api/registros?dia=${diasAtras(120)}`)).registros, [], 'dia antigo voltou depois de zerar');
     });
     await teste(grupo, '90 dias de anotações da usina inteira: a central aceita e continua rápida', async () => {
       const tudo = [];
@@ -243,7 +243,7 @@ export async function testarRobustezAparelhos(nav, ligar, porta, grupo) {
       await anotar(rel, 'brix', ['1', '7']);
       await rel.irParaHora(16, 0, 5);
       await dormir(1500);
-      await rel.tocar('[data-a="salvar"]');
+      // 2.18: quando o turno vira, o que estava aberto já salva sozinho
       await esperarCentral((l) => l.some((r) => r.prancheta === 'hid_anexo1' && r.valores.brix === '17' && r.operador === 'Carlindo'), 'dorna do turno anterior salva no nome de Carlindo');
       certo(await rel.existe('.opcoes.nomes'), 'não pediu o nome do novo turno');
     });
@@ -273,6 +273,7 @@ export async function testarRobustezAparelhos(nav, ligar, porta, grupo) {
       await rel.tocar('[data-a="enviar-dorna"]');
       await dornaNova(rel);
       await anotar(rel, 'brix', ['2', '0']);
+      await dormir(2100); // logo depois de Enviar, o Terminou não vale (toque dobrado na bomba)
       await rel.tocar('[data-a="terminar-dorna"][data-chave="1"]');
       const dia = await rel.avaliar('(() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; })()');
       await esperarCentral((l) => {
@@ -291,7 +292,7 @@ export async function testarRobustezAparelhos(nav, ligar, porta, grupo) {
       await rel.tocar('[data-a="aba"][data-id="hid_anexo1"]');
       await rel.tocar('[data-a="linha"][data-chave="2"]');
       await rel.tocar('[data-a="enviar-dorna"]');
-      await dormir(1500);
+      await dormir(2100);
       certo((await regs()).some((r) => r.id === `${dia}|ins_lphera|10` && r.valores.qtd === '70' && !r.conferir), 'a dorna 2 ainda está indo para cima, mas já entrou na soma');
       await rel.tocar('[data-a="terminar-dorna"][data-chave="2"]');
       await esperarCentral((l) => lph(l) && lph(l).valores.qtd === '140' && lph(l).conferir, 'LPHERA das 10h volta para conferir com 140');

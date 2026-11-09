@@ -7,33 +7,18 @@ export const SENHA_ENCARREGADO = '271828';
 export const teclasDaSenha = () => [...SENHA_ENCARREGADO.split(''), 'ok'];
 /** Tablet chefe (versão 2.9): entra com a senha do administrador (a central nova cadastra o Guilherme com ela). */
 export async function entrarComoChefe(a) {
-  // tablet chefe novo (versão 2.12): a central pede para liberar; fica o nível 2 (já marcado) com a senha do dono
-  await liberarSePedir(a);
   // a notificação ("Aparelho conectado") fica em cima do botão no alto: fecha antes de tocar
   await a.avaliar('(() => { const t = document.getElementById("toast"); if (t && !t.hidden) t.click(); })()');
   await new Promise((r) => setTimeout(r, 400));
   await a.tocar('[data-a="pessoa"]');
   await a.teclar(teclasDaSenha());
-  await liberarSePedir(a);
   await a.esperar('!!(JSON.parse(localStorage.getItem("usina.cfg") || "{}").pessoa)', 10000, 'entrar no tablet chefe');
 }
-/** Se a tela "Liberar este aparelho como tablet chefe" abriu: continua com o nível marcado e digita a senha. */
+/** 3.0: escolher "Tablet chefe" não abre janela (quem pode liberar entra direto, no nível 2). Outro nível, o teste pede à central como o administrador faria. */
 export async function liberarSePedir(a, nivel) {
-  // a central responde se este aparelho já é tablet chefe (fica o nível) ou abre a janela de liberar; com a máquina
-  // carregada (bateria inteira) isso passa de 2,5 s, então espera o que vier primeiro
-  try { await a.esperar('!!document.querySelector(".modal .liberar-chefe") || !!(JSON.parse(localStorage.getItem("usina.cfg") || "{}").nivelChefe)', 10000); } catch { return false; }
-  if (!(await a.avaliar('!!document.querySelector(".modal .liberar-chefe")'))) return false;
-  // 2.17: a janela não pergunta o nível (fica no 2); outro nível, o teste pede à central como o administrador faria
-  await a.tocar('.modal [data-k="ok"]');
-  await a.teclar(teclasDaSenha());
-  if (nivel && nivel !== 2) {
-    await a.esperar('!!JSON.parse(localStorage.getItem("usina.cfg") || "{}").nivelChefe', 10000, 'liberar o tablet chefe');
-    await a.avaliar(`postJson('api/chefes', { acao: 'liberar', pin: ${JSON.stringify(SENHA_ENCARREGADO)}, nivel: ${nivel} }).then((r) => r.json()).then((d) => { cfg.nivelChefe = d.nivel; salvarCfg(); return d.nivel; })`);
-  }
-  // espera a central responder (o nível fica guardado) e a janela fechar, para nada cair em cima do próximo toque
-  await a.esperar('(() => { const c = JSON.parse(localStorage.getItem("usina.cfg") || "{}"); return !!c.nivelChefe && !document.querySelector(".modal"); })()', 10000, 'liberar o tablet chefe');
-  await a.avaliar('(() => { const t = document.getElementById("toast"); if (t && !t.hidden) t.click(); })()');
-  await new Promise((r) => setTimeout(r, 400));
+  if (!nivel || nivel === 2) return false;
+  await a.avaliar(`postJson('api/chefes', { acao: 'liberar', pin: ${JSON.stringify(SENHA_ENCARREGADO)}, nivel: ${nivel} }).then((r) => r.json()).then((d) => { cfg.nivelChefe = d.nivel; salvarCfg(); return d.nivel; })`);
+  await a.esperar(`Number(JSON.parse(localStorage.getItem("usina.cfg") || "{}").nivelChefe) === ${nivel}`, 10000, 'liberar o tablet chefe');
   return true;
 }
 /** Digita a senha só se ela for pedida (quem já entrou no tablet chefe com permissão não precisa de novo). */

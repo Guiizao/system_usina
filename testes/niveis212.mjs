@@ -36,11 +36,30 @@ export async function testarNiveis(ligar, porta, grupo) {
     const n3 = await conectarTeste(c.url, c.codigo());
     const setor = await conectarTeste(c.url, c.codigo());
 
-    await teste(grupo, 'tablet chefe novo não entra sem ser liberado; a senha errada não libera', async () => {
-      const r = await p(adm, '/api/pessoas', { acao: 'entrar', pin: SENHA_ENCARREGADO });
-      igual(r.status, 403); certo(r.naoLiberado, JSON.stringify(r));
+    await teste(grupo, 'a senha errada não libera; quem libera tablets chefe entra direto; quem não libera, não', async () => {
+      igual((await p(adm, '/api/pessoas', { acao: 'entrar', pin: '000000' })).status, 403);
       igual((await p(adm, '/api/chefes', { acao: 'liberar', pin: '000000', nivel: 2 })).status, 403);
       igual((await p(adm, '/api/chefes', { acao: 'estado' })).nivel, 0);
+      const r = await p(adm, '/api/pessoas', { acao: 'entrar', pin: SENHA_ENCARREGADO });
+      igual(r.status, 200, JSON.stringify(r)); igual(r.nivel, 2); igual(r.pessoa.nome, 'Guilherme');
+      igual((await p(adm, '/api/chefes', { acao: 'estado' })).nivel, 2);
+      igual((await p(adm, '/api/pessoas', { acao: 'salvar', pessoa: { nome: 'Func Ana', nivel: 'funcionario', pin: '6161' } })).status, 200);
+      const novo = await conectarTeste(c.url, c.codigo());
+      const nao = await p(novo, '/api/pessoas', { acao: 'entrar', pin: '6161' });
+      igual(nao.status, 403); certo(nao.naoLiberado, JSON.stringify(nao));
+      igual((await p(novo, '/api/chefes', { acao: 'estado' })).nivel, 0);
+    });
+    await teste(grupo, 'funcionário troca a função do aparelho e mais nada', async () => {
+      const f = await conectarTeste(c.url, c.codigo());
+      const papel = async (x) => p(f, '/api/sync', { aparelho: f.aparelho, papel: x, versao: '3.0.0', registros: [] });
+      await papel('hidrolise');
+      const dia = diaProducao(), folha = (pid, chave) => reg(`${dia}|${pid}|${chave}`, { x: '1' });
+      const v = await p(f, '/api/pessoas', { acao: 'verificar', pin: '6161' });
+      igual(v.status, 200); igual(JSON.stringify(v.funcoes), JSON.stringify(['trocar_funcao']));
+      await papel('caldeira');
+      const r = await p(f, '/api/sync', { aparelho: f.aparelho, papel: 'caldeira', versao: '3.0.0', registros: [folha('caldeira', '10')] });
+      igual(r.recusados.length, 0, 'a folha do setor novo vale: ' + JSON.stringify(r.recusados));
+      igual((await p(f, '/api/pessoas', { acao: 'lista' })).status, 403);
     });
 
     await teste(grupo, 'o dono libera o nível 2; entrando, a central diz o nível e as funções que valem nele', async () => {
@@ -63,8 +82,11 @@ export async function testarNiveis(ligar, porta, grupo) {
       certo(e.funcoes.every((f) => ['corrigir', 'relatorios'].includes(f)) && e.funcoes.includes('corrigir'), 'nível 1: ' + e.funcoes);
     });
 
-    await teste(grupo, 'nível 1: a central recusa trocar o código, registro, nuvem, apagar relatório, pessoas e bloquear', async () => {
+    await teste(grupo, 'nível 1: recusa código com conexão desativada, registro, nuvem, apagar relatório, pessoas e bloquear', async () => {
+      const ana = (await p(adm, '/api/pessoas', { acao: 'lista' })).pessoas.find((x) => x.nome === 'Ana');
+      igual((await p(adm, '/api/pessoas', { acao: 'salvar', pessoa: { ...ana, extras: { conexao: false } } })).status, 200);
       igual((await p(n1, '/api/novo-codigo', {})).status, 403);
+      igual((await p(adm, '/api/pessoas', { acao: 'salvar', pessoa: { ...ana, extras: {} } })).status, 200);
       igual((await n1.pedir('/api/registro?dia=' + hoje)).status, 403);
       igual((await p(n1, '/api/nuvem', { acao: 'configurar', url: '' })).status, 403);
       igual((await p(n1, '/api/nuvem', { acao: 'estado' })).status, 200, 'o estado da nuvem continua livre');
@@ -217,7 +239,9 @@ export async function testarNiveis(ligar, porta, grupo) {
       await sync(adm, [reg(idH, { brix: '10' }), reg(idI, { qtd: '5', nf: '111' })]);
       const r = await sync(n1, [reg(idH, { brix: '11' }, { atualizadoEm: Date.now() + 1000 })]);
       igual(r.recusados.length, 0, 'nível 1 corrige dia antigo: ' + JSON.stringify(r.recusados));
-      await p(setor, '/api/sync', { aparelho: setor.aparelho, papel: 'ralo', registros: [reg(idI, { qtd: '6', nf: '999' }, { atualizadoEm: Date.now() + 2000 })] });
+      // outro tablet de setor: neste aqui o dono acabou de digitar a senha, e ela vale por 10 minutos
+      const ralo = await conectarTeste(c.url, c.codigo());
+      await p(ralo, '/api/sync', { aparelho: ralo.aparelho, papel: 'ralo', registros: [reg(idI, { qtd: '6', nf: '999' }, { atualizadoEm: Date.now() + 2000 })] });
       const dia = (await adm.pedir('/api/registros?dia=' + antigo)).json.registros;
       igual(dia.find((x) => x.id === idH).valores.brix, '11', 'a correção ficou no arquivo');
       const ins = dia.find((x) => x.id === idI);

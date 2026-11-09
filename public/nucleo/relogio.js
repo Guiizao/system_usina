@@ -24,6 +24,8 @@
       });
   }
 
+  const SALVAR_PARADO_MS = 5 * 60000; // 3.0: digitou e deixou a folha aberta: vai sozinho depois de 5 minutos sem mexer
+  let parouEm = 0;
   let ultimaData = dataProducao(), ultimoTurno = turnoAtual().id, ultimaHora = new Date().getHours();
   setInterval(() => {
     const rel = document.getElementById('relogio');
@@ -31,7 +33,7 @@
     const tt = document.getElementById('turno-topo');
     if (tt && tt.textContent !== turnoAtual().nome) tt.textContent = turnoAtual().nome;
     // chegou anotação nova enquanto a pessoa rolava: redesenha quando ela soltar
-    if (redesenharDepois && podeRedesenhar()) { redesenharDepois = false; if (['central', 'inicio', 'prancheta', 'config', 'aparelhos'].includes(view().tela)) render(); }
+    if (redesenharDepois && podeRedesenhar()) { redesenharDepois = false; if (['central', 'inicio', 'prancheta', 'config', 'aparelhos', 'configurar', 'trocar-funcao'].includes(view().tela)) render(); }
     // hora da linha nova acompanha o relógio até a pessoa mudar
     if (rascunho && rascunho.horaAuto && rascunho.horaAuto.length && view().tela === 'prancheta') {
       let mudou = false;
@@ -42,6 +44,7 @@
       if (mudou) atualizarEdicao();
     }
     guardarRascunhoAberto();
+    if (rascunhoSujo() && Date.now() - Math.max(ultimoToque, parouEm) > SALVAR_PARADO_MS) { parouEm = Date.now(); salvarSemSair(); }
     const d = dataProducao(), t = turnoAtual().id, h = new Date().getHours();
     fechamentoDoDia(d);
     travarPorInatividade();

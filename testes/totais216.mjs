@@ -107,7 +107,7 @@ export async function testarTotais216(g, sqlite = false) {
         await teste(g, nome + ': sync anuncia o pacote local antes de ligar a nuvem', async () => {
           igual((await c.api('/api/sync', { registros: [] })).atualizacao, { versao: '2.15.0', apkMinimo: '2.14.0' });
         });
-        await c.api('/api/sync', { registros: [...regs, ...registros('2020-01-01'), {
+        await c.api('/api/sync', { registros: [...registros(dia), ...registros(seguinte), ...registros('2020-01-01'), {
           id: 'config|sistema|geral', data: 'config', prancheta: 'sistema', chave: 'geral',
           valores: { turnosSetor: { hidrolise: '12h' } }, atualizadoEm: Date.now(),
         }] });
@@ -179,7 +179,8 @@ export async function testarTotais216(g, sqlite = false) {
     await teste(g, 'pacote ausente não quebra envio nem sync da nuvem', async () => {
       fs.unlinkSync(path.join(pacote, 'pacote.json'));
       if (!sqlite) await new Promise((r) => setTimeout(r, 2500));
-      igual((await nuvem.pedir('/central/enviar', { senha: segredo, corpo: { registros: [] } })).json.telas, null);
+      const { geracao } = (await nuvem.pedir('/central/estado', { senha: segredo })).json;
+      igual((await nuvem.pedir('/central/enviar', { senha: segredo, corpo: { geracao, registros: [] } })).json.telas, null);
       const aparelho = 'tablet216', senha = crypto.createHmac('sha256', segredo).update('aparelho|' + aparelho).digest('hex');
       igual((await nuvem.pedir('/aparelho/sync', { senha, aparelho, corpo: { registros: [] } })).json.telas, null);
     });

@@ -190,6 +190,7 @@ print(json.dumps({'folhas': wb.sheetnames, 'v7229': 7229.25 in valores, 'sub': 2
       await esc.tocar('[data-a="voltar"]');
       await esc.tocar('[data-a="config"]');
       await senhaSeAparecer(esc);
+      await esc.tocar('[data-a="categoria"][data-cat="medidas"]');
       await esc.tocar('[data-a="medida-grupo"][data-grupo="sac"]');
       await esc.avaliar('(() => { const i = document.getElementById("alt2"); i.value = "3"; return true; })()');
       await esc.tocar('[data-k="ok"]');

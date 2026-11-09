@@ -4,6 +4,33 @@
    Depois do sinal de igual vem JSON puro, porque o servidor do tablet chefe (Java) também lê este arquivo. */
 window.NOVIDADES = [
   {
+    "versao": "3.0.1",
+    "data": "2026-11-03",
+    "itens": [
+      "Escritório: o lote, os cálculos, a folha de rastreamento e a etiqueta agora seguem a data escolhida no painel. No dia de hoje, que ainda não fechou, continua valendo o último dia que fechou."
+    ]
+  },
+  {
+    "versao": "3.0.0",
+    "data": "2026-11-02",
+    "itens": [
+      "Configurações da usina e ajustes do aparelho organizados em quadros, dois a dois, numa tela só. Cada quadro abre uma parte: Operadores, Áreas, Envios e assim por diante.",
+      "Área nova: o dono cria a área, as tabelas dela e os operadores, sem versão nova do aplicativo.",
+      "Caixinhas com os totais em cima da tabela do dia: cal, enzima, dornas anotadas. A central guarda 90 dias, a cópia de cada aparelho 2 anos, e o relatório abre qualquer dia guardado no banco.",
+      "Tabela: Desligar (dá para ligar de novo) ou Remover de vez, e campo novo já com mínimo e máximo, como a temperatura. O que foi anotado continua guardado.",
+      "Banco de dados no centro: o que qualquer aparelho salva vai para o banco e aparece nos outros em poucos segundos, inclusive nos computadores.",
+      "O que outra pessoa está digitando na mesma folha aparece como \"ainda não salvo\", com internet ou só no Wi-Fi.",
+      "Sem internet, o Wi-Fi da usina continua funcionando e a central leva tudo para o banco quando a internet volta. Falta de dado nunca apaga nada.",
+      "Cargos novos: Dono, Administrador, Encarregado, Funcionário (só troca o serviço do aparelho) e Usuário (só consulta). As permissões estão por categoria.",
+      "Quem tem permissão entra direto, sem configurar o nível do tablet primeiro. A ficha da pessoa mostra o que ela pode fazer em cada nível.",
+      "Sala de controle, só para o dono: aparelhos conectados, tipo de conexão, rede e o histórico de todas as alterações.",
+      "Folhas e avisos: tabela nova em cada setor e, em cada campo, tipo (só números, só letras, letras prontas) e saída (total do dia, relatório e API).",
+      "Salva e envia sozinho ao sair da folha, quando o aplicativo vai para o fundo e depois de 5 minutos parado.",
+      "Todo aparelho, inclusive o computador, guarda os dados em Documentos/Usina/BackupUsina, um arquivo por dia. Apagar os dados do aparelho não mexe no banco.",
+      "Leitor de folhas: agora lê a Caldeira e não pega mais o cabeçalho, mesmo com a foto cortada ou com a borda da tabela fora da foto."
+    ]
+  },
+  {
     "versao": "2.18.0",
     "data": "2026-10-28",
     "itens": [

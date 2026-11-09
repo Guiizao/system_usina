@@ -73,7 +73,42 @@
       throw new Error('relógio');
     } finally { clearTimeout(t); }
   }
+  /* 3.0: o banco é a fonte de tudo. Quem tem a chave dele fala direto com ele, pelas mesmas rotas da central; a central
+     (ponte do Wi-Fi) entra quando não há internet. A anotação fica primeiro aqui no aparelho: nada se perde se os dois caírem. */
+  const NO_BANCO = /^api\/(sync|registros|registro|status|pessoas|chefes|aparelhos|liberar)(\?|$)/;
+  // computador pela nuvem numa nuvem de antes da 3.0 (ainda sem o banco): só vê
+  const soVer = () => cfg.soNuvem && !!sync.bancoAntigo;
+  const usarBanco = () => !cfg.demo && !sync.bancoAntigo && enderecoNuvemSeguro(cfg.nuvemUrl) && !!cfg.nuvemToken && !(sync.bancoForaAte > Date.now());
+  async function pedirAoBanco(caminho, opcoes = {}, ms = 4000) {
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), ms);
+    try {
+      const r = await fetch(`${cfg.nuvemUrl.replace(/\/+$/, '')}/banco/${caminho}`, Object.assign({}, opcoes, {
+        cache: 'no-store', redirect: 'error', signal: ctrl.signal,
+        headers: Object.assign({}, opcoes.headers, { Authorization: 'Bearer ' + cfg.nuvemToken, 'X-Aparelho': cfg.deviceId }),
+      }));
+      marcarNuvem(r.status < 500);
+      if (r.status === 423) {
+        const d = await r.clone().json().catch(() => ({}));
+        conhecerCentralDoBloqueio(d.geracao);
+        aplicarBloqueio(d.bloqueio);
+      }
+      return r;
+    } finally { clearTimeout(t); }
+  }
+  // entrar e sair valem também na ponte, para ela saber quem está no aparelho quando a internet cair
+  const TAMBEM_NA_PONTE = /"acao":"(entrar|sair|liberar)"/;
   async function buscar(caminho, opcoes = {}, ms = 4000) {
+    if (NO_BANCO.test(caminho) && usarBanco()) {
+      try {
+        const r = await pedirAoBanco(caminho, opcoes, ms);
+        if (r.status === 404) sync.bancoAntigo = true;
+        else if (r.status < 500) {
+          if (r.ok && cfg.chave && TAMBEM_NA_PONTE.test(opcoes.body || '')) pedirCifrado(baseCentral(), caminho, opcoes, 4000).catch(() => {});
+          return r;
+        } else if (r.status !== 501) sync.bancoForaAte = Date.now() + 30000;
+      } catch (e) { sync.bancoForaAte = Date.now() + 30000; marcarNuvem(false); }
+    }
     if (cfg.chave && caminho !== 'api/ping' && caminho !== 'api/parear') {
       const r = await pedirCifrado(baseCentral(), caminho, opcoes, ms);
       // aparelho bloqueado pelo administrador (423): a tela trava
@@ -92,10 +127,23 @@
   const postJson = (caminho, corpo, ms) => buscar(caminho, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(corpo) }, ms);
 
   async function sincronizar() {
-    if (cfg.soNuvem) return cfg.pessoa ? sincronizarNuvem() : undefined; // 2.16: pela nuvem, sem central
-    if (cfg.demo || !cfg.chave || sync.ocupado) return;
+    if (cfg.soNuvem && !cfg.pessoa) return; // 2.16: pela nuvem, só depois de entrar
+    if (cfg.demo || (!cfg.chave && !cfg.soNuvem) || sync.ocupado) return;
+    const viaBanco = usarBanco();
+    if (cfg.soNuvem && !viaBanco) return sincronizarNuvem();
+    // 3.0: o banco só é chamado com motivo (o plano grátis conta os pedidos): algo para mandar, um aviso ou um tempo sem falar
+    if (viaBanco && !bancoPrecisa()) return;
+    const pedir = viaBanco ? pedirAoBanco : buscar;
+    const cursor = viaBanco ? 'bancoSeq' : 'ultimoSeq';
     sync.ocupado = true;
     try {
+      if (viaBanco) {
+        sync.temNovidade = false; sync.bancoEm = Date.now();
+        if (baseCentral() && Date.now() - (sync.centralEm || 0) > 30000) {
+          sync.centralEm = Date.now();
+          buscar('api/ping', {}, 1500).then((r) => r.json()).then((d) => { sync.centralOk = d.app === 'pranchetas'; }).catch(() => { sync.centralOk = false; }).finally(atualizarConexao);
+        }
+      } else {
       const r0 = await buscar('api/ping');
       const info = r0.ok ? await r0.json() : null;
       if (!info || info.app !== 'pranchetas') throw new Error('sem central');
@@ -107,10 +155,11 @@
       if (info.agora) desvioCentral = info.agora - Date.now();
       cfg.ultimoContato = Date.now(); salvarCfg();
       sync.modo = 'online'; sync.falhas = 0;
+      }
 
       // liberado aqui com a senha de desbloqueio: a central fica sabendo (e confere a senha de novo)
       if (cfg.liberacao) {
-        const rl = await postJson('api/liberar', { codigo: cfg.liberacao.codigo, em: cfg.liberacao.em, rev: cfg.liberacao.rev || 0, geracao: cfg.liberacao.geracao || '' }, 10000);
+        const rl = await pedir('api/liberar', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ codigo: cfg.liberacao.codigo, em: cfg.liberacao.em, rev: cfg.liberacao.rev || 0, geracao: cfg.liberacao.geracao || '' }) }, 10000);
         if (rl.ok) { cfg.liberacao = null; salvarCfg(); }
         else if (rl.status === 403) { const d = await rl.json().catch(() => ({})); cfg.liberacao = null; conhecerCentralDoBloqueio(d.geracao); salvarCfg(); aplicarBloqueio(d.bloqueio); return; }
         else if (rl.status === 423) { cfg.liberacao = null; salvarCfg(); return; }
@@ -121,7 +170,21 @@
         .map((r) => (r.data === 'config' ? Object.assign({}, r, { base: r.rev || 0 }) : r));
       const erros = errosGuardados.slice();
       const antesDoEnvio = Date.now();
-      const r1 = await postJson('api/sync', { aparelho: cfg.deviceId, papel: cfg.papel, nome: nomeDesteAparelho(), info: infoAparelho, operador: operadorAtual(), versao: VERSAO, geracao: cfg.geracao || '', novaConexao: !!cfg.novaConexao, registros: envio, erros }, 15000);
+      const r1 = await pedir('api/sync', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ aparelho: cfg.deviceId, papel: cfg.papel, nome: nomeDesteAparelho(), info: infoAparelho, tipo: tipoDoAparelho(), rede: (navigator.connection || {}).type || '', operador: operadorAtual(), versao: VERSAO, geracao: cfg.geracao || '', novaConexao: !!cfg.novaConexao, registros: envio, erros }) }, 15000);
+      if (viaBanco) {
+        if (r1.status === 401) {
+          // a chave do banco não vale mais: pela nuvem, entra de novo; com a ponte do Wi-Fi, continua por ela
+          if (cfg.soNuvem) { sairDaNuvem(); toast('O acesso pela nuvem acabou (a senha mudou ou a permissão foi tirada). Entre de novo.', 'erro'); return; }
+          cfg.nuvemToken = ''; salvarCfg();
+          sync.nuvemErro = 'A nuvem recusou a chave deste aparelho: ligue-o uma vez no Wi-Fi da central';
+          return;
+        }
+        if (r1.status === 404) { sync.bancoAntigo = true; return; }
+        if (r1.status >= 500) throw new Error('banco fora');
+        sync.modo = 'online'; sync.falhas = 0; sync.viaBanco = true; sync.nuvemErro = '';
+        cfg.ultimoContato = Date.now(); salvarCfg();
+        ligarAoVivo();
+      } else sync.viaBanco = false;
       if (r1.status === 401) {
         // o servidor está neste aparelho: pega a chave nova com ele (o código de conexão foi trocado)
         if (centralNoTablet()) { try { const e = await pluginCentral.estado(); if (e && e.chave) { usarChaveDaRede(e.chave); salvarCfg(); } } catch (x) { /* tenta de novo */ } return; }
@@ -141,13 +204,26 @@
         if (revCentral > (cfg.revLiberada || 0)) { cfg.revLiberada = revCentral; salvarCfg(); }
       }
       // o escritório zerou as anotações de teste: limpa as deste aparelho e começa de novo
-      if (resp1.zerar) { zerarLocal(resp1.geracao); toast('O escritório zerou as anotações. Este aparelho começou do zero.'); render(true); return; }
+      if (resp1.zerar) {
+        if (!resp1.zerada) {
+          if (!sync.avisoZerarAntiga) { sync.avisoZerarAntiga = true; avisarCentralAntiga(); }
+          return;
+        }
+        try { zerarLocal(resp1.geracao); } catch (e) { return; }
+        toast('O escritório zerou as anotações. Este aparelho começou do zero.'); render(true); return;
+      }
       if (r1.ok && resp1.geracao && resp1.geracao !== cfg.geracao) {
         // conectou numa central nova (tablet chefe trocado ou reinstalado): manda de novo o que este aparelho guarda,
         // para a central não começar vazia
         const outraCentral = !!cfg.geracao;
-        cfg.geracao = resp1.geracao; cfg.ultimoSeq = 0; cfg.nuvemSeq = null; cfg.nuvemOrdem = 0;
-        if (outraCentral) { Object.values(registros).forEach((r) => { if (!envio.includes(r)) r.sincronizado = false; }); salvarRegistros(); }
+        cfg.geracao = resp1.geracao; cfg.ultimoSeq = 0; cfg.bancoSeq = 0; cfg.nuvemSeq = null; cfg.nuvemOrdem = 0;
+        if (outraCentral) {
+          // o que é de outro setor a central recusaria daqui: ele vai pelo api/devolver, junto com a pasta
+          Object.values(registros).forEach((r) => { if (!envio.includes(r) && (ehCentral() || r.data === 'config' || (setorDaPrancheta(r.prancheta) || { id: cfg.papel }).id === cfg.papel)) r.sincronizado = false; });
+          salvarRegistros();
+          cfg.copiaSeq = 0;
+          if (!viaBanco) cfg.devolverPendente = true;
+        }
         salvarCfg();
       }
       if (r1.ok && cfg.novaConexao) { cfg.novaConexao = false; salvarCfg(); }
@@ -162,6 +238,7 @@
           const local = registros[x.id];
           if (local && local.data !== 'config' && x.motivo !== 'invalido') { local.esperaEntrar = true; semSessao = semSessao || x.motivo === 'sem_sessao'; return; }
           if (x.atual) registros[x.id] = Object.assign({}, x.atual, { sincronizado: true });
+          else if (local && local.data === 'config') local.sincronizado = true; // 3.0: recusar nunca apaga a configuração que só este aparelho tem
           else delete registros[x.id];
         });
         if (recusados.length) avisarRecusa(recusados);
@@ -178,7 +255,7 @@
         if (erros.length) { errosGuardados.splice(0, erros.length); LS.set('erros', errosGuardados); }
         if (resp.agora) conferirRelogio(resp.agora - (antesDoEnvio + Date.now()) / 2);
         // longe da usina, o aparelho pergunta na nuvem se foi bloqueado
-        if (typeof resp.nuvem === 'string' && resp.nuvem !== (cfg.nuvemUrl || '')) { cfg.nuvemUrl = resp.nuvem; salvarCfg(); }
+        if (typeof resp.nuvem === 'string' && resp.nuvem !== (cfg.nuvemUrl || '') && (resp.nuvem || !cfg.ativadoNoBanco)) { cfg.nuvemUrl = resp.nuvem; salvarCfg(); }
         // a chave deste aparelho para a fila da nuvem (versão 2.13), para quando estiver longe da central
         if (typeof resp.nuvemToken === 'string' && resp.nuvemToken !== (cfg.nuvemToken || '')) { cfg.nuvemToken = resp.nuvemToken; salvarCfg(); }
         sync.avisouNuvem = false;
@@ -188,33 +265,47 @@
       let mudou = false;
       // o aparelho passou a guardar mais dias (virou tablet chefe): busca de novo, desde o começo
       const corte = primeiroDiaGuardado();
-      if (cfg.corteSync && corte < cfg.corteSync) cfg.ultimoSeq = 0;
-      const r2 = await buscar(`api/registros?desde=${cfg.ultimoSeq || 0}&aPartirDe=${corte}`, {}, 15000);
+      if (cfg.corteSync && corte < cfg.corteSync) { cfg.ultimoSeq = 0; cfg.bancoSeq = 0; }
+      const r2 = await pedir(`api/registros?desde=${cfg[cursor] || 0}&aPartirDe=${corte}`, {}, 15000);
       if (r2.ok) {
         const dados = await r2.json();
         for (const rec of dados.registros) {
           if (receberRegistro(rec)) mudou = true;
         }
-        cfg.ultimoSeq = dados.seq; cfg.corteSync = corte; salvarCfg();
+        cfg[cursor] = dados.seq; cfg.corteSync = corte; salvarCfg();
+        if (dados.mais) { sync.temNovidade = true; sincronizarLogo(); } // ainda tem: o banco manda em páginas
         if (mudou) { podar(); salvarRegistros(); }
       }
       if (ehCentral()) {
-        const r3 = await buscar('api/status');
+        const r3 = await pedir('api/status');
         if (r3.ok) {
-          const texto = await r3.text();
+          let texto = await r3.text();
+          // com o servidor neste aparelho, o painel também mostra o que só ele sabe (pastas, endereços, código)
+          if (viaBanco && centralNoTablet()) {
+            const lan = await pedirCifrado(baseCentral(), 'api/status', {}, 3000).catch(() => null);
+            const local = lan && lan.ok ? await lan.json().catch(() => null) : null;
+            if (local) texto = JSON.stringify(Object.assign(local, { aparelhos: JSON.parse(texto).aparelhos }));
+          }
           // só redesenha se algo mudou de verdade, para não pular a tela de quem está olhando
           if (texto !== sync.statusJson) { sync.statusJson = texto; sync.status = JSON.parse(texto); mudou = true; }
           verificarBase44();
         }
       }
-      if (mudou && ['central', 'inicio', 'prancheta', 'config', 'aparelhos'].includes(view().tela)) {
+      if (mudou && ['central', 'inicio', 'prancheta', 'config', 'aparelhos', 'configurar', 'trocar-funcao'].includes(view().tela)) {
         if (podeRedesenhar()) render(); else redesenharDepois = true;
       }
       if (mudou && view().tela === 'avisos') atualizarTelaAvisos();
       revisarAvisoNaTela();
       verificarAvisos();
       if (envio.length === LOTE_ENVIO) sincronizarLogo(); // ainda tem anotação esperando: manda o próximo lote
+      if (cfg.devolverPendente && !viaBanco) devolverCopias();
     } catch (e) {
+      if (viaBanco) {
+        // o banco não respondeu: na próxima volta vai pela ponte do Wi-Fi (ou fica guardado aqui)
+        sync.bancoForaAte = Date.now() + 30000; sync.viaBanco = false; marcarNuvem(false);
+        if (cfg.soNuvem) sync.modo = 'offline';
+        return;
+      }
       sync.modo = 'offline';
       sync.falhas = (sync.falhas || 0) + 1;
       conferirNaNuvem();
@@ -242,6 +333,8 @@
     } catch { return false; }
   }
   async function sincronizarNuvem(forcar) {
+    // 3.0: esta troca (2.14) só continua para falar com uma nuvem que ainda não tem o banco
+    if (!sync.bancoAntigo) return;
     if (cfg.demo || !enderecoNuvemSeguro(cfg.nuvemUrl) || !cfg.nuvemToken || sync.enviandoNuvem) return;
     if (!forcar && (Date.now() - (cfg.ultimoContato || 0) < 2 * 60000 || Date.now() - (sync.nuvemEm || 0) < 20000)) return;
     if (sync.nuvemAntiga) return mandarParaNuvem();
@@ -317,6 +410,9 @@
      avisa (a folha do dia e o turno dependem da hora certa). */
   function conferirRelogio(diferenca) {
     sync.relogio = diferenca;
+    // 3.0: "o mais novo ganha" vale pela hora do servidor, não pela deste aparelho (fica guardado: ele pode reabrir sem rede)
+    const desvio = Math.abs(diferenca) < 5000 ? 0 : Math.round(diferenca);
+    if (desvio !== (cfg.desvioRelogio || 0)) { cfg.desvioRelogio = desvio; salvarCfg(); }
     const minutos = Math.round(diferenca / 60000);
     if (Math.abs(minutos) < 5) { sync.avisoRelogio = 0; return; }
     if (Date.now() - (sync.avisoRelogio || 0) < 30 * 60000) return;
@@ -328,14 +424,213 @@
     const m = Math.round(sync.relogio / 60000);
     return Math.abs(m) < 2 ? 'certo' : `${Math.abs(m)} min ${m > 0 ? 'atrasado' : 'adiantado'}`;
   };
+  const tipoDoAparelho = () => (document.documentElement.dataset.pc === '1' ? 'computador' : Math.min(screen.width || 0, screen.height || 0) < 600 ? 'celular' : 'tablet');
+  /** O banco é chamado se há o que mandar, se ele avisou que mudou algo, ou depois de um tempo sem falar. */
+  function bancoPrecisa() {
+    if (sync.temNovidade || !sync.bancoEm) return true;
+    if (Object.values(registros).some((r) => !r.sincronizado && !r.esperaEntrar)) return Date.now() - sync.bancoEm >= 800;
+    return Date.now() - sync.bancoEm >= (sync.aoVivo ? 60000 : 15000);
+  }
+  /* A sala do banco: uma conexão aberta que avisa na hora quando outro aparelho muda algo. Se cair, o aparelho pergunta de 15 em 15 segundos. */
+  let aoVivo = null, esperaAoVivo = 2000, pingAoVivo = null;
+  function ligarAoVivo() {
+    if (aoVivo || typeof WebSocket === 'undefined' || !usarBanco() || (cfg.soNuvem && !cfg.pessoa)) return;
+    let ws;
+    try { ws = new WebSocket(`${cfg.nuvemUrl.replace(/\/+$/, '').replace(/^http/, 'ws')}/banco/aovivo?a=${encodeURIComponent(cfg.deviceId)}`, ['pranchetas', cfg.nuvemToken]); } catch (e) { return; }
+    aoVivo = ws;
+    ws.onopen = () => {
+      sync.aoVivo = true; esperaAoVivo = 2000;
+      clearInterval(pingAoVivo);
+      pingAoVivo = setInterval(() => { try { ws.send('ping'); } catch (e) { /* o onclose cuida */ } }, 45000);
+      atualizarConexao();
+    };
+    ws.onmessage = (e) => {
+      if (e.data === 'pong') return;
+      let d = null;
+      try { d = JSON.parse(e.data); } catch (x) { return; }
+      if (d.tipo === 'rascunho') return receberRascunho(d);
+      if (d.tipo === 'estado') sync.quemEm = 0;
+      if (d.tipo === 'estado' || (d.de !== cfg.deviceId && Number(d.seq) > (cfg.bancoSeq || 0))) { sync.temNovidade = true; sincronizarLogo(); }
+    };
+    ws.onclose = () => {
+      sync.aoVivo = false; aoVivo = null;
+      clearInterval(pingAoVivo);
+      setTimeout(ligarAoVivo, esperaAoVivo);
+      esperaAoVivo = Math.min(60000, esperaAoVivo * 2);
+      atualizarConexao();
+    };
+    ws.onerror = () => { try { ws.close(); } catch (e) { /* já fechou */ } };
+  }
+  /* 3.0: o que outro aparelho está digitando chega de segundo em segundo pela sala, sem passar pelo banco: ainda não é
+     anotação e some se ele não salvar. Com internet passa pela sala do banco; só no Wi-Fi, pela central, de 2 em 2 segundos. */
+  const rascunhosDeOutros = new Map();
+  const RASCUNHO_VALE_MS = 15000;
+  function receberRascunho(d) {
+    const id = `${d.data}|${d.pid}|${d.chave}`;
+    if (d.valores) rascunhosDeOutros.set(id, { quem: d.quem || 'Outro aparelho', chave: d.chave, valores: d.valores, em: Date.now(), peloWifi: !!d.peloWifi });
+    else rascunhosDeOutros.delete(id);
+    mostrarRascunhoDeOutro();
+  }
+  function mostrarRascunhoDeOutro() {
+    const v = view(), agora = Date.now();
+    rascunhosDeOutros.forEach((x, id) => { if (agora - x.em > RASCUNHO_VALE_MS) rascunhosDeOutros.delete(id); });
+    const prefixo = v && v.tela === 'prancheta' ? `${dataDaView(v)}|${v.pid}|` : null;
+    const achado = prefixo && [...rascunhosDeOutros].find(([id]) => id.startsWith(prefixo));
+    let el = document.getElementById('rascunho-outro');
+    if (!achado) { if (el) el.remove(); return; }
+    const x = achado[1];
+    const nomes = alvos.filter((a) => a.id in x.valores && typeof x.valores[a.id] !== 'object' && x.valores[a.id] !== '').slice(0, 4).map((a) => `${a.labelCurto || a.label}: ${fmtNum(String(x.valores[a.id]))}`);
+    const texto = `${x.quem} está anotando a linha ${x.chave}, ainda não salvo${nomes.length ? `: ${nomes.join(', ')}` : ''}`;
+    const main = document.querySelector('main');
+    if (!main) return;
+    if (!el) { el = document.createElement('p'); el.id = 'rascunho-outro'; el.className = 'aviso atencao rascunho-outro'; main.prepend(el); }
+    if (el.textContent !== texto) el.textContent = texto;
+  }
+  let rascunhoMandado = null, rascunhoWifiEm = 0, rascunhoWifiOcupado = false;
+  async function rascunhoPeloWifi(agora, naFolha) {
+    if (cfg.demo || cfg.soNuvem || !cfg.chave || sync.modo !== 'online' || rascunhoWifiOcupado || Date.now() - rascunhoWifiEm < 2000) return;
+    if (!naFolha && !rascunhoMandado) return; // fora da folha não precisa ficar perguntando
+    rascunhoWifiEm = Date.now(); rascunhoWifiOcupado = true;
+    try {
+      const r = await postJson('api/rascunho', { rascunho: agora && JSON.stringify(agora).length <= 7000 ? agora : null }, 1800);
+      if (!r.ok) return;
+      rascunhoMandado = agora;
+      const vieram = (await r.json()).rascunhos || [], ids = new Set(vieram.map((x) => `${x.data}|${x.pid}|${x.chave}`));
+      rascunhosDeOutros.forEach((x, id) => { if (x.peloWifi && !ids.has(id)) rascunhosDeOutros.delete(id); });
+      vieram.forEach((x) => receberRascunho(Object.assign(x, { peloWifi: true })));
+      mostrarRascunhoDeOutro();
+    } catch (e) { /* a central não respondeu: o sincronizar cuida do aviso */ } finally { rascunhoWifiOcupado = false; }
+  }
+  function mandarRascunho() {
+    if (rascunhosDeOutros.size) mostrarRascunhoDeOutro();
+    const v = view();
+    const agora = v && v.tela === 'prancheta' && rascunhoSujo() ? { tipo: 'rascunho', pid: v.pid, data: dataDaView(v), chave: String(rascunho.chave), quem: quemEstaAqui(), valores: rascunho.valores } : null;
+    if (!aoVivo || aoVivo.readyState !== 1) return rascunhoPeloWifi(agora, !!v && v.tela === 'prancheta');
+    if (JSON.stringify(agora) === JSON.stringify(rascunhoMandado)) return;
+    // salvou ou desistiu: avisa uma vez, para o aviso sumir na hora nos outros
+    const texto = JSON.stringify(agora || Object.assign({}, rascunhoMandado, { valores: null }));
+    if (texto.length <= 7000) { try { aoVivo.send(texto); } catch (e) { /* o onclose cuida */ } }
+    rascunhoMandado = agora;
+  }
+  if (!DEMO_IMG) setInterval(mandarRascunho, 1000);
+
+  /* 3.0: todo aparelho guarda uma cópia em Documentos/Usina/BackupUsina. No APK vai pelo plugin; no programa do Windows, pela ponte da janela.
+     São dois arquivos: copia-<aparelho>.json, com o que está na memória dele (inclusive o que ainda não subiu), e um por dia, com o dia inteiro de todos os setores. */
+  const temPastaDeCopia = () => !cfg.demo && !DEMO_IMG && (!!window.pranchetasPC || (NO_APK && !!pluginCentral && !!pluginCentral.guardarCopia));
+  const gravarNaPasta = (nome, texto) => (window.pranchetasPC ? window.pranchetasPC.guardarCopia(nome, texto) : pluginCentral.guardarCopia({ nome, texto }));
+  /** O que o arquivo daquele dia tem. Sem o arquivo, ou num aplicativo que ainda não sabe ler: nada. */
+  async function lerDaPasta(nome) {
+    try {
+      const r = window.pranchetasPC ? await window.pranchetasPC.lerCopia(nome) : await pluginCentral.lerCopia({ nome });
+      const lista = JSON.parse((typeof r === 'string' ? r : r && r.texto) || '[]');
+      return Array.isArray(lista) ? lista.filter((x) => x && x.id && (x.atualizadoEm || 0) >= (cfg.zeradoEm || 0)) : [];
+    } catch (e) { return []; }
+  }
+  /** Falta de dado nunca apaga: o arquivo fica com o que já tinha, e em cada linha ganha a mais nova (um banco ou uma central vazia não esvazia a cópia). */
+  async function juntarComAPasta(nome, novos) {
+    const porId = new Map((await lerDaPasta(nome)).map((x) => [x.id, x]));
+    novos.forEach((x) => {
+      const a = porId.get(x.id), junto = Juncao.juntar(a, x);
+      if (junto) porId.set(x.id, junto); else if (!a || (x.atualizadoEm || 0) >= (a.atualizadoEm || 0)) porId.set(x.id, x);
+    });
+    return [...porId.values()];
+  }
+  function copiaDoAparelho() {
+    const lista = Object.values(registros).map((r) => {
+      if (r.data !== 'config' || !r.valores || !r.valores.operadores) return r;
+      // sem as senhas dos operadores: o arquivo fica numa pasta que outros aplicativos podem ler
+      const operadores = Object.fromEntries(Object.entries(r.valores.operadores).map(([s, l]) => [s, (l || []).map((o) => comoOperador(o).nome)]));
+      return Object.assign({}, r, { valores: Object.assign({}, r.valores, { operadores }) });
+    });
+    return JSON.stringify({ versao: VERSAO, em: Date.now(), aparelho: cfg.deviceId, papel: cfg.papel || '', registros: lista });
+  }
+  let copiaGuardada = -1;
+  async function guardarCopia(mesmoSemMudar) {
+    if (!temPastaDeCopia()) return false;
+    if (!mesmoSemMudar && versaoRegistros === copiaGuardada) return false;
+    copiaGuardada = versaoRegistros;
+    try { await gravarNaPasta(`copia-${cfg.deviceId}.json`, copiaDoAparelho()); return true; } catch (e) { guardarErro('Não consegui guardar a cópia', e.message); return false; }
+  }
+  if (!DEMO_IMG) setInterval(guardarCopia, 10 * 60000);
+  /* Puxa do banco (só no Wi-Fi, da central) os dias que mudaram e guarda inteiros, no formato do BackupUsina da central. O tablet de setor só
+     mantém 3 dias na memória: é isto que deixa os dados em todo aparelho. A central no tablet já guarda os dela. */
+  const DIAS_NA_PASTA = 730; // 2 anos: um arquivo por dia, dezenas de KB cada
+  let copiandoDias = false;
+  async function guardarDias() {
+    if (!temPastaDeCopia() || copiandoDias || centralNoTablet() || (cfg.soNuvem && !cfg.pessoa)) return 0;
+    const viaBanco = usarBanco();
+    if (!viaBanco && (cfg.soNuvem || !cfg.chave)) return 0;
+    const pedir = viaBanco ? pedirAoBanco : buscar, cursor = viaBanco ? 'copiaBancoSeq' : 'copiaSeq', desde = somarDias(dataProducao(), -DIAS_NA_PASTA);
+    let dias = 0;
+    copiandoDias = true;
+    try {
+      for (let volta = 0; volta < 50; volta++) {
+        const r = await pedir(`api/registros?desde=${cfg[cursor] || 0}&aPartirDe=${desde}`, {}, 20000);
+        if (!r.ok) return dias;
+        const d = await r.json();
+        for (const dia of new Set((d.registros || []).map((x) => x.data).filter((x) => /^\d{4}-\d{2}-\d{2}$/.test(x) && x >= desde))) {
+          const rd = await pedir(`api/registros?dia=${dia}`, {}, 20000);
+          if (!rd.ok) return dias;
+          await gravarNaPasta(`${dia}.json`, JSON.stringify(await juntarComAPasta(`${dia}.json`, (await rd.json()).registros || [])));
+          dias++;
+        }
+        cfg[cursor] = d.seq; salvarCfg();
+        if (!d.mais) break;
+      }
+    } catch (e) { /* sem conexão agora: na próxima volta continua de onde parou */ } finally { copiandoDias = false; }
+    return dias;
+  }
+  if (!DEMO_IMG) { setTimeout(guardarDias, 60000); setInterval(guardarDias, 10 * 60000); }
+  /* 3.0: conectou numa central nova (trocada, reinstalada, ou este aparelho virou servidor) com a nuvem fora: devolve o que guarda, da memória e da pasta.
+     A central só pega o que não tem. Se cair no meio, tenta de novo na próxima sincronização. Com a nuvem ligada não precisa: a central baixa do banco. */
+  let devolvendo = false;
+  async function devolverCopias() {
+    if (devolvendo || cfg.soNuvem || !cfg.chave) return 0;
+    devolvendo = true;
+    let aceitos = 0;
+    const mandar = async (lista) => {
+      const limpos = lista.filter((r) => r && r.data !== 'config' && (r.atualizadoEm || 0) >= (cfg.zeradoEm || 0)).map(({ sincronizado, naNuvem, esperaEntrar, doBanco, ...r }) => r);
+      for (let i = 0; i < limpos.length; i += 300) {
+        const r = await postJson('api/devolver', { registros: limpos.slice(i, i + 300) }, 20000);
+        if (!r.ok) throw new Error('a central respondeu ' + r.status);
+        aceitos += (await r.json()).aceitos || 0;
+      }
+    };
+    try {
+      await mandar(Object.values(registros));
+      const pasta = !temPastaDeCopia() ? null : window.pranchetasPC || pluginCentral;
+      if (pasta && pasta.listarCopias) {
+        const r = await pasta.listarCopias();
+        const desde = somarDias(dataProducao(), -DIAS_NA_PASTA);
+        for (const nome of (r && r.nomes) || []) if (nome.slice(0, 10) >= desde) await mandar(await lerDaPasta(nome));
+      }
+      cfg.devolverPendente = false; salvarCfg();
+      if (aceitos) { registrar('anotacao', `${nomeDesteAparelho()} devolveu ${contar(aceitos, 'anotação', 'anotações')} para a central nova`); toast(`Este aparelho devolveu ${contar(aceitos, 'anotação', 'anotações')} para a central nova`); }
+    } catch (e) { guardarErro('Não consegui devolver as anotações à central', e.message); } finally { devolvendo = false; }
+    return aceitos;
+  }
+  async function baixarCopia() {
+    if (temPastaDeCopia()) return toast((await guardarCopia(true)) ? 'Cópia guardada em Documentos/Usina/BackupUsina' : 'Não consegui guardar a cópia', 'aviso');
+    baixar(new File([copiaDoAparelho()], `copia-${cfg.deviceId}.json`, { type: 'application/json' }));
+  }
+
   const LOTE_ENVIO = 300;
   let syncTimer = null;
   function sincronizarLogo() { clearTimeout(syncTimer); syncTimer = setTimeout(sincronizar, 400); atualizarConexao(); }
   /** Apaga as anotações guardadas neste aparelho (a configuração da usina fica). */
   function zerarLocal(geracao) {
+    try {
+      // LS.set esconde falhas de escrita; a cópia precisa estar gravada antes de apagar.
+      localStorage.setItem('usina.antesDeZerar', JSON.stringify({ geracao: cfg.geracao || '', quando: Date.now(), registros }));
+    } catch (e) {
+      guardarErro('Não consegui guardar a cópia antes de zerar', e.message);
+      toast('Não consegui guardar a cópia. As anotações continuam neste aparelho.', 'erro');
+      throw e;
+    }
     Object.keys(registros).forEach((id) => { if (registros[id].data !== 'config') delete registros[id]; });
     salvarRegistros();
-    cfg.ultimoSeq = 0; cfg.geracao = geracao || ''; salvarCfg();
+    // zerar de propósito também vale para a pasta: o que era de antes não volta nem é devolvido a uma central nova
+    cfg.ultimoSeq = 0; cfg.geracao = geracao || ''; cfg.copiaSeq = 0; cfg.copiaBancoSeq = 0; cfg.zeradoEm = Date.now(); cfg.devolverPendente = false; salvarCfg();
     rascunho = null; ed.alvoId = null;
     Object.keys(lembrar).forEach((k) => delete lembrar[k]);
     pilha = [telaInicial()];
@@ -345,7 +640,7 @@
       Devolve uma promessa: quem vai gerar o relatório de um dia antigo espera ele chegar. */
   const promessasDoDia = new Map();
   function buscarDia(data) {
-    if (cfg.demo || !cfg.chave || !/^\d{4}-\d{2}-\d{2}$/.test(data || '') || data >= primeiroDiaGuardado()) return Promise.resolve();
+    if (cfg.demo || (!cfg.chave && !cfg.soNuvem) || !/^\d{4}-\d{2}-\d{2}$/.test(data || '') || data >= primeiroDiaGuardado()) return Promise.resolve();
     if (promessasDoDia.has(data)) return promessasDoDia.get(data);
     const promessa = (async () => {
       diasAbertos.add(data); diasBuscando.add(data);
@@ -358,8 +653,13 @@
         });
         salvarRegistros();
       } catch (e) {
-        diasAbertos.delete(data); promessasDoDia.delete(data); // na próxima vez tenta de novo
-        toast(`Não consegui buscar a folha de ${fmtData(data)} na central`, 'erro');
+        promessasDoDia.delete(data); // na próxima vez tenta de novo
+        // sem banco e sem central: o dia pode estar na cópia deste aparelho
+        const daCopia = temPastaDeCopia() ? await lerDaPasta(`${data}.json`) : [];
+        if (daCopia.length) { daCopia.forEach((rec) => receberRegistro(rec)); salvarRegistros(); } else {
+          diasAbertos.delete(data);
+          toast(`Não consegui buscar a folha de ${fmtData(data)} na central`, 'erro');
+        }
       }
       diasBuscando.delete(data);
       if (podeRedesenhar()) render(); else redesenharDepois = true;
@@ -372,6 +672,7 @@
   function textoConexao() {
     const p = pendentes();
     if (cfg.demo) return 'Demonstração, dados só neste aparelho';
+    if (sync.modo === 'online' && sync.viaBanco) return p ? `Enviando ${contar(p, 'anotação', 'anotações')}` : 'Tudo enviado para o banco';
     if (sync.modo === 'online') return p ? `Enviando ${contar(p, 'anotação', 'anotações')}` : 'Tudo enviado para a central';
     if (nuvemLeva()) { const n = faltamNaNuvem(); return n ? `Sem a central. Enviando ${contar(n, 'anotação', 'anotações')} pela nuvem` : 'Sem a central. Tudo enviado pela nuvem'; }
     if (sync.modo === 'offline') return p ? `Sem conexão. ${contar(p, 'anotação guardada', 'anotações guardadas')} aqui` : 'Sem conexão. Pode anotar: fica guardado aqui';

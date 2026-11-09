@@ -58,7 +58,7 @@
     if (cfg.bloqueio && !DEMO_IMG) v = { tela: 'bloqueado-adm' };
     const telas = {
       conectar: telaConectar, preparando: telaPreparando, configurar: telaConfigurar, operador: telaOperador,
-      inicio: telaInicio, prancheta: telaPrancheta, central: telaCentral, relatorios: telaRelatorios, leitura: telaLeitura, config: telaConfig, admin: telaAdmin, avisos: telaAvisos,
+      'trocar-funcao': telaTrocarFuncao, sala: telaSala, inicio: telaInicio, prancheta: telaPrancheta, central: telaCentral, relatorios: telaRelatorios, leitura: telaLeitura, config: telaConfig, admin: telaAdmin, avisos: telaAvisos,
       pessoas: telaPessoas, registro: telaRegistro, graficos: telaGraficos, folhas: telaFolhas,
       aparelhos: telaAparelhos, 'bloqueado-adm': telaBloqueioAdm,
       escritorio: telaEscritorio, 'esc-calculos': telaEscCalculos, 'esc-rastreamento': telaEscRastreamento,

@@ -86,7 +86,7 @@ export async function testarExemplo218(nav, g) {
   const a = await nav.novoAparelho('chefe', TAMANHOS.tablet);
   try {
     await teste(g, 'Ajustes fora da demonstração: sem o botão de dados de exemplo', async () => {
-      await a.ir(c.url + '/?demo&papel=hidrolise&op=Guilherme&tela=admin', '!!document.querySelector("[data-a=exemplo]")');
+      await a.ir(c.url + '/?demo&papel=hidrolise&op=Guilherme&tela=admin&cat=dados', '!!document.querySelector("[data-a=exemplo]")');
       await a.avaliar('(() => { cfg.demo = false; render(true); return 1; })()');
       certo(!(await a.existe('[data-a=exemplo]')), 'o botão aparece fora da demonstração');
     });
@@ -121,7 +121,7 @@ export async function testarNuvemNaHora218(nav, g) {
     await teste(g, 'nuvem recusa a chave: a janela Conexão diz o motivo', async () => {
       await b.avaliar('(() => { cfg.nuvemToken = "chave-errada"; salvarCfg(); return 1; })()');
       await conferir(b);
-      await dormir(3000);
+      await b.esperar('!!sync.nuvemErro', 8000, 'a nuvem recusar a chave');
       await b.tocar('#status-con');
       certo((await b.avaliar('document.querySelector(".modal").innerText')).includes('recusou'), 'a janela não diz que a nuvem recusou a chave');
     });
@@ -155,8 +155,10 @@ export async function testarPainel218(nav, g) {
       certo(h.includes('graf-faixa'), 'a linha do limite sumiu');
     });
     await teste(g, 'Usina do encarregado: sem Base44, Nuvem e Apagar tudo', async () => {
-      await a.ir(c.url + '/?demo&papel=central&funcoes=corrigir,relatorios,usina,avisos&tela=config', '!!document.querySelector("#app main")');
-      for (const s of ['#bloco-base44', '#bloco-nuvem', '[data-a="zerar-tudo"]']) certo(!(await a.existe(s)), s + ' aparece para o encarregado');
+      for (const parte of ['envios', 'sistema']) {
+        await a.ir(c.url + `/?demo&papel=central&funcoes=corrigir,relatorios,usina,avisos&tela=config&cat=${parte}`, '!!document.querySelector("#app main")');
+        for (const s of ['#bloco-base44', '#bloco-nuvem', '[data-a="zerar-tudo"]']) certo(!(await a.existe(s)), s + ' aparece para o encarregado');
+      }
     });
     certo(!a.erros.length, a.erros.join(' | '));
   } finally { await a.fechar(); await c.desligar(); }
@@ -169,7 +171,7 @@ export async function testarEscritorio218(nav, g) {
   try {
     await teste(g, 'pela nuvem: arquivo do rastreamento não chama o salvar e o "Gerar agora" some', async () => {
       await a.ir(c.url + '/?demo&papel=central&funcoes=relatorios,escritorio', 'typeof arquivoEsc === "function"');
-      const chamou = await a.avaliar(`(async () => { cfg.soNuvem = true; let n = 0; salvarEsc = async () => { n++; return true; };
+      const chamou = await a.avaliar(`(async () => { cfg.soNuvem = true; sync.bancoAntigo = true; let n = 0; salvarEsc = async () => { n++; return true; };
         try { await arquivoEsc({ data: dataProducao(), sujo: true }, 'pdf'); } catch (e) { /* só importa se salvou */ } return n; })()`);
       igual(chamou, 0, 'chamou o salvar pela nuvem');
       await a.avaliar('(() => { ir({ tela: "relatorios" }); return 1; })()');
@@ -246,11 +248,15 @@ export async function testarAjustesPC218(nav, g) {
       await a.ir(c.url + '/?demo&papel=central', 'typeof render === "function" && !!document.querySelector("#app main")');
       await a.avaliar('(() => { cfg.soNuvem = true; cfg.nuvemUrl = "https://nuvem.exemplo"; cfg.pessoa = { id: "lucas", nome: "Lucas", funcoes: ["relatorios"] }; pilha = [telaInicial()]; render(true); return 1; })()');
       await a.tocar('[data-a="admin"]');
-      const t = await a.avaliar('document.querySelector("main").innerText');
-      for (const x of ['Versão', 'Tamanho das letras', 'nuvem.exemplo', 'Lucas']) certo(t.includes(x), 'faltou ' + x);
-      certo(await a.existe('[data-a="sair-nuvem"]'), 'faltou o Sair');
-      certo(!t.includes('Este aparelho é'), 'mostrou a troca de função do tablet');
       await a.foto('testes/saida/papeis218/pc-ajustes.png');
+      certo(!(await a.avaliar('document.querySelector("main").innerText')).includes('Este aparelho'), 'mostrou a troca de função do tablet');
+      for (const [parte, textos] of [['tela', ['Tamanho das letras']], ['aplicativo', ['Versão']], ['servidor', ['nuvem.exemplo', 'Lucas']]]) {
+        await a.tocar(`[data-a="categoria"][data-cat="${parte}"]`);
+        const t = await a.avaliar('document.querySelector("main").innerText');
+        for (const x of textos) certo(t.includes(x), 'faltou ' + x);
+        if (parte === 'servidor') certo(await a.existe('[data-a="sair-nuvem"]'), 'faltou o Sair');
+        await a.tocar('[data-a="voltar"]');
+      }
     });
     certo(!a.erros.length, a.erros.join(' | '));
   } finally { await a.fechar(); await c.desligar(); }

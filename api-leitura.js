@@ -16,6 +16,7 @@
  * O mesmo arquivo roda na central (server.js) e na nuvem (nuvem/src/index.js, Cloudflare): por isso não usa fs nem vm.
  */
 
+const Folhas = require('./public/config/folhas.js');
 const ehDia = (d) => /^\d{4}-\d{2}-\d{2}$/.test(d || '');
 const vazio = (v) => v === '' || v == null;
 const pad2 = (n) => String(n).padStart(2, '0');
@@ -73,7 +74,16 @@ function criar(C, medidasAtuais, opcoes = {}) {
     const unidade = unidadeNoDia(c, data);
     return Object.assign({ rotulo: c.label, valor: valorDe(c, v) }, unidade ? { unidade } : {});
   };
-  const camposDe = (lista, valores, data) => { const o = {}; lista.forEach((c) => { o[c.id] = campo(c, valores[c.id], data); }); return o; };
+  const naApi = (c) => !c.saida || c.saida.api !== false;
+  const camposDe = (lista, valores, data) => { const o = {}; lista.filter(naApi).forEach((c) => { o[c.id] = campo(c, valores[c.id], data); }); return o; };
+  /** 3.0: a saída de cada quadro com total (soma, média ou último valor do dia). */
+  function saidasDaFolha(p, regs) {
+    const lista = (p.tipo === 'grade' ? p.itens : p.tipo === 'insumo' ? p.camposOperador : p.campos) || [];
+    const linhas = regs.filter((r) => /^\d+$/.test(r.chave)).sort((a, b) => ordemNoDia(a.chave) - ordemNoDia(b.chave));
+    const saidas = lista.filter(naApi).map((c) => ({ c, total: Folhas.totalDoCampo(c, linhas.map((r) => r.valores[c.id])) })).filter((x) => x.total != null)
+      .map(({ c, total }) => Object.assign({ id: c.id, rotulo: c.label, tipoDeTotal: c.saida.total, total }, c.unidade ? { unidade: c.unidade } : {}));
+    return saidas.length ? { saidas } : {};
+  }
   const base = (r) => ({ id: r.id, operador: r.operador || null, atualizadoEm: iso(r.atualizadoEm), ...(r.alteradoPeloEscritorio ? { alteradoPeloEscritorio: { em: iso(r.alteradoPeloEscritorio.em), autorizadoPor: r.alteradoPeloEscritorio.autorizadoPor } } : {}) });
   const horaDaChave = (k) => `${pad2(Number(k))}:00`;
   const ordemNoDia = (h) => (Number(h) - C.inicioDoDia + 24) % 24;
@@ -151,7 +161,7 @@ function criar(C, medidasAtuais, opcoes = {}) {
       id: s.id, nome: s.nome,
       pranchetas: folhasDoSetor(s).map((pid) => {
         const p = pranchetas[pid];
-        return Object.assign({ id: pid, nome: p.nome, codigo: p.codigo || null, titulo: (p.papel && p.papel.titulo) || p.titulo || p.nome, tipo: p.tipo }, MONTAR[p.tipo] ? MONTAR[p.tipo](p, porFolha[pid] || [], data, s) : {});
+        return Object.assign({ id: pid, nome: p.nome, codigo: p.codigo || null, titulo: (p.papel && p.papel.titulo) || p.titulo || p.nome, tipo: p.tipo }, MONTAR[p.tipo] ? MONTAR[p.tipo](p, porFolha[pid] || [], data, s) : {}, saidasDaFolha(p, porFolha[pid] || []));
       }),
     }));
     const insumos = setores.flatMap((s) => s.pranchetas.filter((p) => p.tipo === 'insumo').flatMap((p) => (p.total.length ? p.total : [{ quantidade: 0, unidade: ((C.somarEm || {})[pranchetas[p.id].unidade] || {}).unidade || pranchetas[p.id].unidade || null }]).map((t) => ({ setor: s.nome, prancheta: p.id, insumo: p.nome, quantidade: t.quantidade, unidade: t.unidade }))));
@@ -173,7 +183,7 @@ function criar(C, medidasAtuais, opcoes = {}) {
       : p.tipo === 'grade' ? p.itens : p.tipo === 'medicao' ? [] : p.campos || [];
     const vistos = new Set();
     const campos = {};
-    lista.forEach((c) => { if (!vistos.has(c.id)) { vistos.add(c.id); campos[c.id] = campo(c, r.valores[c.id], r.data); } });
+    lista.filter(naApi).forEach((c) => { if (!vistos.has(c.id)) { vistos.add(c.id); campos[c.id] = campo(c, r.valores[c.id], r.data); } });
     return Object.assign({ id: r.id, seq: r.seq, data: r.data, setor: s ? s.id : r.setor || null, prancheta: r.prancheta, chave: r.chave, apagado: !!r.apagado }, base(r),
       { campos: r.prancheta === 'rastreamento' || (p && (p.tipo === 'medicao' || p.tipo === 'fermentacao')) ? r.valores : campos });
   }
@@ -199,7 +209,7 @@ function criar(C, medidasAtuais, opcoes = {}) {
           const p = pranchetas[pid];
           const campos = p.tipo === 'insumo' ? [{ id: 'qtd', label: 'Quantidade', type: 'num' }, ...(p.camposOperador || []), ...(p.camposEscritorio || []).filter((c) => !(p.camposOperador || []).some((o) => o.id === c.id))]
             : p.tipo === 'grade' ? p.itens : p.tipo === 'medicao' ? p.parametros : p.campos || [];
-          return Object.assign({ id: pid, nome: p.nome, codigo: p.codigo || null, tipo: p.tipo, linhaPor: { dornas: 'dorna', insumo: 'hora', grade: 'hora', medicao: 'grupo de dornas', fermentacao: 'enchimento' }[p.tipo] || null, campos: campos.map(desc) },
+          return Object.assign({ id: pid, nome: p.nome, codigo: p.codigo || null, tipo: p.tipo, linhaPor: { dornas: 'dorna', insumo: 'hora', grade: 'hora', medicao: 'grupo de dornas', fermentacao: 'enchimento' }[p.tipo] || null, campos: campos.filter(naApi).map(desc) },
             p.tipo === 'insumo' ? { unidades: p.unidades || [p.unidade], conversoesDosTotais: Object.fromEntries([...(p.unidades || []), p.unidade].filter((u) => (C.somarEm || {})[u]).map((u) => [u, C.somarEm[u]])) } : {},
             p.tipo === 'medicao' ? { grupos: medidas().grupos.map((g) => ({ id: g.id, nome: g.nome, unidade: g.unidade || 'L', dornas: g.dornas.map((d) => ({ id: d.id, nome: d.nome, alturaM: d.altura, areaDaBaseM2: d.area })) })) } : {});
         }),

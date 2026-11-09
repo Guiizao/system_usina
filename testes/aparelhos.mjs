@@ -174,6 +174,7 @@ export async function testarAparelhos(nav, central, grupo) {
       await esc.tocar('[data-a="voltar"]');
       await esc.tocar('[data-a="config"]');
       await senhaSeAparecer(esc);
+      await esc.tocar('[data-a="categoria"][data-cat="operadores"]');
       await esc.tocar('[data-a="op-senha"][data-setor="hidrolise"][data-i="2"]');
       await esc.teclar(['4', '3', '2', '1', 'ok']);
       await esc.esperar('document.body.innerText.includes("Senha de Carlindo trocada")', 5000);

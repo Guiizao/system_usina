@@ -15,7 +15,7 @@ import crypto from 'node:crypto';
 import { spawn, execFileSync } from 'node:child_process';
 import { dormir } from './navegador.mjs';
 import { teste, certo, igual, SENHA_ENCARREGADO, usinaNoContexto } from './teste.mjs';
-import { centralNode, centralJava, pastaTemporaria, APP } from './servidores.mjs';
+import { centralNode, centralJava, pastaTemporaria, APP, SENHA_PROGRAMADOR_TESTE } from './servidores.mjs';
 import { diaDeExemplo } from './api-leitura.mjs';
 import { chaveDeTeste, telasDeTeste, montarPacote } from './atualizacao.mjs';
 import { conectarTeste } from './cifra.mjs';
@@ -142,14 +142,17 @@ export async function testarNuvem(grupo, sqlite = false) {
       const dia = diaProducao(1);
       try {
         await teste(grupo, `${nome}: manda a cópia sozinha e a nuvem fica com tudo`, async () => {
-          // começa de uma nuvem vazia (cada central é uma "geração" diferente: a nuvem limpa e recebe tudo de novo)
+          // A rodada anterior só sai com a declaração explícita de que foi zerada.
           const regs = diaDeExemplo(dia);
-          await c.api('/api/sync', { aparelho: 'teste-nuvem', registros: regs });
+          const sync = await c.api('/api/sync', { aparelho: 'teste-nuvem', registros: regs });
+          const anterior = (await nuvem.pedir('/central/estado', { senha: SEGREDO })).json.geracao;
+          if (anterior) igual((await nuvem.pedir('/central/enviar', { senha: SEGREDO,
+            corpo: { geracao: sync.geracao, geracoesZeradas: [anterior], registros: [] } })).status, 200);
           // o aplicativo do tablet chefe manda as folhas (a central do computador lê o forms.js sozinha)
           const r = await c.api('/api/nuvem', { acao: 'configurar', url: nuvem.url, segredo: SEGREDO, forms: formsDoApp() });
           certo(r && r.url === nuvem.url && r.temSegredo, 'configurar: ' + JSON.stringify(r));
           const publicas = regs.filter((x) => /^\d{4}-/.test(x.data) && x.prancheta !== 'avisos').length;
-          const e = await esperar(async () => { const x = (await nuvem.pedir('/central/estado', { senha: SEGREDO })).json; return x && x.registros === publicas ? x : null; }, 'anotações na nuvem (só as desta central: a da rodada anterior sai quando esta manda tudo)');
+          const e = await esperar(async () => { const x = (await nuvem.pedir('/central/estado', { senha: SEGREDO })).json; return x && x.registros === publicas ? x : null; }, 'anotações desta central na nuvem após zerar explicitamente a rodada anterior');
           igual(e.registros, publicas, 'a configuração da usina e os avisos não sobem');
           const st = await esperar(async () => { const x = await c.api('/api/nuvem', { acao: 'estado' }); return x && x.ultimoEnvio && !x.faltam ? x : null; }, 'estado da central');
           igual(st.erro, '');
@@ -255,17 +258,17 @@ export async function testarNuvem(grupo, sqlite = false) {
         await teste(grupo, `${nome}: config pela fila respeita permissão, revisão e registro das recusas`, async () => {
           const id = 'config|sistema|geral';
           let cfg = (await registros()).find((x) => x.id === id);
-          const entrada = { id, data: 'config', prancheta: 'sistema', chave: 'geral', base: cfg?.rev || 0, valores: { ...(cfg?.valores || {}), operadores: { caldeira: ['Fila'] } }, atualizadoEm: t + 300 };
+          const entrada = { id, data: 'config', prancheta: 'sistema', chave: 'geral', base: cfg?.rev || 0, valores: { ...(cfg?.valores || {}), operadores: { caldeira: ['Fila ' + nome] } }, atualizadoEm: t + 300 };
           await mandar([entrada]); await puxar();
           igual(JSON.stringify((await registros()).find((x) => x.id === id)?.valores), JSON.stringify(cfg?.valores));
           await remoto.pedir('/api/pessoas', { corpo: { acao: 'verificar', pin: SENHA_ENCARREGADO } });
           await mandar([{ ...entrada, atualizadoEm: t + 301 }]); await puxar();
           cfg = (await registros()).find((x) => x.id === id);
-          igual(cfg.valores.operadores.caldeira[0], 'Fila');
+          igual(cfg.valores.operadores.caldeira[0], 'Fila ' + nome);
           await mandar([{ ...entrada, atualizadoEm: t + 302 }]); await puxar();
           igual((await registros()).find((x) => x.id === id).rev, cfg.rev);
           const log = (await c.api('/api/registro?dia=' + diaProducao())).registros;
-          certo(log.some((x) => x.valores.texto.includes('Fila recusada: ' + id) && x.valores.texto.includes('sem_permissao')), 'recusa registrada');
+          certo(log.some((x) => x.valores.texto.includes('Fila recusada: ' + id) && x.valores.texto.includes('sem_permissao')), 'recusa registrada: ' + log.map((x) => x.valores.texto).filter((x) => /Fila/.test(x)).join(' | '));
           certo(log.some((x) => x.valores.texto.includes('Fila recusada: ' + id) && x.valores.texto.includes('conflito')), 'conflito registrado');
         });
         await teste(grupo, `${nome}: rastreamento sem permissão e aparelho bloqueado não entram pela fila`, async () => {
@@ -285,9 +288,13 @@ export async function testarNuvem(grupo, sqlite = false) {
           certo(log.some((x) => x.valores.texto.includes('Fila recusada: ' + r.id) && x.valores.texto.includes('bloqueado')), 'bloqueio registrado');
           await c.api('/api/aparelhos', { acao: 'desbloquear', id: remoto.aparelho });
         });
-        await teste(grupo, `${nome}: fila de outra geração não ressuscita anotações`, async () => {
-          await mandar([{ ...r, atualizadoEm: t + 500, valores: { pressao: '999' } }], { geracao: 'geracao-antiga' }); await puxar();
-          igual((await registros()).find((x) => x.id === r.id).valores.pressao, '7');
+        await teste(grupo, `${nome}: fila de geração zerada não ressuscita anotações`, async () => {
+          const zerou = await c.api('/api/zerar', { confirmar: 'ZERAR', senha: SENHA_PROGRAMADOR_TESTE });
+          certo(zerou.ok && zerou.geracao !== credencial.geracao, 'a central zerou a geração da fila');
+          await mandar([{ ...r, atualizadoEm: t + 500, valores: { pressao: '999' } }]); await puxar();
+          const recusada = (await registros()).find((x) => x.id === r.id);
+          certo(recusada && recusada.apagado === true, 'a anotação zerada continua apagada');
+          igual(recusada.valores, {}, 'só a marca de exclusão é publicada');
         });
 
       } finally { await c.desligar(); }
@@ -306,7 +313,9 @@ export async function testarNuvem(grupo, sqlite = false) {
       const pasta = path.join(nuvem.publico, 'atualizacao');
       const apk = crypto.randomBytes(200000);
       fs.writeFileSync(path.join(pasta, 'pranchetas.apk'), apk);
-      fs.writeFileSync(path.join(pasta, 'versao.json'), JSON.stringify({ versao: '9.9.9', tamanho: apk.length, sha256: sha(apk), novidades: [{ versao: '9.9.9', itens: ['teste da nuvem'] }] }));
+      const manifesto = Buffer.from(JSON.stringify({ versao: '9.9.9', tamanho: apk.length, sha256: sha(apk), novidades: [{ versao: '9.9.9', itens: ['teste da nuvem'] }] }));
+      fs.writeFileSync(path.join(pasta, 'versao.json'), manifesto);
+      fs.writeFileSync(path.join(pasta, 'versao.sig'), crypto.sign('sha256', manifesto, fs.readFileSync(chave.privada)).toString('base64')); // 2.18: o APK vem assinado
       await dormir(2500); // o wrangler percebe os arquivos novos
       const v = await nuvem.pedir('/atualizacao/versao.json');
       igual(v.json && v.json.versao, '9.9.9');
@@ -314,6 +323,8 @@ export async function testarNuvem(grupo, sqlite = false) {
       const t = await nuvem.pedir('/telas/pacote.json');
       igual(t.json && t.json.versao, '9.9.9');
       igual(t.cabecalhos.get('access-control-allow-origin'), '*', 'o tablet chefe lê o pacote das telas direto da nuvem');
+      // 3.0.1: o programa do Windows recusa redirecionamento: a página inicial das telas tem de sair direto
+      igual((await fetch(nuvem.url + '/telas/index.html', { redirect: 'manual' })).status, 200, '/telas/index.html sem redirecionar');
       const pastaApk = pastaTemporaria('nuvem-apk');
       const c = await centralNode(8794, pastaTemporaria('nuvem-atualizacao'), undefined, { PASTA_APK: pastaApk, ATUALIZACAO_ONLINE: nuvem.url + '/atualizacao/', ATUALIZACAO_ESPERA_MS: '300', CHAVE_TELAS: chave.publica });
       try {

@@ -10,18 +10,22 @@ import { novoGrupo, teste, certo, igual, resumo, entrarComoChefe, teclasDaSenha 
 import { centralNode, pastaTemporaria, APP } from './servidores.mjs';
 import { ligarNuvemSQLite } from './nuvem-sqlite.mjs';
 import { pbkdf2Sync } from 'node:crypto';
+import { createRequire } from 'node:module';
 
 const SEGREDO = 'segredo-ficticio-pc217';
+const { carregarUsina } = createRequire(import.meta.url)('../carregar-usina.js');
+const FORMS = carregarUsina(path.join(APP, 'public'));
 // senhas de teste das pessoas fictícias (nunca as de verdade)
 const verificador = (pin, sal = 'c'.repeat(32)) => ({ sal, iteracoes: 1000, verificador: pbkdf2Sync(pin, sal, 1000, 32, 'sha256').toString('hex') });
 const PESSOAS = [
-  { id: 'lucas', nome: 'Lucas', nivel: 'consulta', ativo: true, funcoes: ['escritorio', 'relatorios'], nuvem: verificador('2468') },
+  { id: 'lucas', nome: 'Lucas', nivel: 'consulta', ativo: true, extras: { escritorio: true }, funcoes: ['escritorio', 'relatorios'], nuvem: verificador('2468') },
   { id: 'ana', nome: 'Ana', nivel: 'consulta', ativo: true, funcoes: ['relatorios'], nuvem: verificador('1357') },
 ];
 /** Cfg inicial só na primeira página (as recargas mantêm o que o aplicativo gravou). */
 const cfgInicial = (nuvemUrl) => `if (!localStorage.getItem('usina.cfg')) localStorage.setItem('usina.cfg', JSON.stringify({ nuvemUrl: ${JSON.stringify(nuvemUrl)} }));`;
 
 const FOTOS = path.join(APP, 'testes', 'saida', 'pc217');
+const LINHA = (nome) => `[...document.querySelectorAll(".aparelhos-agora .agora-linha")].find((l) => l.innerText.includes(${JSON.stringify(nome)}))`;
 const semNotificacao = async (a) => { await a.avaliar('(() => { const t = document.getElementById("toast"); if (t && !t.hidden) t.click(); return 1; })()'); await dormir(350); };
 
 export async function testarNivelNaTela217(nav, g) {
@@ -30,17 +34,14 @@ export async function testarNivelNaTela217(nav, g) {
   const aparelhos = [];
   try {
     const chefe = await nav.novoAparelho('tablet chefe', TAMANHOS.tablet); aparelhos.push(chefe);
-    await teste(g, 'liberar tablet chefe: a janela não pergunta o nível; com a senha fica no nível 2', async () => {
+    await teste(g, '3.0: entra no tablet chefe sem configurar nada antes: com a senha ele fica no nível 2', async () => {
       await chefe.ir(c.url + '/', 'document.querySelector("[data-quadro=\\"codigo\\"]")');
       await chefe.tocar('[data-quadro="codigo"]'); await chefe.teclar(c.codigo().split('')); await chefe.tocar('[data-ed="ocultar"]');
       await chefe.tocar('[data-a="conectar"]');
       await chefe.tocar('[data-a="papel"][data-id="central"]', null, { esperarMs: 15000 });
-      await chefe.esperar('!!document.querySelector(".modal .liberar-chefe")', 10000, 'janela de liberar');
-      certo(!(await chefe.avaliar('!!document.querySelector(".modal .opcoes-nivel, .modal [data-k^=\\"n:\\"]")')), 'não pergunta o nível');
-      await chefe.foto(path.join(FOTOS, 'liberar.png'));
-      await chefe.tocar('.modal [data-k="ok"]'); await chefe.teclar(teclasDaSenha());
-      await chefe.esperar('JSON.parse(localStorage.getItem("usina.cfg") || "{}").nivelChefe === 2 && !document.querySelector(".modal")', 10000, 'nível 2');
+      certo(!(await chefe.avaliar('!!document.querySelector(".modal .liberar-chefe")')), 'não pede para liberar antes');
       await entrarComoChefe(chefe);
+      await chefe.esperar('JSON.parse(localStorage.getItem("usina.cfg") || "{}").nivelChefe === 2 && !document.querySelector(".modal")', 10000, 'nível 2');
     });
     await teste(g, 'pessoa nova: "Vale em" qualquer aparelho ou só nos fixos; marcar este tablet grava a lista', async () => {
       await semNotificacao(chefe);
@@ -84,7 +85,7 @@ export async function testarEntrarPC217(nav, g) {
   const c = await centralNode(8369, pastaTemporaria('pc217-login')); // só entrega as telas, como o programa do Windows
   const aparelhos = [];
   try {
-    igual((await n.pedir('/central/enviar', { senha: SEGREDO, corpo: { geracao: 'pc217', registros: [], pessoas: PESSOAS } })).status, 200);
+    igual((await n.pedir('/central/enviar', { senha: SEGREDO, corpo: { geracao: 'pc217', registros: [], pessoas: PESSOAS, forms: FORMS } })).status, 200);
     const pc = await nav.novoAparelho('pc', TAMANHOS.pcGrande); aparelhos.push(pc);
     await pc.antesDeAbrir(cfgInicial(n.url));
     await teste(g, 'tela de entrar: logo, lista de nomes, senha e Entrar; o servidor fica numa aba própria', async () => {
@@ -155,7 +156,7 @@ export async function testarPainelPC217(nav, g) {
       { id: 'tab-hid', nome: 'Tablet da Hidrólise', papel: 'hidrolise', setor: 'hidrolise', operador: 'Felipe', pessoa: '', versao: '2.17.0', vistoEm: agora - 20000 },
       { id: 'tab-cal', nome: 'Tablet da Caldeira', papel: 'caldeira', setor: 'caldeira', operador: '', pessoa: '', versao: '2.16.1', vistoEm: agora - 10 * 60000 },
     ];
-    igual((await n.pedir('/central/enviar', { senha: SEGREDO, corpo: { geracao: 'pc217b', registros: regs, pessoas: PESSOAS, aparelhos } })).status, 200);
+    igual((await n.pedir('/central/enviar', { senha: SEGREDO, corpo: { geracao: 'pc217b', registros: regs, pessoas: PESSOAS, forms: FORMS, aparelhos } })).status, 200);
     await pc.antesDeAbrir(cfgInicial(n.url));
     await pc.ir(c.url + '/?nuvem=1');
     await pc.esperar('!!document.querySelector("#nuvem-nome option[value=lucas]")', 15000, 'nomes');
@@ -163,10 +164,11 @@ export async function testarPainelPC217(nav, g) {
     await pc.tocar('.entrar-cartao button[type=submit]');
     await pc.esperar('!!document.querySelector(".menu-pc") && Object.values(registros).some((r) => r.prancheta === "caldeira")', 20000, 'painel com as anotações');
     await teste(g, 'aparelhos ao vivo pela nuvem: um verde (Felipe na Hidrólise) e um cinza; número de ligados no alto', async () => {
-      await pc.esperar('document.querySelectorAll(".aparelhos-agora .agora-linha").length === 2', 15000, 'aparelhos agora');
-      igual(await pc.avaliar('document.querySelectorAll(".aparelhos-agora .conexao.ok").length'), 1);
+      await pc.esperar(`${LINHA('Tablet da Hidrólise')} && ${LINHA('Tablet da Caldeira')}`, 15000, 'aparelhos agora');
+      certo(await pc.avaliar(`!!${LINHA('Tablet da Hidrólise')}.querySelector(".conexao.ok")`), 'a Hidrólise devia estar ligada');
+      certo(!(await pc.avaliar(`!!${LINHA('Tablet da Caldeira')}.querySelector(".conexao.ok")`)), 'a Caldeira devia estar desligada');
       certo(/Felipe/.test(await pc.avaliar('document.querySelector(".aparelhos-agora").innerText')), 'quem opera');
-      igual(await pc.avaliar('document.querySelector("[data-num=ligados] b").textContent'), '1');
+      igual(await pc.avaliar('document.querySelector("[data-num=ligados] b").textContent'), '2', 'o tablet e este computador');
       await pc.foto(path.join(FOTOS, 'painel-pc.png'));
     });
     await teste(g, 'últimas anotações do dia: quem, folha e hora, a mais nova primeiro', async () => {
@@ -176,22 +178,31 @@ export async function testarPainelPC217(nav, g) {
     });
     await teste(g, 'central sem mandar a lista há mais de 5 min: "sem sinal da central"', async () => {
       n.consultar(`UPDATE info SET valor = '${agora - 6 * 60000}' WHERE chave = 'aparelhosEm' RETURNING chave`);
-      await pc.avaliar('(() => { sync.nuvemEm = 0; sincronizarNuvem(); return 1; })()');
+      await pc.avaliar('(() => { sync.nuvemEm = 0; sync.temNovidade = true; sincronizar(); return 1; })()');
       await pc.esperar('document.querySelector(".aparelhos-agora") && document.querySelector(".aparelhos-agora").innerText.includes("sem sinal da central")', 15000, 'sem sinal');
-      igual(await pc.avaliar('document.querySelectorAll(".aparelhos-agora .conexao.ok").length'), 0, 'ninguém verde sem sinal');
+      certo(!(await pc.avaliar(`!!${LINHA('Tablet da Hidrólise')}.querySelector(".conexao.ok")`)), 'ninguém da central fica verde sem sinal');
     });
-    await teste(g, 'Escritório pela nuvem: Cálculos e Rastreamento abrem direto, sem Salvar, e Enviar abre os formatos', async () => {
+    await teste(g, 'Escritório pela nuvem: Cálculos e Rastreamento abrem direto, sem pedir senha, e Enviar abre os formatos', async () => {
       await pc.tocar('[data-a="esc-abrir"][data-t="esc-calculos"]');
       await pc.esperar('document.body.innerText.includes("Hidrolisado e vinho")', 10000, 'cálculos');
-      certo(!(await pc.avaliar('!!document.querySelector("[data-a=esc-salvar], [data-a=esc-entrar]")')), 'cálculos sem salvar nem pedir senha');
+      certo(!(await pc.avaliar('!!document.querySelector("[data-a=esc-entrar]")')), 'cálculos sem pedir senha');
       await pc.tocar('[data-a="voltar"]');
       await pc.tocar('[data-a="esc-abrir"][data-t="esc-rastreamento"]');
       await pc.esperar('document.body.innerText.includes("Insumos utilizados")', 10000, 'rastreamento');
-      certo(!(await pc.avaliar('!!document.querySelector("[data-a=esc-salvar], [data-a=esc-entrar]")')), 'rastreamento sem salvar');
+      certo(!(await pc.avaliar('!!document.querySelector("[data-a=esc-entrar]")')), 'rastreamento sem pedir senha');
       await pc.foto(path.join(FOTOS, 'escritorio-pc.png'));
       await pc.tocar('[data-a="esc-arquivo"]');
       await pc.esperar('!!document.querySelector(".modal")', 8000, 'enviar');
       await pc.tocar('.modal [data-k="x"]').catch(() => {});
+    });
+    await teste(g, 'Ajustes do computador: em quadros, sem rolar, e cada quadro abre a sua parte', async () => {
+      await pc.avaliar('ir({ tela: "admin" }); true');
+      await pc.esperar('document.querySelectorAll(".quadro-menu").length === 3', 8000, 'os quadros');
+      certo(await pc.avaliar('(() => { const m = document.querySelector("main.quadros-menu"); return m.scrollHeight <= m.clientHeight + 1; })()'), 'apareceu rolagem');
+      await pc.foto(path.join(FOTOS, 'ajustes-pc.png'));
+      await pc.tocar('[data-a="categoria"][data-cat="servidor"]');
+      await pc.esperar('!!document.querySelector("[data-a=sair-nuvem]")', 5000, 'a parte do servidor');
+      await pc.foto(path.join(FOTOS, 'ajustes-pc-servidor.png'));
     });
     certo(!pc.erros.length, pc.erros.join(' | '));
   } finally { await pc.fechar().catch(() => {}); await c.desligar(); await n.desligar(); }

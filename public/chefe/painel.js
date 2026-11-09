@@ -27,6 +27,7 @@
     const pend = data === hoje ? lista.flatMap((s) => s.pranchetas.map((pid) => resumoPrancheta(pid, data))).filter((r) => r.estado === 'pendente').length : 0;
     const ligados = aparelhosDoPainel().filter((a) => a.online).length;
     const subtitulo = cfg.demo ? 'Demonstração, dados só neste aparelho'
+      : cfg.soNuvem && !soVer() ? (sync.modo === 'online' ? 'Ligado ao banco em tempo real' : 'Procurando o banco')
       : cfg.soNuvem ? (sync.nuvemEm ? `Pela nuvem · atualizado às ${new Date(sync.nuvemEm).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}` : 'Pela nuvem')
       : sync.modo === 'online' ? (centralNoTablet() ? 'Servidor ligado neste aparelho' : 'Acompanhando a central em tempo real') : 'Procurando o servidor';
 
@@ -42,7 +43,7 @@
           <div class="numeros">
             <div><b>${todos.length}</b><span>anotações</span></div>
             <div class="${pend ? 'atencao' : ''}"><b>${pend}</b><span>pendências</span></div>
-            ${cfg.soNuvem ? `<div data-num="ligados"><b>${sync.aparelhosNuvem ? ligados : '-'}</b><span>aparelhos ligados</span></div>`
+            ${soVer() ? `<div data-num="ligados"><b>${sync.aparelhosNuvem ? ligados : '-'}</b><span>aparelhos ligados</span></div>`
               : `<button class="numero-botao" data-num="ligados" data-a="aparelhos"><b>${cfg.demo && !st ? '-' : ligados}</b><span>aparelhos ligados</span></button>`}
           </div>
         </div>
@@ -61,7 +62,7 @@
               // o que falta vem primeiro; depois a dorna em andamento (o escritório vê as duas coisas)
               const agora = [pends[0], andando[0]].filter(Boolean).map((r) => r.texto.replace(/\.$/, '')).join('. ');
               const situacao = diasBuscando.has(data) ? 'Buscando as anotações na central...' : agora ? agora + '.' : regs.length ? `${contar(regs.length, 'anotação', 'anotações')}, a última às ${hora}` : 'Nada anotado neste dia';
-              const aparelho = cfg.demo || cfg.soNuvem ? '' : disp ? (disp.bloqueio ? 'Bloqueado' : disp.online ? `Ligado${disp.operador ? `, ${disp.operador}` : ''}` : situacaoDoAparelho(disp)) : 'Tablet não conectado';
+              const aparelho = cfg.demo || soVer() ? '' : disp ? (disp.bloqueio ? 'Bloqueado' : disp.online ? `Ligado${disp.operador ? `, ${disp.operador}` : ''}` : situacaoDoAparelho(disp)) : 'Tablet não conectado';
               const sinal = cfg.demo ? '' : disp && disp.online ? 'ok' : disp ? 'off' : '';
               return `<button class="setor-cartao ${pends.length ? 'pendente' : andando.length ? 'andamento' : regs.length ? 'feito' : ''}" data-a="abrir-setor" data-id="${s.id}">
                 <span class="desenho">${ico(s.icone)}</span>
@@ -72,7 +73,7 @@
           </section>
 
           <aside class="lateral-chefe">
-            ${veNoChefe('escritorio') ? blocoEscritorio() : ''}
+            ${veNoChefe('escritorio') ? blocoEscritorio(data) : ''}
             ${veNoChefe('relatorios') ? blocoTotais(data) : ''}
             ${veNoChefe('relatorios') ? `<section class="bloco">
               <h2>Compartilhar a folha do dia</h2>
@@ -103,9 +104,9 @@
         </div>
       </main>`;
   }
-  /** Escritório dentro do painel (versão 2.15): o lote do dia que fechou e as duas partes, sem trocar de aparelho. */
-  function blocoEscritorio() {
-    const dia = diaFechado();
+  /** Escritório dentro do painel (versão 2.15): o lote do dia escolhido e as duas partes, sem trocar de aparelho. */
+  function blocoEscritorio(data) {
+    const dia = diaDoEscritorio(data);
     const salvo = rastreioGuardado(dia);
     return `<section class="bloco escritorio-bloco">
       <h2>Escritório</h2>
@@ -132,7 +133,7 @@
       Pela nuvem, ligado = falou com a central até 2 min antes do último envio; sem envio há 5 min, ninguém aparece ligado. */
   const SEM_SINAL_DA_CENTRAL_MS = 5 * 60000;
   function aparelhosDoPainel() {
-    if (!cfg.soNuvem) return (sync.status && sync.status.aparelhos) || [];
+    if (!soVer()) return (sync.status && sync.status.aparelhos) || [];
     const em = sync.aparelhosNuvemEm || 0, semSinal = Date.now() - em > SEM_SINAL_DA_CENTRAL_MS;
     return (sync.aparelhosNuvem || []).map((a) => Object.assign({}, a, {
       online: !semSinal && a.vistoEm > 0 && em - a.vistoEm < 2 * 60000,
@@ -143,10 +144,10 @@
   function blocoAparelhosAgora() {
     const lista = aparelhosDoPainel().slice().sort((a, b) => Number(!!b.online) - Number(!!a.online));
     if (!lista.length) return '';
-    const em = sync.aparelhosNuvemEm || 0;
-    const aviso = cfg.soNuvem && Date.now() - em > SEM_SINAL_DA_CENTRAL_MS
+    const em = cfg.soNuvem && !soVer() ? (sync.status || {}).aparelhosEm || 0 : sync.aparelhosNuvemEm || 0;
+    const aviso = cfg.soNuvem && (em || soVer()) && Date.now() - em > SEM_SINAL_DA_CENTRAL_MS
       ? `<p class="sub aviso-sinal">${ico('alerta')} A usina está sem sinal da central desde ${new Date(em).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}.</p>` : '';
-    return `<section class="bloco aparelhos-agora"><div class="titulo-secao"><h2>Aparelhos agora</h2>${cfg.soNuvem ? '' : '<button class="btn pequeno" data-a="aparelhos">Ver todos</button>'}</div>${aviso}
+    return `<section class="bloco aparelhos-agora"><div class="titulo-secao"><h2>Aparelhos agora</h2>${soVer() ? '' : '<button class="btn pequeno" data-a="aparelhos">Ver todos</button>'}</div>${aviso}
       ${lista.slice(0, 8).map((a) => `<div class="agora-linha"><span class="conexao ${a.bloqueio ? 'off' : a.online ? 'ok' : 'off'}"><i></i></span>
         <span><b>${esc(funcaoDoAparelho(a))}</b><small>${esc(quemUsa(a))} · ${esc(situacaoDoAparelho(a))}</small></span></div>`).join('')}
       ${lista.length > 8 ? `<p class="sub">E mais ${lista.length - 8}.</p>` : ''}
@@ -180,7 +181,7 @@
   }
   /** Atalhos para as outras telas, só os que a pessoa pode usar. */
   function blocoIrPara() {
-    const itens = [['graficos', 'grafico', 'Gráficos', ''], ['relatorios', 'pasta', 'Relatórios', 'relatorios'], ...(cfg.soNuvem ? [] : [['aparelhos', 'wifi', 'Aparelhos', '']]),
+    const itens = [...((pessoaAtual() || {}).dono && !soVer() ? [['sala', 'servidor', 'Sala de controle', '']] : []), ['graficos', 'grafico', 'Gráficos', ''], ['relatorios', 'pasta', 'Relatórios', 'relatorios'], ...(soVer() ? [] : [['aparelhos', 'wifi', 'Aparelhos', '']]),
       ['pessoas', 'pessoas', 'Pessoas', 'pessoas'], ['registro', 'nota', 'Registro', 'registro'], ['config', 'ajustes', 'Usina', 'usina']]
       .filter(([, , , f]) => !f || veNoChefe(f));
     return `<section class="bloco ir-para"><h2>Ir para</h2><div class="grade-acoes">${itens.map(([a, i, t]) => `<button data-a="${a}">${ico(i)}<span>${t}</span></button>`).join('')}</div></section>`;

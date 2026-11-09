@@ -13,11 +13,11 @@ main.leitura { padding-bottom: 12px; }
 .tabela-leitura th { position: sticky; top: 0; z-index: 1; background: var(--papel-2); font-size: 15px; padding: 8px 6px; border-bottom: 2px solid var(--linha); white-space: nowrap; }
 .tabela-leitura td { border-bottom: 1px solid var(--linha-clara); padding: 4px; vertical-align: middle; text-align: center; }
 .tabela-leitura td.chave b { font-size: 20px; }
-.tabela-leitura td.chave small { display: block; font-size: 12px; color: var(--ambar-texto); font-weight: 700; }
+.tabela-leitura td.chave small { display: block; font-size: 14px; line-height: 1.15; color: var(--ambar-texto); font-weight: 700; }
 .tabela-leitura tr.fora td:not(.inc) { opacity: .45; }
 .marca-linha { width: 44px; height: 44px; border-radius: 8px; border: 2px solid var(--linha); background: var(--papel); display: grid; place-items: center; }
 .marca-linha.sel { background: var(--verde); border-color: var(--verde); color: var(--branco); }
-.cel-leitura { display: flex; flex-direction: column; align-items: stretch; gap: 2px; min-width: 86px; width: 100%; padding: 4px; border-radius: 8px; border: 2px solid transparent; }
+.cel-leitura { display: flex; flex-direction: column; align-items: stretch; gap: 2px; min-width: 86px; min-height: 42px; width: 100%; padding: 4px; border-radius: 8px; border: 2px solid transparent; }
 .cel-leitura img { height: 30px; width: 100%; object-fit: contain; object-position: left center; background: var(--branco); border-radius: 4px; }
 .cel-leitura b { font-size: 20px; min-height: 26px; }
 .cel-leitura.duvida { background: var(--ambar-fundo); border-color: var(--ambar); color: var(--ambar-texto); }

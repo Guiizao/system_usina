@@ -19,6 +19,7 @@ testes/java/saida/
 # Nuvem: estado local do wrangler, senhas e o APK que vai para a nuvem
 nuvem/.wrangler/
 nuvem/segredos.txt
+nuvem/segredos-*.txt
 nuvem/publico/atualizacao/pranchetas.apk
 nuvem/publico/atualizacao/versao.json
 nuvem/publico/telas/
@@ -29,3 +30,4 @@ apk/.omc/
 
 # área de trabalho dos planos (superpowers)
 .superpowers/
+nuvem/publico/atualizacao/versao.sig

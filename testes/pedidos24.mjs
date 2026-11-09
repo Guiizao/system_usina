@@ -61,8 +61,9 @@ export async function testarPedidos24(nav, ligar, porta, grupo) {
     await teste(grupo, 'tablet chefe mudando o que o operador anotou: pede a senha dele; senha errada não salva', async () => {
       // o encarregado cadastra a senha de Guilherme
       await esc.tocar('[data-a="config"]'); await senhaSeAparecer(esc);
+      await esc.tocar('[data-a="categoria"][data-cat="operadores"]');
       await esc.tocar('[data-a="op-senha"][data-setor="hidrolise"][data-i="0"]'); await esc.teclar(['4', '3', '2', '1', 'ok']);
-      await esc.tocar('[data-a="voltar"]');
+      await esc.tocar('[data-a="voltar"]'); await esc.tocar('[data-a="voltar"]');
       await esc.tocar('[data-a="abrir-setor"][data-id="hidrolise"]');
       await esc.tocar('[data-a="linha"][data-chave="1"]');
       await esc.tocar('[data-quadro="brix"]'); await esc.teclar(['2', '0']); await esc.tocar('[data-ed="ocultar"]');
@@ -151,6 +152,7 @@ export async function testarPedidos24(nav, ligar, porta, grupo) {
 
     await teste(grupo, 'apagar os dados deste aparelho: volta para escolher onde ele vai ficar', async () => {
       await chefeCel.tocar('[data-a="admin"]'); await senhaSeAparecer(chefeCel);
+      await chefeCel.tocar('[data-a="categoria"][data-cat="dados"]');
       await chefeCel.tocar('[data-a="limpar-tudo"]'); await chefeCel.tocar('[data-k="sim"]');
       await chefeCel.esperar('document.body.innerText.includes("Onde este aparelho vai ficar?")', 8000, 'escolher a função de novo');
       igual(await chefeCel.avaliar('Object.keys(JSON.parse(localStorage.getItem("usina.registros") || "{}")).filter((id) => !id.startsWith("config")).length'), 0, 'anotações que sobraram');

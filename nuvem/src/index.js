@@ -10,7 +10,10 @@
  *   POST /aparelho/entrar    senha pessoal libera leitura remota    (sem token)
  *   POST /aparelho/sair      revoga a chave pessoal deste aparelho  (X-Aparelho + Bearer HMAC)
  *   POST /aparelho/sync      os aparelhos enviam e puxam anotações   (X-Aparelho + Bearer HMAC)
+ *   /banco/...               3.0: os aparelhos falam direto com o banco, com as rotas da central (veja banco.js)
  *   POST /central/enviar     a central manda as anotações novas      (Authorization: Bearer <SEGREDO_CENTRAL>)
+ *   GET  /central/novidades  a central puxa o que chegou por aqui     (Authorization: Bearer <SEGREDO_CENTRAL>)
+ *   POST /central/sincronia  pessoas, níveis e código, nos dois sentidos (Authorization: Bearer <SEGREDO_CENTRAL>)
  *   GET  /central/estado     a central pergunta até onde a nuvem tem  (Authorization: Bearer <SEGREDO_CENTRAL>)
  *   GET  /api/v1/...         a API de leitura, igual à da central     (Authorization: Bearer <TOKEN_LEITURA>)
  *   GET  /aparelho/<id>      o aplicativo pergunta se este aparelho foi bloqueado (sem senha; responde só sobre ele)
@@ -21,6 +24,10 @@
  */
 import leitura from '../../api-leitura.js';
 import Juncao from '../../public/nucleo/juncao.js';
+import { criarBanco, Sala } from './banco.js';
+import { enviarAoServidorDaUsina } from './usina.js';
+
+export { Sala };
 
 const FUSO = -180; // a usina fica em -03:00 (o Brasil não tem mais horário de verão)
 const MAX_POR_ENVIO = 500;
@@ -70,7 +77,7 @@ const tokenDoAparelho = (segredo, aparelho) => assinar(segredo, 'aparelho|' + ap
 /* 2.16: quem entra pela nuvem recebe outra chave, só de ver, presa à pessoa e à senha dela. Trocar a senha, desativar
    ou tirar Relatórios e Escritório tira o acesso; e ela nunca vale como a chave de um tablet (mesmo com o número dele). */
 const FUNCOES_NA_NUVEM = ['relatorios', 'escritorio'];
-const veNaNuvem = (p) => !!(p && p.nuvem && p.nuvem.selado && Array.isArray(p.funcoes) && p.funcoes.some((f) => FUNCOES_NA_NUVEM.includes(f)));
+const veNaNuvem = (p) => !!(p && p.ativo !== false && p.nuvem && p.nuvem.selado && Array.isArray(p.funcoes) && p.funcoes.some((f) => FUNCOES_NA_NUVEM.includes(f)));
 async function pessoasDaNuvem(req, env) {
   if (req.method !== 'GET') return responder(405, { erro: 'Use GET' });
   // conferência ainda sem selo (chegou na 2.16.0) também aparece: ela é selada na primeira entrada
@@ -278,7 +285,7 @@ async function puxarAparelho(env, aparelho, corpo, recusados = [], leitor = fals
     resposta.aparelhosEm = Number(info.aparelhosEm) || 0;
   }
   const { results } = await env.DB.prepare(`SELECT json, seq AS cursor, 0 AS fonte FROM
-      (SELECT json, seq FROM registros WHERE seq > ? AND data >= ? ORDER BY seq LIMIT 501)
+      (SELECT json, seq FROM registros WHERE seq > ? AND data >= ? AND data <> 'config' AND prancheta <> 'registro' ORDER BY seq LIMIT 501)
     UNION ALL SELECT json, ordem AS cursor, 1 AS fonte FROM
       (SELECT json, ordem FROM pendentes WHERE ordem > ? AND aparelho <> ?
         AND json_extract(json, '$.data') <> 'config' AND json_extract(json, '$.prancheta') <> 'registro'
@@ -324,8 +331,8 @@ async function receber(req, env) {
   const lista = Array.isArray(corpo.registros) ? corpo.registros : null;
   if (!lista || lista.length > MAX_POR_ENVIO) return responder(400, { erro: `mande de 0 a ${MAX_POR_ENVIO} anotações por vez` });
   if ('aparelhos' in corpo && !aparelhosValidos(corpo.aparelhos)) return responder(400, { erro: 'Lista de aparelhos inválida (máximo 200, textos até 80 caracteres)' });
-  // Dias de produção para os aparelhos, incluindo avisos; a API do escritório continua filtrando os internos.
-  const regs = lista.filter((r) => r && typeof r.id === 'string' && leitura.ehDia(r.data) && r.prancheta !== 'registro' && Number.isFinite(Number(r.seq)));
+  // 3.0: também a configuração e o registro do sistema ficam no banco; a API do escritório continua filtrando os internos.
+  const regs = lista.filter((r) => r && typeof r.id === 'string' && r.id === `${r.data}|${r.prancheta}|${r.chave}` && (r.data === 'config' || leitura.ehDia(r.data)) && Number.isSafeInteger(r.atualizadoEm) && Juncao.valido(r));
   // aparelhos bloqueados: a central manda a lista inteira quando ela muda (vazia = ninguém bloqueado).
   // Lista grande demais é recusada (antes era cortada sem avisar). Só fica o que o aparelho precisa saber: nada da senha.
   let bloqueios = null;
@@ -334,34 +341,20 @@ async function receber(req, env) {
     bloqueios = corpo.bloqueios.filter((b) => b && typeof b.id === 'string' && /^[\w.-]{1,80}$/.test(b.id))
       .map((b) => ({ id: b.id, em: Number(b.em) || 0, rev: Number(b.rev) || 0, modo: b.modo === 'senha' ? 'senha' : 'trava', apagar: !!b.apagar }));
   }
-  let pessoas = null;
-  if ('pessoas' in corpo) {
-    if (!Array.isArray(corpo.pessoas) || corpo.pessoas.length > 500) return responder(400, { erro: 'Lista de pessoas inválida' });
-    pessoas = [];
-    for (const p of corpo.pessoas) {
-      if (!p || !idAparelho(p.id) || typeof p.nome !== 'string' || !p.nome.trim() || p.nome.length > 40
-        || !['administrador', 'encarregado', 'consulta'].includes(p.nivel) || typeof p.ativo !== 'boolean'
-        || !Array.isArray(p.funcoes) || p.funcoes.length > 100 || p.funcoes.some((f) => typeof f !== 'string' || !/^[a-z_]{2,30}$/.test(f))) return responder(400, { erro: 'Pessoa inválida' });
-      if (!p.ativo) continue;
-      // Lista explícita: nem senha, nem sal/resumo da central podem ser persistidos aqui.
-      const copia = { id: p.id, nome: p.nome, nivel: p.nivel, ativo: true, funcoes: [...new Set(p.funcoes)].filter((f) => !['conexao', 'sistema'].includes(f)) };
-      if (p.nuvem !== undefined) {
-        const n = p.nuvem;
-        if (!n || typeof n.sal !== 'string' || !/^[a-f0-9]{32}$/.test(n.sal)
-          || typeof n.verificador !== 'string' || !/^[a-f0-9]{64}$/.test(n.verificador) || n.iteracoes !== 1000) return responder(400, { erro: 'Verificador inválido' });
-        copia.nuvem = { sal: n.sal, iteracoes: n.iteracoes, selado: await selar(env.SEGREDO_CENTRAL, n.verificador) };
-      }
-      pessoas.push(copia);
-    }
-    if (new Set(pessoas.map((p) => p.id)).size !== pessoas.length) return responder(400, { erro: 'Pessoa repetida' });
-  }
   const info = await lerInfo(env);
   const consultas = [];
   const geracao = String(corpo.geracao || '');
-  // a central foi zerada (Apagar todos os dados do sistema) ou é outra central: a cópia começa de novo
-  if (geracao && info.geracao && geracao !== info.geracao) {
-    consultas.push(env.DB.prepare('DELETE FROM registros'), env.DB.prepare('DELETE FROM dias'), env.DB.prepare('DELETE FROM pessoas'));
-    consultas.push(env.DB.prepare("DELETE FROM info WHERE chave IN ('aparelhos', 'aparelhosEm')"));
+  // Só o zerar explícito pode substituir a cópia de outra geração.
+  if (info.geracao && geracao !== info.geracao) {
+    if (!Array.isArray(corpo.geracoesZeradas) || !corpo.geracoesZeradas.includes(info.geracao)) {
+      return responder(409, { geracao: info.geracao, erro: 'A nuvem é de outra central, nada foi enviado' });
+    }
+    // zerar não tira as pessoas (são da usina, não das anotações de teste)
+    consultas.push(env.DB.prepare(`INSERT INTO registros_apagados (id, data, prancheta, setor, chave, seq, atualizadoEm, apagado, json, apagado_em)
+      SELECT id, data, prancheta, setor, chave, seq, atualizadoEm, apagado, json, ? FROM registros`).bind(Date.now()));
+    // a configuração fica, como nas centrais (operadores, contatos, listas e os limites de cada nível continuam)
+    consultas.push(env.DB.prepare("DELETE FROM registros WHERE data <> 'config'"), env.DB.prepare('DELETE FROM dias'));
+    consultas.push(env.DB.prepare("DELETE FROM info WHERE chave IN ('aparelhos', 'aparelhosEm', 'usinaSeq', 'usinaDesde', 'usinaInicio')"));
   }
   const novasInfo = { geracao, ultimoEnvio: String(Date.now()) };
   if ('aparelhos' in corpo) { novasInfo.aparelhos = JSON.stringify(corpo.aparelhos); novasInfo.aparelhosEm = novasInfo.ultimoEnvio; }
@@ -379,33 +372,16 @@ async function receber(req, env) {
   consultas.push(env.DB.prepare(TIRAR_PIN_ANTIGO));
   consultas.push(env.DB.prepare(`INSERT INTO info (chave, valor) SELECT key, value FROM json_each(?) WHERE true
     ON CONFLICT(chave) DO UPDATE SET valor = excluded.valor`).bind(JSON.stringify(novasInfo)));
-  if (pessoas) {
-    consultas.push(env.DB.prepare('DELETE FROM pessoas'));
-    consultas.push(env.DB.prepare("INSERT INTO pessoas (id, json) SELECT json_extract(value, '$.id'), value FROM json_each(?)").bind(JSON.stringify(pessoas)));
-  }
-  if (regs.length) {
-    const texto = JSON.stringify(regs);
-    consultas.push(env.DB.prepare(`INSERT INTO registros (id, data, prancheta, setor, chave, seq, atualizadoEm, apagado, json)
-      SELECT json_extract(value, '$.id'), json_extract(value, '$.data'), json_extract(value, '$.prancheta'), json_extract(value, '$.setor'),
-             json_extract(value, '$.chave'), json_extract(value, '$.seq'), json_extract(value, '$.atualizadoEm'),
-             CASE WHEN json_extract(value, '$.apagado') THEN 1 ELSE 0 END, value
-      FROM json_each(?) WHERE true
-      ON CONFLICT(id) DO UPDATE SET data = excluded.data, prancheta = excluded.prancheta, setor = excluded.setor, chave = excluded.chave,
-        seq = excluded.seq, atualizadoEm = excluded.atualizadoEm, apagado = excluded.apagado, json = excluded.json
-      WHERE excluded.seq >= registros.seq`).bind(texto));
-    // quantas anotações cada dia tem (a lista de dias não precisa ler o banco inteiro)
-    const dias = JSON.stringify([...new Set(regs.map((r) => r.data))]);
-    consultas.push(env.DB.prepare('UPDATE dias SET anotacoes = 0 WHERE data IN (SELECT value FROM json_each(?))').bind(dias));
-    consultas.push(env.DB.prepare(`INSERT INTO dias (data, anotacoes)
-      SELECT data, COUNT(*) FROM registros WHERE apagado = 0 AND prancheta NOT IN ('avisos', 'avisos-recibo') AND data IN (SELECT value FROM json_each(?)) GROUP BY data
-      ON CONFLICT(data) DO UPDATE SET anotacoes = excluded.anotacoes`).bind(dias));
-  }
   if (bloqueios) {
     consultas.push(env.DB.prepare('DELETE FROM bloqueios'));
     if (bloqueios.length) consultas.push(env.DB.prepare("INSERT INTO bloqueios (id, json) SELECT json_extract(value, '$.id'), value FROM json_each(?) WHERE true").bind(JSON.stringify(bloqueios)));
   }
   await env.DB.batch(consultas);
-  const maior = regs.reduce((m, r) => Math.max(m, Number(r.seq)), 0);
+  // a lista de pessoas de uma central antiga junta como a da sincronia: ninguém some por não ter vindo
+  if (Array.isArray(corpo.pessoas) && corpo.pessoas.length) await banco.sincronia(new Request('https://banco/', { method: 'POST', body: JSON.stringify({ pessoas: corpo.pessoas }) }), env);
+  const aceitos = await banco.gravar(env, regs);
+  if (aceitos) await banco.avisar(env, { seq: await banco.seqAtual(env), de: 'central' });
+  const maior = regs.reduce((m, r) => Math.max(m, Number(r.seq) || 0), 0);
   return responder(200, { ok: true, recebidos: regs.length, seq: maior, telas: await telasPublicadas(env) });
 }
 
@@ -444,19 +420,21 @@ async function apiDeLeitura(url, env) {
   }
   const m = p.match(/^\/api\/v1\/dias\/(\d{4}-\d{2}-\d{2})$/);
   if (m) {
-    const { results } = await env.DB.prepare("SELECT json FROM registros WHERE data = ? AND prancheta NOT IN ('avisos', 'avisos-recibo')").bind(m[1]).all();
+    const { results } = await env.DB.prepare("SELECT json FROM registros WHERE data = ? AND prancheta NOT IN ('avisos', 'avisos-recibo', 'registro')").bind(m[1]).all();
     return responder(200, api.dia(m[1], results.map((l) => JSON.parse(l.json))));
   }
   if (p === '/api/v1/registros') {
     const desde = Number(url.searchParams.get('desde') || 0) || 0;
     const limite = Math.min(2000, Math.max(1, Number(url.searchParams.get('limite') || 500) || 500));
-    const { results } = await env.DB.prepare("SELECT json FROM registros WHERE seq > ? AND prancheta NOT IN ('avisos', 'avisos-recibo') ORDER BY seq LIMIT ?").bind(desde, limite + 1).all();
+    const { results } = await env.DB.prepare("SELECT json FROM registros WHERE seq > ? AND data <> 'config' AND prancheta NOT IN ('avisos', 'avisos-recibo', 'registro') ORDER BY seq LIMIT ?").bind(desde, limite + 1).all();
     const lote = results.slice(0, limite).map((l) => JSON.parse(l.json));
-    const ultimo = await env.DB.prepare("SELECT MAX(seq) AS seq FROM registros WHERE prancheta NOT IN ('avisos', 'avisos-recibo')").first();
+    const ultimo = await env.DB.prepare("SELECT MAX(seq) AS seq FROM registros WHERE data <> 'config' AND prancheta NOT IN ('avisos', 'avisos-recibo', 'registro')").first();
     return responder(200, { seq: lote.length ? lote[lote.length - 1].seq : (ultimo && ultimo.seq) || 0, maisDepois: results.length > limite, registros: lote.map(api.registro) });
   }
   return responder(404, { erro: 'rota desconhecida' });
 }
+
+const banco = criarBanco({ responder, mesmoSegredo, tokenDoAparelho, leitorDaNuvem, idAparelho, senhaDoPedido, reservarTentativa, devolverTentativa, corpoFila, selar, hex, telasPublicadas });
 
 export default {
   async fetch(req, env) {
@@ -467,6 +445,7 @@ export default {
       if (p === '/' || p === '') {
         return new Response('Nuvem das Pranchetas Digitais da Ubirálcool: no ar.\n', { headers: { 'Content-Type': 'text/plain; charset=utf-8' } });
       }
+      if (p.startsWith('/banco/')) return await banco.rota(req, env, url);
       if (p === '/aparelho/pessoas') return await pessoasDaNuvem(req, env);
       if (p === '/aparelho/entrar') return await entrar(req, env);
       if (p === '/aparelho/sair') return await sair(req, env);
@@ -476,6 +455,8 @@ export default {
         if (!(await mesmoSegredo(senhaDoPedido(req), env.SEGREDO_CENTRAL))) return responder(401, { erro: 'Senha da central errada' });
         if (p === '/central/enviar' && req.method === 'POST') return await receber(req, env);
         if (p === '/central/estado' && req.method === 'GET') return await estado(env);
+        if (p === '/central/novidades' && req.method === 'GET') return await banco.novidades(env, url);
+        if (p === '/central/sincronia' && req.method === 'POST') return await banco.sincronia(req, env);
         return responder(404, { erro: 'rota desconhecida' });
       }
       // o aplicativo pergunta se foi bloqueado (versão 2.11): só responde sobre o aparelho pedido, sem nada da senha.
@@ -499,4 +480,6 @@ export default {
       return responder(500, { erro: 'erro na nuvem: ' + (e && e.message ? e.message : e) });
     }
   },
+  // 3.0: de 10 em 10 minutos, o que falta mandar ao Servidor da Usina (sem o endereço nos segredos, não faz nada)
+  scheduled: (evento, env, ctx) => ctx.waitUntil(enviarAoServidorDaUsina(env, evento.scheduledTime, FUSO)),
 };

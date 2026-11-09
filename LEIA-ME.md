@@ -4,6 +4,51 @@ Troca as pranchetas de papel (POP 011, POP-03-FOR-004, controles diários da cal
 
 Guia com o passo a passo ilustrado: https://claude.ai/artifact/CmJHBvqjeGRWHVYE5R9fWU
 
+## Escritório segue a data do painel (versão 3.0.1)
+
+Só as telas mudaram: vai pela atualização rápida, sem instalar APK nem exe em quem já está na 3.0.0. O quadro Escritório do painel e o menu lateral usam a data escolhida; no dia de hoje, que ainda não fechou, continuam no último dia que fechou (`diaDoEscritorio`, em `chefe/escritorio.js`). O lote leva a data do fechamento: o painel em 31/10 mostra o lote de 01/11.
+
+Duas correções de publicação que apareceram ao testar o exe 3.0.0 contra a nuvem real:
+- A nuvem redirecionava `/telas/index.html` e o programa do Windows recusa redirecionamento, então ele nunca conseguia baixar as telas. Agora `html_handling = "none"` em `nuvem/wrangler.toml`.
+- Pasta escondida de ferramenta dentro de `public` (`.omc`) ia junto no pacote. Agora `apk/versao-do-apk.js` e `windows/construir.js` deixam de fora. Antes de publicar, compare a lista de arquivos do pacote novo com a do publicado.
+
+## Banco de dados no centro (versão 3.0)
+
+**Como os dados andam.** O banco de dados fica na nuvem (Cloudflare) e é o ponto principal. O aparelho com internet fala direto com ele. A central do Wi-Fi vira uma ponte: quem está só no Wi-Fi da usina fala com a central, e ela troca com o banco a cada 30 segundos. Sem internet tudo continua pelo Wi-Fi e sobe depois. O computador não guarda o banco: fala com ele e fica com uma cópia.
+
+**As regras que não mudam:**
+- Falta de dado nunca é apagamento. Zerar só acontece quando alguém zera de propósito.
+- Em cada campo vale a digitação mais nova. Reenviar a mesma coisa não muda nada.
+- Relógio adiantado mais de 5 minutos vale a hora de quem recebeu.
+- Pessoas, senhas, funções, tabelas e níveis também ficam no banco, linha por linha, cada uma com a hora em que mudou.
+- Todo aparelho, APK ou Windows, guarda os dados em `Documentos/Usina/BackupUsina`, de 10 em 10 minutos: um arquivo por dia (últimos 2 anos, todos os setores, puxados do banco ou da central) e `copia-<aparelho>.json` com o que está na memória dele. Sem senhas e sem a lista de pessoas.
+
+**Em tempo real.** Quando alguém salva, o banco avisa os outros na hora pela sala ao vivo. O que está sendo digitado aparece nos outros como "ainda não salvo" e não fica gravado: com internet passa pela sala, de segundo em segundo; só no Wi-Fi passa pela central, de 2 em 2 segundos. Aparelho com internet e aparelho só no Wi-Fi não veem o rascunho um do outro: veem depois de salvar.
+
+**Quando o banco cai.** Nada para. Cada aparelho guarda o que anota, todos trocam pelo Wi-Fi da central (tablet chefe ou computador) e, quando o banco volta, tudo sobe sozinho. Aparelho novo puxa tudo da central ou do banco; aparelho que estava desligado atualiza ao ligar. Sem banco e sem central ligada, cada aparelho só guarda o seu, até um dos dois voltar: para não ficar assim, qualquer tablet vira servidor em Ajustes > Conexão, e os outros entram com o código dele. Trocar ou reinstalar a central com o banco fora também não perde nada: cada aparelho devolve o que guarda na pasta (`/api/devolver`), e a central só pega o que não tem. O teste de ponta a ponta é `testes/sem-nuvem30.mjs`.
+
+**Os dois bancos.** O da Cloudflare é o principal e guarda tudo: anotações, pessoas, senhas, permissões, histórico. O Servidor da Usina (função `producao-receber`, do Evandro) recebe só a produção: todos os campos e os totais de cada dia fechado, às 07:00, e de novo o dia inteiro se ele for corrigido (`nuvem/src/usina.js`, teste `testes/usina30.mjs`). Fica desligado até ter os segredos `USINA_URL` (https) e `USINA_CHAVE` na nuvem. O formato é o mesmo do envio por turno que o Evandro já conhece: POST em JSON, cabeçalho `X-Pranchetas-Segredo`, resposta 2xx confirma, corpo igual ao de `/api/v1/totais?dia=` com `turnoEncerrado`, mais a produção completa em `producao` (texto para ele em `API-mudancas-3.0.txt`). Dias passados: `USINA_DESDE`.
+
+**Quanto fica guardado.** O banco guarda tudo, sem limite de dias. A central guarda 90 dias na memória e o resto em `BackupUsina`. A cópia de cada aparelho em `Documentos/Usina/BackupUsina` fica com 2 anos. O tablet chefe guarda 20 dias na memória (o limite é do navegador) e busca os outros quando alguém abre; sem banco e sem central, abre da cópia dele. A lista de Relatórios abre com 90 dias, e o botão traz os mais antigos. Apagar todos os dados deixa cópia em `BackupUsina/antes-de-zerar-*` e na tabela `registros_apagados` do banco.
+
+**Tabelas.** Desligar (`pranchetasDesligadas`) dá para desfazer. Remover de vez (`folhas._removidas`, só o dono) tira do setor, dos tablets e dos relatórios; o que foi anotado continua no banco e nas cópias. Campo novo já pode nascer com mínimo e máximo, que viram avisos de baixo e de alto.
+
+**Menus de configuração.** A Usina e a engrenagem abrem em quadros, dois a dois, numa tela só (`telaDeQuadros`, `chefe/configuracoes-da-usina.js`). Cada quadro abre uma parte (`v.cat`). Parte nova: um quadro na lista e um `if` em `telaConfig` ou `telaAdmin`. `testes/menus30.mjs` confere os 15 tamanhos sem rolar.
+
+**Quando salva e envia.** Ao tocar em Salvar, ao sair da folha, quando o aplicativo vai para o fundo, depois de 5 minutos sem mexer e na troca de turno. A sincronização roda a cada 5 segundos e a central troca com o banco a cada 30 segundos (e 5 segundos depois de receber algo). Não salva sozinho: tablet sem operador escolhido, e correção do tablet chefe em linha de outra pessoa, que continua pedindo a senha dela.
+
+**O que apaga o quê.** Apagar dados deste aparelho e desligar o servidor não mexem na central nem no banco: depois o aparelho baixa de novo o que precisar. O único botão que apaga do banco é Apagar todos os dados do sistema, com a senha do programador.
+
+**Cargos.** Dono (ADM master), Administrador, Encarregado, Funcionário (troca só o serviço daquele aparelho) e Usuário (só consulta). A pessoa faz o que está nas funções dela, no nível do tablet e no teto do aparelho, tudo ao mesmo tempo. Quem tem a função de entrar no chefe entra direto, sem configurar o nível primeiro. A ficha da pessoa mostra o que ela pode em cada nível (1, 2 e 3). O código de ativação só muda no nível 3 ou com a permissão dada à pessoa.
+
+**Sala de controle (só o dono).** Lista os aparelhos, se é computador ou tablet, tipo de conexão e histórico de alterações. O nome do Wi-Fi o Android só entrega com permissão de localização, então os aparelhos aparecem agrupados por rede (Rede A, Rede B), pelo endereço da internet.
+
+**Tabelas novas e saída.** Em Folhas e avisos, o dono cria tabela em qualquer setor e tira do setor (os dados ficam guardados). Cada campo tem tipo (só números, só letras, letras e números, letras prontas, hora, marcar OK) e saída: total do dia (soma, média ou último), se vai no relatório e se vai na API.
+
+**Limites conhecidos.**
+- Correção em dia arquivado feita só pelo Wi-Fi não sobe sozinha para o banco. Com internet no aparelho, sobe.
+- O espelho em Documentos não é relido: o Android só deixa o aplicativo ver os próprios arquivos. A fonte, depois de reinstalar, é o banco.
+
 ## Antes de instalar
 
 1. A senha do administrador fica em `public/forms.js` (`pinAdmin`, 159357 desde a versão 2.4). Na primeira vez que a central liga na versão 2.9, ela cadastra o Guilherme como administrador com essa senha. Nos tablets dos setores ela só vale quando a central está fora do ar.
@@ -103,6 +148,14 @@ Folhas lidas hoje: Hidrólise (Anexo I), Sacarificação (Anexo II) e todas as d
 
 O treino da rede fica fora do aplicativo (Python + PyTorch), com a base EMNIST de letras de mão, 90 fontes cursivas e de mão do Google Fonts, números desenhados no jeito brasileiro (1 com gancho, 7 cortado) e células reais das folhas da usina.
 
+### Leitor na versão 3.0
+
+- **Caldeira:** as horas ficam nas colunas e os itens nas fileiras. A última coluna (7h do dia seguinte) não é lida, porque ela é a primeira da folha do outro dia. `6K` é 6 e traço é vazio. Na dúvida, a pressão sugere o valor das horas vizinhas, em amarelo.
+- **Cabeçalho:** é a coluna impressa que diz onde a tabela começa (1, 2, 3... nos Anexos e 07:00, 08:00... no POP-03). Ela também escolhe o giro da foto. Se a borda da tabela ficou fora da foto, o leitor calcula a coluna que falta.
+- **Medido em 02/11/2026** (`node testes/leitor30.mjs`): nas duas fotos da mesma folha da caldeira, 155 e 153 de 168 células, com 2 e 3 erros entre as de confiança alta. A rede não foi treinada com essa folha. Sacarificação e Hidrólise deram 150 de 150 e 220 de 220, mas essas folhas entraram no treino: o número justo delas é o de folha nunca vista, de 77% a 89%.
+- **Treinar de novo com a caldeira:** precisa da base EMNIST (560 MB) e dos 500 mil exemplos gerados, e de mais folhas com gabarito (`treino-leitor/gabarito.py`).
+- **Destilaria:** ainda não é lida.
+
 ## Dia da Hidrólise (versão 2.2)
 
 Do jeito que é feito na área:
@@ -130,7 +183,7 @@ A memória do navegador do Android guarda uns 5 milhões de letras, o que dá pe
 
 - **Tablet do setor:** guarda os últimos 3 dias (o que ainda não foi enviado nunca sai da memória).
 - **Tablet chefe:** guarda os últimos 20 dias. Um dia mais antigo é buscado na central quando alguém abre (o painel mostra "Buscando as anotações na central...").
-- **Central:** guarda na memória os últimos 60 dias. Os mais antigos ficam só em `BackupUsina`, um arquivo por dia, e continuam abrindo no painel, no Excel e no XML.
+- **Central:** guarda na memória os últimos 90 dias. Os mais antigos ficam só em `BackupUsina`, um arquivo por dia, e continuam abrindo no painel, no Excel e no XML.
 - Aparelho que ficou muito tempo sem Wi-Fi manda as anotações em lotes de 300.
 
 ## Tablet chefe trocado, reinstalado ou reiniciado (versão 2.3)

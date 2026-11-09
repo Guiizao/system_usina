@@ -124,7 +124,7 @@ try {
     try {
       await c.api('/api/nuvem', { acao: 'configurar', url: n.url, segredo: SEGREDO });
       const remoto = await conectarTeste(c.url, c.codigo());
-      const cred = (await remoto.pedir('/api/sync', { corpo: { aparelho: remoto.aparelho, registros: [] } })).json;
+      const cred = (await remoto.pedir('/api/sync', { corpo: { aparelho: remoto.aparelho, papel: 'caldeira', registros: [] } })).json;
       const rast = (chave, extra = {}) => reg(chave, { id: `${dia}|rastreamento|${chave}`, prancheta: 'rastreamento', ...extra });
       const puxar = async () => {
         await c.api('/api/nuvem', { acao: 'enviar' });
@@ -149,12 +149,19 @@ try {
         await sync(remoto.aparelho, [r], { geracao: cred.geracao }); await puxar();
         const corrigido = await correcao(r); igual(corrigido.valores, original.valores); certo(corrigido.seq > 0); certo(!corrigido.apagado);
       });
-      await teste(g, `${nome}: recusa por bloqueio e por geração também publica correção`, async () => {
+      await teste(g, `${nome}: bloqueio publica correção; geração desconhecida preserva e entra na central`, async () => {
         await c.api('/api/aparelhos', { acao: 'bloquear', id: remoto.aparelho, modo: 'trava' });
         for (const geracao of [cred.geracao, 'antiga']) {
           const r = reg('recusa-' + geracao, { atualizadoEm: Date.now() + 120000 });
           igual((await n.pedir('/fila', { aparelho: remoto.aparelho, senha: token(remoto.aparelho), corpo: { registros: [r], geracao } })).status, 200);
-          await puxar(); igual((await correcao(r)).apagado, true);
+          await puxar();
+          if (geracao === cred.geracao) igual((await correcao(r)).apagado, true);
+          else {
+            const salvo = (await c.api('/api/registros?desde=0')).registros.find((x) => x.id === r.id);
+            certo(salvo && !salvo.apagado, 'a geração desconhecida perdeu a anotação');
+            igual(salvo.valores, r.valores);
+            await esperar(async () => (await sync('observador')).json.registros.some((x) => x.id === r.id && !x.apagado), 'anotação preservada na nuvem');
+          }
           await c.api('/api/aparelhos', { acao: 'desbloquear', id: remoto.aparelho });
         }
       });

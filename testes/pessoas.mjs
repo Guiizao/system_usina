@@ -89,12 +89,12 @@ export async function testarPessoas(nav, ligar, porta, grupo) {
       await chefe.esperar('!!document.querySelector(".modal .visor")', 5000, 'pede a senha');
       await digitar(chefe, LUCAS);
       await chefe.esperar('document.getElementById("toast").textContent.includes("Lucas não pode")', 8000, 'Lucas recusado');
-      certo(!(await chefe.avaliar('!!document.querySelector("main.config")')), 'não podia ter aberto a Usina');
+      certo(!(await chefe.avaliar('!!document.querySelector("main.quadros-menu")')), 'não podia ter aberto a Usina');
       await semNotificacao(chefe);
       await chefe.tocar('[data-a="pessoa"]'); await chefe.tocar('[data-k="sair"]');
       await chefe.tocar('[data-a="config"]');
       await digitar(chefe, FERNANDO);
-      await chefe.esperar('!!document.querySelector("main.config")', 8000, 'Fernando abriu a Usina');
+      await chefe.esperar('!!document.querySelector("main.quadros-menu")', 8000, 'Fernando abriu a Usina');
       await chefe.tocar('[data-a="voltar"]');
     });
     await teste(grupo, 'o teto do tablet chefe nível 2 vale também para o administrador', async () => {
@@ -123,7 +123,7 @@ export async function testarPessoas(nav, ligar, porta, grupo) {
       await hid.esperar('document.getElementById("toast").textContent.includes("Lucas não pode")', 8000, 'Lucas recusado');
       await semNotificacao(hid);
       await hid.tocar('[data-a="admin"]'); await digitar(hid, FERNANDO);
-      await hid.esperar('!!document.querySelector("main.config")', 8000, 'ajustes abertos');
+      await hid.esperar('!!document.querySelector("main.quadros-menu")', 8000, 'ajustes abertos');
       await hid.tocar('[data-a="voltar"]');
     });
     await teste(grupo, 'registro: quem anotou e quem corrigiu, com o antes e o depois', async () => {

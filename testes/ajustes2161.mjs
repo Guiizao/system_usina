@@ -116,12 +116,13 @@ export async function testarAjustes2161(nav, ligar, porta, grupo) {
       await chefe.tocar('[data-a="voltar"]');
       await semNotificacao(chefe);
       await chefe.tocar('[data-a="config"]');
+      await chefe.tocar('[data-a="categoria"][data-cat="envios"]');
       await chefe.esperar('!!document.querySelector("main.config")', 8000, 'Usina aberta');
       for (const bloco of ['#bloco-turnos', '#bloco-base44']) {
         await chefe.esperar(`(document.querySelector(${JSON.stringify(bloco)}) || {}).textContent.includes("Não precisa preencher")`, 10000, bloco + ' com o aviso');
       }
       await chefe.foto(path.join(FOTOS, 'usina-envio.png'));
-      await chefe.tocar('[data-a="voltar"]');
+      await chefe.tocar('[data-a="voltar"]'); await chefe.tocar('[data-a="voltar"]');
     });
 
     await teste(grupo, 'envio: as 6 áreas ficam 3 + 3 e os 3 turnos numa linha (caixas iguais, nenhuma sozinha)', async () => {

@@ -88,24 +88,27 @@ window.USINA = {
   // O administrador ajusta por pessoa (ligar ou desligar uma função) e por tablet chefe (o que aquele aparelho deixa fazer).
   // "Pessoas e permissões" é só do administrador e não aparece na lista.
   funcoes: [
-    { id: 'anotar', nome: 'Anotar nas folhas do tablet chefe (Vinho e Fermentação)' },
-    { id: 'corrigir', nome: 'Corrigir o que os setores anotaram' },
-    { id: 'avisos', nome: 'Mandar avisos aos setores' },
-    { id: 'relatorios', nome: 'Relatórios: gerar, enviar, imprimir e apagar' },
-    { id: 'ler_folha', nome: 'Ler folha de papel pela foto' },
-    { id: 'usina', nome: 'Configurar a usina (operadores, setores, listas e medidas)' },
-    { id: 'folhas', nome: 'Mudar as folhas (nomes dos quadros, unidades e avisos)' },
-    { id: 'conexao', nome: 'Conectar tablets e trocar o código de conexão' },
-    { id: 'integracoes', nome: 'Nuvem e Base44' },
-    { id: 'ajustes', nome: 'Ajustes dos tablets (função do aparelho, operadores, apagar dados)' },
-    { id: 'registro', nome: 'Ver o registro do sistema' },
+    { id: 'anotar', categoria: 'Folhas', nome: 'Anotar nas folhas do tablet chefe (Vinho e Fermentação)' },
+    { id: 'corrigir', categoria: 'Folhas', nome: 'Corrigir o que os setores anotaram' },
+    { id: 'avisos', categoria: 'Escritório', nome: 'Mandar avisos aos setores' },
+    { id: 'relatorios', categoria: 'Escritório', nome: 'Relatórios: gerar, enviar, imprimir e apagar' },
+    { id: 'ler_folha', categoria: 'Folhas', nome: 'Ler folha de papel pela foto' },
+    { id: 'usina', categoria: 'Usina', nome: 'Configurar a usina (operadores, setores, listas e medidas)' },
+    { id: 'folhas', categoria: 'Folhas', nome: 'Mudar as folhas (nomes dos quadros, unidades e avisos)' },
+    { id: 'conexao', categoria: 'Sistema', nome: 'Conectar tablets e trocar o código de conexão' },
+    { id: 'integracoes', categoria: 'Sistema', nome: 'Nuvem e Base44' },
+    { id: 'ajustes', categoria: 'Aparelhos', nome: 'Ajustes dos tablets (função do aparelho, operadores, apagar dados)' },
+    { id: 'registro', categoria: 'Sistema', nome: 'Ver o registro do sistema' },
     // versão 2.12: liberar um aparelho como tablet chefe (nível 1 ou 2) e mudar o nível dos outros
-    { id: 'chefes', nome: 'Liberar tablets chefe e escolher o nível' },
+    { id: 'chefes', categoria: 'Aparelhos', nome: 'Liberar tablets chefe e escolher o nível' },
     // versão 2.13: o aparelho do Escritório (cálculos da produção, rastreamento de lotes e etiqueta das bombonas)
-    { id: 'escritorio', nome: 'Escritório: cálculos, rastreamento de lotes e etiqueta' },
+    { id: 'escritorio', categoria: 'Escritório', nome: 'Escritório: cálculos, rastreamento de lotes e etiqueta' },
+    // versão 3.0: o tablet fixo num setor que opera em duas áreas
+    { id: 'trocar_funcao', categoria: 'Aparelhos', nome: 'Trocar a função do aparelho (Ex.: tablet da hidrólise que opera em duas áreas)' },
   ],
   // Níveis do tablet chefe (versão 2.12), do aparelho: a central guarda e confere.
   // O que a pessoa faz no aparelho = funções dela ∩ funções do nível ∩ limite do aparelho.
+  // O código de conexão: no nível 3 ou na pessoa com a opção "conexao" ligada por quem administra.
   niveisDoAparelho: {
     1: { nome: 'Nível 1', texto: 'Vê, corrige, envia e escritório', funcoes: ['corrigir', 'relatorios', 'escritorio'] },
     2: { nome: 'Nível 2', texto: 'Quase tudo, menos conectar tablets (o dono escolhe)', funcoes: 'todas' },
@@ -113,8 +116,9 @@ window.USINA = {
   },
   niveis: {
     administrador: { nome: 'Administrador', funcoes: 'todas' },
-    encarregado: { nome: 'Encarregado', funcoes: ['anotar', 'corrigir', 'avisos', 'relatorios', 'ler_folha', 'usina', 'conexao', 'ajustes'] },
-    consulta: { nome: 'Consulta', funcoes: ['relatorios'] },
+    encarregado: { nome: 'Encarregado', funcoes: ['anotar', 'corrigir', 'avisos', 'relatorios', 'ler_folha', 'usina', 'ajustes'] },
+    funcionario: { nome: 'Funcionário', funcoes: ['trocar_funcao'] },
+    consulta: { nome: 'Usuário (só consulta)', funcoes: ['relatorios'] },
   },
 
   // Gráficos do dia no tablet chefe (versão 2.10). Cada um junta quadros de uma folha, na ordem em que aparecem.

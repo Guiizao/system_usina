@@ -16,7 +16,7 @@ const editar = (r, aparelho, campo, valor, em) => ({ ...r, aparelho, atualizadoE
   valores: { ...r.valores, [campo]: valor }, camposEm: { ...r.camposEm, [campo]: em } });
 const fonte = (nome) => fs.readFileSync(new URL('../public/nucleo/' + nome, import.meta.url), 'utf8');
 function aplicativo() {
-  const ctx = vm.createContext({ registros: {}, cfg: { deviceId: 'a' }, setorDaPrancheta: () => ({ id: 'caldeira' }),
+  const ctx = vm.createContext({ setInterval: () => 0, setTimeout, clearTimeout, DEMO_IMG: false, registros: {}, cfg: { deviceId: 'a' }, setorDaPrancheta: () => ({ id: 'caldeira' }),
     salvarRegistros() {}, sincronizarLogo() {}, verificarLembrete() {}, PID_REGISTRO: 'registro', Juncao });
   vm.runInContext(fonte('registros.js'), ctx);
   return ctx;
@@ -99,7 +99,7 @@ await teste(g, 'sincronizar real no Wi-Fi preserva edição durante o envio, inc
       conhecerCentralDoBloqueio() {},
       dataProducao: () => dia, somarDias: () => dia,
       ehCentral: () => false, LS: { set() {} }, view: () => ({ tela: 'outra' }), conferirNaNuvem() {},
-      revisarAvisoNaTela() {}, verificarAvisos() {}, toast() {}, document: { getElementById: () => null },
+      revisarAvisoNaTela() {}, verificarAvisos() {}, toast() {}, navigator: {}, screen: {}, document: { getElementById: () => null, documentElement: { dataset: {} } },
     });
     c.cfg.chave = 'teste'; c.cfg.geracao = 'g'; c.registros[r.id] = { ...r, sincronizado: false };
     vm.runInContext(fonte('conexao.js'), c);

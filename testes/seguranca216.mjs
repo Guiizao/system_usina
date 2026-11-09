@@ -22,7 +22,7 @@ export async function testarWindowsSeguranca216(g) {
     on() {}, setMenu() {}, loadURL: async () => {}, isMinimized: () => false, show() {}, focus() {} };
   const electron = { app: { isPackaged: true, requestSingleInstanceLock: () => false, quit() {}, getPath: () => pasta,
     getLoginItemSettings: () => ({}), getVersion: () => '2.18.0' }, BrowserWindow: function () { return janela; },
-    session: { defaultSession: { clearStorageData: async () => {} } },
+    session: { defaultSession: { clearStorageData: async () => {} } }, ipcMain: { handle() {} },
     nativeImage: { createFromPath: () => ({ resize: () => ({}) }) },
     Tray: function () { this.setToolTip = this.setContextMenu = this.on = () => {}; }, Menu: { buildFromTemplate: (x) => x },
     shell: { openExternal: async (url) => externos.push(url) }, dialog: { showErrorBox() {} } };
@@ -69,7 +69,7 @@ export async function testarWindowsSeguranca216(g) {
 
 function cliente() {
   const campos = { 'nuvem-nome': { value: 'pessoa-teste' }, 'nuvem-senha': { value: '2468', focus() {} } };
-  const ctx = vm.createContext({ URL, AbortController, setTimeout, clearTimeout, NO_APK: false, cfg: { deviceId: 'pc-teste' }, window: {}, registros: {},
+  const ctx = vm.createContext({ URL, AbortController, setTimeout, clearTimeout, setInterval: () => 0, DEMO_IMG: false, NO_APK: false, cfg: { deviceId: 'pc-teste' }, window: {}, registros: {},
     document: { addEventListener() {}, getElementById: (id) => campos[id] || null },
     pedirSenhaModal: async () => '2468', toast() {}, salvarCfg() {}, salvarRegistros() {}, marcarNuvem() {},
     atualizarConexao() {}, primeiroDiaGuardado: () => '2026-10-01', render() {}, turnoDaPessoa: () => 'turno',
@@ -103,6 +103,7 @@ export async function testarClienteSeguranca216(g) {
       const c = cliente(); let pedidos = 0, opcoes;
       Object.assign(c.cfg, { nuvemUrl: 'http://localhost.example.com', nuvemToken: 'token' });
       c.registros.r = { id: 'r', atualizadoEm: 1 };
+      vm.runInContext('sync.bancoAntigo = true', c); // 3.0: esta troca só vale para a nuvem que ainda não tem o banco
       c.fetch = async (url, o) => { pedidos++; opcoes = o; return { status: 500 }; };
       await vm.runInContext(funcao + '()', c); igual(pedidos, 0);
       c.cfg.nuvemUrl = 'https://example.com';
@@ -123,6 +124,7 @@ export async function testarClienteSeguranca216(g) {
     c.fetch = (url) => url.endsWith('/aparelho/sair') ? Promise.resolve({ status: 200 })
       : new Promise((r) => { concluir = r; iniciou(); });
     c.versaoNaSincronizacao = () => {}; c.podar = () => {};
+    vm.runInContext('sync.bancoAntigo = true', c);
     const sync = vm.runInContext('sincronizarNuvem()', c); await chamado;
     vm.runInContext('sairDaNuvem()', c);
     concluir({ status: 200, ok: true, json: async () => ({ registros: [{ id: 'tardio', atualizadoEm: 1 }], seq: 1 }) });
@@ -135,7 +137,7 @@ export async function testarTextoSeguranca216(g) {
     const totais = [{ nome: texto, unidade: texto, folha: 'insumo', total: 2, turnos: [{ t: { nome: texto }, q: 2 }] }];
     let modal;
     const c = vm.createContext({ C: { inicioDoDia: 7 }, cfg: { soNuvem: true }, texto,
-      pessoaAtual: () => ({ nome: texto }), ico: () => '', pode: () => true, avisosEmAberto: () => [],
+      pessoaAtual: () => ({ nome: texto }), ico: () => '', pode: () => true, soVer: () => false, avisosEmAberto: () => [],
       setores: () => [{ id: 'setor', nome: texto, pranchetas: ['insumo'] }], diaFechado: () => '2026-10-20',
       totaisPorTurno: () => totais, folhasDe: (p) => [p], prancheta: () => ({ nome: texto, tipo: 'insumo' }),
       resumoPrancheta: () => ({ texto }), listarPapel: () => [], buscarDia: async () => {},

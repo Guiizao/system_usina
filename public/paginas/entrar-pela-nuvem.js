@@ -7,7 +7,7 @@
    * Entrar pela nuvem (2.16, pedido do Guilherme): o computador do escritório (o programa do Windows) e um celular fora
    * da usina entram com a senha de uma pessoa cadastrada no tablet chefe, sem o IP e sem o código. A nuvem confere a
    * senha (a central manda para ela as pessoas e uma conferência leve da senha, nunca a senha) e devolve o que a pessoa
-   * pode fazer. Pela nuvem é só ver: o painel, os relatórios e o escritório; corrigir continua no tablet chefe.
+   * pode fazer. Desde a 3.0 o que dá para fazer aqui depende das permissões da pessoa; só com o banco antigo é só ver.
    * As anotações chegam pela sincronização da nuvem que a versão 2.14 já usa (cfg.nuvemUrl e cfg.nuvemToken).
    * ========================================================= */
   const FUNCOES_NA_NUVEM = ['relatorios', 'escritorio'];
@@ -56,7 +56,7 @@
         <label>Senha<input id="nuvem-senha" type="password" inputmode="numeric" maxlength="8" autocomplete="current-password" ${sem ? 'disabled' : ''}></label>
         <button class="btn primario largo" type="submit" ${sem ? 'disabled' : ''}>${ico('cadeado')} Entrar</button>
         ${params.get('nuvem') ? '' : `<button type="button" class="btn largo" data-a="voltar-conectar">${ico('wifi')} Conectar na rede da usina</button>`}
-        <p class="sub">Pela nuvem você vê o painel, os relatórios e o escritório; corrigir as folhas continua no tablet chefe.</p>
+        <p class="sub">O que aparece depois de entrar depende das permissões de cada pessoa.</p>
       </form>
       <p class="autoria">Pranchetas Digitais ${VERSAO} · ${esc(AUTORIA)}</p></main>`;
   }
@@ -89,7 +89,7 @@
       const s = document.getElementById('nuvem-senha'); if (s) { s.value = ''; s.focus(); }
       return toast(r.status === 401 ? 'Senha não confere. Se você acabou de ganhar a senha, entre uma vez no tablet chefe.' : (d.erro || 'A nuvem recusou a entrada'), 'erro');
     }
-    const funcoes = (d.pessoa.funcoes || []).filter((f) => FUNCOES_NA_NUVEM.includes(f));
+    const funcoes = d.pessoa.funcoes || [];
     Object.assign(cfg, {
       soNuvem: true, nuvemUrl: url, nuvemToken: d.token, papel: 'central', chave: null, demo: false,
       pessoa: Object.assign({}, d.pessoa, { funcoes }), pessoaTurno: turnoDaPessoa(),
@@ -98,7 +98,9 @@
     salvarCfg();
     toast(`${d.pessoa.nome} entrou pela nuvem`);
     ed.alvoId = null; pilha = [telaInicial()]; render(true);
-    sincronizarNuvem();
+    sync.bancoAntigo = false; sync.temNovidade = true;
+    sincronizar();
+    conferirSessao();
   }
 
   /** Sair pela nuvem: volta para a tela de entrar (o que já chegou continua guardado neste aparelho). */

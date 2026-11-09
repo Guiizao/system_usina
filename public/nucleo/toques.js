@@ -31,7 +31,7 @@
     'nuvem-url': 'sistema', 'nuvem-segredo': 'sistema', 'nuvem-enviar': 'integracoes', 'base44-url': 'sistema', 'base44-segredo': 'sistema', 'base44-enviar': 'integracoes',
     'turnos-url': 'integracoes', 'turnos-segredo': 'integracoes', 'turnos-ligar': 'integracoes', 'turnos-enviar': 'integracoes', 'turnos-atualizar': 'integracoes',
     'novo-codigo': 'conexao',
-    graficos: 'relatorios', folhas: 'folhas', 'folha-campo': 'folhas', 'folha-unidades': 'folhas',
+    graficos: 'relatorios', folhas: 'folhas', 'folha-campo': 'folhas', 'folha-unidades': 'folhas', 'folha-remover': 'folhas',
   };
   app.addEventListener('click', async (e) => {
     const b = e.target.closest('[data-a]');
@@ -56,18 +56,19 @@
         if (cfg.soNuvem) { // pela nuvem: só mostra quem entrou e o Sair
           const p = pessoaAtual();
           if (!p) { pilha = [{ tela: 'nuvem-entrar' }]; return render(true); }
-          const r = await abrirModal(`<h3>${esc(p.nome)}</h3><p class="dica">Entrou pela nuvem: vê o painel, os relatórios e o escritório.</p>
+          const r = await abrirModal(`<h3>${esc(p.nome)}</h3><p class="dica">${soVer() ? 'Entrou pela nuvem: vê o painel, os relatórios e o escritório.' : 'Este computador faz o que a sua permissão deixa.'}</p>
             <div class="acoes-modal"><button class="btn" data-k="x">Fechar</button><button class="btn primario" data-k="sair">${ico('voltar')} Sair</button></div>`, (k, b2, fechar) => fechar(k), {});
           if (r === 'sair') sairDaNuvem();
           return;
         }
         if (!pessoaAtual()) return entrarNoChefe();
         const p = pessoaAtual();
-        const opcoes = [pode('pessoas') ? '<button class="btn" data-k="pessoas">Pessoas e permissões</button>' : '', pode('registro') ? '<button class="btn" data-k="registro">Registro do sistema</button>' : '', pode('folhas') ? '<button class="btn" data-k="folhas">Folhas e avisos</button>' : ''].join('');
+        const opcoes = [p.dono ? '<button class="btn" data-k="sala">Sala de controle</button>' : '', pode('pessoas') ? '<button class="btn" data-k="pessoas">Pessoas e permissões</button>' : '', pode('registro') ? '<button class="btn" data-k="registro">Registro do sistema</button>' : '', pode('folhas') ? '<button class="btn" data-k="folhas">Folhas e avisos</button>' : ''].join('');
         const resp = await abrirModal(`<h3>${esc(p.nome)}</h3><p class="dica">${esc((C.niveis[p.nivel] || {}).nome || p.nivel)} neste tablet chefe.</p>
           ${opcoes ? `<div class="linha-botoes">${opcoes}</div>` : ''}
           <div class="acoes-modal"><button class="btn" data-k="x">Fechar</button><button class="btn primario" data-k="sair">${ico('voltar')} Sair</button></div>`, (k, b2, fechar) => fechar(k), {});
         if (resp === 'sair') { sairDoChefe(); toast('Saiu. O painel continua à vista.'); }
+        if (resp === 'sala') return ir({ tela: 'sala', data: dataProducao() });
         if (resp === 'pessoas') return ir({ tela: 'pessoas' });
         if (resp === 'registro') return ir({ tela: 'registro', data: dataProducao() });
         if (resp === 'folhas') return ir({ tela: 'folhas' });
@@ -77,6 +78,11 @@
       case 'registro': if (!(await exigir('registro'))) return; return ir({ tela: 'registro', data: dataProducao() });
       case 'registro-dia': { const d = somarDias(v.data, Number(b.dataset.n)); if (d > dataProducao()) return; pilha[pilha.length - 1] = { tela: 'registro', data: d, tipo: v.tipo }; return render(); }
       case 'registro-tipo': v.tipo = b.dataset.tipo || ''; return render();
+      case 'sala': if (!(pessoaAtual() || {}).dono) return toast('Só o dono vê esta tela', 'erro'); return ir({ tela: 'sala', data: dataProducao() });
+      case 'sala-dia': { const d = somarDias(v.data, Number(b.dataset.n)); if (d > dataProducao()) return; pilha[pilha.length - 1] = { tela: 'sala', data: d, tipo: v.tipo }; return render(); }
+      case 'baixar-copia': return baixarCopia();
+      case 'conectar-banco': return ativarNoBanco();
+      case 'previa-pessoa': v.previa = b.dataset.id; return render();
       case 'pessoa-nova': return editarPessoa(v, '');
       case 'pessoa-editar': return editarPessoa(v, b.dataset.id);
       case 'aparelho-chefe': return editarAparelhoChefe(v, b.dataset.id);
@@ -112,6 +118,10 @@
       case 'folha-campo': return editarCampoDaFolha(b.dataset.pid, b.dataset.id);
       case 'folha-unidades': return editarUnidadesDaFolha(b.dataset.pid);
       case 'folha-estrutura': return editarEstruturaDaFolha(b.dataset.pid);
+      case 'folha-tabela': return criarTabela(b.dataset.setor);
+      case 'folha-remover': return removerTabela(b.dataset.setor, b.dataset.id);
+      case 'area-nova': return criarArea();
+      case 'categoria': return ir(Object.assign({}, view(), { cat: b.dataset.cat }));
       case 'voltar': return voltar();
       case 'tema':
         cfg.tema = cfg.tema === 'escuro' ? 'claro' : 'escuro'; salvarCfg(); aplicarTema();
@@ -151,7 +161,8 @@
         if (ehCentral() && !(await exigir('escritorio'))) return;
         renovarEscritorio();
         const dia = b.dataset.dia || v.data;
-        buscarDia(dia); return ir({ tela: b.dataset.t, data: dia });
+        await buscarDia(dia); // a folha guarda a conta ao abrir: dia antigo só abre depois de chegar
+        return ir({ tela: b.dataset.t, data: dia });
       }
       case 'esc-campo': return mudarCampoEsc(v, b.dataset.c, b.dataset.r);
       case 'esc-salvar': return salvarEsc(v);
@@ -163,7 +174,6 @@
       case 'esc-etiqueta': return etiquetaEsc(v);
       case 'esc-folha': return imprimirFolhaEsc(v);
       case 'papel': {
-        if (b.dataset.id === 'central' && !cfg.demo && cfg.chave && !centralNoTablet() && !(await garantirLiberacaoDeChefe())) return;
         cfg.papel = b.dataset.id; salvarCfg();
         pilha = [telaInicial()];
         if (!ehCentral() && !ehEscritorio() && !operadorAtual()) pilha.push({ tela: 'operador' });
@@ -191,8 +201,11 @@
       }
       case 'admin': {
         // 2.18: no PC pela nuvem os ajustes são só deste computador (letra, cores, versão, sair): sem senha
-        if (!cfg.soNuvem && !(await (ehCentral() ? exigir('ajustes') : verificarNoSetor('ajustes')))) return;
-        return ir({ tela: 'admin' });
+        if (cfg.soNuvem) return ir({ tela: 'admin' });
+        if (ehCentral()) return (await exigir('ajustes')) ? ir({ tela: 'admin' }) : undefined;
+        // 3.0: o funcionário só troca a função do aparelho; os ajustes continuam com quem pode
+        const liberado = await verificarNoSetor(['ajustes', 'trocar_funcao']);
+        return liberado ? ir({ tela: liberado.has('ajustes') ? 'admin' : 'trocar-funcao' }) : undefined;
       }
       case 'abrir-prancheta': return ir({ tela: 'prancheta', pid: b.dataset.id });
       // ao trocar de prancheta, continua no modo que a pessoa estava (anotando ou monitorando)
@@ -371,6 +384,7 @@
       case 'leitura-salvar': return salvarLeitura(v);
       case 'relatorio-enviar': return enviarDia(b.dataset.data);
       case 'relatorio-abrir': return ir({ tela: 'central', data: b.dataset.data });
+      case 'relatorios-mais': v.quantos = (v.quantos || DIAS_NA_LISTA) + DIAS_NA_LISTA; return render();
       case 'relatorio-apagar': {
         if (!(await confirmar(`Apagar o arquivo de ${fmtData(b.dataset.data)}?`, 'O Excel e o XML guardados deste dia são apagados. As anotações continuam no sistema e dá para gerar o arquivo de novo.', 'Apagar', true))) return;
         const r = await postJson('api/relatorio-apagar', { data: b.dataset.data }).catch(() => null);
@@ -680,7 +694,8 @@
         if (centralNoTablet()) return toast('Este aparelho é o servidor da usina. Desligue o servidor antes de apagar os dados dele.', 'erro');
         if (await confirmar('Apagar os dados deste aparelho?', `${aviso} Depois você escolhe de novo onde ele vai ficar.`, 'Apagar tudo', true)) {
           registros = {}; salvarRegistros();
-          cfg.ultimoSeq = 0; cfg.papel = null; cfg.op = null; salvarCfg();
+          // só neste aparelho: nada vai para a central nem para o banco, e ele baixa de novo o que precisar
+          cfg.ultimoSeq = 0; cfg.bancoSeq = 0; cfg.nuvemSeq = null; cfg.nuvemOrdem = 0; cfg.copiaSeq = 0; cfg.copiaBancoSeq = 0; cfg.papel = null; cfg.op = null; salvarCfg();
           toast('Dados deste aparelho apagados'); pilha = [telaInicial()]; render(true);
         }
         return;

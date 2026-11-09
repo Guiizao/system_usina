@@ -202,3 +202,10 @@ table.papel td.fora { background: var(--vermelho-fundo); color: var(--vermelho);
 .turno h3 { margin: 0 0 4px; font-size: 20px; }
 .turno p { margin: 3px 0; font-size: 17px; }
 .turno p span { color: var(--tinta-2); }
+/* 3.0: os totais em cima da tabela, fora dela */
+.caixas-total { display: grid; grid-template-columns: repeat(auto-fit, minmax(100px, 1fr)); gap: 8px; margin: 0 0 12px; }
+.caixa-total { background: var(--papel); border: 2px solid var(--linha-clara); border-radius: 10px; padding: 8px 12px; min-width: 0; }
+.caixa-total.aqui { border-color: var(--verde); }
+.caixa-total > small { display: block; color: var(--tinta-2); font-size: 15px; }
+.caixa-total b { font-size: 22px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.caixa-total b small { color: var(--tinta-2); font-size: 15px; }

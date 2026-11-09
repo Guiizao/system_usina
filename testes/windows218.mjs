@@ -46,7 +46,7 @@ async function programa({ preinstalar = false, saudavel = true, rede = false, fa
   fs.mkdirSync(pasta); fs.cpSync(publico, publicApp, { recursive: true });
   const destino = path.join(pasta, 'Pranchetas');
   if (preinstalar) await instalar(new AtualizadorTelas({ publico: publicApp, destino, versao: '2.18.0' }), pacote());
-  const servidores = [], cargas = [], intervalos = [], eventos = {}, pedidos = [];
+  const servidores = [], cargas = [], intervalos = [], eventos = {}, pedidos = [], maos = {};
   let remoto = pacote(), endereco;
   const nuvem = http.createServer((req, res) => {
     pedidos.push(req); const dados = remoto[req.url.slice('/telas/'.length)];
@@ -67,7 +67,7 @@ async function programa({ preinstalar = false, saudavel = true, rede = false, fa
     BrowserWindow: function () { return janela; }, Menu: { buildFromTemplate: (x) => x },
     Tray: function () { this.setToolTip = this.setContextMenu = this.on = () => {}; },
     nativeImage: { createFromPath: () => ({ resize: () => ({}) }) },
-    session: { defaultSession: { clearStorageData: async () => {} } } };
+    session: { defaultSession: { clearStorageData: async () => {} } }, ipcMain: { handle(nome, fn) { maos[nome] = fn; } } };
   const requireWindows = createRequire(new URL('../windows/main.js', import.meta.url));
   const ctx = vm.createContext({ __dirname: pasta, URL, process: { env: { LOCALAPPDATA: pasta } },
     setTimeout: (f, ms) => setTimeout(f, ms === 5000 ? 1 : ms), clearTimeout,
@@ -82,7 +82,7 @@ async function programa({ preinstalar = false, saudavel = true, rede = false, fa
     vm.runInContext(fs.readFileSync(path.join(raiz, 'windows/main.js'), 'utf8'), ctx);
     await vm.runInContext('ligar()', ctx);
     await esperar(() => fs.existsSync(path.join(pasta, 'janela.log')));
-    return { cargas, intervalos, eventos, pedidos, destino, endereco, fechar, ctx,
+    return { cargas, intervalos, eventos, pedidos, destino, endereco, fechar, ctx, maos, pasta,
       remoto: (p) => { remoto = p; } };
   } catch (e) { await fechar(); throw e; }
 }
@@ -171,6 +171,17 @@ try {
     for (const url of ['file:///tmp', 'http://localhost.example.com', 'https://a:b@x/', 'https://x/?token=teste'])
       await assert.rejects(a.atualizar(url, () => assert.fail('Não deveria baixar')));
     assert.ok(!fs.readdirSync(a.destino).some((n) => n.startsWith('.telas-')));
+  });
+  await teste(g, 'cópia em Documentos: só pede a tela do programa, só nome de cópia, e fica na pasta certa', async () => {
+    const p = await programa({});
+    try {
+      const guardar = p.maos['guardar-copia'], daTela = { senderFrame: { url: p.endereco + '/' } };
+      guardar(daTela, '2026-11-02.json', '[]');
+      assert.equal(fs.readFileSync(path.join(p.pasta, 'Usina', 'BackupUsina', '2026-11-02.json'), 'utf8'), '[]');
+      assert.throws(() => guardar(daTela, '../../fora.json', '[]'));
+      assert.throws(() => guardar(daTela, 'programa.exe', '[]'));
+      assert.throws(() => guardar({ senderFrame: { url: 'https://site-qualquer.com/' } }, '2026-11-02.json', '[]'));
+    } finally { await p.fechar(); }
   });
   await teste(g, 'main.js serve bytes verificados e bloqueia alteração, extras e junction', async () => {
     const p = await programa({ preinstalar: true });

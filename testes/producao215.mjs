@@ -463,7 +463,9 @@ export async function testarProducao(ligar, porta, grupo) {
         if (nome === 'config.json') await p(dono, '/api/pessoas', { acao: 'aparelho', id: dono.aparelho, nome: 'Dono recuperado' });
         else await sync(dono, [reg(id, { valor: 'mais recente' })]);
         certo(fs.existsSync(arquivo + '.bak'), 'cópia anterior criada');
-        certo(fs.readFileSync(arquivo + '.bak').equals(antes), 'cópia é a versão anterior exata');
+        // a sincronização pode gravar mais de uma vez: o que importa é a cópia ter o que valia antes
+        if (nome === 'config.json') certo(fs.readFileSync(arquivo + '.bak').equals(antes), 'cópia é a versão anterior exata');
+        else igual(JSON.parse(fs.readFileSync(arquivo + '.bak', 'utf8')).registros[id].valores.valor, 'preservado', 'a cópia tem o valor anterior');
         await c.desligar();
         const cfg = cfgDisco();
         const backup = JSON.parse(fs.readFileSync(arquivo + '.bak', 'utf8'));
@@ -495,6 +497,8 @@ export async function testarProducao(ligar, porta, grupo) {
         certo(!textos.includes(c.chave()) && !textos.includes(c.codigo()), 'registro sem segredos');
         if (nome === 'registros.json') certo(Object.values(banco.registros).every((r) => r.prancheta === 'registro'), 'banco novo só contém auditoria');
         dono = await conectarTeste(c.url, c.codigo());
+        // sem config, a central recomeçou: o dono entra com a senha de fábrica e escolhe a dele de novo
+        if (nome === 'config.json') igual((await p(dono, '/api/pessoas', { acao: 'entrar', pin: '159357', novaSenha: SENHA_ENCARREGADO })).status, 200);
         await entrar(dono, 3);
         igual((await sync(dono)).status, 200);
       });

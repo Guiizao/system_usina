@@ -153,6 +153,7 @@ export async function testarPedidos25(nav, ligar, porta, grupo, { correcao = tru
       await esc.avaliar(`entrarNoChefe(${JSON.stringify(SENHA_ENCARREGADO)}).then(() => 1)`);
       await esc.tocar('[data-a="config"]');
       await senhaSeAparecer(esc);
+      await esc.tocar('[data-a="categoria"][data-cat="envios"]');
       // o endereço aparece encurtado (só o nome do site): aqui, 127.0.0.1
       await esc.esperar('!!document.querySelector("#bloco-base44") && document.querySelector("#bloco-base44").textContent.includes("127.0.0.1")', 15000, 'endereço na tela');
       const texto = await esc.avaliar('document.querySelector("#bloco-base44").textContent');

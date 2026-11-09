@@ -22,6 +22,12 @@
   };
   const podeRedesenhar = () => !modalAberto() && !rascunhoSujo() && !painelVisivel() && !mexendoNaTela();
 
+  document.addEventListener('keydown', () => { ultimoToque = Date.now(); }, { passive: true });
+  /** 3.0: salva o que está digitado e continua na folha (o aplicativo foi para o fundo, ou ficou tudo parado). */
+  function salvarSemSair() {
+    if (!rascunhoSujo() || modalAberto()) return;
+    if (salvarRascunho(true, { silencioso: true })) { rascunho = null; ed.alvoId = null; render(true); }
+  }
   function ir(v, substituir = false) {
     if (rascunhoSujo()) salvarRascunho(true);
     if (substituir) pilha[pilha.length - 1] = v; else pilha.push(v);

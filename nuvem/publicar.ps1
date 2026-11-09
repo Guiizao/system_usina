@@ -126,7 +126,7 @@ Write-Output ''
 Write-Output '=============================================================='
 Write-Output " PRONTO. A nuvem esta no ar em: $url"
 Write-Output ''
-Write-Output ' No tablet chefe: Usina > Nuvem (internet)'
+Write-Output ' No tablet chefe: Usina > Sistema > Nuvem (internet)'
 Write-Output "   Endereco: $url"
 Write-Output '   Senha da central: esta no arquivo segredos.txt, nesta pasta'
 Write-Output ''

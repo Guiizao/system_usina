@@ -116,14 +116,6 @@
     toast('Este aparelho agora é o tablet do dono (nível 3)');
     return trocar ? novaSenha : null;
   }
-  /** Ao escolher "Tablet chefe": se a central ainda não liberou este aparelho, libera agora. */
-  async function garantirLiberacaoDeChefe() {
-    const r = await postJson('api/chefes', { acao: 'estado' }, 8000).catch(() => null);
-    if (!r || !r.ok) return true; // central de antes da 2.12 (sem a rota) ou sem resposta: ela confere de novo quando a pessoa entrar
-    const d = await r.json().catch(() => ({}));
-    if (d.nivel) { cfg.nivelChefe = d.nivel; return true; }
-    return (await liberarEsteAparelho()) !== undefined;
-  }
   /** A central diz quem está neste tablet chefe e o que pode. Se a sessão caiu (o nível mudou, a pessoa foi
       desativada, outra pessoa entrou), sai daqui também; se as funções mudaram, passa a valer na hora. */
   async function conferirSessao() {
@@ -178,11 +170,12 @@
     if ((await pedirSenhaModal('Repita a senha nova', 'Digite a mesma senha de novo.')) !== nova) { toast('As duas senhas não são iguais. Tente de novo.', 'erro'); return r; }
     return postJson('api/pessoas', { acao, pin, novaSenha: nova }, ms).catch(() => null);
   }
+  /** f: uma função ou, na 3.0, a lista das que servem. Devolve as funções de quem digitou a senha (ou false). */
   async function verificarNoSetor(f, titulo, dica) {
     const pin = await pedirSenhaModal(titulo, dica);
     if (pin === undefined) return false;
     // demonstração: qualquer senha entra (os dados são só deste aparelho)
-    if (cfg.demo) return /^\d{4,8}$/.test(pin);
+    if (cfg.demo) return /^\d{4,8}$/.test(pin) && new Set([].concat(f));
     const r = await postSenha('verificar', pin, 6000);
     if (!r) {
       // 2.18: sem a senha universal no aplicativo (a de fábrica servia em qualquer tablet, para sempre)
@@ -191,9 +184,10 @@
     }
     const d = await r.json().catch(() => ({}));
     if (!r.ok) { toast(d.erro || 'Senha errada', 'erro'); return false; }
-    if (!funcoesDe(d.pessoa).has(f)) { toast(`${d.pessoa.nome} não pode ${nomeDaFuncao(f)}`, 'erro'); return false; }
-    registrar('entrada', `${d.pessoa.nome} liberou ${nomeDaFuncao(f)} no ${nomeDesteAparelho()}`);
-    return true;
+    const dela = funcoesDe(d.pessoa), serve = [].concat(f).find((x) => dela.has(x));
+    if (!serve) { toast(`${d.pessoa.nome} não pode ${nomeDaFuncao([].concat(f)[0])}`, 'erro'); return false; }
+    registrar('entrada', `${d.pessoa.nome} liberou ${nomeDaFuncao(serve)} no ${nomeDesteAparelho()}`);
+    return dela;
   }
 
   /** A central não aceitou algo deste aparelho: uma notificação só, com o motivo. */
@@ -208,7 +202,7 @@
   const quemEstaAqui = () => operadorAtual() || (pessoaAtual() && pessoaAtual().nome) || (ehCentral() ? nomeDoChefe() : 'Sem operador');
   /** Uma linha no registro do sistema. tipo: anotacao, entrada, aparelho ou configuracao. */
   function registrar(tipo, texto, mudancas) {
-    if (cfg.demo || !cfg.chave) return;
+    if (cfg.demo || (!cfg.chave && !cfg.soNuvem)) return;
     const em = Date.now();
     const chave = em.toString(36) + '-' + Math.random().toString(36).slice(2, 6);
     gravar(dataProducao(), PID_REGISTRO, chave, Object.assign({ em, tipo, quem: quemEstaAqui(), aparelho: nomeDesteAparelho(), texto }, mudancas && mudancas.length ? { mudancas } : {}), { operador: quemEstaAqui() });
@@ -305,13 +299,33 @@
             }).join('') || '<p class="sub">Nenhum tablet chefe falou com a central ainda.</p>'}
             ${pode('sistema') ? secaoNiveisChefe() : ''}
           </section>
+          ${secaoPreviaDaPessoa(v, l)}
         </div>
       </main>`;
+  }
+  /** 3.0: "se eu der tal permissão a fulano, ela vale no tablet nível 2?": a pessoa e os três níveis, lado a lado.
+      A central é quem confere de verdade; aqui é a mesma conta (a pessoa, o nível do tablet e o código só com a opção ligada). */
+  function secaoPreviaDaPessoa(v, l) {
+    const pessoas = l.pessoas.filter((p) => p.ativo);
+    const p = pessoas.find((x) => x.id === v.previa) || pessoas[0];
+    if (!p) return '';
+    const dono = p.id === l.donoId;
+    const dela = funcoesDe({ nivel: p.nivel, extras: p.extras, dono });
+    const vale = (f, n) => (n === 3 ? dono : dela.has(f) && f !== 'sistema' && (funcoesDoNivel(n).includes(f) || (f === 'conexao' && (p.extras || {}).conexao === true)));
+    const celula = (f, n) => (vale(f, n) ? `<td class="sim" aria-label="Pode no nível ${n}">${ico('certo')}</td>` : `<td class="nao" aria-label="Não pode no nível ${n}">-</td>`);
+    return `<section class="bloco previa-pessoa">
+      <h2>${ico('pessoa')} O que cada pessoa pode, em cada nível</h2>
+      <p class="sub" style="margin:0 0 8px">Vale o que a pessoa pode junto com o que o nível do tablet chefe deixa. Por isso o tablet pode ter a opção ligada e a pessoa não ver: ela aparece para quem tem a permissão, quando entrar ali.</p>
+      <div class="chips">${pessoas.map((x) => `<button class="chip-liga ${x === p ? 'sel' : ''}" data-a="previa-pessoa" data-id="${esc(x.id)}">${esc(x.nome)}</button>`).join('')}</div>
+      <table class="tabela-previa"><thead><tr><th scope="col">Função</th><th scope="col">Nível 1</th><th scope="col">Nível 2</th><th scope="col">Nível 3</th></tr></thead>
+      ${categorias(funcoesDosNiveis()).map(([nome, lista]) => `<tbody><tr><th colspan="4" class="categoria-funcao" scope="colgroup">${esc(nome)}</th></tr>
+        ${lista.map((f) => `<tr><td>${esc(f.nome.replace(/ \(.*\)$/, '').replace(/:.*$/, ''))}</td>${[1, 2, 3].map((n) => celula(f.id, n)).join('')}</tr>`).join('')}</tbody>`).join('')}
+      </table></section>`;
   }
   /* Versão 2.15: o dono escolhe o que cada nível de tablet chefe pode fazer (vale para todos os tablets do nível, junto
      com o que cada pessoa pode). A central confere. Sem escolha: nível 1 = corrigir, relatórios e escritório; nível 2 =
      tudo menos conectar tablets e trocar o código. */
-  const funcoesDosNiveis = () => [...C.funcoes, { id: 'pessoas', nome: 'Cadastrar pessoas e senhas' }];
+  const funcoesDosNiveis = () => [...C.funcoes, { id: 'pessoas', categoria: 'Sistema', nome: 'Cadastrar pessoas e senhas' }];
   function funcoesDoNivel(n) {
     const salvo = (configSistema().niveisChefe || {})[n];
     if (Array.isArray(salvo)) return salvo;
@@ -328,7 +342,7 @@
     const marcadas = new Set(funcoesDoNivel(n));
     const lista = funcoesDosNiveis();
     const desenhar = (f) => {
-      f.querySelector('#funcoes-nivel').innerHTML = `<div class="chips funcoes">${lista.map((x) => `<button class="chip-liga ${marcadas.has(x.id) ? 'sel' : ''}" data-k="f:${x.id}">${marcadas.has(x.id) ? ico('certo') : ico('fechar')} ${esc(x.nome)}</button>`).join('')}</div>`;
+      f.querySelector('#funcoes-nivel').innerHTML = categorias(lista).map(([nome, doGrupo]) => `<h4 class="categoria-funcao">${esc(nome)}</h4><div class="chips funcoes">${doGrupo.map((x) => `<button class="chip-liga ${marcadas.has(x.id) ? 'sel' : ''}" data-k="f:${x.id}">${marcadas.has(x.id) ? ico('certo') : ico('fechar')} ${esc(x.nome)}</button>`).join('')}</div>`).join('');
     };
     const ok = await abrirModal(`<h3>${esc(nomeDoNivelChefe(n))}: o que pode fazer</h3>
       <div class="form-pessoa"><p class="dica">Toque para ligar ou desligar. Vale para quem entrar num tablet chefe deste nível.</p><div id="funcoes-nivel"></div></div>
@@ -365,10 +379,11 @@
     if (view() === v) render();
   }
   /** Os quadradinhos das funções (marcado = pode). */
-  const chipsDeFuncoes = (marcadas, prefixo) => `<div class="chips funcoes">${C.funcoes.map((f) => `<button class="chip-liga ${marcadas.has(f.id) ? 'sel' : ''}" data-k="${prefixo}:${f.id}">${marcadas.has(f.id) ? ico('certo') : ico('fechar')} ${esc(f.nome)}</button>`).join('')}</div>`;
+  const categorias = (lista) => [...new Set(lista.map((f) => f.categoria || 'Outras'))].map((nome) => [nome, lista.filter((f) => (f.categoria || 'Outras') === nome)]);
+  const chipsDeFuncoes = (marcadas, prefixo) => categorias(C.funcoes).map(([nome, lista]) => `<h4 class="categoria-funcao">${esc(nome)}</h4><div class="chips funcoes">${lista.map((f) => `<button class="chip-liga ${marcadas.has(f.id) ? 'sel' : ''}" data-k="${prefixo}:${f.id}">${marcadas.has(f.id) ? ico('certo') : ico('fechar')} ${esc(f.nome)}</button>`).join('')}</div>`).join('');
   async function editarPessoa(v, id) {
     const atual = id ? (v.lista.pessoas.find((p) => p.id === id) || null) : null;
-    const estado = { nivel: atual ? atual.nivel : 'encarregado', extras: Object.assign({}, atual ? atual.extras : {}), ativo: atual ? atual.ativo : true,
+    const estado = { nivel: atual ? atual.nivel : 'encarregado', extras: atual ? Object.assign({}, atual.extras) : { conexao: true }, ativo: atual ? atual.ativo : true,
       fixos: new Set(atual && atual.aparelhos ? atual.aparelhos : []) };
     estado.soFixos = estado.fixos.size > 0;
     // 2.17: os aparelhos que a central conhece (tablets chefe e de setor), para "Vale em" (fora deles a pessoa só consulta)
@@ -404,7 +419,12 @@
       <div class="acoes-modal"><button class="btn" data-k="x">Cancelar</button><button class="btn primario" data-k="ok">Salvar</button></div>`,
     async (k, b, fechar, f) => {
       if (k === 'x') return fechar(undefined);
-      if (k.startsWith('n:')) { estado.nivel = k.slice(2); return desenhar(f); }
+      if (k.startsWith('n:')) {
+        // o encarregado já nasce com a conexão ligada na ficha; o dono desliga por pessoa
+        if (estado.nivel !== k.slice(2)) { if (k.slice(2) === 'encarregado') estado.extras.conexao = true; else delete estado.extras.conexao; }
+        estado.nivel = k.slice(2);
+        return desenhar(f);
+      }
       if (k.startsWith('f:')) {
         const fn = k.slice(2);
         const padrao = funcoesDe({ nivel: estado.nivel, extras: {} }).has(fn);
@@ -486,8 +506,6 @@
     if (!v.data) v.data = dataProducao();
     if (!v.linhas && !v.carregando) carregarRegistro(v);
     const hoje = dataProducao();
-    const linhas = (v.linhas || []).filter((r) => !v.tipo || r.valores.tipo === v.tipo).slice().reverse();
-    const hora = (ms) => new Date(ms).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
     return `${topo('Registro do sistema', `${fmtData(v.data)} · o que aconteceu, de hora em hora`, true)}
       <main class="registro">
         <div class="barra-dia">
@@ -497,15 +515,20 @@
             <button class="btn" data-a="registro-dia" data-n="1" aria-label="Próximo dia" ${v.data >= hoje ? 'disabled' : ''}>${ico('seta')}</button>
           </div>
         </div>
-        <div class="segmentos filtros-registro">${TIPOS_REGISTRO.map(([t, n]) => `<button class="${(v.tipo || '') === t ? 'sel' : ''}" data-a="registro-tipo" data-tipo="${t}">${n}</button>`).join('')}</div>
+        ${listaDoRegistro(v)}
+      </main>`;
+  }
+  function listaDoRegistro(v) {
+    const linhas = (v.linhas || []).filter((r) => !v.tipo || r.valores.tipo === v.tipo).slice().reverse();
+    const hora = (ms) => new Date(ms).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+    return `<div class="segmentos filtros-registro">${TIPOS_REGISTRO.map(([t, n]) => `<button class="${(v.tipo || '') === t ? 'sel' : ''}" data-a="registro-tipo" data-tipo="${t}">${n}</button>`).join('')}</div>
         <div class="lista-registro">${v.carregando && !v.linhas ? '<p class="sub">Buscando na central...</p>' : linhas.map((r) => {
           const x = r.valores;
           return `<div class="reg-linha reg-${esc(x.tipo)}"><b class="reg-hora">${hora(x.em)}</b><div class="reg-texto"><p>${esc(x.texto)}</p>
             <small>${esc([x.quem, x.aparelho].filter(Boolean).join(' · '))}</small>
             ${(x.mudancas || []).length ? `<ul>${x.mudancas.map((m) => `<li>${esc(m.campo)}: <s>${esc(m.antes)}</s> → <b>${esc(m.depois)}</b></li>`).join('')}</ul>` : ''}
             ${x.antes && x.depois ? `<ul><li><s>${esc(x.antes)}</s> → <b>${esc(x.depois)}</b></li></ul>` : ''}</div></div>`;
-        }).join('') || '<p class="sub">Nada registrado neste dia.</p>'}</div>
-      </main>`;
+        }).join('') || '<p class="sub">Nada registrado neste dia.</p>'}</div>`;
   }
   async function carregarRegistro(v) {
     v.carregando = true;

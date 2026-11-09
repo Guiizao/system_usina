@@ -116,7 +116,7 @@
     sync.nuvem = { ok, em: ok ? Date.now() : (sync.nuvem && sync.nuvem.em) || 0 };
     atualizarConexao();
   }
-  const centralLigada = () => sync.modo === 'online';
+  const centralLigada = () => (sync.viaBanco ? !!sync.centralOk : sync.modo === 'online');
   const nuvemLigada = () => !!(sync.nuvem && sync.nuvem.ok);
   // sem a central, a nuvem só leva as anotações depois que o aparelho pegou a chave dela com a central (2.13)
   const nuvemLeva = () => !centralLigada() && nuvemLigada() && !!cfg.nuvemToken;
@@ -139,7 +139,7 @@
       <div class="acoes-modal"><button class="btn" data-k="conferir">Conferir agora</button><button class="btn primario" data-k="ok">Entendi</button></div>`,
     (k, b, fechar) => {
       // 2.18: longe da central (outra rede) o Conferir troca com a nuvem na hora, sem esperar os 2 minutos
-      if (k === 'conferir') { Promise.resolve(sincronizar()).finally(() => { if (!centralLigada()) sincronizarNuvem(true); }); conferirNaNuvem(true); toast('Conferindo...'); }
+      if (k === 'conferir') { sync.temNovidade = true; Promise.resolve(sincronizar()).finally(() => { if (!centralLigada()) sincronizarNuvem(true); }); conferirNaNuvem(true); toast('Conferindo...'); }
       fechar();
     });
   }
@@ -178,6 +178,52 @@
       <button class="btn pequeno mais-info" data-a="aparelho-info" data-id="${esc(a.id)}" aria-label="Mais sobre ${esc(funcaoDoAparelho(a))}">${ico('mais')}</button>
     </div>`;
   }
+  /* ---------- 3.0: a sala de controle do dono: quem está com o sistema ligado e tudo o que mudou ---------- */
+  const tipoDoLigado = (a) => a.tipo || (a.info && /^Computador/.test(a.info.modelo || '') ? 'computador' : 'tablet');
+  const NOME_DO_TIPO = { computador: 'Computador', tablet: 'Tablet', celular: 'Celular' };
+  /** O Android não dá o nome do Wi-Fi sem a permissão de localização. Quem sai para a internet pelo mesmo endereço está na mesma rede. */
+  function redesDosAparelhos(lista) {
+    const letras = new Map();
+    lista.filter((a) => a.ip).forEach((a) => { if (!letras.has(a.ip)) letras.set(a.ip, String.fromCharCode(65 + (letras.size % 26))); });
+    return (a) => {
+      if (a.rede === 'cellular') return 'Dados móveis';
+      const nome = letras.has(a.ip) ? `Rede ${letras.get(a.ip)}` : 'Rede não informada';
+      return a.rede === 'wifi' ? `Wi-Fi, ${nome.toLowerCase()}` : nome;
+    };
+  }
+  function telaSala(v) {
+    if (!v.data) v.data = dataProducao();
+    if (!v.linhas && !v.carregando) carregarRegistro(v);
+    const lista = (sync.status && sync.status.aparelhos) || [];
+    const ligados = lista.filter((a) => a.online);
+    const rede = redesDosAparelhos(lista);
+    const numero = (n, rotulo) => `<div><b>${n}</b><span>${rotulo}</span></div>`;
+    return `${topo('Sala de controle', 'Só o dono vê esta tela', true)}
+      <main class="config tela-sala">
+        <div class="numeros-sala">
+          ${numero(ligados.length, 'ligados agora')}
+          ${numero(ligados.filter((a) => tipoDoLigado(a) === 'computador').length, 'computadores')}
+          ${numero(ligados.filter((a) => tipoDoLigado(a) === 'tablet').length, 'tablets')}
+          ${numero(ligados.filter((a) => tipoDoLigado(a) === 'celular').length, 'celulares')}
+          ${numero(new Set(ligados.map(rede)).size, 'redes')}
+        </div>
+        <div class="config-grade">
+          <section class="bloco">
+            <h2>${ico('wifi')} Aparelhos</h2>
+            <div class="lista-aparelhos">${lista.map((a) => `<div class="aparelho-linha ${a.bloqueio ? 'bloqueado' : ''}">
+              <span class="conexao ${a.bloqueio ? 'bloq' : a.online ? 'ok' : 'off'}"><i></i>${esc(situacaoDoAparelho(a))}</span>
+              <div class="aparelho-texto"><b>${esc((a.info && a.info.nome) || funcaoDoAparelho(a))}</b><small>${esc(NOME_DO_TIPO[tipoDoLigado(a)] || 'Aparelho')} · ${esc(funcaoDoAparelho(a))} · ${esc(quemUsa(a))}</small><small>${esc(rede(a))}${a.aoVivo ? ' · em tempo real' : ''}${a.versao ? ` · versão ${esc(a.versao)}` : ''}</small></div>
+              <button class="btn pequeno mais-info" data-a="aparelho-info" data-id="${esc(a.id)}" aria-label="Mais sobre ${esc(funcaoDoAparelho(a))}">${ico('mais')}</button>
+            </div>`).join('') || '<p class="sub">Nenhum aparelho falou com o sistema ainda.</p>'}</div>
+          </section>
+          <section class="bloco">
+            <div class="titulo-secao"><h2>${ico('nota')} Alterações de ${fmtData(v.data)}</h2>
+              <div class="linha-botoes"><button class="btn pequeno" data-a="sala-dia" data-n="-1" aria-label="Dia anterior">${ico('voltar')}</button><button class="btn pequeno" data-a="sala-dia" data-n="1" aria-label="Próximo dia" ${v.data >= dataProducao() ? 'disabled' : ''}>${ico('seta')}</button></div></div>
+            ${listaDoRegistro(v)}
+          </section>
+        </div>
+      </main>`;
+  }
   function telaAparelhos() {
     const lista = (sync.status && sync.status.aparelhos) || [];
     const ligados = lista.filter((a) => a.online).length;
@@ -196,9 +242,11 @@
       ['Nome no Android', i.nome || 'não informado (aparelho com versão antiga ou navegador)'],
       ['Modelo', modeloDoAparelho(a) || 'não informado'],
       ['Sistema', i.android ? `Android ${i.android}` : i.navegador ? `Navegador ${i.navegador}` : 'não informado'],
+      ['Tipo', NOME_DO_TIPO[tipoDoLigado(a)] || 'Aparelho'],
       ['Função', funcaoDoAparelho(a)],
       ['Aplicativo', a.versao ? `versão ${a.versao}${a.versao !== VERSAO ? ' (falta atualizar)' : ''}` : 'versão antiga'],
       ['Endereço na rede (IP)', a.ip || 'não informado'],
+      ['Fala com o sistema', a.aoVivo ? 'Direto no banco, em tempo real' : 'Pelo Wi-Fi ou de tempos em tempos'],
       ['Situação', a.bloqueio ? `Bloqueado em ${dataHora(a.bloqueio.em)}${a.bloqueio.por ? ` por ${a.bloqueio.por}` : ''} (${a.bloqueio.modo === 'senha' ? 'pede a senha de desbloqueio' : 'travado de vez'})` : a.online ? 'Ligado agora' : a.minutos == null ? 'Sem sinal' : `Sem sinal há ${tempoCurto(a.minutos)}`],
       ['Conectou a primeira vez', a.desde ? dataHora(a.desde) : 'não informado'],
       ['Identificador', a.id],

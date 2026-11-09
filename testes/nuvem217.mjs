@@ -112,9 +112,9 @@ try {
       igual(n.consultar("SELECT * FROM info WHERE chave IN ('aparelhos', 'aparelhosEm') ORDER BY chave"), antes);
     }
   });
-  await teste(g, 'troca de geração sem lista não conserva aparelhos da central anterior', async () => {
+  await teste(g, 'troca explícita de geração sem lista não conserva aparelhos da central anterior', async () => {
     await enviar({ aparelhos: [aparelho] });
-    await enviar({ geracao: 'nova217', pessoas });
+    igual((await enviar({ geracao: 'nova217', geracoesZeradas: ['g217'], pessoas })).status, 200);
     login = await entrar('zoe'); igual(login.status, 200);
     const r = await sync(login.json.token); igual(r.json.aparelhos, []); igual(r.json.aparelhosEm, 0);
   });
@@ -131,6 +131,8 @@ try {
         inicio = envios.length;
         await c.api('/api/chefes', { acao: 'liberar', pin: SENHA_ENCARREGADO, nivel: 3 });
         await c.api('/api/pessoas', { acao: 'entrar', pin: SENHA_ENCARREGADO });
+        const anterior = (await n.pedir('/central/estado', { senha: SEGREDO })).json.geracao;
+        igual((await enviar({ geracao: r.json.geracao, geracoesZeradas: [anterior] })).status, 200);
         await c.api('/api/nuvem', { acao: 'configurar', url: 'http://127.0.0.1:8371', segredo: SEGREDO });
         const envio = await c.api('/api/nuvem', { acao: 'enviar' }); certo(!envio.erro, envio.erro);
         const foto = envios.slice(inicio).find((x) => x.aparelhos)?.aparelhos;

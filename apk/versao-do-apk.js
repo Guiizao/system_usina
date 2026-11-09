@@ -95,6 +95,8 @@ function pacoteDasTelas() {
   fs.writeFileSync(path.join(origem, 'chave-telas.txt'), publica + '\n');
   const arquivos = {};
   const juntar = (d, rel) => fs.readdirSync(d, { withFileTypes: true }).forEach((e) => {
+    // pasta escondida é de ferramenta (ex.: .omc), não do aplicativo: sai da cópia, então não vai no APK nem no pacote
+    if (e.isDirectory() && e.name.startsWith('.')) return fs.rmSync(path.join(d, e.name), { recursive: true, force: true });
     const r = rel ? rel + '/' + e.name : e.name;
     if (e.isDirectory()) return juntar(path.join(d, e.name), r);
     if (r === 'pacote.json' || r === 'pacote.sig') return;

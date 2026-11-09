@@ -8,8 +8,23 @@ compatibility_date = "2026-09-01"
 [assets]
 directory = "./publico"
 binding = "ASSETS"
+# Sem redirecionar /telas/index.html: o programa do Windows recusa redirecionamento ao baixar as telas (3.0.1)
+html_handling = "none"
+
+# 3.0: de 10 em 10 minutos o banco confere o que falta mandar ao Servidor da Usina (USINA_URL e USINA_CHAVE nos segredos; sem eles, nada)
+[triggers]
+crons = ["*/10 * * * *"]
 
 [[d1_databases]]
 binding = "DB"
 database_name = "pranchetas"
 database_id = "8fbc79a9-262c-4563-a65a-24fb854b6a26"
+
+# 3.0: a sala dos aparelhos ligados (aviso em tempo real). SQLite é o que o plano grátis aceita.
+[[durable_objects.bindings]]
+name = "SALA"
+class_name = "Sala"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["Sala"]

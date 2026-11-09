@@ -91,8 +91,8 @@
     contextoEdicao = 'conectar este aparelho';
     // 2.16: o logo fica só na barra de cima; o código e os botões na mesma largura; a assinatura no pé da tela
     const conteudo = `<div class="boas-vindas conectar">
-        <header><div><h1>Conectar na rede da usina</h1>
-        <p>O aplicativo só funciona dentro da rede da Ubirálcool. Peça ao escritório o ${NO_APK ? 'endereço e o ' : ''}código que aparece no tablet chefe.</p></div></header>
+        <header><div><h1>Conectar na usina</h1>
+        <p>Peça ao escritório o código que aparece no tablet chefe. No Wi-Fi da usina, o aparelho acha o tablet chefe pelo endereço. Com internet, ${NO_APK ? 'deixe o endereço em branco e ele conecta direto no banco de dados.' : 'use a entrada pela nuvem.'}</p></div></header>
         ${grupoQuadros(alvos)}
         ${NO_APK && pluginCentral ? `<div class="procura-central ${procura.ativa ? 'ativa' : ''}">
           ${procura.ativa ? '<i class="giro"></i>' : ico(conexaoForm.endereco ? 'certo' : 'wifi')}
@@ -101,6 +101,7 @@
         </div>` : ''}
         <div class="linha-botoes">
           <button class="btn primario" data-a="conectar">${ico('wifi')} Conectar</button>
+          ${NO_APK ? `<button class="btn" data-a="conectar-banco">${ico('servidor')} Conectar pela internet</button>` : ''}
           <button class="btn" data-a="modo-demo">Só demonstração, sem central</button>
         </div>
         <button class="btn largo" data-a="ir-nuvem-entrar" style="margin-top:12px">${ico('enviar')} Entrar pela nuvem (fora da usina, com a sua senha)</button>
@@ -125,8 +126,27 @@
     await conectar();
     if (cfg.chave && !cfg.papel) { const b = document.querySelector('[data-a="papel"][data-id="central"]'); if (b) b.click(); }
   }
+  /** 3.0: o código vale direto no banco, sem precisar estar no Wi-Fi da usina. A chave que volta é a mesma que a central daria:
+      quando o aparelho chegar no Wi-Fi, ele também acha o tablet chefe (reencontrarCentral). */
+  async function ativarNoBanco() {
+    if (!/^\d{6}$/.test(conexaoForm.codigo)) return toast('O código tem 6 números', 'erro');
+    const url = String(cfg.nuvemUrl || C.nuvemPadrao || '').replace(/\/+$/, '');
+    if (!enderecoNuvemSeguro(url)) return toast('O endereço do banco de dados não está configurado', 'erro');
+    let r, d = {};
+    try {
+      r = await fetch(url + '/banco/ativar', { method: 'POST', cache: 'no-store', redirect: 'error', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ aparelho: cfg.deviceId, codigo: conexaoForm.codigo }) });
+      d = await r.json().catch(() => ({}));
+    } catch (e) { return toast('Sem internet: não achei o banco de dados. No Wi-Fi da usina, use o endereço do tablet chefe.', 'erro'); }
+    if (!r.ok || !d.nuvemToken) return toast(r.status === 403 ? 'Código errado. Confira no tablet chefe.' : (d.erro || 'O banco recusou a conexão'), 'erro');
+    Object.assign(cfg, { nuvemUrl: url, nuvemToken: d.nuvemToken, chave: d.chave || '', cifra: 1, demo: false, soNuvem: false, ativadoNoBanco: true, central: '', ultimoContato: Date.now(), novaConexao: true });
+    salvarCfg();
+    sync.bancoAntigo = false; sync.temNovidade = true;
+    toast('Aparelho conectado no banco de dados');
+    ed.alvoId = null; pilha = [telaInicial()]; render(true); sincronizar();
+  }
   async function conectar() {
     const endereco = NO_APK ? conexaoForm.endereco.trim() : '';
+    if (NO_APK && !endereco) return ativarNoBanco();
     if (NO_APK && !/^\d{1,3}(\.\d{1,3}){3}(:\d+)?$/.test(endereco)) return toast('Endereço incompleto. Exemplo: 192.168.1.113', 'erro');
     if (!/^\d{6}$/.test(conexaoForm.codigo)) return toast('O código tem 6 números', 'erro');
     if (!(await garantirRedeLocal(true))) return;
@@ -146,6 +166,6 @@
       toast('Aparelho conectado na rede da usina');
       ed.alvoId = null; pilha = [telaInicial()]; render(true); sincronizar();
     } catch (e) {
-      toast('Não achei a central. Confira se está no Wi-Fi da usina e se o endereço é o que aparece no tablet chefe.', 'erro');
+      toast(`Não achei a central. Confira se está no Wi-Fi da usina e se o endereço é o que aparece no tablet chefe.${NO_APK ? ' Com internet, use Conectar pela internet.' : ''}`, 'erro');
     }
   }

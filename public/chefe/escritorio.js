@@ -15,6 +15,8 @@
   // quem salvou ou imprimiu: no tablet chefe, quem entrou nele
   const quemNoEscritorio = () => (ehCentral() ? (pessoaAtual() || {}).nome || '' : cfg.escritorio ? cfg.escritorio.nome : '');
   const diaFechado = () => somarDias(dataProducao(), -1);
+  // 3.0.1: o Escritório abre no dia que está na tela; hoje ainda não fechou, então vale o último que fechou
+  const diaDoEscritorio = (data) => (data && data < dataProducao() ? data : diaFechado());
   const numBr = (n) => (n === '' || n == null || !Number.isFinite(Number(n)) ? '' : Number(n).toLocaleString('pt-BR', { maximumFractionDigits: Math.abs(Number(n)) >= 1000 ? 1 : 2 }));
   const pegarCaminho = (o, c) => c.split('.').reduce((x, k) => (x == null ? undefined : x[k]), o);
   const dataBr = (d) => (/^\d{4}-\d{2}-\d{2}$/.test(d || '') ? fmtData(d) : d || '');
@@ -97,9 +99,9 @@
       <span class="num-esc">${val === '' || val == null ? '—' : esc(numBr(val))}${unidade && val !== '' ? ` <small>${esc(unidade)}</small>` : ''}</span>
       <button class="btn pequeno" data-a="esc-campo" data-c="${c}" data-r="${esc(rotulo)}">Mudar</button></div>`;
   }
-  // 2.17: pela nuvem é só ver: dá para mudar os números para enviar ou imprimir, mas salvar é no tablet chefe
-  const atalhosEsc = (v, extra = '') => (cfg.soNuvem ? '' : `<button class="atalho ${v.sujo ? 'destaque' : ''}" data-a="esc-salvar">${ico('certo')}<span>Salvar</span></button>`) + extra;
-  const botaoSalvarEsc = () => (cfg.soNuvem ? '</div><p class="sub">Pela nuvem: dá para mudar os números e enviar ou imprimir; salvar é no tablet chefe.</p>'
+  // 2.17: na nuvem antiga é só ver: dá para mudar os números para enviar ou imprimir, mas salvar é no tablet chefe
+  const atalhosEsc = (v, extra = '') => (soVer() ? '' : `<button class="atalho ${v.sujo ? 'destaque' : ''}" data-a="esc-salvar">${ico('certo')}<span>Salvar</span></button>`) + extra;
+  const botaoSalvarEsc = () => (soVer() ? '</div><p class="sub">Pela nuvem: dá para mudar os números e enviar ou imprimir; salvar é no tablet chefe.</p>'
     : `<button class="btn primario" data-a="esc-salvar">${ico('certo')} Salvar</button></div>`);
   function telaEscCalculos(v) {
     const x = valoresDaTela(v);
@@ -194,7 +196,7 @@
   }
   /** Folha igual ao papel: imprime ou monta o arquivo com o que está salvo (salva antes, se mudou). */
   async function arquivoEsc(v, formato) {
-    if (!cfg.soNuvem && (v.sujo || !rastreioGuardado(v.data)) && !(await salvarEsc(v))) return null;
+    if (!soVer() && (v.sujo || !rastreioGuardado(v.data)) && !(await salvarEsc(v))) return null;
     const nome = `Rastreamento_${somarDias(v.data, 1)}`;
     if (formato === 'xml') return new File([gerarXml(v.data, [PID_RASTREIO])], nome + '.xml', { type: MIME.xml });
     if (formato === 'pdf') { const pecas = await pecasPdf(); return new File([window.criarPdf([papel().folha(PID_RASTREIO, v.data)], Object.assign({ fmtNum, titulo: nome }, pecas))], nome + '.pdf', { type: MIME.pdf }); }
@@ -219,7 +221,7 @@
     if (destino) compartilhar(destino, somarDias(v.data, 1), arquivo);
   }
   async function imprimirFolhaEsc(v) {
-    if (!cfg.soNuvem && (v.sujo || !rastreioGuardado(v.data)) && !(await salvarEsc(v))) return;
+    if (!soVer() && (v.sujo || !rastreioGuardado(v.data)) && !(await salvarEsc(v))) return;
     imprimirHtml(window.ModelosPapel.paraHtml(papel().folha(PID_RASTREIO, v.data), 'icons/logo.png', fmtNum), `Rastreamento ${fmtData(somarDias(v.data, 1))}`);
   }
 
@@ -256,7 +258,7 @@
       </div></div>`;
   }
   async function etiquetaEsc(v) {
-    if (!cfg.soNuvem && (v.sujo || !rastreioGuardado(v.data)) && !(await salvarEsc(v))) return;
+    if (!soVer() && (v.sujo || !rastreioGuardado(v.data)) && !(await salvarEsc(v))) return;
     const x = valoresDoDia(v.data);
     const volumes = C.rastreamento.etiqueta.volumes;
     let volume = volumes[0], qtd = 1;

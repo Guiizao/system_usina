@@ -18,21 +18,22 @@
     const item = (a, icone, texto, ativo, extra = '') => `<button class="menu-item ${ativo ? 'ativo' : ''}" data-a="${a}" ${extra}>${ico(icone)}<span>${texto}</span></button>`;
     const abertos = veNoChefe('avisos') ? avisosEmAberto().length : 0;
     const quem = pessoaAtual();
+    const administrar = [quem && quem.dono ? item('sala', 'servidor', 'Sala de controle', naTela('sala')) : '',
+      veNoChefe('chefes') || veNoChefe('conexao') ? item('aparelhos', 'wifi', 'Aparelhos', naTela('aparelhos')) : '',
+      veNoChefe('pessoas') ? item('pessoas', 'pessoas', 'Pessoas', naTela('pessoas')) : '',
+      veNoChefe('registro') ? item('registro', 'nota', 'Registro', naTela('registro')) : '',
+      FUNCOES_DA_USINA.some(veNoChefe) ? item('config', 'ajustes', 'Usina', naTela('config', 'folhas')) : ''].join('');
     return `<nav class="menu-pc" aria-label="Menu do painel">
-      <div class="menu-marca"><img src="icons/logo-u.svg" alt=""><div><b>Pranchetas</b><small>${cfg.soNuvem ? 'Painel pela nuvem' : 'Painel do escritório'}</small></div></div>
+      <div class="menu-marca"><img src="icons/logo-u.svg" alt=""><div><b>Pranchetas</b><small>${soVer() ? 'Painel pela nuvem' : 'Painel do escritório'}</small></div></div>
       ${item('abrir-painel', 'casa', 'Visão geral', naTela('central'))}
       ${veNoChefe('corrigir') || veNoChefe('relatorios') ? `<p class="menu-titulo">Setores</p>
         ${setores().map((s) => item('abrir-setor', s.icone, esc(s.nome), setorAberto === s.id, `data-id="${s.id}"`)).join('')}` : ''}
       <p class="menu-titulo">Acompanhar</p>
       ${veNoChefe('relatorios') ? item('graficos', 'grafico', 'Gráficos', naTela('graficos')) : ''}
       ${veNoChefe('relatorios') ? item('relatorios', 'pasta', 'Relatórios', naTela('relatorios')) : ''}
-      ${veNoChefe('escritorio') ? item('esc-abrir', 'escritorio', 'Escritório', naTela('escritorio', 'esc-calculos', 'esc-rastreamento'), `data-t="escritorio" data-dia="${diaFechado()}"`) : ''}
-      ${veNoChefe('avisos') && !cfg.soNuvem ? item('avisos', 'sino', `Avisos${abertos ? ` <em class="contador">${abertos}</em>` : ''}`, naTela('avisos')) : ''}
-      ${cfg.soNuvem ? '' : `<p class="menu-titulo">Administrar</p>
-        ${item('aparelhos', 'wifi', 'Aparelhos', naTela('aparelhos'))}
-        ${veNoChefe('pessoas') ? item('pessoas', 'pessoas', 'Pessoas', naTela('pessoas')) : ''}
-        ${veNoChefe('registro') ? item('registro', 'nota', 'Registro', naTela('registro')) : ''}
-        ${FUNCOES_DA_USINA.some(veNoChefe) ? item('config', 'ajustes', 'Usina', naTela('config', 'folhas')) : ''}`}
-      <div class="menu-pe">${quem ? `<b>${esc(quem.nome)}</b><small>${cfg.soNuvem ? 'pela nuvem · só ver' : 'neste turno'}</small>` : '<small>Ninguém entrou</small>'}</div>
+      ${veNoChefe('escritorio') ? item('esc-abrir', 'escritorio', 'Escritório', naTela('escritorio', 'esc-calculos', 'esc-rastreamento'), `data-t="escritorio" data-dia="${diaDoEscritorio(view().data)}"`) : ''}
+      ${veNoChefe('avisos') && !soVer() ? item('avisos', 'sino', `Avisos${abertos ? ` <em class="contador">${abertos}</em>` : ''}`, naTela('avisos')) : ''}
+      ${soVer() || !administrar ? '' : `<p class="menu-titulo">Administrar</p>${administrar}`}
+      <div class="menu-pe">${quem ? `<b>${esc(quem.nome)}</b><small>${soVer() ? 'pela nuvem · só ver' : cfg.soNuvem ? 'pelo banco' : 'neste turno'}</small>` : '<small>Ninguém entrou</small>'}</div>
     </nav>`;
   }

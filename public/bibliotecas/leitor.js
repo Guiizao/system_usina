@@ -19,11 +19,20 @@
   // Molde: onde ficam as colunas (0 = borda esquerda da tabela, 1 = direita) e quantas linhas tem
   const MOLDES = {
     anexo1: { linhas: 25, colunas: [0, 0.049, 0.148, 0.251, 0.315, 0.381, 0.445, 0.517, 0.597, 0.675, 0.754, 0.876, 1],
-      nomes: ['n', 'inicio', 'fim', 'phf', 'cal', 'brix', 'phf2', 'anti', 'enzi', 'bhx', 'produto', 'responsavel'] },
+      nomes: ['n', 'inicio', 'fim', 'phf', 'cal', 'brix', 'phf2', 'anti', 'enzi', 'bhx', 'produto', 'responsavel'],
+      chave: { coluna: 'n', textos: Array.from({ length: 25 }, (_, i) => String(i + 1)) } },
     anexo2: { linhas: 25, colunas: [0, 0.075, 0.205, 0.34, 0.459, 0.58, 0.70, 0.824, 1],
-      nomes: ['n', 'horario', 'sac', 'phf', 'bhx', 'enz', 'anti', 'responsavel'] },
+      nomes: ['n', 'horario', 'sac', 'phf', 'bhx', 'enz', 'anti', 'responsavel'],
+      chave: { coluna: 'n', textos: Array.from({ length: 25 }, (_, i) => String(i + 1)) } },
     pop03: { linhas: 24, colunas: [0, 0.227, 0.315, 0.403, 0.591, 0.744, 0.858, 1],
-      nomes: ['fornecedor', 'nf', 'lote', 'validade', 'qtd', 'hora', 'operador'] },
+      nomes: ['fornecedor', 'nf', 'lote', 'validade', 'qtd', 'hora', 'operador'],
+      chave: { coluna: 'hora', textos: Array.from({ length: 24 }, (_, i) => `${String((i + 7) % 24 || 24).padStart(2, '0')}:00`) } },
+    // Caldeira: as horas ficam nas colunas e os itens nas fileiras, que têm alturas diferentes. Medido nas duas fotos da folha.
+    // As colunas contam só as horas, porque a coluna dos nomes costuma ficar coberta na foto; a última (7h do dia seguinte) não é lida.
+    caldeira: { linhas: 24, deitada: true, tol: 0.012,
+      colunas: [0, 0.048, 0.086, 0.125, 0.162, 0.2, 0.247, 0.294, 0.341, 0.388, 0.424, 0.47, 0.517, 0.553, 0.59, 0.626, 0.664, 0.706, 0.738, 0.774, 0.81, 0.849, 0.882, 0.924, 0.962, 1],
+      fileiras: [0, 0.058, 0.221, 0.386, 0.552, 0.663, 0.777, 0.888, 1],
+      nomes: ['horas', 'inicio_aquec', 'parada', 'pressao', 'temp_agua', 'descarga_fundo', 'descarga_garrafa', 'retirada_cinza'] },
   };
 
   /* ---------------- carregar OpenCV e a rede ---------------- */
@@ -134,7 +143,8 @@
     }
     return grupos.map((g) => g.sort((p, q) => p[0] - q[0]));
   }
-  function tabela(pts, nLinhas) {
+  const FOLGA = 3; // fileiras a mais de cada lado, para a coluna impressa poder corrigir a posição (alinharPelaChave)
+  function tabela(pts, nLinhas, alturaFoto) {
     if (pts.length < 10) return null;
     const fil = fileiras(pts, 8).filter((f) => f.length >= 3);
     if (fil.length < 3) return null;
@@ -147,7 +157,7 @@
         let s = ys[j] - ys[i];
         if (s < 12) continue;
         const usados = [i, j], posic = [ys[i], ys[j]];
-        let total = Math.min(cont[i], cap) + Math.min(cont[j], cap), faltas = 0, parou = false;
+        let total = Math.min(cont[i], cap) + Math.min(cont[j], cap), faltas = 0, foraDaFoto = 0, parou = false;
         for (let m = 2; m <= nLinhas; m++) {
           const alvo = posic[posic.length - 1] + s;
           let c = 0, dmin = Infinity;
@@ -156,18 +166,42 @@
             s = 0.7 * s + 0.3 * (ys[c] - posic[posic.length - 1]); usados.push(c); posic.push(ys[c]); total += Math.min(cont[c], cap);
           } else {
             usados.push(null); posic.push(alvo); faltas++;
-            if (faltas > nLinhas * 0.25) { parou = true; break; }
+            if (alvo > alturaFoto - s * 0.5) foraDaFoto++; // a foto cortou: não é a linha que falhou
+            if (faltas - foraDaFoto > nLinhas * 0.25) { parou = true; break; }
           }
         }
         if (parou || usados.length < nLinhas + 1) continue;
         const passos = posic.slice(1).map((y, k) => y - posic[k]); const med = mediana(passos);
         const irregular = passos.reduce((sum, p) => sum + Math.abs(p - med), 0) / med;
-        const nota = total - faltas * cap * 1.5 - irregular * cap;
+        const nota = total - (faltas - foraDaFoto) * cap * 1.5 - irregular * cap;
         if (!melhor || nota > melhor.nota) melhor = { nota, usados, posic };
       }
     }
     if (!melhor) return null;
-    return { fils: melhor.usados.map((u) => (u === null ? null : fil[u])), y0: melhor.posic[0], s: (melhor.posic[nLinhas] - melhor.posic[0]) / nLinhas };
+    const s = (melhor.posic[nLinhas] - melhor.posic[0]) / nLinhas;
+    const miolo = melhor.usados.map((u) => (u === null ? null : fil[u]));
+    const alem = (de, passo) => {
+      const fora = []; let y = de;
+      for (let e = 0; e < FOLGA; e++) {
+        y += passo;
+        let c = -1, dmin = s * 0.3;
+        ys.forEach((v, k) => { const d = Math.abs(v - y); if (d < dmin) { dmin = d; c = k; } });
+        if (c >= 0) y = ys[c];
+        fora.push(c >= 0 ? fil[c] : null);
+      }
+      return fora;
+    };
+    return { miolo, fils: [...alem(melhor.posic[0], -s).reverse(), ...miolo, ...alem(melhor.posic[nLinhas], s)], y0: melhor.posic[0] - FOLGA * s, s, altura: s * (nLinhas + 2 * FOLGA), folga: FOLGA };
+  }
+  /** molde com fileiras de alturas diferentes: casa as fileiras inteiras com o molde, do mesmo jeito que as colunas */
+  function tabelaPorFileiras(pts, molde) {
+    const fil = fileiras(pts, 8).filter((f) => f.length >= molde.colunas.length * 0.6);
+    const ys = fil.map((f) => f.reduce((s, p) => s + p[1], 0) / f.length);
+    const casado = casarColunas(ys, molde.fileiras, molde.tol);
+    if (!casado || casado.achou < molde.fileiras.length * 0.7) return null;
+    const altura = casado.pos[casado.pos.length - 1] - casado.pos[0];
+    const miolo = casado.pos.map((y) => { const k = ys.indexOf(y); return k >= 0 ? fil[k] : null; });
+    return { miolo, fils: miolo, y0: casado.pos[0], s: altura / (molde.fileiras.length - 1), altura, folga: 0 };
   }
   function colunas(fils, s) {
     const cadeias = [];
@@ -191,19 +225,23 @@
     });
   }
   function casarColunas(xs, molde, tol = 0.022) {
+    const n = molde.length;
     let melhor = null;
-    for (let i = 0; i < xs.length; i++) {
-      for (let j = xs.length - 1; j > i; j--) {
-        const L = xs[i], R = xs[j];
-        if (R - L < 50) continue;
-        let achou = 0; const pos = [];
-        for (const r of molde) {
-          const alvo = L + r * (R - L);
-          let k = 0, dmin = Infinity;
-          xs.forEach((x, q) => { const d = Math.abs(x - alvo); if (d < dmin) { dmin = d; k = q; } });
-          if (dmin < tol * (R - L)) { achou++; pos.push(xs[k]); } else pos.push(alvo);
+    // a borda da tabela pode ter ficado fora da foto: também tenta casar sem a primeira ou sem a última linha do molde
+    for (const [a, b] of [[0, n - 1], [1, n - 1], [0, n - 2]]) {
+      for (let i = 0; i < xs.length; i++) {
+        for (let j = xs.length - 1; j > i; j--) {
+          const larg = (xs[j] - xs[i]) / (molde[b] - molde[a]), L = xs[i] - molde[a] * larg;
+          if (larg < 50) continue;
+          let achou = 0; const pos = [];
+          for (const r of molde) {
+            const alvo = L + r * larg;
+            let k = 0, dmin = Infinity;
+            xs.forEach((x, q) => { const d = Math.abs(x - alvo); if (d < dmin) { dmin = d; k = q; } });
+            if (dmin < tol * larg) { achou++; pos.push(xs[k]); } else pos.push(alvo);
+          }
+          if (!melhor || achou > melhor.achou) melhor = { achou, pos };
         }
-        if (!melhor || achou > melhor.achou) melhor = { achou, pos };
       }
     }
     return melhor;
@@ -217,23 +255,24 @@
     liberar(norm, hor, ver);
     const pts = cruzamentos(hor2, ver2);
     liberar(hor2, ver2);
-    const t = tabela(pts, molde.linhas);
+    const t = molde.fileiras ? tabelaPorFileiras(pts, molde) : tabela(pts, molde.linhas, cinza.rows);
     if (!t) { liberar(norm2); return null; }
-    const cols = colunas(t.fils, t.s);
+    const cols = colunas(t.miolo, t.s);
     // retas das fileiras (y = a x + b); as que faltam são interpoladas
     const rf = t.fils.map((fl) => (fl && fl.length >= 3 ? retaMinQuad(fl.map((p) => p[0]), fl.map((p) => p[1])) : null));
     const vivos = rf.map((r, i) => (r ? i : -1)).filter((i) => i >= 0);
     if (vivos.length < 2) { liberar(norm2); return null; }
+    const pos = molde.fileiras || rf.map((_, i) => i / (rf.length - 1)); // onde cada fileira fica na altura da tabela
     for (let i = 0; i < rf.length; i++) {
       if (rf[i]) continue;
       const ant = vivos.filter((j) => j < i).pop(); const prox = vivos.find((j) => j > i);
-      if (ant !== undefined && prox !== undefined) { const u = (i - ant) / (prox - ant); rf[i] = [rf[ant][0] * (1 - u) + rf[prox][0] * u, rf[ant][1] * (1 - u) + rf[prox][1] * u]; }
-      else { const base = ant !== undefined ? ant : prox; rf[i] = [rf[base][0], rf[base][1] + (i - base) * t.s]; }
+      if (ant !== undefined && prox !== undefined) { const u = (pos[i] - pos[ant]) / (pos[prox] - pos[ant]); rf[i] = [rf[ant][0] * (1 - u) + rf[prox][0] * u, rf[ant][1] * (1 - u) + rf[prox][1] * u]; }
+      else { const base = ant !== undefined ? ant : prox; rf[i] = [rf[base][0], rf[base][1] + (pos[i] - pos[base]) * t.altura]; }
     }
-    const ymeio = t.y0 + t.s * molde.linhas / 2;
+    const ymeio = t.y0 + t.altura / 2;
     const ordem = cols.sort((p, q) => (p.a * ymeio + p.b) - (q.a * ymeio + q.b));
     const xs = ordem.map((c) => c.a * ymeio + c.b);
-    const casado = casarColunas(xs, molde.colunas);
+    const casado = casarColunas(xs, molde.colunas, molde.tol);
     if (!casado || casado.achou < molde.colunas.length * 0.6) { liberar(norm2); return null; }
     let rc = casado.pos.map((alvo) => { let kk = -1, dmin = Infinity; xs.forEach((x, q) => { const d = Math.abs(x - alvo); if (d < dmin) { dmin = d; kk = q; } }); return dmin < 2 ? [ordem[kk].a, ordem[kk].b] : null; });
     const vivasC = rc.map((r, i) => (r ? i : -1)).filter((i) => i >= 0);
@@ -247,7 +286,7 @@
     });
     const cruza = (f, c) => { const y = (f[0] * c[1] + f[1]) / (1 - f[0] * c[0]); return [c[0] * y + c[1], y]; };
     const P = rf.map((f) => rc.map((c) => cruza(f, c)));
-    return { img: norm2, P, angulo: a, achou: casado.achou };
+    return { img: norm2, P, angulo: a, achou: casado.achou, folga: t.folga };
   }
 
   /* ---------------- 3. células ---------------- */
@@ -265,7 +304,7 @@
     return out;
   }
   /** apaga as bordas impressas que sobram na célula */
-  function limparCelula(cel) {
+  function limparCelula(cel, semRisco) {
     const h = cel.rows, w = cel.cols;
     const gf = new cv.Mat(); cel.convertTo(gf, cv.CV_32F);
     const fundo = new cv.Mat(); cv.GaussianBlur(gf, fundo, new cv.Size(0, 0), 10);
@@ -288,7 +327,7 @@
     const lab = new cv.Mat(), st = new cv.Mat(), cen = new cv.Mat();
     const nComp = cv.connectedComponentsWithStats(ver, lab, st, cen);
     let risco = false;
-    for (let k = 1; k < nComp; k++) {
+    for (let k = 1; k < nComp && !semRisco; k++) {
       const topo = st.data32S[k * 5 + 1], alt = st.data32S[k * 5 + 3];
       if (alt < h * 0.9 || topo > h * 0.06) continue;
       risco = true;
@@ -327,6 +366,27 @@
   }
   function paraImagemUrl(cel) {
     const c = document.createElement('canvas'); cv.imshow(c, cel); return c.toDataURL('image/jpeg', 0.8);
+  }
+
+  /* ---------------- alinhar pelo que está impresso ---------------- */
+  function lerCelulaBruta(g, m, c) {
+    const bruta = recortarCelula(g.img, g.P, m, c), limpa = limparCelula(bruta), prep = preparar(limpa);
+    const r = rodarRede(prep.entrada);
+    liberar(bruta, limpa);
+    return r;
+  }
+  const NOTA_CHAVE_LIDA = -30; // soma das 6 primeiras linhas: acima disso, a coluna impressa foi lida mesmo
+  /** Cada linha da folha já vem com a sua identificação impressa (1, 2, 3... ou 07:00, 08:00...). A rede lê isso muito bem, então é
+      a coluna impressa que diz onde a tabela começa: o cabeçalho nunca entra como linha, nem com a foto cortada ou torta. */
+  function alinharPelaChave(g, molde) {
+    const c = molde.nomes.indexOf(molde.chave.coluna);
+    const lidas = {};
+    const ler = (i) => { if (!lidas[i]) lidas[i] = lerCelulaBruta(g, i, c); return lidas[i]; };
+    const nota = (d) => { let s = 0; for (let m = 0; m < 6; m++) s += ctc(ler(g.folga + d + m), molde.chave.textos[m]); return s; };
+    let melhor = 0, melhorNota = nota(0); const padrao = melhorNota;
+    for (let d = -g.folga; d <= g.folga; d++) { if (!d) continue; const v = nota(d); if (v > melhorNota) { melhorNota = v; melhor = d; } }
+    // sem diferença clara (foto ruim), fica com as linhas achadas na foto
+    return { inicio: melhorNota - padrao > 6 ? g.folga + melhor : g.folga, nota: melhorNota };
   }
 
   /* ---------------- 4. rede e leitura restrita ---------------- */
@@ -380,10 +440,20 @@
       c.push(['', '']);
     } else if (spec.tipo === 'decimal') {
       for (let i = Math.round(spec.min * 10); i <= Math.round(spec.max * 10); i++) {
-        const a = Math.floor(i / 10), b = i % 10; const v = `${a}.${b}`;
-        new Set([`${a},${b}`, `${a}.${b}`, `${a}${b}`]).forEach((s) => c.push([s, v]));
+        const a = Math.floor(i / 10), b = i % 10;
+        if (!spec.inteiro) {
+          // 50 é 5,0 (a vírgula sumiu), mas ninguém escreve 0,3 como 03: 03 é 3
+          const v = `${a}.${b}`;
+          new Set([`${a},${b}`, `${a}.${b}`, ...(a ? [`${a}${b}`] : [])]).forEach((s) => c.push([s, v]));
+          if (!b && a < 10) c.push([`0${a}`, v]);
+          continue;
+        }
+        // sem vírgula é número inteiro (6 é 6, não 0,6), e a unidade pode vir escrita do lado (6K)
+        const formas = b ? [`${a},${b}`, `${a}.${b}`] : [`${a},0`, `${a}.0`, String(a)], v = b ? `${a}.${b}` : String(a);
+        formas.forEach((s) => { c.push([s, v]); (spec.sufixos || []).forEach((u) => c.push([s + u, v])); });
       }
       c.push(['-', '']); c.push(['', '']);
+      if (spec.inteiro) { c.push(['--', '']); c.push(['---', '']); }
     } else if (spec.tipo === 'quantidade') {
       // quantidade anotada: 160 é cento e sessenta; 188,8 tem a vírgula escrita
       for (let n = 0; n <= (spec.max || 999); n++) c.push([String(n), String(n)]);
@@ -393,7 +463,11 @@
       for (let n = spec.min; n <= spec.max; n++) { c.push([String(n), String(n)]); if (n < 10) c.push([`0${n}`, String(n)]); }
       c.push(['-', '']); c.push(['', '']);
     } else if (spec.tipo === 'opcoes') {
-      spec.opcoes.forEach((o) => c.push([String(o).toUpperCase().normalize('NFD').replace(/[^A-Z0-9 ]/g, '').replace(/ /g, ''), o]));
+      spec.opcoes.forEach((o) => {
+        c.push([String(o).toUpperCase().normalize('NFD').replace(/[^A-Z0-9 ]/g, '').replace(/ /g, ''), o]);
+        if (/^0\d$/.test(o)) c.push([o[1], o]); // 02 escrito como 2
+        ((spec.formas || {})[o] || []).forEach((s) => c.push([s, o]));
+      });
       c.push(['-', '']); c.push(['', '']);
     }
     cacheCand[chave] = c;
@@ -440,7 +514,7 @@
     const { lp, T, C } = r; let caminho = 0, txt = '', ant = 0;
     for (let t = 0; t < T; t++) { let k = 0, mx = -Infinity; for (let c = 0; c < C; c++) if (lp[t * C + c] > mx) { mx = lp[t * C + c]; k = c; } caminho += mx; if (k !== ant && k !== 0) txt += ALFABETO[k - 1]; ant = k; }
     // peso: em número, "outra coisa" conta bastante; em nome/palavra da lista conta pouco (assinatura nunca é legível letra a letra)
-    const penalidade = spec.tipo === 'opcoes' ? Math.log(400) : Math.log(2);
+    const penalidade = spec.tipo === 'opcoes' && !spec.exato ? Math.log(400) : Math.log(2);
     if (!cands.some(([s2]) => s2 === txt)) total = logsoma(total, caminho - penalidade);
     for (const [v, x] of por) {
       let y = x;
@@ -464,7 +538,7 @@
     await new Promise((ok) => setTimeout(ok, 30));
     const cinza = await imagemParaCinza(arquivo);
     // foto tirada de lado ou de cabeça para baixo: testa os giros e fica com o que encaixa melhor no molde
-    const deitada = cinza.cols > cinza.rows;
+    const deitada = (cinza.cols > cinza.rows) !== !!molde.deitada;
     const giros = deitada ? [cv.ROTATE_90_CLOCKWISE, cv.ROTATE_90_COUNTERCLOCKWISE, null, cv.ROTATE_180] : [null, cv.ROTATE_180, cv.ROTATE_90_CLOCKWISE, cv.ROTATE_90_COUNTERCLOCKWISE];
     let g = null;
     for (const giro of giros) {
@@ -472,21 +546,27 @@
       if (giro !== null) { img = new cv.Mat(); cv.rotate(cinza, img, giro); }
       const t = acharGrade(img, molde);
       if (giro !== null) liberar(img);
-      if (t && (!g || t.achou > g.achou)) { if (g) liberar(g.img); g = t; } else if (t) liberar(t.img);
-      if (g && g.achou === molde.colunas.length) break;
+      if (t) {
+        // o giro certo é o que deixa ler a coluna impressa; sem ela, o que encaixa melhor no molde
+        t.alinhada = molde.chave ? alinharPelaChave(t, molde) : { inicio: t.folga, nota: t.achou };
+        if (!g || t.alinhada.nota > g.alinhada.nota) { if (g) liberar(g.img); g = t; } else liberar(t.img);
+      }
+      if (g && (molde.chave ? g.alinhada.nota > NOTA_CHAVE_LIDA : g.achou === molde.colunas.length)) break;
       await new Promise((ok) => setTimeout(ok, 0));
     }
     liberar(cinza);
     if (!g) throw new Error('Não achei a tabela na foto. Tire de novo, com a folha inteira, reta e bem iluminada.');
-    const nomes = Object.keys(colunasPedidas);
+    const inicio = g.alinhada.inicio;
+    const nomes = Object.keys(colunasPedidas).filter((n) => molde.nomes.includes(n));
     const linhas = [];
     const total = molde.linhas * nomes.length; let feitas = 0;
     for (let m = 0; m < molde.linhas; m++) {
       const celulas = {};
       for (const nome of nomes) {
         const c = molde.nomes.indexOf(nome);
-        const bruta = recortarCelula(g.img, g.P, m, c);
-        const limpa = limparCelula(bruta);
+        const bruta = molde.fileiras ? recortarCelula(g.img, g.P, c, m) : recortarCelula(g.img, g.P, inicio + m, c);
+        // com a unidade do lado (6K) a letra é mais alta que a célula: o traço de cima a baixo é a perna do K, não um risco
+        const limpa = limparCelula(bruta, !!colunasPedidas[nome].spec.sufixos);
         const prep = preparar(limpa);
         const vazia = prep.tinta < 0.012; // quase sem tinta: nem passa na rede (e a rede ainda pode dizer "vazio")
         celulas[nome] = { vazia, risco: !!limpa.risco, imagem: paraImagemUrl(bruta), r: vazia ? null : rodarRede(prep.entrada) };
@@ -503,5 +583,5 @@
 
   window.LeitorFolhas = { carregar, lerFoto, lerCelula, MOLDES, candidatos,
     // etapas soltas, para testar e comparar com o treino
-    _interno: { imagemParaCinza, acharGrade, recortarCelula, limparCelula, preparar, rodarRede, livre, get cv() { return cv; } } };
+    _interno: { imagemParaCinza, mascaras, angulo, girar, cruzamentos, fileiras, colunas, acharGrade, alinharPelaChave, ctc, recortarCelula, limparCelula, preparar, rodarRede, livre, get cv() { return cv; } } };
 })();

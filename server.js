@@ -186,6 +186,8 @@ const ATUALIZE = 'Atualize o aplicativo: a central agora usa a conexão embaralh
 if (!config.tokenLeitura) { config.tokenLeitura = crypto.randomBytes(24).toString('base64url'); salvarConfig(); }
 const TOKEN_LEITURA = process.env.TOKEN_LEITURA || config.tokenLeitura;
 const leitura = require('./api-leitura');
+const RegrasUsina = require('./regras-usina');
+const { juntarLinhas, criadasSemSaber } = RegrasUsina;
 const Juncao = require('./public/nucleo/juncao');
 let apiLeituraPronta = null;
 const medidasDoEscritorio = () => { const c = db.registros['config|sistema|geral']; return c && !c.apagado && c.valores ? c.valores.medicao || null : null; };
@@ -432,18 +434,117 @@ async function puxarFilaNuvem() {
     if (c.status !== 200) throw new Error(erroDaNuvem(c));
   }
 }
-const erroDaNuvem = (r) => r.erro || (r.status === 401 ? 'A nuvem recusou a senha da central' : `A nuvem respondeu ${r.status}: ${((r.json && r.json.erro) || r.texto || '').slice(0, 200)}`);
+const erroDaNuvem = (r) => r.erro || (r.status === 401 ? 'A nuvem recusou a senha da central' : r.status === 409 ? 'A nuvem é de outra central, nada foi enviado' : `A nuvem respondeu ${r.status}: ${((r.json && r.json.erro) || r.texto || '').slice(0, 200)}`);
 /** O que falta mandar: o que mudou depois do último envio (e, na primeira vez, também os dias do BackupUsina). */
 function pendentesNuvem(n) {
   const mapa = new Map();
-  const juntar = (r) => { if (ehDia(r.data) && r.prancheta !== 'registro' && r.seq > (n.seq || 0)) { const a = mapa.get(r.id); if (!a || r.seq > a.seq) mapa.set(r.id, r); } };
+  // 3.0: também a configuração e o registro do sistema ficam no banco; o que veio dele não volta
+  const juntar = (r) => { if ((ehDia(r.data) || r.data === 'config') && !r.doBanco && r.seq > (n.seq || 0)) { const a = mapa.get(r.id); if (!a || r.seq > a.seq) mapa.set(r.id, r); } };
   if (!n.arquivosEnviados) {
-    fs.readdirSync(PASTAS.backup).forEach((f) => { const m = f.match(/^(\d{4}-\d{2}-\d{2})\.json$/); if (m && arquivado(m[1])) lerDiaArquivado(m[1]).forEach(juntar); });
+    fs.readdirSync(PASTAS.backup).forEach((f) => { const m = f.match(/^(\d{4}-\d{2}-\d{2})\.json$/); if (m && arquivado(m[1])) lerDiaArquivado(m[1]).forEach((r) => {
+      // arquivo de backup restaurado pode ter número maior que o de agora: o que chegar depois tem de numerar acima, senão nunca sobe
+      if (r.seq > db.seq) db.seq = r.seq;
+      juntar(r);
+    }); });
   }
   Object.values(db.registros).forEach(juntar);
   return [...mapa.values()].sort((a, b) => a.seq - b.seq);
 }
 const resumoHash = (x) => crypto.createHash('sha256').update(JSON.stringify(x === undefined ? null : x)).digest('hex').slice(0, 16);
+/* ---------- 3.0: o banco é a fonte. A central é a ponte do Wi-Fi: manda o que recebeu e puxa o que chegou lá. ---------- */
+/** Uma anotação que veio do banco. Mais novo ganha, campo a campo; o que já está aqui nunca some. */
+function receberDoBanco(rec) {
+  if (!rec || typeof rec.id !== 'string' || rec.id !== `${rec.data}|${rec.prancheta}|${rec.chave}` || !(rec.data === 'config' || ehDia(rec.data)) || !Juncao.valido(rec)) return false;
+  const doBanco = Object.assign({}, rec, { doBanco: true });
+  if (arquivado(rec.data)) return juntarNoArquivo(rec.data, [doBanco]) > 0;
+  const atual = db.registros[rec.id];
+  let entrada;
+  if (rec.data === 'config') {
+    if (atual && (Number(rec.rev) || 0) < (Number(atual.rev) || 0)) return false;
+    if (atual && rec.atualizadoEm <= atual.atualizadoEm && (Number(rec.rev) || 0) === (Number(atual.rev) || 0)) return false;
+    entrada = doBanco;
+    // a configuração da migração só completa o que falta na que a central já tem, e o resultado sobe
+    if (atual && !atual.apagado && rec.aparelho === 'migracao-3.0') {
+      const meus = (atual.valores || {}).operadores || {}, deles = (rec.valores || {}).operadores || {}, nome = (o) => (typeof o === 'string' ? o : o.nome), operadores = {};
+      for (const s of new Set([...Object.keys(deles), ...Object.keys(meus)])) operadores[s] = [...(meus[s] || []), ...(deles[s] || []).filter((o) => !(meus[s] || []).some((x) => nome(x) === nome(o)))];
+      entrada = Object.assign({}, atual, { valores: Object.assign({}, rec.valores, atual.valores, { operadores }), rev: (Number(rec.rev) || 0) + 1, atualizadoEm: Date.now() });
+    }
+  } else {
+    entrada = Juncao.juntar(atual, doBanco);
+    if (entrada) delete entrada.doBanco; // juntou com o que está aqui: a junção ainda precisa subir
+    else entrada = !atual || rec.atualizadoEm > atual.atualizadoEm ? doBanco : null;
+    if (!entrada) return false;
+    if (atual && JSON.stringify([entrada.valores, entrada.camposEm, !!entrada.apagado]) === JSON.stringify([atual.valores, atual.camposEm, !!atual.apagado]) && entrada.atualizadoEm === atual.atualizadoEm) return false;
+  }
+  db.seq += 1;
+  db.registros[rec.id] = Object.assign({}, entrada, { seq: db.seq, recebidoEm: Date.now() });
+  return true;
+}
+async function puxarNovidades() {
+  const n = config.nuvem;
+  for (let vez = 0; vez < 40; vez++) {
+    const r = await pedirNuvem('central/novidades?desde=' + (n.seqBanco || 0));
+    if (r.status === 404) return; // nuvem que ainda não tem o banco
+    if (r.status !== 200 || !r.json || !Array.isArray(r.json.registros)) throw new Error(erroDaNuvem(r));
+    const dias = new Set();
+    for (const rec of r.json.registros) if (receberDoBanco(rec)) dias.add(rec.data);
+    if (dias.size) { gravarDisco(true); dias.forEach((d) => { if (ehDia(d) && !arquivado(d)) backupDoDia(d); }); }
+    n.seqBanco = Number(r.json.seq) || 0;
+    if (!r.json.mais) return;
+  }
+}
+/** Mapa de id -> { em }: fica a linha com a hora mais nova. Nada some por não ter vindo. */
+function juntarMapa(meu, dele) {
+  Object.entries(dele || {}).forEach(([id, x]) => { if (x && typeof x === 'object' && (!meu[id] || (Number(x.em) || 0) > (Number(meu[id].em) || 0))) meu[id] = x; });
+  return meu;
+}
+function aplicarEstado(j) {
+  const e = j.estado || {};
+  if (typeof e.donoId === 'string' && e.donoId) config.donoId = e.donoId;
+  (Array.isArray(j.pessoas) ? j.pessoas : []).forEach((p) => {
+    if (!p || typeof p.id !== 'string' || typeof p.nome !== 'string') return;
+    let local = config.pessoas.find((x) => x.id === p.id);
+    if (!local) {
+      // central que voltou zerada: a pessoa de mesmo nome é a do banco
+      const xara = config.pessoas.find((x) => x.nome.toLowerCase() === p.nome.toLowerCase());
+      if (xara) {
+        config.pessoas = config.pessoas.filter((x) => x !== xara);
+        Object.keys(config.sessoes).forEach((k) => { if (config.sessoes[k].pessoaId === xara.id) delete config.sessoes[k]; });
+      }
+      local = { id: p.id };
+      config.pessoas.push(local);
+    } else if ((Number(p.em) || 0) <= (Number(local.em) || 0)) return;
+    Object.assign(local, { nome: p.nome, nivel: p.nivel, ativo: p.ativo !== false, extras: p.extras || {}, aparelhos: p.aparelhos || [], criadoEm: p.criadoEm || 0, em: Number(p.em) || 0 });
+    if (p.nuvem && (!local.nuvem || local.nuvem.sal !== p.nuvem.sal)) {
+      // a senha mudou em outro lugar: a daqui não vale mais
+      local.nuvem = p.nuvem; delete local.sal; delete local.resumo; delete local.pedeTrocarSenha;
+    } else if (p.nuvem && local.nuvem) local.nuvem.selado = p.nuvem.selado;
+    if (local.ativo === false) Object.keys(config.sessoes).forEach((k) => { if (config.sessoes[k].pessoaId === local.id) delete config.sessoes[k]; });
+  });
+  juntarMapa(config.aparelhosChefe, e.aparelhosChefe);
+  config.setoresAparelhos = juntarMapa(config.setoresAparelhos || {}, e.setoresAparelhos);
+  if (e.codigo && e.chave && (Number(e.codigoEm) || 0) > (Number(config.codigoEm) || 0)) Object.assign(config, { codigo: e.codigo, chave: e.chave, codigoEm: Number(e.codigoEm) });
+  if ((Number(e.bloqueiosEm) || 0) > (Number(config.bloqueiosEm) || 0) && Array.isArray(j.bloqueios)) {
+    const novos = {};
+    j.bloqueios.forEach((b) => { if (b && typeof b.id === 'string') { const { id, ...resto } = b; novos[id] = Object.assign({}, config.bloqueios[id], resto); } });
+    config.bloqueios = novos; config.bloqueiosEm = Number(e.bloqueiosEm);
+    config.bloqueiosRev = Math.max(config.bloqueiosRev || 0, ...j.bloqueios.map((b) => Number(b.rev) || 0));
+  }
+  salvarConfig();
+}
+async function sincronizarEstado() {
+  const n = config.nuvem;
+  const pessoas = config.pessoas.map((p) => ({
+    id: p.id, nome: p.nome, nivel: p.nivel, ativo: p.ativo !== false, extras: p.extras || {}, aparelhos: p.aparelhos || [], criadoEm: p.criadoEm || 0, em: p.em || 0,
+    funcoes: [...funcoesDaPessoa(p)].filter((f) => !['conexao', 'sistema'].includes(f)).sort(),
+    ...(!p.pedeTrocarSenha && p.nuvem && p.nuvem.verificador ? { nuvem: { sal: p.nuvem.sal, iteracoes: p.nuvem.iteracoes, verificador: p.nuvem.verificador } } : {}),
+  }));
+  const estado = { donoId: config.donoId || '', aparelhosChefe: config.aparelhosChefe, setoresAparelhos: config.setoresAparelhos || {}, geracoesZeradas: config.geracoesZeradas || [], codigo: config.codigo, chave: config.chave, codigoEm: config.codigoEm || 0 };
+  const r = await pedirNuvem('central/sincronia', { pessoas, estado });
+  if (r.status === 404) return;
+  if (r.status !== 200 || !r.json) throw new Error(erroDaNuvem(r));
+  aplicarEstado(r.json);
+}
 let enviandoNuvem = false;
 async function enviarParaNuvem() {
   const n = config.nuvem;
@@ -455,18 +556,12 @@ async function enviarParaNuvem() {
     if (!n.conferida) {
       const e = await pedirNuvem('central/estado');
       if (e.status !== 200 || !e.json) throw new Error(erroDaNuvem(e));
-      if (e.json.geracao !== config.geracao || !e.json.registros) { n.seq = 0; n.arquivosEnviados = false; n.formsHash = ''; n.medidasHash = ''; n.bloqueiosHash = ''; n.pessoasHash = ''; }
+      if (e.json.geracao !== config.geracao || !e.json.registros) { n.seq = 0; n.arquivosEnviados = false; n.formsHash = ''; n.medidasHash = ''; n.bloqueiosHash = ''; }
       n.conferida = true;
     }
     const forms = formsEmVigor();
     delete forms.pinAdmin; // senha não vai para a nuvem
     const formsHash = resumoHash(forms);
-    const pessoas = config.pessoas.filter((p) => p.ativo !== false).map((p) => ({
-      id: p.id, nome: p.nome, nivel: p.nivel, ativo: true,
-      funcoes: [...funcoesDaPessoa(p)].filter((f) => !['conexao', 'sistema'].includes(f)).sort(),
-      ...(!p.pedeTrocarSenha && p.nuvem ? { nuvem: p.nuvem } : {}),
-    }));
-    const pessoasHash = resumoHash(pessoas);
     // aparelhos bloqueados: longe da usina, o aparelho pergunta na nuvem (versão 2.11).
     // A senha de desbloqueio (sal e resumo) não sobe: a rota da nuvem é aberta e daria para testar senhas fora do aparelho.
     // A lista e a revisão saem juntas (sem esperar nada no meio): a revisão diz até onde a lista está certa.
@@ -478,11 +573,15 @@ async function enviarParaNuvem() {
     const medidas = medidasDoEscritorio();
     const medidasHash = resumoHash(medidas);
     // Um envio vazio por ciclo também consulta a versão publicada, mesmo sem novas anotações.
+    let adotou = false;
     for (let vez = 0; vez < 40; vez++) {
       const pend = pendentesNuvem(n);
       const lote = pend.slice(0, NUVEM_LOTE);
-      if (vez > 0 && !lote.length && n.pessoasHash === pessoasHash && n.formsHash === formsHash && n.medidasHash === medidasHash && (bloqueiosDemais || n.bloqueiosHash === bloqueiosHash)) { n.arquivosEnviados = true; n.faltam = 0; break; }
-      const corpo = { geracao: config.geracao, medidas, registros: lote };
+      if (vez > 0 && !lote.length && n.formsHash === formsHash && n.medidasHash === medidasHash && (bloqueiosDemais || n.bloqueiosHash === bloqueiosHash)) { n.arquivosEnviados = true; n.faltam = 0; break; }
+      // 3.0: sem nada novo, o envio vazio (que traz a versão publicada) sai só uma vez por minuto
+      if (vez === 0 && !lote.length && n.conferidaEm && n.formsHash === formsHash && n.medidasHash === medidasHash && (bloqueiosDemais || n.bloqueiosHash === bloqueiosHash) && Date.now() - (n.vazioEm || 0) < 55000) break;
+      n.vazioEm = Date.now();
+      const corpo = { geracao: config.geracao, geracoesZeradas: config.geracoesZeradas || [], medidas, registros: lote };
       // A foto atualiza mesmo sem anotações; lotes e envios antecipados não a repetem no mesmo minuto.
       if (vez === 0 && Date.now() - (n.aparelhosEnviadosEm || 0) >= 60000) {
         corpo.aparelhos = listaDeAparelhos().slice(0, 200).map((a) => ({
@@ -492,10 +591,19 @@ async function enviarParaNuvem() {
         n.aparelhosEnviadosEm = Date.now();
       }
       if (n.formsHash !== formsHash) corpo.forms = forms;
-      if (n.pessoasHash !== pessoasHash) corpo.pessoas = pessoas;
       // com a revisão: o aparelho só aceita a resposta da nuvem se ela for mais nova que o bloqueio que ele já tem
       if (!bloqueiosDemais && n.bloqueiosHash !== bloqueiosHash) { corpo.bloqueios = bloqueios; corpo.bloqueiosRev = bloqueiosRev; }
       const r = await pedirNuvem('central/enviar', corpo);
+      // 3.0: o banco é de outra geração (esta central voltou zerada ou foi trocada): adota a dele e junta tudo. Nada se apaga.
+      if (r.status === 409 && !adotou && r.json && typeof r.json.geracao === 'string' && r.json.geracao) {
+        adotou = true;
+        config.geracao = r.json.geracao;
+        Object.assign(n, { seq: 0, seqBanco: 0, arquivosEnviados: false, formsHash: '', medidasHash: '', bloqueiosHash: '', conferidaEm: 0 });
+        registrar('configuracao', 'A central adotou os dados do banco', { aparelho: 'central' });
+        salvarConfig();
+        vez = -1;
+        continue;
+      }
       if (r.status !== 200) throw new Error(erroDaNuvem(r));
       const telas = infoDasTelas(r.json && r.json.telas);
       if (telas && (!infoDasTelas(n.telas) || numeroDaVersao(telas.versao) >= numeroDaVersao(n.telas.versao))) n.telas = telas;
@@ -503,11 +611,13 @@ async function enviarParaNuvem() {
         await buscarTelasOnline(n.url.replace(/\/$/, '') + '/telas/').catch((e) => console.log('  Telas pela internet: ' + e.message));
       }
       if (lote.length) n.seq = lote[lote.length - 1].seq;
-      n.pessoasHash = pessoasHash; n.formsHash = formsHash; n.medidasHash = medidasHash; if (!bloqueiosDemais) n.bloqueiosHash = bloqueiosHash;
+      n.formsHash = formsHash; n.medidasHash = medidasHash; n.conferidaEm = Date.now(); if (!bloqueiosDemais) n.bloqueiosHash = bloqueiosHash;
       n.ultimoEnvio = Date.now(); n.erro = bloqueiosDemais ? 'Mais de 500 aparelhos bloqueados: a lista não vai para a nuvem' : '';
       n.faltam = Math.max(0, pend.length - lote.length);
     }
     if (bloqueiosDemais) n.erro = 'Mais de 500 aparelhos bloqueados: a lista não vai para a nuvem';
+    await puxarNovidades();
+    await sincronizarEstado();
   } catch (e) {
     n.erro = e.message; n.conferida = false;
   } finally {
@@ -522,7 +632,7 @@ const agendarNuvem = (ms = 5000) => { if (!config.nuvem.url) return; clearTimeou
 // Cada pessoa tem nome, nível e a sua senha (só a senha já diz quem é). A senha fica só aqui, embaralhada com sal:
 // nem a central guarda a senha em si. Quem entra num tablet chefe fica como responsável dele.
 // Só o administrador cadastra pessoas e mexe nas permissões (o que cada uma pode fazer fica no aplicativo, forms.js).
-const NIVEIS_VALIDOS = ['administrador', 'encarregado', 'consulta'];
+const NIVEIS_VALIDOS = ['administrador', 'encarregado', 'funcionario', 'consulta'];
 function resumoDaSenha(pin, sal) {
   let h = crypto.createHash('sha256').update(sal + ':' + pin).digest();
   for (let i = 0; i < 20000; i++) h = crypto.createHmac('sha256', h).update(String(pin)).digest();
@@ -542,10 +652,23 @@ if (!Array.isArray(config.pessoas)) {
 if (!config.sessoes) config.sessoes = {};
 if (!config.aparelhosChefe) config.aparelhosChefe = {};
 if (!config.aparelhosVistos) config.aparelhosVistos = {};
-const pessoaPublica = (p) => ({ id: p.id, nome: p.nome, nivel: p.nivel, extras: p.extras || {}, aparelhos: p.aparelhos || [], ativo: p.ativo !== false, temSenha: !!p.resumo });
-const pessoaDaSenha = (pin) => config.pessoas.find((p) => p.ativo !== false && p.resumo && mesmoSegredo(resumoDaSenha(String(pin), p.sal), p.resumo));
-const pessoaDoAparelho = (id) => { const s = config.sessoes[id]; return s ? config.pessoas.find((p) => p.id === s.pessoaId && p.ativo !== false && !p.pedeTrocarSenha) || null : null; };
-const tetoDoAparelho = (id) => { const a = config.aparelhosChefe[id]; return a && Array.isArray(a.teto) ? a.teto : null; };
+const pessoaPublica = (p) => ({ id: p.id, nome: p.nome, nivel: p.nivel, extras: p.extras || {}, aparelhos: p.aparelhos || [], ativo: p.ativo !== false, temSenha: !!(p.resumo || p.nuvem) });
+/** Pessoa que veio do banco ainda não tem o resumo daqui: confere pela conferência do banco e guarda o resumo. */
+function senhaDoBancoConfere(p, pin) {
+  const n = p.nuvem;
+  if (!n || !n.sal || n.iteracoes !== 1000) return false;
+  const v = crypto.pbkdf2Sync(String(pin), n.sal, n.iteracoes, 32, 'sha256').toString('hex');
+  if (n.verificador) return mesmoSegredo(v, n.verificador);
+  const segredo = config.nuvem && config.nuvem.segredo;
+  if (!segredo || !n.selado || !mesmoSegredo(crypto.createHmac('sha256', segredo).update('senha|' + v).digest('hex'), n.selado)) return false;
+  n.verificador = v;
+  return true;
+}
+function pessoaDaSenha(pin) {
+  const p = config.pessoas.find((x) => x.ativo !== false && (x.resumo ? mesmoSegredo(resumoDaSenha(String(pin), x.sal), x.resumo) : senhaDoBancoConfere(x, pin)));
+  if (p && !p.resumo) { Object.assign(p, guardarSenha(String(pin))); salvarConfig(); }
+  return p;
+}
 let formsDaCentral = null;
 const formsLidas = () => formsDaCentral || (formsDaCentral = carregarPranchetas());
 /** Nome do aparelho para o registro e para a lista: o que o administrador deu, ou a função dele. */
@@ -572,17 +695,17 @@ const tentativasSenha = {};
    O que a pessoa faz num aparelho = funções dela ∩ funções do nível ∩ limite do aparelho; o nível 3 continua sem teto.
    O dono (config.donoId) é a pessoa criada pela migração da 2.9 (o Guilherme). A identidade do aparelho é a da conexão
    cifrada (req.aparelho), nunca o que vem no pedido. Aparelho tablet chefe novo precisa ser liberado com uma senha. */
-const FUNCOES_PADRAO = ['anotar', 'corrigir', 'avisos', 'relatorios', 'ler_folha', 'usina', 'folhas', 'conexao', 'integracoes', 'ajustes', 'registro', 'chefes', 'escritorio'];
-const FUNCOES_DO_NIVEL_1 = ['corrigir', 'relatorios', 'escritorio'];
-const funcoesDoForms = () => { try { return formsLidas().funcoes.map((f) => f.id); } catch (e) { return FUNCOES_PADRAO; } };
-const niveisDoForms = () => { try { return formsLidas().niveis || {}; } catch (e) { return {}; } };
+const liberadosNoSetor = {};
+const negar = (res, f) => json(res, 403, { erro: 'Quem está neste aparelho não pode fazer isso', semPermissao: f });
+const { liberarAoEntrar, pessoaDoAparelho, tetoDoAparelho, FUNCOES_PADRAO, FUNCOES_DO_NIVEL_1, funcoesDoForms, niveisDoForms, nivelDoAparelho, ehDono, funcoesDaPessoa, funcoesDaPessoaNoAparelho, funcoesNoAparelho, podeNoAparelho, podeAparelhoSozinho, LIBERADO_NO_SETOR_MS, funcoesNoSetor, guardarSetor, podeFolhaNoSetor, nomeDoNivel, permissoesDoAparelho, decidirConfig, pranchetasSoDoChefe, motivoNoChefe, soMudouEscritorio, camposSoDoEscritorio } = RegrasUsina.criar({ config: () => config, sistema: () => db.registros['config|sistema|geral'], forms: () => formsLidas(), liberados: () => liberadosNoSetor, salvar: () => salvarConfig() });
+
 if (!config.donoId) {
   const dono = config.pessoas.find((p) => p.nivel === 'administrador' && p.ativo !== false) || config.pessoas.find((p) => p.nivel === 'administrador');
   if (dono) { config.donoId = dono.id; salvarConfig(); }
 }
 // 2.18: também protege centrais antigas que ainda usam a senha de fábrica.
 const donoInicial = config.pessoas.find((p) => p.id === config.donoId);
-if (donoInicial && mesmoSegredo(resumoDaSenha('159357', donoInicial.sal), donoInicial.resumo)) {
+if (donoInicial && donoInicial.resumo && mesmoSegredo(resumoDaSenha('159357', donoInicial.sal), donoInicial.resumo)) {
   donoInicial.pedeTrocarSenha = true;
   delete donoInicial.nuvem;
   Object.keys(config.sessoes).forEach((id) => { if (config.sessoes[id].pessoaId === donoInicial.id) delete config.sessoes[id]; });
@@ -595,220 +718,6 @@ if (!config.niveisMigrados) {
   config.niveisMigrados = Date.now();
   salvarConfig();
 }
-const nivelDoAparelho = (id) => { const a = config.aparelhosChefe[id]; return a && [1, 2, 3].includes(a.nivel) ? a.nivel : 0; };
-const ehDono = (p) => !!p && !!config.donoId && p.id === config.donoId;
-/** As funções da pessoa, sem olhar o aparelho. 'sistema' e 'pessoas' não se dão por ajuste. */
-function funcoesDaPessoa(p) {
-  if (!p) return new Set();
-  const todas = funcoesDoForms();
-  if (ehDono(p)) return new Set([...todas, 'pessoas', 'chefes', 'sistema']);
-  if (p.nivel === 'administrador') return new Set([...todas, 'pessoas']);
-  const nv = niveisDoForms()[p.nivel] || { funcoes: [] };
-  const s = new Set(nv.funcoes === 'todas' ? todas : nv.funcoes || []);
-  Object.entries(p.extras || {}).forEach(([f, sim]) => { if (f === 'sistema' || f === 'pessoas') return; if (sim) s.add(f); else s.delete(f); });
-  return s;
-}
-/** 2.17: fora dos aparelhos fixos da pessoa ela só consulta: o aparelho (chefe ou de setor) não ganha o nível dela. */
-const funcoesDaPessoaNoAparelho = (p, aparelho) =>
-  funcoesDaPessoa(p && Array.isArray(p.aparelhos) && p.aparelhos.length && !p.aparelhos.includes(aparelho) ? { nivel: 'consulta' } : p);
-/** O que quem está no aparelho pode fazer nele: a pessoa, o nível do aparelho e o limite dele. */
-function funcoesNoAparelho(aparelho) {
-  const p = pessoaDoAparelho(aparelho);
-  const nivel = nivelDoAparelho(aparelho);
-  if (!p || !nivel || (nivel === 3 && !ehDono(p))) return new Set();
-  const s = funcoesDaPessoaNoAparelho(p, aparelho);
-  if (nivel !== 3) {
-    const cfg = db.registros['config|sistema|geral'];
-    const niveis = cfg && !cfg.apagado && cfg.valores && cfg.valores.niveisChefe;
-    const permitidas = niveis && Array.isArray(niveis[nivel]) ? niveis[nivel] :
-      (nivel === 1 ? FUNCOES_DO_NIVEL_1 : [...s].filter((f) => f !== 'conexao'));
-    [...s].forEach((f) => { if (f === 'sistema' || !permitidas.includes(f)) s.delete(f); });
-  }
-  const teto = tetoDoAparelho(aparelho);
-  if (teto && nivel !== 3) [...s].forEach((f) => { if (!teto.includes(f)) s.delete(f); });
-  return s;
-}
-const podeNoAparelho = (aparelho, f) => funcoesNoAparelho(aparelho).has(f);
-/** O que o tablet chefe faz sozinho, sem depender de quem está dentro (o relatório das 07:05 e os totais do Base44):
-    o que o nível e o limite do próprio aparelho deixam. Às 07:05 o turno virou e normalmente não há ninguém dentro. */
-function podeAparelhoSozinho(aparelho, f) {
-  const nivel = nivelDoAparelho(aparelho);
-  if (!nivel) return false;
-  if (nivel === 3) return true;
-  const cfg = db.registros['config|sistema|geral'];
-  const niveis = cfg && !cfg.apagado && cfg.valores && cfg.valores.niveisChefe;
-  const permitidas = niveis && Array.isArray(niveis[nivel]) ? niveis[nivel] : nivel === 1 ? FUNCOES_DO_NIVEL_1 : FUNCOES_PADRAO.filter((x) => x !== 'conexao');
-  const teto = tetoDoAparelho(aparelho);
-  return permitidas.includes(f) && (!teto || teto.includes(f));
-}
-const negar = (res, f) => json(res, 403, { erro: 'Quem está neste aparelho não pode fazer isso', semPermissao: f });
-// tablet de setor: quem digitou a senha nos ajustes fica liberado por 10 minutos (para a central aceitar o que ele mudar)
-const liberadosNoSetor = {};
-const LIBERADO_NO_SETOR_MS = 10 * 60000;
-// no tablet de setor a senha só abre os ajustes dele (os operadores), seja de quem for: o resto é do tablet chefe
-const FUNCOES_NO_SETOR = ['ajustes', 'usina', 'escritorio'];
-function funcoesNoSetor(aparelho) {
-  const l = liberadosNoSetor[aparelho];
-  if (!l || Date.now() > l.ate) return new Set();
-  const s = funcoesDaPessoaNoAparelho(config.pessoas.find((p) => p.id === l.pessoaId && p.ativo !== false && !p.pedeTrocarSenha), aparelho);
-  return new Set([...s].filter((f) => FUNCOES_NO_SETOR.includes(f)));
-}
-/** Setor vem da conexão, nunca de r.setor. O histórico permite escoar a fila anterior à troca. */
-function guardarSetor(aparelho, papel) {
-  if (nivelDoAparelho(aparelho)) return;
-  const setores = formsLidas().setores.filter((s) => !s.soChefe);
-  const mapa = config.setoresAparelhos || (config.setoresAparelhos = {});
-  const salvo = mapa[aparelho];
-  const declarado = papel || (!salvo && config.aparelhosVistos[aparelho]?.papel);
-  if (!setores.some((s) => s.id === declarado) || salvo?.atual === declarado) return;
-  const f = funcoesNoSetor(aparelho);
-  if (salvo && !f.has('ajustes') && !f.has('usina')) return;
-  const anteriores = { ...(salvo?.anteriores || {}) };
-  if (salvo) anteriores[salvo.atual] = Date.now();
-  mapa[aparelho] = { atual: declarado, anteriores };
-  salvarConfig();
-}
-function podeFolhaNoSetor(aparelho, r) {
-  const forms = formsLidas();
-  const setor = forms.setores.find((s) => s.pranchetas.some((pid) => pid === r.prancheta ||
-    (forms.pranchetas[pid]?.partes || []).some((p) => p.prancheta === r.prancheta)));
-  if (setor?.soChefe) return false;
-  if (!setor) return true;
-  const salvo = config.setoresAparelhos?.[aparelho];
-  return !!salvo && (salvo.atual === setor.id || (Number.isFinite(r.atualizadoEm) && r.atualizadoEm > 0 && r.atualizadoEm <= (salvo.anteriores[setor.id] || 0)));
-}
-const nomeDoNivel = (n) => ({ 1: 'nível 1 (vê, corrige e envia)', 2: 'nível 2', 3: 'nível 3 (do dono)' }[n] || 'sem nível');
-/** O que vai para o aplicativo mostrar só o que pode: o nível do aparelho, se é o dono e as funções que valem aqui. */
-function permissoesDoAparelho(aparelho, pessoaVerificada) {
-  const nivel = nivelDoAparelho(aparelho);
-  const p = pessoaVerificada || pessoaDoAparelho(aparelho);
-  const funcoes = pessoaVerificada && !nivel ? funcoesDaPessoaNoAparelho(pessoaVerificada, aparelho) : funcoesNoAparelho(aparelho);
-  return { nivel, dono: ehDono(p), funcoes: [...funcoes] };
-}
-
-/* ---------- O que a central aceita pela sincronização (versão 2.12) ----------
-   Configuração da usina ('config|...'): cada parte mudada precisa da função de quem está no aparelho; nas folhas, as
-   propriedades novas (vírgula, mostrar ao operador, campos do escritório para o operador, campos novos) só o dono num
-   tablet nível 3. Quem não pode mexer nelas não as apaga: a central põe de volta as que vieram faltando.
-   Conflito: a configuração leva "base" (a revisão que o aparelho editou); se outro tablet mudou antes, é recusada. */
-const FOLHAS_SISTEMA = ['dec', 'oculto', '_operador', '_novos'];
-/** Compara dois valores sem depender da ordem das chaves (o mesmo objeto pode chegar com as chaves em outra ordem). */
-const ordenado = (x) => (Array.isArray(x) ? x.map(ordenado) : x && typeof x === 'object' ? Object.keys(x).sort().reduce((o, k) => { o[k] = ordenado(x[k]); return o; }, {}) : x);
-const mesmoJson = (a, b) => JSON.stringify(ordenado(a === undefined ? null : a)) === JSON.stringify(ordenado(b === undefined ? null : b));
-function mudancasDaConfig(atual, nova) {
-  const a = (atual && atual.valores) || {};
-  const b = nova.valores || {};
-  return [...new Set([...Object.keys(a), ...Object.keys(b)])].filter((k) => !mesmoJson(a[k], b[k]));
-}
-/** Folhas: põe de volta as propriedades do sistema que vieram faltando e diz se alguma do sistema mudou. */
-function conferirFolhas(antes, depois, podeSistema) {
-  const a = antes || {};
-  const b = JSON.parse(JSON.stringify(depois || {}));
-  let mexeuSistema = false, mexeuComum = false;
-  [...new Set([...Object.keys(a), ...Object.keys(b)])].forEach((pid) => {
-    const fa = a[pid] || {}, fb = b[pid] || (b[pid] = {});
-    [...new Set([...Object.keys(fa), ...Object.keys(fb)])].forEach((k) => {
-      if (FOLHAS_SISTEMA.includes(k)) {
-        if (!podeSistema) { if (k in fa) fb[k] = fa[k]; else delete fb[k]; }
-        else if (!mesmoJson(fa[k], fb[k])) mexeuSistema = true;
-        return;
-      }
-      if (k.startsWith('_')) { if (!mesmoJson(fa[k], fb[k])) mexeuComum = true; return; }
-      const ca = fa[k] || {}, cb = fb[k] || (fb[k] = {});
-      [...new Set([...Object.keys(ca), ...Object.keys(cb)])].forEach((prop) => {
-        if (FOLHAS_SISTEMA.includes(prop)) {
-          if (!podeSistema) { if (prop in ca) cb[prop] = ca[prop]; else delete cb[prop]; }
-          else if (!mesmoJson(ca[prop], cb[prop])) mexeuSistema = true;
-        } else if (!mesmoJson(ca[prop], cb[prop])) mexeuComum = true;
-      });
-      if (!Object.keys(cb).length) delete fb[k];
-    });
-    if (!Object.keys(fb).length) delete b[pid];
-  });
-  return { folhas: b, mexeuSistema, mexeuComum };
-}
-/**
- * Decide uma anotação de configuração que chegou. Devolve { aceita, entrada, motivo }.
- * Aplicativo de antes da 2.12 (manda sem "base"): ele não conhece a recusa e marcaria como enviado. Então vale o que
- * ele podia mudar, o resto fica como está, e a configuração volta para ele na próxima sincronização (sai com um
- * horário mais novo que o dele, e o aparelho troca a cópia).
- */
-function decidirConfig(atual, r, aparelho) {
-  const chefe = nivelDoAparelho(aparelho) > 0;
-  const funcoes = chefe ? funcoesNoAparelho(aparelho) : funcoesNoSetor(aparelho);
-  const vivo = atual && !atual.apagado ? atual : null;
-  const antigo = !('base' in r);
-  // conflito: alguém mudou a configuração depois da cópia que este aparelho editou
-  if (!antigo && vivo && Number(r.base || 0) !== Number(vivo.rev || 0)) return { aceita: false, motivo: 'conflito' };
-  const antes = (vivo && vivo.valores) || {};
-  // a configuração da usina não se apaga pela sincronização (o aplicativo nunca apaga): o aparelho antigo recebe ela de volta
-  if (r.apagado) return antigo && vivo ? { aceita: true, entrada: Object.assign({}, vivo, { atualizadoEm: Math.max(r.atualizadoEm, vivo.atualizadoEm || 0) + 1, rev: Number(vivo.rev || 0) + 1 }) } : { aceita: false, motivo: 'sem_permissao' };
-  const entrada = JSON.parse(JSON.stringify(r));
-  delete entrada.base;
-  const valores = Object.assign({}, entrada.valores);
-  // o que não pode: o aplicativo novo recebe a recusa; do antigo, fica como estava
-  const naoPode = (k) => { if (!antigo) return true; if (k in antes) valores[k] = antes[k]; else delete valores[k]; return false; };
-  if ('folhas' in valores || 'folhas' in antes) {
-    const f = conferirFolhas(antes.folhas, valores.folhas, funcoes.has('sistema'));
-    // folhas só no tablet chefe: as do sistema com 'sistema' (o dono no nível 3), as outras com 'folhas'
-    const pode = chefe && (!f.mexeuSistema || funcoes.has('sistema')) && (!f.mexeuComum || funcoes.has('folhas') || funcoes.has('sistema'));
-    if ((f.mexeuSistema || f.mexeuComum) && !pode) { if (naoPode('folhas')) return { aceita: false, motivo: 'sem_permissao' }; }
-    else if (f.folhas && Object.keys(f.folhas).length) valores.folhas = f.folhas;
-    else delete valores.folhas;
-  }
-  for (const k of mudancasDaConfig({ valores: antes }, { valores })) {
-    if (k === 'folhas') continue;
-    // no tablet de setor só os operadores (ajustes); no tablet chefe, o resto da usina
-    const precisa = k === 'niveisChefe' ? ['sistema'] : !chefe ? (k === 'operadores' ? ['ajustes', 'usina'] : null) : ['usina'];
-    if ((!precisa || !precisa.some((f) => funcoes.has(f))) && naoPode(k)) return { aceita: false, motivo: 'sem_permissao' };
-  }
-  if ('niveisChefe' in valores) {
-    const n = valores.niveisChefe;
-    const validas = new Set([...funcoesDoForms(), 'pessoas', 'chefes']);
-    if (!n || typeof n !== 'object' || Array.isArray(n) || Object.keys(n).some((k) => !['1', '2'].includes(k)) ||
-        !['1', '2'].every((k) => Array.isArray(n[k]) && n[k].every((f) => typeof f === 'string' && validas.has(f)) && new Set(n[k]).size === n[k].length))
-      return { aceita: false, motivo: 'invalido' };
-  }
-  entrada.valores = valores;
-  entrada.rev = Number(vivo ? vivo.rev || 0 : 0) + 1;
-  // a central guardou diferente do que veio (do antigo, ou as do sistema que voltaram): vai de volta para o aparelho
-  if (!mesmoJson(valores, r.valores || {})) entrada.atualizadoEm = Math.max(r.atualizadoEm, vivo ? vivo.atualizadoEm || 0 : 0) + 1;
-  return { aceita: true, entrada };
-}
-/** Folhas que só o tablet chefe anota (Vinho e Fermentação): pedem 'anotar'. As dos setores, 'corrigir'. */
-const pranchetasSoDoChefe = () => { try { return formsLidas().setores.filter((s) => s.soChefe).flatMap((s) => s.pranchetas); } catch (e) { return ['med_dornas', 'fermentacao']; } };
-/**
- * Anotação que chegou de um tablet chefe: a mesma função que a tela pede, de quem está dentro dele.
- * Sem ninguém dentro: 'sem_sessao' (o aparelho guarda a anotação e manda de novo quando alguém entrar).
- */
-function motivoNoChefe(aparelho, r, guardado) {
-  if (!pessoaDoAparelho(aparelho)) return 'sem_sessao';
-  const f = funcoesNoAparelho(aparelho);
-  if (r.prancheta === 'avisos') return f.has('avisos') ? '' : 'sem_permissao';
-  if (pranchetasSoDoChefe().includes(r.prancheta)) return f.has('anotar') ? '' : 'sem_permissao';
-  return f.has('corrigir') || (f.has('escritorio') && soMudouEscritorio(r, guardado)) ? '' : 'sem_permissao';
-}
-// A função Escritório não permite alterar quantidade, autoria nem apagar a linha.
-function soMudouEscritorio(r, guardado) {
-  const permitidos = camposSoDoEscritorio(r.prancheta);
-  if (!permitidos.length || r.apagado || guardado?.apagado) return false;
-  const antes = guardado?.valores || {}, depois = r.valores || {};
-  if (guardado && r.operador !== guardado.operador) return false;
-  return [...new Set([...Object.keys(antes), ...Object.keys(depois), ...Object.keys(r.camposEm || {})])].every((k) =>
-    permitidos.includes(k) || (JSON.stringify(antes[k]) === JSON.stringify(depois[k]) &&
-      (r.camposEm?.[k] || 0) === (guardado?.camposEm?.[k] || 0)));
-}
-/** Campos do escritório de cada folha de insumo que o operador não preenche (o tablet do setor não muda). */
-function camposSoDoEscritorio(pid) {
-  let p = null;
-  try { p = formsLidas().pranchetas[pid]; } catch (e) { return []; }
-  if (!p || p.tipo !== 'insumo') return [];
-  const cs = db.registros['config|sistema|geral'];
-  const folhas = cs && !cs.apagado && cs.valores ? cs.valores.folhas || {} : {};
-  const liberados = new Set([...(p.camposOperador || []).map((c) => c.id), ...((folhas[pid] || {})._operador || [])]);
-  return [...(p.camposEscritorio || []).map((c) => c.id), 'verificado'].filter((id) => !liberados.has(id));
-}
-
 /* ---------- Registro do sistema (versão 2.9) ----------
    Cada linha é uma anotação da folha "registro" (hora, tipo, quem, aparelho, texto e o antes e depois).
    O aplicativo escreve o que a pessoa fez (ele sabe o antes e o depois); a central escreve o que só ela vê:
@@ -943,6 +852,8 @@ function postarBase44(dados) {
 
 // ---------- banco de dados simples em arquivo JSON ----------
 let db = carregarCentral(ARQUIVO) || { seq: 0, registros: {} };
+// desligou antes de gravar as anotações no disco, mas depois de gravar até onde enviou: numera acima, senão o que chegar agora nunca sobe para o banco
+if ((config.nuvem.seq || 0) > db.seq) db.seq = config.nuvem.seq;
 const envioTurnos = require('./envio-turnos').criar({ config, salvar: salvarConfig, forms: formsEmVigor,
   registros: (dia) => arquivado(dia) ? lerDiaArquivado(dia) : Object.values(db.registros).filter((r) => r.data === dia),
   agora: () => process.env.TURNO_AGORA ? Number(process.env.TURNO_AGORA) : Date.now() });
@@ -963,9 +874,9 @@ function backupDoDia(data) {
   fs.writeFile(arquivoDoDia(data), JSON.stringify(doDia, null, 1), () => {});
 }
 
-/* A central guarda na memória os últimos 60 dias. Os mais antigos ficam só no BackupUsina (um arquivo por dia)
+/* A central guarda na memória os últimos 90 dias. Os mais antigos ficam só no BackupUsina (um arquivo por dia)
    e são lidos de lá quando o tablet chefe abre um dia antigo. Assim a central não fica mais lenta com o tempo. */
-const DIAS_NA_CENTRAL = Number(process.env.DIAS_NA_CENTRAL || 60);
+const DIAS_NA_CENTRAL = Number(process.env.DIAS_NA_CENTRAL || 90);
 function diasAtras(n) {
   const d = new Date(); d.setDate(d.getDate() - n);
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
@@ -982,13 +893,23 @@ function lerDiaArquivado(data) {
   }
 }
 /** Junta anotações num dia que só está no BackupUsina (ex.: o tablet chefe corrigiu uma folha antiga). */
-function juntarNoArquivo(data, novos) {
+function juntarNoArquivo(data, novos, paraNuvem = false) {
   const mapa = {};
   lerDiaArquivado(data).forEach((r) => { mapa[r.id] = r; });
   let n = 0;
   novos.forEach((r) => {
     const a = mapa[r.id], junto = Juncao.juntar(a, r);
-    if (junto || !a || r.atualizadoEm >= a.atualizadoEm) { mapa[r.id] = junto || r; n += 1; }
+    if (junto || !a || r.atualizadoEm >= a.atualizadoEm) {
+      const entrada = junto || r;
+      // veio do banco e juntou com o que está aqui: como na memória, igual não muda nada; diferente ainda precisa subir
+      if (junto && r.doBanco) {
+        if (JSON.stringify([junto.valores, junto.camposEm, !!junto.apagado]) === JSON.stringify([a.valores, a.camposEm, !!a.apagado]) && junto.atualizadoEm === a.atualizadoEm) return;
+        delete entrada.doBanco; entrada.seq = ++db.seq; config.nuvem.arquivosEnviados = false;
+      }
+      // Correção recebida pelo Wi-Fi entra na fila com a numeração desta central.
+      if (paraNuvem) { entrada.seq = ++db.seq; delete entrada.doBanco; }
+      mapa[r.id] = entrada; n += 1;
+    }
   });
   const arquivo = arquivoDoDia(data);
   fs.writeFileSync(arquivo + '.tmp', JSON.stringify(Object.values(mapa), null, 1));
@@ -1015,22 +936,6 @@ function listaDeRelatorios() {
 /* Dois aparelhos criaram a mesma linha sem um saber do outro (ex.: o tablet chefe corrigiu uma dorna nos segundos
    antes de recebê-la): em vez de a última apagar a primeira, os valores se juntam. O mais novo vale nos quadros que ele
    preencheu; o resto continua. A linha junta ganha um horário novo, para chegar de novo nos dois aparelhos. */
-function juntarLinhas(a, b) {
-  const [velho, novo] = b.atualizadoEm >= a.atualizadoEm ? [a, b] : [b, a];
-  const valores = Object.assign({}, velho.valores);
-  Object.entries(novo.valores || {}).forEach(([k, x]) => { if (x !== '' && x != null) valores[k] = x; });
-  const junta = Object.assign({}, velho, novo, {
-    valores, operador: novo.operador || velho.operador,
-    criadoEm: Math.min(a.criadoEm, b.criadoEm), atualizadoEm: Math.max(a.atualizadoEm, b.atualizadoEm) + 1,
-  });
-  delete junta.camposEm; // a mescla legada não tem horário por campo confiável
-  return junta;
-}
-// só entre aparelhos diferentes: o mesmo aparelho mudando a própria linha vale a versão mais nova, como sempre
-const criadasSemSaber = (atual, r) => !!(atual && !atual.apagado && !r.apagado && atual.valores && r.valores
-  && r.aparelho && atual.aparelho && r.aparelho !== atual.aparelho
-  && r.criadoEm && atual.criadoEm && r.criadoEm !== atual.criadoEm);
-
 // ---------- rede ----------
 function ipDoCliente(req) { return (req.socket.remoteAddress || '').replace(/^::ffff:/, ''); }
 function redeInterna(ip) {
@@ -1283,10 +1188,10 @@ function sincronizar(corpo, aparelho, ip) {
   }
   guardarErros(corpo.aparelho, corpo.erros, ip);
   // aparelho com anotações de antes de zerar: não aceita, manda ele limpar.
-  // Aparelho que acabou de conectar numa central nova (tablet chefe trocado ou reinstalado): aceita o que ele tem.
+  // Geração desconhecida vem de outra central: aceita o que o aparelho tem, mesmo sem novaConexao.
   if (corpo.geracao && corpo.geracao !== config.geracao) {
     const zerada = (config.geracoesZeradas || []).includes(corpo.geracao);
-    if (zerada || !corpo.novaConexao) return { ok: false, zerar: true, geracao: config.geracao, seq: db.seq, agora: Date.now(), ...(nivelDoAparelho(aparelho) === 3 && config.codigoTrocado ? { codigoTrocado: config.codigoTrocado } : {}) };
+    if (zerada) return { ok: false, zerar: true, zerada: true, geracao: config.geracao, seq: db.seq, agora: Date.now(), ...(nivelDoAparelho(aparelho) === 3 && config.codigoTrocado ? { codigoTrocado: config.codigoTrocado } : {}) };
   }
   const dias = new Set();
   const antigos = {};
@@ -1301,6 +1206,7 @@ function sincronizar(corpo, aparelho, ip) {
   for (const r0 of Array.isArray(corpo.registros) ? corpo.registros : []) {
     let r = r0;
     if (!r || typeof r.id !== 'string' || typeof r.atualizadoEm !== 'number') continue;
+    r = Juncao.semFuturo(r, Date.now());
     // o id diz o que a anotação é (dia|folha|linha): com outro id, uma anotação poderia passar por configuração
     if (r.id !== `${r.data}|${r.prancheta}|${r.chave}` || !(r.data === 'config' || ehDia(r.data)) || !Juncao.valido(r)) { recusados.push({ id: r.id, motivo: 'invalido' }); continue; }
     // configuração da usina: confere quem pode mudar cada parte, e o conflito
@@ -1350,13 +1256,15 @@ function sincronizar(corpo, aparelho, ip) {
     if (!atual || entrada !== r || r.atualizadoEm >= atual.atualizadoEm || r.data === 'config') {
       db.seq += 1;
       const limpo = Object.assign({}, entrada, { seq: db.seq, recebidoEm: Date.now() });
-      delete limpo.sincronizado;
+      delete limpo.sincronizado; delete limpo.doBanco;
       db.registros[r.id] = limpo;
       dias.add(r.data);
       aceitos += 1;
     }
   }
-  Object.entries(antigos).forEach(([d, lista]) => { aceitos += juntarNoArquivo(d, lista); });
+  let aceitosAntigos = 0;
+  Object.entries(antigos).forEach(([d, lista]) => { aceitosAntigos += juntarNoArquivo(d, lista, true); });
+  if (aceitosAntigos) { aceitos += aceitosAntigos; config.nuvem.arquivosEnviados = false; salvarConfig(); }
   if (aceitos) { gravarDisco(true); dias.forEach(backupDoDia); agendarNuvem(); }
   // bloqueado enquanto esta sincronização acontecia: responde como bloqueado (o 200 abaixo diz "livre até a revisão")
   const blq = config.bloqueios[aparelho];
@@ -1366,6 +1274,36 @@ function sincronizar(corpo, aparelho, ip) {
   return { ok: true, aceitos, recusados, revs, seq: db.seq, agora: Date.now(), geracao: config.geracao, nuvem: config.nuvem.url || '', nuvemToken: tokenNuvem(aparelho), bloqueiosRev: config.bloqueiosRev, ...(nivelAqui === 3 && config.codigoTrocado ? { codigoTrocado: config.codigoTrocado } : {}) };
 }
 
+/* 3.0: central nova (trocada ou reinstalada) com a nuvem fora: um aparelho devolve o que guarda. Só entra a anotação que a central não tem; nunca muda a que existe. */
+function receberDevolvidos(lista, aparelho) {
+  if (!Array.isArray(lista) || config.bloqueios[aparelho]) return 0;
+  const dias = new Set(), nivel = nivelDoAparelho(aparelho), antigos = {};
+  let aceitos = 0;
+  for (const r0 of lista.slice(0, 500)) {
+    if (!r0 || typeof r0.id !== 'string' || typeof r0.atualizadoEm !== 'number') continue;
+    const r = Juncao.semFuturo(r0, Date.now());
+    if (r.id !== `${r.data}|${r.prancheta}|${r.chave}` || !ehDia(r.data) || db.registros[r.id] || !Juncao.valido(r) || (r.prancheta === 'avisos' && !nivel)) continue;
+    if (arquivado(r.data)) { (antigos[r.data] = antigos[r.data] || []).push(r); continue; }
+    db.seq += 1;
+    const limpo = Object.assign({}, r, { seq: db.seq, recebidoEm: Date.now() });
+    delete limpo.sincronizado; delete limpo.doBanco;
+    db.registros[r.id] = limpo;
+    dias.add(r.data);
+    aceitos += 1;
+  }
+  // dia arquivado: só entra o que o arquivo não tem
+  Object.entries(antigos).forEach(([d, l]) => {
+    const tem = new Set(lerDiaArquivado(d).map((x) => x.id));
+    const novos = l.filter((x) => !tem.has(x.id)).map(({ sincronizado, doBanco, ...x }) => Object.assign(x, { recebidoEm: Date.now() }));
+    if (novos.length) { aceitos += juntarNoArquivo(d, novos, true); config.nuvem.arquivosEnviados = false; }
+  });
+  if (aceitos) { gravarDisco(true); dias.forEach(backupDoDia); agendarNuvem(); }
+  return aceitos;
+}
+
+/* 3.0: o que está sendo digitado (ainda não é anotação). Só fica na memória, por pouco tempo, e nunca vai para o disco nem para o banco. */
+const rascunhos = new Map();
+const RASCUNHO_VALE_MS = 8000;
 /** As rotas com os dados da usina. Chegam aqui só depois de abrir o pedido embaralhado. */
 async function rotaProtegida(req, res, url, ip) {
   const p = url.pathname;
@@ -1375,6 +1313,19 @@ async function rotaProtegida(req, res, url, ip) {
         const resultado = sincronizar(corpo, req.aparelho, ip);
         resultado.atualizacao = atualizacaoDisponivel();
         return json(res, resultado.erro === 'bloqueado' ? 423 : 200, resultado);
+      }
+
+      if (p === '/api/devolver' && req.method === 'POST') {
+        return json(res, 200, { aceitos: receberDevolvidos(JSON.parse(await lerCorpo(req, 8 * 1024 * 1024)).registros, req.aparelho) });
+      }
+
+      // 3.0: quem está só no Wi-Fi vê pela central o que os outros estão digitando (com internet, isso passa pela sala do banco)
+      if (p === '/api/rascunho' && req.method === 'POST') {
+        const d = JSON.parse(await lerCorpo(req, 8000)).rascunho, agora = Date.now();
+        rascunhos.forEach((r, a) => { if (agora - r.em > RASCUNHO_VALE_MS) rascunhos.delete(a); });
+        if (d && d.valores && typeof d.valores === 'object') rascunhos.set(req.aparelho, { em: agora, pid: String(d.pid), data: String(d.data), chave: String(d.chave), quem: String(d.quem || '').slice(0, 60), valores: d.valores });
+        else rascunhos.delete(req.aparelho);
+        return json(res, 200, { rascunhos: [...rascunhos].filter(([a]) => a !== req.aparelho).map(([, r]) => r) });
       }
 
       // pessoas do escritório: entrar com a senha, sair, e (só o administrador) cadastrar e dar permissões
@@ -1392,7 +1343,7 @@ async function rotaProtegida(req, res, url, ip) {
             const nova = corpo.novaSenha;
             if (typeof nova !== 'string' || !/^\d{4,8}$/.test(nova) || nova === '159357') return json(res, 403, { erro: 'Troque a senha inicial do dono', pedeTrocarSenha: true });
             if (pessoaDaSenha(nova)) return json(res, 400, { erro: 'Essa senha já é de outra pessoa. Escolha outra.' });
-            Object.assign(pessoa, guardarSenha(nova), { nuvem: guardarSenhaNuvem(nova) });
+            Object.assign(pessoa, guardarSenha(nova), { nuvem: guardarSenhaNuvem(nova), em: Date.now() });
             delete pessoa.pedeTrocarSenha;
             Object.keys(config.sessoes).forEach((id) => { if (config.sessoes[id].pessoaId === pessoa.id) delete config.sessoes[id]; });
             salvarConfig(); agendarNuvem();
@@ -1400,11 +1351,12 @@ async function rotaProtegida(req, res, url, ip) {
           }
           if (corpo.acao === 'entrar') {
             // só entra pessoa em tablet chefe liberado; no nível 3, só o dono (versão 2.12)
+            if (liberarAoEntrar(pessoa, req.aparelho)) { registrar('configuracao', `${pessoa.nome} liberou o ${nomeDoAparelho(req.aparelho)} como tablet chefe nível 2`, { quem: pessoa.nome, aparelho: nomeDoAparelho(req.aparelho) }); agendarNuvem(500); }
             const nivel = nivelDoAparelho(req.aparelho);
             if (!nivel) return json(res, 403, { erro: 'Este aparelho ainda não foi liberado como tablet chefe', naoLiberado: true });
             if (nivel === 3 && !ehDono(pessoa)) return json(res, 403, { erro: 'Este tablet é só do dono do sistema' });
             const antes = pessoaDoAparelho(req.aparelho);
-            if (!pessoa.nuvem) { pessoa.nuvem = guardarSenhaNuvem(corpo.pin); agendarNuvem(); }
+            if (!pessoa.nuvem) { pessoa.nuvem = guardarSenhaNuvem(corpo.pin); pessoa.em = Date.now(); agendarNuvem(); }
             config.sessoes[req.aparelho] = { pessoaId: pessoa.id, em: agora };
             salvarConfig();
             if (!antes || antes.id !== pessoa.id) registrar('entrada', `${pessoa.nome} entrou no ${aqui}`, { quem: pessoa.nome, aparelho: aqui });
@@ -1449,7 +1401,7 @@ async function rotaProtegida(req, res, url, ip) {
           Object.entries(d.extras || {}).forEach(([k, v]) => { if (/^[a-z_]{2,30}$/.test(k) && typeof v === 'boolean') extras[k] = v; });
           const novo = existente || { id: 'p' + crypto.randomBytes(4).toString('hex'), criadoEm: Date.now() };
           const antes = existente ? { nome: existente.nome, nivel: existente.nivel, ativo: existente.ativo !== false, extras: JSON.stringify(existente.extras || {}), aparelhos: JSON.stringify(existente.aparelhos || []) } : null;
-          Object.assign(novo, { nome, nivel: d.nivel, extras, aparelhos: fixos, ativo }, pin ? guardarSenha(pin) : {});
+          Object.assign(novo, { nome, nivel: d.nivel, extras, aparelhos: fixos, ativo, em: Date.now() }, pin ? guardarSenha(pin) : {});
           if (pin) novo.nuvem = guardarSenhaNuvem(pin);
           if (!existente) config.pessoas.push(novo);
           if (!ativo) Object.keys(config.sessoes).forEach((k) => { if (config.sessoes[k].pessoaId === novo.id) delete config.sessoes[k]; });
@@ -1491,8 +1443,10 @@ async function rotaProtegida(req, res, url, ip) {
               mudancaDeNivel = `${quem.nome} mudou o ${nomeAntes} de ${nomeDoNivel(nivelAntes)} para ${nomeDoNivel(novoNivel)}`;
             }
           }
+          a.em = Date.now();
           config.aparelhosChefe[id] = a;
           salvarConfig();
+          agendarNuvem(500);
           if (mudancaDeNivel) registrar('configuracao', mudancaDeNivel, { quem: quem.nome, aparelho: aqui });
           registrar('configuracao', `${quem.nome} mudou o que o ${nomeAntes} pode fazer${a.nome && a.nome !== nomeAntes ? ` (agora se chama ${a.nome})` : ''}`, { quem: quem.nome, aparelho: aqui });
           return lista();
@@ -1520,7 +1474,7 @@ async function rotaProtegida(req, res, url, ip) {
           if (!funcoesDaPessoaNoAparelho(pessoa, req.aparelho).has('chefes')) return json(res, 403, { erro: `${pessoa.nome} não pode liberar tablet chefe neste aparelho` });
           const a = config.aparelhosChefe[req.aparelho] || (config.aparelhosChefe[req.aparelho] = {});
           const antes = nivelDoAparelho(req.aparelho);
-          Object.assign(a, { nivel, liberadoPor: pessoa.nome, liberadoEm: agora });
+          Object.assign(a, { nivel, liberadoPor: pessoa.nome, liberadoEm: agora, em: agora });
           delete config.sessoes[req.aparelho];
           salvarConfig();
           registrar('configuracao', `${pessoa.nome} liberou o ${aqui} como tablet chefe ${nomeDoNivel(nivel)}${antes ? ` (antes: ${nomeDoNivel(antes)})` : ''}`, { quem: pessoa.nome, aparelho: aqui });
@@ -1538,6 +1492,7 @@ async function rotaProtegida(req, res, url, ip) {
             if (config.pessoas.some((x) => x !== dono && x.resumo && mesmoSegredo(resumoDaSenha(nova, x.sal), x.resumo))) return json(res, 400, { erro: 'Essa senha já é de outra pessoa. Escolha outra.' });
             Object.assign(dono, guardarSenha(nova));
             dono.nuvem = guardarSenhaNuvem(nova);
+            dono.em = Date.now();
             delete dono.pedeTrocarSenha;
             agendarNuvem();
           }
@@ -1546,7 +1501,7 @@ async function rotaProtegida(req, res, url, ip) {
           if (dono.aparelhos?.length) dono.aparelhos = [req.aparelho];
           Object.keys(config.sessoes).forEach((k) => { if (config.sessoes[k].pessoaId === dono.id) delete config.sessoes[k]; });
           const a = config.aparelhosChefe[req.aparelho] || (config.aparelhosChefe[req.aparelho] = {});
-          Object.assign(a, { nivel: 3, liberadoPor: 'senha do programador', liberadoEm: Date.now() });
+          Object.assign(a, { nivel: 3, liberadoPor: 'senha do programador', liberadoEm: Date.now(), em: Date.now() });
           delete config.sessoes[req.aparelho];
           salvarConfig();
           registrar('configuracao', `Com a senha do programador, o ${aqui} virou o tablet do dono (nível 3)${nova ? ' e a senha do dono foi trocada' : ''}`, { aparelho: aqui });
@@ -1636,7 +1591,7 @@ async function rotaProtegida(req, res, url, ip) {
         if (corpo.acao === 'configurar') {
           const endereco = String(corpo.url || '').trim().replace(/\/+$/, '');
           if (endereco && !/^https:\/\/[^\s/]+\.[^\s]+$/i.test(endereco) && !/^http:\/\/127\.0\.0\.1:\d+$/.test(endereco)) return json(res, 400, { erro: 'Endereço inválido. Ele começa com https://' });
-          if (endereco !== n.url) Object.assign(n, { url: endereco, segredo: '', seq: 0, arquivosEnviados: false, conferida: false, formsHash: '', pessoasHash: '', medidasHash: '', erro: '', ultimoEnvio: 0, faltam: 0 });
+          if (endereco !== n.url) Object.assign(n, { url: endereco, segredo: '', seq: 0, arquivosEnviados: false, conferida: false, seqBanco: 0, conferidaEm: 0, formsHash: '', medidasHash: '', erro: '', ultimoEnvio: 0, faltam: 0 });
           if (typeof corpo.segredo === 'string') { n.segredo = corpo.segredo.trim().slice(0, 200); n.conferida = false; n.erro = ''; }
           salvarConfig();
           registrar('configuracao', `${pessoaDoAparelho(req.aparelho).nome} configurou a Nuvem`, { aparelho: nomeDoAparelho(req.aparelho) });
@@ -1647,6 +1602,9 @@ async function rotaProtegida(req, res, url, ip) {
           if (!n.url || !n.segredo) return json(res, 400, { erro: 'Cadastre o endereço e a senha da nuvem' });
           // um envio agendado pode estar no meio: espera, para o "mandar agora" mandar de verdade (como o Java)
           while (enviandoNuvem) await new Promise((r) => setTimeout(r, 100));
+          n.vazioEm = 0;
+          // 3.0: com o envio de meio em meio minuto, pode ter um a caminho: espera ele acabar, senão o pedido seria ignorado sem aviso
+          for (let i = 0; i < 300 && enviandoNuvem; i++) await new Promise((ok) => setTimeout(ok, 100));
           await enviarParaNuvem();
           return json(res, 200, estadoNuvem());
         }
@@ -1782,7 +1740,9 @@ async function rotaProtegida(req, res, url, ip) {
           fs.renameSync(path.join(PASTAS.backup, n), path.join(guardados, n));
         });
         config.geracoesZeradas = [...(config.geracoesZeradas || []), config.geracao].slice(-50);
-        config.geracao = crypto.randomBytes(6).toString('hex'); salvarConfig();
+        config.geracao = crypto.randomBytes(6).toString('hex');
+        if (config.nuvem) config.nuvem.seqBanco = 0;
+        salvarConfig();
         const quemZerou = pessoaDoAparelho(req.aparelho);
         registrar('configuracao', `${quemZerou ? quemZerou.nome : 'Alguém'} apagou todas as anotações do sistema (${apagados}). A cópia ficou no BackupUsina.`, { quem: quemZerou ? quemZerou.nome : '', aparelho: nomeDoAparelho(req.aparelho) });
         gravarDisco();
@@ -1796,7 +1756,7 @@ async function rotaProtegida(req, res, url, ip) {
         if (protegido && config.codigoTrocado) return json(res, 409, { erro: 'O dono precisa resolver a troca de código pendente' });
         const quem = pessoaDoAparelho(req.aparelho).nome;
         const aparelho = nomeDoAparelho(req.aparelho);
-        const nova = { ...config, codigo: novoCodigo(), chave: crypto.randomBytes(18).toString('hex') };
+        const nova = { ...config, codigo: novoCodigo(), chave: crypto.randomBytes(18).toString('hex'), codigoEm: Date.now() };
         delete nova.codigoTrocado; delete nova.codigoAnterior; delete nova.chaveAnterior;
         if (protegido) {
           nova.codigoAnterior = config.codigo; nova.chaveAnterior = config.chave;
@@ -1817,7 +1777,7 @@ async function rotaProtegida(req, res, url, ip) {
         if (!corpo || typeof corpo.id !== 'string' || !['manter', 'voltar'].includes(corpo.acao)) return json(res, 400, { erro: 'ação inválida' });
         if (!config.codigoTrocado || corpo.id !== config.codigoTrocado.id) return json(res, 409, { erro: 'Troca de código não está mais pendente' });
         const nova = { ...config };
-        if (corpo.acao === 'voltar') { nova.codigo = config.codigoAnterior; nova.chave = config.chaveAnterior; }
+        if (corpo.acao === 'voltar') { nova.codigo = config.codigoAnterior; nova.chave = config.chaveAnterior; nova.codigoEm = Date.now(); }
         delete nova.codigoTrocado; delete nova.codigoAnterior; delete nova.chaveAnterior;
         salvarConfig(nova); config = nova;
         const quem = pessoaDoAparelho(req.aparelho).nome;
@@ -1840,7 +1800,7 @@ arquivarDiasAntigos();
 setInterval(arquivarDiasAntigos, 3600 * 1000).unref();
 // nuvem: manda o que mudou logo depois de ligar e a cada minuto (e 5 s depois de chegar anotação nova)
 setTimeout(enviarParaNuvem, Number(process.env.NUVEM_ESPERA_MS || 15000)).unref();
-setInterval(enviarParaNuvem, 60 * 1000).unref();
+setInterval(enviarParaNuvem, Number(process.env.NUVEM_INTERVALO_MS) || 30 * 1000).unref(); // 3.0: de meio em meio minuto, para o que chegou no banco logo chegar na rede local
 setInterval(() => envioTurnos.verificar().catch(() => {}), Number(process.env.TURNO_INTERVALO_MS) || 60000).unref();
 // versão nova na internet: olha logo depois de ligar e a cada 6 horas
 setTimeout(buscarAtualizacaoOnline, Number(process.env.ATUALIZACAO_ESPERA_MS || 20000)).unref();

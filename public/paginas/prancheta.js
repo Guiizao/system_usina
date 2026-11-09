@@ -329,6 +329,36 @@
     </table></div></div>`;
   }
 
+  /** 3.0: em cima da tabela, fora dela: o total de cada parte da área no dia, o que foi anotado nesta folha e os quadros com total escolhido em Saída. */
+  function caixasDeTotal(pid, data) {
+    const s = setorDaPrancheta(pid);
+    if (!s) return '';
+    const num = (n) => fmtNum(String(Math.round(n * 100) / 100));
+    const p = prancheta(pid), folhas = folhasDe(pid);
+    const caixas = totaisPorTurno(data).filter((l) => l.setor === s.nome)
+      .map((l) => {
+        // a soma vai numa unidade só (copos em kg, L em mL); embaixo, como foi anotado e como está no fim da tabela
+        const anotado = totalInsumo(linhasDeHora(listar(data, l.folha)));
+        return { nome: l.nome, valor: num(l.total), unidade: l.unidade, aqui: folhas.includes(l.folha), anotado: anotado === `${num(l.total)} ${l.unidade}` ? '' : anotado };
+      });
+    if (p.tipo === 'medicao') {
+      const m = medicaoDoDia(data);
+      if (m.medidas) caixas.unshift({ nome: 'Vinho da produção', valor: litros(m.producao), aqui: true }, { nome: 'Nos tanques de álcool', valor: volumeTexto(m.tanques, gruposDaMedicao().find((y) => !y.soma)), aqui: true });
+    } else if (p.tipo === 'dornas' || p.tipo === 'grade') {
+      const n = linhasDeHora(listar(data, pid)).length;
+      if (n) caixas.unshift({ nome: p.tipo === 'dornas' ? 'Dornas anotadas' : 'Horas anotadas', valor: String(n), aqui: true });
+    }
+    folhas.forEach((f) => {
+      const pf = prancheta(f);
+      const ordem = (r) => (pf.tipo === 'dornas' ? Number(r.chave) : HORAS.indexOf(Number(r.chave)));
+      const linhas = linhasDeHora(listar(data, f)).sort((a, b) => ordem(a) - ordem(b));
+      (pf[window.Folhas.listaDe(pf)] || []).forEach((c) => {
+        const t = window.Folhas.totalDoCampo(c, linhas.map((r) => r.valores[c.id]));
+        if (t != null) caixas.push({ nome: c.labelCurto || c.label, valor: typeof t === 'number' ? num(t) : fmtCampo(c, t), unidade: c.unidade, aqui: true });
+      });
+    });
+    return caixas.length ? `<div class="caixas-total">${caixas.map((c) => `<div class="caixa-total ${c.aqui ? 'aqui' : ''}"><small>${esc(c.nome)}</small><b>${esc(c.valor)}${c.unidade ? ` <small>${esc(c.unidade)}</small>` : ''}</b>${c.anotado ? `<small>${esc(c.anotado)}</small>` : ''}</div>`).join('')}</div>` : '';
+  }
   function telaPrancheta(v) {
     aoAtualizarEdicao = null;
     const { p, data, chave } = prepararRascunho(v);
@@ -498,6 +528,7 @@
       return `${cabecalho(p.nome, subtituloTopo, false, atalhosOperador())}
         <div class="edicao"><div class="coluna"><div class="barra-trabalho"><div class="linha-monitor">${abasDoSetor(v)}${navDia}</div></div><main>
           <p class="sub" style="margin:2px 0 10px">${soConsulta() ? `Folha de ${fmtData(data)}: só para consultar (corrigir pede a função Corrigir).` : hoje || ehCentral() ? 'Toque em uma linha para abrir e corrigir.' : `Folha de ${fmtData(data)}: só para consultar.`}</p>
+          ${caixasDeTotal(v.pid, data)}
           ${folha()}</main>
         ${soConsulta() ? '' : `<div class="rodape"><button class="btn primario" data-a="monitor">${ico('voltar')} Voltar para anotar</button></div>`}</div></div>`;
     }

@@ -52,6 +52,8 @@
     // O papel conserva seus quadros; os novos saem separados no XML.
     ctx = Object.assign({}, ctx, { prancheta(pid) {
       const p = pranchetaCompleta(pid);
+      // tabela nova não tem desenho de papel: sai inteira, menos o que o dono tirou do relatório
+      if (p.novaTabela) return Object.assign({}, p, { itens: p.itens.filter((c) => !c.saida || c.saida.relatorio !== false) });
       const novos = new Set(listas.flatMap((k) => (p[k] || []).filter((c) => c.novo === true).map((c) => c.id)));
       const copia = Object.assign({}, p);
       listas.forEach((k) => { if (p[k]) copia[k] = p[k].filter((c) => c.novo !== true); });
@@ -205,11 +207,14 @@
       const valorHora = (c, h, i) => { const r = i === horas.length - 1 ? amanha : porHora[h]; return r ? valorCampo(c, r.valores[c.id]) : ''; };
       const colunas = ['HORAS', ...horas.map(String)];
       const linhas = p.itens.map((c) => ({ rotulo: c.papel || c.label, valores: [c.papel || c.label, ...horas.map((h, i) => valorHora(c, h, i))] }));
+      const NOME_DO_TOTAL = { soma: 'Soma do dia', media: 'Média do dia', ultimo: 'Último valor' };
+      const saidas = p.novaTabela ? p.itens.map((c) => [c, window.Folhas.totalDoCampo(c, ctx.HORAS.map((h) => (porHora[h] || { valores: {} }).valores[c.id]))]).filter(([, t]) => t != null) : [];
       const turnos = turnosDa(pid).map((t) => ({ nome: t.nome, operador: operadoresDoTurno(regs, t), horario: horarioDoTurno(t), obs: (ctx.pegar(data, pid, 'obs' + t.id) || { valores: {} }).valores.texto || '' }));
       const dados = {
         cabecalho: [['Documento', titulo], ['Responsável', (doc.responsavel || []).filter(Boolean).join(' ')], ['Data', fmtData(data)]],
         colunas, linhas,
-        rodape: turnos.flatMap((t) => [[`${t.nome} - Operador`, t.operador], [`${t.nome} - Horário/Turno`, t.horario], [`${t.nome} - Obs`, t.obs]]),
+        rodape: [...turnos.flatMap((t) => [[`${t.nome} - Operador`, t.operador], [`${t.nome} - Horário/Turno`, t.horario], [`${t.nome} - Obs`, t.obs]]),
+          ...saidas.map(([c, t]) => [`${c.label} - ${NOME_DO_TOTAL[c.saida.total]}`, `${textoNum(t)}${c.unidade ? ' ' + c.unidade : ''}`])],
       };
       const n = colunas.length; // 26
       const larguras = [15, ...horas.map(() => 5)];
@@ -234,6 +239,7 @@
         g.bloco(b0 + 2, a, b0 + 2, b, `OBS: ${t.obs}`, { sz: 9, al: 'l', va: 't', borda: true, quebra: true });
       });
       g.altura(b0, 22); g.altura(b0 + 1, 22); g.altura(b0 + 2, 48);
+      saidas.forEach(([c, t], i) => { g.bloco(b0 + 3 + i, 0, b0 + 3 + i, n - 1, `${c.label.toUpperCase()}, ${NOME_DO_TOTAL[c.saida.total].toUpperCase()}: ${textoNum(t)}${c.unidade ? ' ' + c.unidade : ''}`, { b: true, sz: 9, al: 'l', borda: true }); g.altura(b0 + 3 + i, 22); });
       return { nome: p.nome, paisagem: true, grade: g, imagem: { linha: 0, coluna: 0, alturaPx: 66, dx: 50, dy: 4 }, dados };
     }
 
@@ -500,7 +506,7 @@
         const nomeModelo = p.papel && p.papel.modelo ? p.papel.modelo : p.tipo === 'rastreamento' ? 'rastreamento' : p.tipo === 'insumo' ? 'pop03' : p.tipo === 'dornas' ? 'pop011' : 'caldeira';
         const f = MODELOS[nomeModelo](pid, data);
         const regs = ctx.listar(data, pid).filter((r) => /^\d+$/.test(r.chave));
-        const novos = listas.flatMap((k) => (p[k] || []).filter((c) => c.novo === true));
+        const novos = p.novaTabela ? [] : listas.flatMap((k) => (p[k] || []).filter((c) => c.novo === true && (!c.saida || c.saida.relatorio !== false)));
         f.dados.camposNovos = novos.map((c) => ({
           id: c.id, rotulo: c.label,
           unidade: window.Folhas && window.Folhas.unidadeNoDia ? window.Folhas.unidadeNoDia(c, data) : c.unidade,

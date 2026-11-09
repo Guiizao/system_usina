@@ -213,6 +213,40 @@ public class CentralPlugin extends Plugin {
     chamada.resolve(new JSObject().put("rodando", false));
   }
 
+  /** 3.0: a cópia deste aparelho, em BackupUsina (e em Documentos/Usina). */
+  @PluginMethod
+  public void guardarCopia(PluginCall chamada) {
+    try {
+      servidor(chamada).guardarCopia(limparNome(chamada.getString("nome", "copia.json")), chamada.getString("texto", "").getBytes(java.nio.charset.StandardCharsets.UTF_8));
+      chamada.resolve();
+    } catch (Exception e) {
+      chamada.reject("Não consegui guardar a cópia: " + e.getMessage());
+    }
+  }
+
+  /** 3.0: os dias guardados neste aparelho, para juntar com o que chega e devolver a uma central nova. */
+  @PluginMethod
+  public void listarCopias(PluginCall chamada) {
+    try {
+      JSObject r = new JSObject();
+      r.put("nomes", new JSArray(servidor(chamada).listarCopias()));
+      chamada.resolve(r);
+    } catch (Exception e) {
+      chamada.reject("Não consegui ler as cópias: " + e.getMessage());
+    }
+  }
+
+  @PluginMethod
+  public void lerCopia(PluginCall chamada) {
+    try {
+      JSObject r = new JSObject();
+      r.put("texto", servidor(chamada).lerCopia(limparNome(chamada.getString("nome", ""))));
+      chamada.resolve(r);
+    } catch (Exception e) {
+      chamada.reject("Não consegui ler a cópia: " + e.getMessage());
+    }
+  }
+
   /** Guarda o arquivo em RelatoriosUsina (e em Documentos/Usina). */
   @PluginMethod
   public void guardarDocumento(PluginCall chamada) {

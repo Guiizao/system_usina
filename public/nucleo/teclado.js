@@ -120,7 +120,7 @@
     } else if (a.type === 'text') {
       if (k === 'apagar') s = s.slice(0, -1);
       else if (k === 'espaco') s += ' ';
-      else if (k.length === 1 && s.length < (a.max || 80)) s += k.toUpperCase();
+      else if (k.length === 1 && s.length < (a.max || 80) && !(a.soLetras && !/\p{L}/u.test(k))) s += k.toUpperCase();
       ed.texto = s; a.set(s);
     }
     atualizarEdicao([a.id]);

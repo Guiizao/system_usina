@@ -7,43 +7,42 @@
    * Ajustes deste aparelho (com a senha do encarregado)
    * ========================================================= */
   /** 2.18: ajustes do computador pela nuvem (o programa do Windows atualiza as telas sozinho pela nuvem). */
-  function telaAjustesNuvem() {
+  function telaAjustesNuvem(v) {
     const seg = (a, atual, ops) => `<div class="segmentos">${ops.map(([x, rot]) => `<button class="${atual === x ? 'sel' : ''}" data-a="${a}" data-valor="${x}">${rot}</button>`).join('')}</div>`;
-    return `${topo('Ajustes', 'Deste computador', true)}
-      <main class="config"><div class="config-grade">
-        <section class="bloco"><h2>${ico('tamanho')} Tela</h2>
+    const sub = 'Deste computador';
+    if (v.cat === 'tela') return telaDaParte('Tela', sub, `<section class="bloco">
           <h3>Tamanho das letras e botões</h3>${seg('escala', cfg.escala || 'normal', [['menor', 'Menor'], ['normal', 'Normal'], ['maior', 'Maior']])}
           <h3 style="margin-top:14px">Cores</h3>${seg('tema-fixo', cfg.tema === 'escuro' ? 'escuro' : 'claro', [['claro', `${ico('sol')} Claro`], ['escuro', `${ico('lua')} Escuro`]])}
-        </section>
-        <section class="bloco"><h2>${ico('instalar')} Aplicativo</h2>
+        </section>`);
+    if (v.cat === 'aplicativo') return telaDaParte('Aplicativo', sub, `<section class="bloco">
           <dl class="kv"><dt>Versão</dt><dd>${VERSAO}</dd></dl>
           <p class="sub">O programa do Windows pega as telas novas sozinho pela nuvem quando abre.</p>
           <div class="linha-botoes"><button class="btn pequeno" data-a="novidades">Novidades desta versão</button></div>
-        </section>
-        <section class="bloco"><h2>${ico('servidor')} Nuvem</h2>
-          <dl class="kv"><dt>Endereço</dt><dd>${esc(cfg.nuvemUrl || '')}</dd><dt>Entrou como</dt><dd>${esc((cfg.pessoa || {}).nome || '')}</dd></dl>
-          <div class="linha-botoes"><button class="btn pequeno" data-a="sair-nuvem">${ico('voltar')} Sair</button></div>
-        </section>
-      </div></main>`;
+        </section>`);
+    if (v.cat === 'servidor') return telaDaParte('Servidor e cópia', sub, `<section class="bloco">
+          <dl class="kv"><dt>Banco de dados</dt><dd><span class="conexao ${sync.viaBanco ? 'ok' : 'off'}"><i></i>${sync.viaBanco ? (sync.aoVivo ? 'Ligado, em tempo real' : 'Ligado') : 'Sem conexão'}</span></dd>
+            <dt>Endereço</dt><dd>${esc(cfg.nuvemUrl || '')}</dd><dt>Este computador</dt><dd>Não é o banco: fala com ele e guarda uma cópia</dd>
+            <dt>Entrou como</dt><dd>${esc((cfg.pessoa || {}).nome || '')}</dd></dl>
+          <p class="sub">Para trocar de servidor, saia e escreva o endereço novo na tela de entrar.</p>
+          <div class="linha-botoes">${pode('pessoas') ? `<button class="btn pequeno" data-a="pessoas">${ico('pessoas')} Pessoas e níveis dos tablets</button>` : ''}<button class="btn pequeno" data-a="baixar-copia">${ico('baixar')} Baixar a cópia deste computador</button><button class="btn pequeno" data-a="sair-nuvem">${ico('voltar')} Sair</button></div>
+        </section>`);
+    return telaDeQuadros('Ajustes', sub, [
+      { cat: 'tela', icone: 'tamanho', nome: 'Tela', resumo: 'Tamanho das letras e cores' },
+      { cat: 'aplicativo', icone: 'instalar', nome: 'Aplicativo', resumo: 'Versão e novidades' },
+      { cat: 'servidor', icone: 'servidor', nome: 'Servidor e cópia', resumo: 'Banco de dados, cópia deste computador e sair' },
+    ]);
   }
   function telaAdmin(v) {
-    if (cfg.soNuvem) return telaAjustesNuvem();
+    if (cfg.soNuvem) return telaAjustesNuvem(v);
     const s = setorPorId(cfg.papel);
-    const ops = s ? operadoresDo(s.id) : [];
-    const aberto = v.abertos && s && v.abertos[s.id];
-    const visiveis = aberto ? ops : ops.slice(0, LIMITE_NOMES);
+    const sub = 'Ajustes do aparelho';
     const papelAtual = ehCentral() ? nomeDoChefe() : s ? s.nome : 'não escolhido';
-    return `${topo('Ajustes do aparelho', 'Protegido pela senha do encarregado', true)}
-      <main class="config">
-        <div class="config-grade">
-          <section class="bloco">
-            <h2>${ico('instalar')} Este aparelho é</h2>
+    if (v.cat === 'funcao') return telaDaParte('Este aparelho', sub, `<section class="bloco">
             <p class="papel-atual"><span class="escolha-ico">${ico(ehCentral() ? 'escritorio' : s ? s.icone : 'ajustes')}</span><b>${esc(papelAtual)}</b></p>
             <p class="sub">Para trocar, toque em outra função:</p>
             ${gradePapeis()}
-          </section>
-          <section class="bloco">
-            <h2>${ico('tamanho')} Tela</h2>
+          </section>`);
+    if (v.cat === 'tela') return telaDaParte('Tela', sub, `<section class="bloco">
             <h3>Tamanho das letras e botões</h3>
             <div class="segmentos">${['menor', 'normal', 'maior'].map((x) => `<button class="${cfg.escala === x ? 'sel' : ''}" data-a="escala" data-valor="${x}">${x === 'menor' ? 'Menor' : x === 'normal' ? 'Normal' : 'Maior'}</button>`).join('')}</div>
             <h3 style="margin-top:14px">Cores</h3>
@@ -52,45 +51,38 @@
             <p class="sub" style="margin:0 0 8px">Ligada, some a barra de cima com bateria e hora. Para ver a barra, arraste o dedo da borda da tela.</p>
             <div class="segmentos"><button class="${!cfg.telaCheia ? 'sel' : ''}" data-a="tela-cheia" data-valor="0">Desligada</button><button class="${cfg.telaCheia ? 'sel' : ''}" data-a="tela-cheia" data-valor="1">${ico('telaCheia')} Ligada</button></div>
             ${NO_APK ? '' : `<div class="linha-botoes"><button class="btn pequeno" data-a="instalar">${ico('instalar')} Instalar na tela inicial</button></div>`}
-          </section>
-          ${s ? `<section class="bloco">
-            <h2>${ico('pessoas')} Operadores da ${esc(s.nome)} <small>${ops.length}</small></h2>
-            <div class="pessoas">${visiveis.map((o) => {
-              const i = ops.indexOf(o);
-              return `<div><span class="nome">${ico('pessoa')} <b>${esc(o.nome)}</b><small class="${o.senha ? '' : 'sem-senha'}">${o.senha ? 'com senha' : 'sem senha'}</small></span>
-              <span class="acoes"><button class="btn pequeno" data-a="op-senha" data-setor="${s.id}" data-i="${i}">Senha</button>
-              <button class="btn pequeno perigo" data-a="op-remove" data-setor="${s.id}" data-i="${i}" aria-label="Remover ${esc(o.nome)}">${ico('lixeira')}</button></span></div>`;
-            }).join('') || '<div class="vazio">Nenhum operador cadastrado</div>'}</div>
-            <div class="linha-botoes">
-              ${ops.length > LIMITE_NOMES ? `<button class="btn pequeno" data-a="mostrar-mais" data-setor="${s.id}">${aberto ? 'Mostrar menos' : `Mostrar mais (${ops.length - LIMITE_NOMES})`}</button>` : ''}
-              <button class="btn pequeno" data-a="op-add" data-setor="${s.id}">${ico('mais')} Cadastrar operador</button></div>
-          </section>` : ''}
-          <section class="bloco">
-            <h2>${ico('wifi')} Rede</h2>
+          </section>`);
+    if (v.cat === 'operadores' && s) return telaDaParte('Operadores', sub, blocoOperadores(s, v));
+    if (v.cat === 'rede') return telaDaParte('Conexão', sub, `<section class="bloco">
             <dl class="kv"><dt>Situação</dt><dd><span class="conexao ${classeConexao()}"><i></i>${esc(textoConexao())}</span></dd>
               <dt>Servidor</dt><dd>${esc(cfg.demo ? 'demonstração' : centralNoTablet() ? 'este próprio aparelho' : cfg.central || location.host)}</dd>
               <dt>Código do aparelho</dt><dd>${esc(cfg.deviceId)}</dd><dt>Esperando envio</dt><dd>${pendentes()}</dd>
-              <dt>Relógio</dt><dd>${esc(cfg.demo ? 'demonstração' : textoRelogio())}</dd></dl>
+              <dt>Relógio</dt><dd>${esc(cfg.demo ? 'demonstração' : textoRelogio())}</dd>
+              <dt>Banco de dados</dt><dd>${esc(cfg.demo ? 'demonstração' : sync.viaBanco ? (sync.aoVivo ? 'Ligado, em tempo real' : 'Ligado') : cfg.nuvemToken ? 'Sem conexão: vai pelo Wi-Fi da usina' : 'Só pelo Wi-Fi da usina')}</dd></dl>
             <div class="linha-botoes">${centralNoTablet()
               ? `<button class="btn pequeno perigo" data-a="desligar-servidor">${ico('servidor')} Desligar o servidor deste aparelho</button>`
               : `${NO_APK && pluginCentral ? `<button class="btn pequeno" data-a="virar-central">${ico('servidor')} Usar este aparelho como servidor</button>` : ''}<button class="btn pequeno perigo" data-a="desconectar">${ico('wifi')} Desconectar da central</button>`}</div>
-          </section>
-          <section class="bloco">
-            <h2>${ico('instalar')} Aplicativo</h2>
+          </section>`);
+    if (v.cat === 'aplicativo') return telaDaParte('Aplicativo', sub, `<section class="bloco">
             <dl class="kv"><dt>Versão</dt><dd>${VERSAO}</dd>${atualizacao.nova ? `<dt>Versão nova</dt><dd><b>${esc(atualizacao.nova.versao)}</b></dd>` : ''}</dl>
             <div class="linha-botoes">
               ${atualizacao.nova ? `<button class="btn pequeno primario" data-a="atualizacao">${ico('instalar')} Atualizar para a ${esc(atualizacao.nova.versao)}</button>` : podeAtualizar() ? `<button class="btn pequeno" data-a="procurar-atualizacao">Procurar atualização</button>` : ''}
               <button class="btn pequeno" data-a="novidades">Novidades desta versão</button></div>
-          </section>
-          <section class="bloco">
-            <h2>${ico('planilha')} Dados</h2>
+          </section><p class="autoria">Pranchetas Digitais ${VERSAO} · ${esc(AUTORIA)}</p>`);
+    if (v.cat === 'dados') return telaDaParte('Dados deste aparelho', sub, `<section class="bloco">
             <p class="sub" style="margin:0 0 8px">Apagar os dados deste aparelho tira daqui as anotações e a função dele (para usar em outro setor, por exemplo). O que já foi enviado continua na central.</p>
             <div class="linha-botoes">
+              <button class="btn pequeno" data-a="baixar-copia">${ico('baixar')} Guardar uma cópia deste aparelho</button>
               <button class="btn pequeno" data-a="compartilhar" data-destino="outros">${ico('compartilhar')} Compartilhar folhas de hoje</button>
               ${cfg.demo ? '<button class="btn pequeno" data-a="exemplo">Preencher com dados de exemplo</button>' : ''}
               <button class="btn pequeno perigo" data-a="limpar-tudo">${ico('lixeira')} Apagar dados deste aparelho</button></div>
-          </section>
-        </div>
-        <p class="autoria">Pranchetas Digitais ${VERSAO} · ${esc(AUTORIA)}</p>
-      </main>`;
+          </section>`);
+    return telaDeQuadros('Ajustes do aparelho', 'Protegido pela senha do encarregado', [
+      { cat: 'funcao', icone: ehCentral() ? 'escritorio' : s ? s.icone : 'ajustes', nome: 'Este aparelho', resumo: `Agora: ${papelAtual}. Trocar de função` },
+      { cat: 'tela', icone: 'tamanho', nome: 'Tela', resumo: 'Tamanho das letras, cores e tela cheia' },
+      s && { cat: 'operadores', icone: 'pessoas', nome: 'Operadores', resumo: `Quem anota na ${s.nome} e as senhas` },
+      { cat: 'rede', icone: 'wifi', nome: 'Conexão', resumo: 'Wi-Fi, servidor e banco de dados' },
+      { cat: 'aplicativo', icone: 'instalar', nome: 'Aplicativo', resumo: 'Versão, atualização e novidades' },
+      { cat: 'dados', icone: 'planilha', nome: 'Dados deste aparelho', resumo: 'Cópia, compartilhar e apagar' },
+    ].filter(Boolean));
   }

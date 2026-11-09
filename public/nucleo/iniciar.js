@@ -36,7 +36,16 @@
     } else {
       pilha = [telaInicial()];
       if (tela === 'operador') { cfg.op = null; pilha.push({ tela: 'operador' }); }
-      else if (tela === 'config' || tela === 'admin' || tela === 'relatorios' || tela === 'pessoas' || tela === 'registro' || tela === 'folhas') pilha.push({ tela });
+      else if (tela === 'config' || tela === 'admin' || tela === 'relatorios' || tela === 'pessoas' || tela === 'registro' || tela === 'folhas' || tela === 'trocar-funcao') pilha.push(params.get('cat') ? { tela, cat: params.get('cat') } : { tela });
+      else if (tela === 'sala') pilha.push({ tela, data: dataProducao() });
+      else if (tela === 'leitura') {
+        // exemplo: a conferência de uma folha da Caldeira, com um valor em dúvida
+        const colunas = colunasDaLeitura('caldeira');
+        const cel = (valor, confianca = 1) => ({ valor, confianca, alternativas: [], tinta: valor !== '' });
+        const linhas = [7, 8, 9, 10, 11, 12].map((chave, i) => ({ chave, temValor: true, existe: i === 5, incluir: i !== 5, riscos: {}, celulas: Object.fromEntries(Object.keys(colunas).map((n) => [n, cel('')])) }));
+        linhas.forEach((l, i) => Object.assign(l.celulas, { pressao: cel('6', i === 2 ? 0.6 : 1), temp_agua: cel(i < 2 ? ['42', '33'][i] : ''), descarga_fundo: cel(['02', '03', '01'][i % 3]), descarga_garrafa: cel(i ? '' : 'OK') }));
+        pilha.push({ tela, pid: 'caldeira', data: dataProducao(), fase: 'revisar', leitura: { pid: 'caldeira', data: dataProducao(), colunas, linhas } });
+      }
       else if (tela === 'graficos') pilha.push({ tela, data: dataProducao(), setor: params.get('setor') || '' });
       else if (tela === 'aparelhos') pilha.push({ tela });
       else if (tela === 'avisos') {

@@ -18,11 +18,19 @@
   const soDoChefe = (pid) => !!(setorDaPrancheta(pid) || {}).soChefe;
   const anotaComoSetor = (pid) => !ehCentral() || soDoChefe(pid);
   const detalheDoChefe = () => 'Acompanha todos os setores, manda avisos e relatórios';
-  function gradePapeis() {
+  function gradePapeis(soSetores) {
     return `<div class="papeis">
       ${todosSetores.filter((s) => !s.soChefe).map((s) => cartaoPapel(s.id, s.icone, s.nome, pranchetasDo(s.id).map((pid) => prancheta(pid).nome).join(', '), cfg.papel === s.id)).join('')}
-      ${cartaoPapel('central', 'escritorio', nomeDoChefe(), detalheDoChefe(), ehCentral())}
+      ${soSetores ? '' : cartaoPapel('central', 'escritorio', nomeDoChefe(), detalheDoChefe(), ehCentral())}
     </div>`;
+  }
+  /** 3.0: o funcionário que opera em duas áreas troca a função do aparelho; os outros ajustes continuam com quem pode. */
+  function telaTrocarFuncao() {
+    return `${topo('Trocar a função', 'Este aparelho vai para outra área', true)}
+      <main><div class="boas-vindas">
+        <header><div><h1>Para qual área?</h1><p>Toque no setor. As anotações já feitas continuam guardadas.</p></div></header>
+        ${gradePapeis(true)}
+      </div></main>`;
   }
   function telaConfigurar() {
     return `${topo('Pranchetas digitais', 'Configuração do aparelho', false)}

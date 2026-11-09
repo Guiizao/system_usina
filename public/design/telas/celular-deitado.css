@@ -46,7 +46,7 @@
   html:root[data-dispositivo] .alerta-texto { font-size: 13px; padding: 3px 8px; }
   html:root[data-dispositivo] .dica-painel { display: none; }
   html:root[data-dispositivo] .fichas button { min-height: var(--toque); font-size: 15px; }
-  html:root[data-dispositivo] .teclas { gap: 4px; grid-auto-rows: minmax(32px, 1fr); }
+  html:root[data-dispositivo] .teclas { gap: 4px; grid-auto-rows: minmax(37px, 1fr); }
   html:root[data-dispositivo] .teclas button { font-size: 21px; }
   html:root[data-dispositivo] .teclas button svg.ico { width: 24px; height: 24px; }
   html:root[data-dispositivo] .edicao.modo-letras { --painel-w: 440px; }

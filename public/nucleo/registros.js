@@ -58,7 +58,7 @@
   function gravar(data, pid, chave, valores, extra = {}, original) {
     const id = idReg(data, pid, chave);
     const antigo = registros[id] && !registros[id].apagado ? registros[id] : null;
-    const agora = Math.max(Date.now(), (antigo && antigo.atualizadoEm || 0) + 1);
+    const agora = Math.max(Date.now() + (cfg.desvioRelogio || 0), (antigo && antigo.atualizadoEm || 0) + 1);
     registros[id] = Object.assign({}, antigo || {}, {
       id, data, prancheta: pid, setor: (setorDaPrancheta(pid) || {}).id, chave: String(chave),
       valores: Object.assign({}, antigo ? antigo.valores : {}, camposMudados(valores, antigo ? original : null)),
@@ -82,7 +82,7 @@
   function apagar(data, pid, chave) {
     const id = idReg(data, pid, chave);
     if (!registros[id]) return;
-    registros[id] = Object.assign({}, registros[id], { apagado: true, atualizadoEm: Math.max(Date.now(), registros[id].atualizadoEm + 1), sincronizado: false, aparelho: cfg.deviceId });
+    registros[id] = Object.assign({}, registros[id], { apagado: true, atualizadoEm: Math.max(Date.now() + (cfg.desvioRelogio || 0), registros[id].atualizadoEm + 1), sincronizado: false, aparelho: cfg.deviceId });
     salvarRegistros(); sincronizarLogo();
   }
   const pendentes = () => Object.values(registros).filter((r) => !r.sincronizado).length;

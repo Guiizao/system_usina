@@ -88,7 +88,7 @@ export async function testarTurnos213(nav, url, grupo) {
     });
     await teste(grupo, 'Configurações da usina: o tablet chefe volta a Nova Destilaria para 3 turnos (com confirmação)', async () => {
       const botao = (modelo) => `[data-a="turnos-setor"][data-id="nova_destilaria"][data-modelo="${modelo}"]`;
-      await chefe.ir(url + '/?demo&papel=central&tela=config&turnos=12h', `!!document.querySelector('${botao('12h')}.sel')`);
+      await chefe.ir(url + '/?demo&papel=central&tela=config&cat=areas&turnos=12h', `!!document.querySelector('${botao('12h')}.sel')`);
       await chefe.tocar(botao('padrao'));
       await chefe.tocar('.modal [data-k="sim"]');
       await chefe.esperar(`!!document.querySelector('${botao('padrao')}.sel')`, 5000, 'marcar 3 turnos');

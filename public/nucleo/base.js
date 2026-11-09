@@ -4,7 +4,7 @@
 'use strict';
 
   const C = window.USINA;
-  const VERSAO = '2.18.0'; // aparece nos ajustes e vai junto com cada envio para a central
+  const VERSAO = '3.0.1'; // aparece nos ajustes e vai junto com cada envio para a central
   const AUTORIA = '© 2026 Guilherme. Todos os direitos reservados. Uso somente com autorização do autor.';
   const params = new URLSearchParams(location.search);
   const DEMO_IMG = params.has('demo'); // usado só para gerar imagens de apresentação
@@ -16,7 +16,12 @@
    * ========================================================= */
   const LS = {
     get(k, padrao) { try { const v = localStorage.getItem('usina.' + k); return v ? JSON.parse(v) : padrao; } catch (e) { return padrao; } },
-    set(k, v) { try { localStorage.setItem('usina.' + k, JSON.stringify(v)); } catch (e) { toast('A memória do aparelho está cheia. Chame o encarregado.', 'erro'); } },
+    set(k, v) {
+      try { localStorage.setItem('usina.' + k, JSON.stringify(v)); } catch (e) {
+        // A cópia de antes de zerar nunca pode impedir de guardar uma anotação nova.
+        try { localStorage.removeItem('usina.antesDeZerar'); localStorage.setItem('usina.' + k, JSON.stringify(v)); } catch (e2) { toast('A memória do aparelho está cheia. Chame o encarregado.', 'erro'); }
+      }
+    },
   };
   const cfg = Object.assign({
     papel: null,          // id do setor ou 'central'

@@ -40,6 +40,7 @@ function apkFalso(pasta, versao, tamanho = 300000) {
   return info;
 }
 
+const assinarVersao = (pasta, chave) => fs.writeFileSync(path.join(pasta, 'versao.sig'), crypto.sign('sha256', fs.readFileSync(path.join(pasta, 'versao.json')), fs.readFileSync(chave.privada)).toString('base64'));
 /** Chave de teste para assinar as telas (a de verdade fica só no computador do Guilherme). */
 export function chaveDeTeste() {
   const pasta = pastaTemporaria('chave');
@@ -147,9 +148,13 @@ export async function testarAtualizacao(nav, grupo) {
   const origem = telasDeTeste('9.5.0');
   let pacote;
   await teste(grupo, 'pacote das telas: lista de cada arquivo com SHA-256 e assinatura que confere', async () => {
+    // 3.0.1: pasta escondida de ferramenta não vai no pacote nem fica na cópia que vira APK
+    fs.mkdirSync(path.join(origem, 'fonts', '.omc'), { recursive: true });
+    fs.writeFileSync(path.join(origem, 'fonts', '.omc', 'estado.json'), '{}');
     pacote = montarPacote(origem, path.join(pastaApk, 'telas'), chave, '9.5.0', '2.0.0');
     igual(pacote.versao, '9.5.0'); igual(pacote.apkMinimo, '2.0.0');
     igual(Object.keys(pacote.arquivos).sort(), ['app.js', 'chave-telas.txt', 'fonts/letra.woff2', 'index.html']);
+    certo(!fs.existsSync(path.join(origem, 'fonts', '.omc')), 'a pasta escondida ficou na cópia');
     igual(pacote.arquivos['app.js'].sha256, sha(fs.readFileSync(path.join(origem, 'app.js'))));
     const dados = fs.readFileSync(path.join(pastaApk, 'telas', 'pacote.json'));
     const assinatura = Buffer.from(fs.readFileSync(path.join(pastaApk, 'telas', 'pacote.sig'), 'utf8'), 'base64');
@@ -306,10 +311,12 @@ export async function testarAtualizacao(nav, grupo) {
   await teste(grupo, 'nuvem: a central do computador baixa o APK novo, confere e passa a entregar aos tablets', async () => {
     const pastaNuvem = path.join(pastaTemporaria('nuvem'), 'atualizacao');
     const nv = apkFalso(pastaNuvem, '9.2.1', 500000);
+    const chaveApk = chaveDeTeste();
+    assinarVersao(pastaNuvem, chaveApk);
     const nuvem = await nuvemFalsa(8183, pastaNuvem);
     const pastaApk2 = pastaTemporaria('apk-saida2');
     apkFalso(pastaApk2, '9.1.0');
-    const c2 = await centralNode(8182, pastaTemporaria('atualizacao2'), undefined, { PASTA_APK: pastaApk2, ATUALIZACAO_ONLINE: nuvem.url, ATUALIZACAO_ESPERA_MS: '300' });
+    const c2 = await centralNode(8182, pastaTemporaria('atualizacao2'), undefined, { PASTA_APK: pastaApk2, ATUALIZACAO_ONLINE: nuvem.url, ATUALIZACAO_ESPERA_MS: '300', CHAVE_TELAS: chaveApk.publica });
     try {
       const v = await esperarVersao(c2.url, '9.2.1');
       igual(v.versao, '9.2.1'); igual(v.sha256, nv.sha256); igual(v.novidades[0].versao, '9.2.1');
@@ -319,17 +326,20 @@ export async function testarAtualizacao(nav, grupo) {
   await teste(grupo, 'nuvem com APK diferente do versao.json, ou com versão mais velha: a central fica com o que tem', async () => {
     const pastaNuvem = path.join(pastaTemporaria('nuvem2'), 'atualizacao');
     apkFalso(pastaNuvem, '9.2.2');
+    const chaveApk = chaveDeTeste();
+    assinarVersao(pastaNuvem, chaveApk);
     fs.appendFileSync(path.join(pastaNuvem, 'pranchetas.apk'), 'estragado');
     const nuvem = await nuvemFalsa(8185, pastaNuvem);
     const pastaApk3 = pastaTemporaria('apk-saida3');
     const antes = apkFalso(pastaApk3, '9.1.0');
-    const c3 = await centralNode(8186, pastaTemporaria('atualizacao3'), undefined, { PASTA_APK: pastaApk3, ATUALIZACAO_ONLINE: nuvem.url, ATUALIZACAO_ESPERA_MS: '300' });
+    const c3 = await centralNode(8186, pastaTemporaria('atualizacao3'), undefined, { PASTA_APK: pastaApk3, ATUALIZACAO_ONLINE: nuvem.url, ATUALIZACAO_ESPERA_MS: '300', CHAVE_TELAS: chaveApk.publica });
     try {
       await dormir(3000);
       const v = await (await fetch(c3.url + '/api/versao')).json();
       igual(v.versao, '9.1.0'); igual(v.sha256, antes.sha256);
       // versão mais velha na nuvem: também não troca
       apkFalso(pastaNuvem, '9.0.9');
+      assinarVersao(pastaNuvem, chaveApk);
       await c3.reiniciar();
       await dormir(3000);
       igual((await (await fetch(c3.url + '/api/versao')).json()).versao, '9.1.0');

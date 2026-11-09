@@ -47,14 +47,16 @@ export async function testarNuvemEntrar216(g) {
       const p = { ...pessoa('Lucas', '4567'), pin: 'nao-guardar', sal: 'sal-central', resumo: 'resumo-central', funcoes: ['relatorios', 'conexao', 'sistema'], nuvem: { ...verificador('4567'), pin: 'nao-guardar' } };
       igual((await enviar({ pessoas: [p, pessoa('Antiga'), { ...pessoa('Inativa', '5678'), ativo: false }] })).status, 200);
       const rows = n.consultar('SELECT json FROM pessoas');
-      igual(rows.length, 2);
+      igual(rows.length, 3); // 3.0: quem ainda não tem senha também fica no banco, e continua sem conseguir entrar
       const texto = JSON.stringify(rows);
       for (const s of ['nao-guardar', 'sal-central', 'resumo-central', 'conexao', 'sistema']) certo(!texto.includes(s), s);
       // o banco da nuvem sozinho não dá para testar PINs: só a conferência selada com o segredo da central
       certo(!texto.includes(verificador('4567').verificador), 'verificador sem selo no banco');
       certo(texto.includes(selado('4567')), 'conferência selada');
-      igual((await enviar({ pessoas: [{ ...p, nuvem: { ...p.nuvem, iteracoes: 999999 } }] })).status, 400);
-      igual(n.consultar('SELECT id FROM pessoas').length, 2, 'envio inválido preserva a lista');
+      // 3.0: uma linha ruim não derruba o envio, e a conferência que o banco já tem continua a mesma
+      igual((await enviar({ pessoas: [{ ...p, nuvem: { ...p.nuvem, iteracoes: 999999 } }] })).status, 200);
+      igual(n.consultar('SELECT id FROM pessoas').length, 3, 'envio inválido preserva a lista');
+      certo(JSON.stringify(n.consultar('SELECT json FROM pessoas')).includes(selado('4567')), 'perdeu a conferência');
     });
     let login;
     await teste(g, 'login dá a chave de leitura (nunca a chave do tablet) e apenas os dados públicos da pessoa', async () => {
@@ -182,6 +184,8 @@ export async function testarNuvemEntrar216(g) {
       igual((await entrar('pc-lucas')).status, 423);
       igual((await n.pedir('/aparelho/sync', { senha: login.json.token, aparelho: 'pc-lucas', corpo: { registros: [] } })).status, 423);
       await enviar({ bloqueios: [], pessoas: [] });
+      igual((await entrar('pc-lucas')).status, 200, '3.0: lista vazia nunca apaga ninguém');
+      await enviar({ pessoas: [{ ...pessoa('Lucas', '4567'), ativo: false }, pessoa('Ana', '1234')] });
       igual((await entrar('pc-lucas')).status, 401);
       igual((await n.pedir('/aparelho/sync', { senha: login.json.token, aparelho: 'pc-lucas', corpo: { registros: [] } })).status, 401);
       limparTentativas();
@@ -216,6 +220,7 @@ export async function testarNuvemEntrar216(g) {
     });
 
     for (const [nome, ligar, porta] of [['Node', centralNode, 8341], ['Java', centralJava, 8342]]) {
+      n.consultar('DELETE FROM pessoas RETURNING id'); // 3.0: mesmo nome com outro id é a mesma pessoa, então cada central começa de um banco limpo
       const c = await ligar(porta);
       const arquivo = path.join(c.pastaServidor, 'config.json');
       const config = () => JSON.parse(fs.readFileSync(arquivo, 'utf8'));
@@ -263,7 +268,7 @@ export async function testarNuvemEntrar216(g) {
           await c.api('/api/pessoas', { acao: 'salvar', pessoa: { ...lucas, ativo: false } });
           await mandar();
           igual((await entrar('inativa-' + nome, '6789')).status, 401);
-          certo(!n.consultar('SELECT id FROM pessoas').some((p) => p.id === lucas.id));
+          certo(!JSON.parse(n.consultar('SELECT json FROM pessoas').find((p) => JSON.parse(p.json).id === lucas.id).json).ativo, '3.0: continua no banco, desativada');
           limparTentativas();
         });
         await teste(g, `${nome}: pessoa antiga recebe verificador só depois de entrar; persiste ao reiniciar`, async () => {
@@ -272,6 +277,7 @@ export async function testarNuvemEntrar216(g) {
           const cfg = config(); delete cfg.pessoas.find((p) => p.id === lucas.id).nuvem;
           fs.writeFileSync(arquivo, JSON.stringify(cfg));
           await c.reiniciar();
+          n.consultar('DELETE FROM pessoas RETURNING id'); // 3.0: o banco guarda a conferência; pessoa antiga é a que não tem em nenhum dos dois
           await mandar();
           igual((await entrar('antiga-' + nome, '6789')).status, 401);
           await c.api('/api/pessoas', { acao: 'entrar', pin: '6789' });

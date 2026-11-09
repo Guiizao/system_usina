@@ -160,6 +160,7 @@ export async function testarDornas(nav, central, grupo) {
     await teste(grupo, 'apagar todos os dados do sistema (senha do programador) limpa a central e o tablet', async () => {
       await esc.tocar('[data-a="config"]');
       await senhaSeAparecer(esc);
+      await esc.tocar('[data-a="categoria"][data-cat="sistema"]');
       await esc.tocar('[data-a="zerar-tudo"]');
       await esc.tocar('[data-k="sim"]');
       await esc.teclar([...SENHA_PROGRAMADOR_TESTE.split(''), 'ok']);

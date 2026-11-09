@@ -23,4 +23,7 @@
     if (navigator.wakeLock && document.visibilityState === 'visible') navigator.wakeLock.request('screen').catch(() => {});
   }
   document.addEventListener('contextmenu', (e) => { if (!e.target.closest('input, textarea')) e.preventDefault(); });
-  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') { entrarTelaCheia(); sincronizar(); } });
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') { entrarTelaCheia(); sincronizar(); }
+    else salvarSemSair(); // 3.0: saiu do aplicativo com algo digitado: salva e envia, como ao sair da tela
+  });

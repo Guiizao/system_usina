@@ -37,7 +37,9 @@ export async function ligarNuvemSQLite(porta, segredo, token) {
   const anterior = crypto.subtle.timingSafeEqual;
   crypto.subtle.timingSafeEqual = (a, b) => timingSafeEqual(new Uint8Array(a), new Uint8Array(b));
   const url = `http://127.0.0.1:${porta}`;
+  let fora = false; // a nuvem fora do ar: corta a conexão, e o banco continua com o que tinha
   const servidor = http.createServer(async (req, res) => {
+    if (fora) { req.socket.destroy(); return; }
     try {
       const arquivo = path.resolve(publico, '.' + new URL(req.url, url).pathname);
       if (arquivo.startsWith(publico + path.sep) && fs.existsSync(arquivo) && fs.statSync(arquivo).isFile()) {
@@ -53,6 +55,9 @@ export async function ligarNuvemSQLite(porta, segredo, token) {
   });
   await new Promise((resolve) => servidor.listen(porta, '127.0.0.1', resolve));
   return { url, publico,
+    env,
+    agendado: async (ms) => { const espera = []; await worker.scheduled({ scheduledTime: ms }, env, { waitUntil: (p) => espera.push(p) }); await Promise.all(espera); },
+    foraDoAr: (sim) => { fora = sim; if (sim) servidor.closeAllConnections(); },
     consultar: (sql) => db.prepare(sql).all(),
     async pedir(rota, { senha = token, corpo, aparelho } = {}) {
       const r = await fetch(url + rota, { method: corpo ? 'POST' : 'GET', headers: {

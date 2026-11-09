@@ -7,10 +7,13 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { pbkdf2Sync } from 'node:crypto';
+import { createRequire } from 'node:module';
 import { ligarNuvemSQLite } from './nuvem-sqlite.mjs';
 import { centralNode, pastaTemporaria, APP } from './servidores.mjs';
 import { abrirNavegador, TAMANHOS, dormir } from './navegador.mjs';
 import { novoGrupo, teste, certo, resumo } from './teste.mjs';
+
+const { carregarUsina } = createRequire(import.meta.url)('../carregar-usina.js');
 
 const SEGREDO = 'segredo-ficticio-painel216';
 const PIN = '2468'; // senha de teste do Lucas fictício (nunca a de verdade)
@@ -32,10 +35,10 @@ export async function testarPainelNuvem216(g) {
       const regs = await demo.avaliar('JSON.stringify(Object.values(registros).filter((r) => /^\\d{4}-/.test(r.data)))').then(JSON.parse);
       await demo.fechar();
       certo(new Set(regs.map((r) => r.data)).size >= 5, 'a demonstração devia ter 5 dias');
-      const pessoas = [{ id: 'lucas', nome: 'Lucas', nivel: 'consulta', ativo: true, funcoes: ['escritorio', 'relatorios'], nuvem: verificador(PIN) }];
+      const pessoas = [{ id: 'lucas', nome: 'Lucas', nivel: 'consulta', ativo: true, extras: { escritorio: true }, funcoes: ['escritorio', 'relatorios'], nuvem: verificador(PIN) }];
       for (let i = 0; i < regs.length; i += 120) {
         const lote = regs.slice(i, i + 120).map((r, k) => Object.assign({}, r, { seq: i + k + 1 }));
-        const r = await n.pedir('/central/enviar', { senha: SEGREDO, corpo: { geracao: 'demo216', registros: lote, ...(i ? {} : { pessoas }) } });
+        const r = await n.pedir('/central/enviar', { senha: SEGREDO, corpo: { geracao: 'demo216', registros: lote, ...(i ? {} : { pessoas, forms: carregarUsina(path.join(APP, 'public')) }) } });
         certo(r.status === 200, 'envio ' + r.status + ' ' + r.texto);
         enviados += lote.length;
       }

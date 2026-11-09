@@ -68,15 +68,18 @@
             const unidades = p.tipo === 'insumo' ? `<div class="linha-config"><div><b>Unidades${(mud[pid] || {})._unidades ? ' <span class="selo-mudado">mudado</span>' : ''}</b><small>${esc(p.unidades.join(', '))}</small></div>
               <button class="btn pequeno" data-a="folha-unidades" data-pid="${pid}">Mudar</button></div>` : '';
             const estrutura = pode('sistema') && window.Folhas.aceitaNovo(p) ? `<div class="linha-botoes"><button class="btn pequeno" data-a="folha-estrutura" data-pid="${pid}">${ico('mais')} Estrutura da folha (campos novos${p.tipo === 'insumo' ? ', campos do escritório' : ''})</button></div>` : '';
-            return linhas || unidades || estrutura ? `<h3 class="folha-titulo">${esc(p.nome)}</h3>${linhas}${unidades}${estrutura}` : '';
+            const tirada = ((configSistema().pranchetasDesligadas || {})[s.id] || []).includes(pid);
+            const tirar = pode('usina') && s.pranchetas.includes(pid) ? `<div class="linha-botoes"><button class="btn pequeno" data-a="prancheta-liga" data-setor="${s.id}" data-id="${pid}">${tirada ? `${ico('mais')} Ligar de novo` : `${ico('fechar')} Desligar`}</button>${pode('sistema') ? `<button class="btn pequeno perigo" data-a="folha-remover" data-setor="${s.id}" data-id="${pid}">${ico('lixeira')} Remover de vez</button>` : ''}</div>` : '';
+            return linhas || unidades || estrutura ? `<h3 class="folha-titulo ${tirada ? 'desligado' : ''}">${esc(p.nome)}${tirada ? ' <span class="selo-mudado">desligada</span>' : ''}</h3>${linhas}${unidades}${estrutura}${tirar}` : '';
           }).join('');
-          return blocos ? `<section class="bloco"><h2>${ico(s.icone)} ${esc(s.nome)}</h2>${blocos}</section>` : '';
+          const nova = pode('sistema') && !s.soChefe ? `<div class="linha-botoes"><button class="btn pequeno" data-a="folha-tabela" data-setor="${s.id}">${ico('mais')} Nova tabela</button></div>` : '';
+          return blocos || nova ? `<section class="bloco"><h2>${ico(s.icone)} ${esc(s.nome)}</h2>${blocos}${nova}</section>` : '';
         }).join('')}</div>
       </main>`;
   }
   function salvarFolhas(novo, texto) {
     const limpo = {};
-    Object.entries(novo).forEach(([pid, m]) => { const x = {}; Object.entries(m).forEach(([k, v]) => { if (v && Object.keys(v).length) x[k] = v; }); if (Object.keys(x).length) limpo[pid] = x; });
+    Object.entries(novo).forEach(([pid, m]) => { if (Array.isArray(m)) { if (m.length) limpo[pid] = m; return; } const x = {}; Object.entries(m).forEach(([k, v]) => { if (v && Object.keys(v).length) x[k] = v; }); if (Object.keys(x).length) limpo[pid] = x; });
     salvarConfigSistema({ folhas: limpo });
     registrar('configuracao', `${quemEstaAqui()} ${texto}`);
     aplicarFolhas();
@@ -90,6 +93,11 @@
     // versão 2.12: só o dono, num tablet chefe nível 3, muda a vírgula e se o operador vê o quadro
     const sistema = pode('sistema');
     const est = { dec: Number(c.dec) || 0, oculto: !!c.oculto };
+    const saida = { total: (c.saida || {}).total || '', relatorio: (c.saida || {}).relatorio !== false, api: (c.saida || {}).api !== false };
+    const desenharSaida = (f) => {
+      f.querySelectorAll('[data-k^="tot:"]').forEach((x) => x.classList.toggle('sel', x.dataset.k === 'tot:' + saida.total));
+      f.querySelectorAll('[data-k^="sai:"]').forEach((x) => { const k = x.dataset.k.slice(4); x.classList.toggle('sel', saida[k]); x.querySelector('.marca-saida').innerHTML = saida[k] ? ico('certo') : ico('fechar'); });
+    };
     const desenharSistema = (f) => {
       f.querySelectorAll('[data-k^="dec:"]').forEach((x) => x.classList.toggle('sel', x.dataset.k === 'dec:' + est.dec));
       const v = f.querySelector('[data-k="oculto"]');
@@ -123,6 +131,10 @@
         <label>Maior valor esperado <input id="f-max" inputmode="decimal" value="${esc(c.max == null ? '' : fmtNum(String(c.max)))}"></label>
         <div class="avisos-bloco"><b>Avisos</b><div id="avisos-campo"></div><button class="btn pequeno" data-k="av-mais">${ico('mais')} Pôr aviso</button></div>`
         : `<label>Dica <small>aparece embaixo do teclado</small><input id="f-dica" maxlength="160" value="${esc(c.dica || '')}"></label>`}
+        <div class="avisos-bloco"><b>Saída</b>
+          <p class="sub">Para onde este quadro vai.${c.novo ? '' : ' A folha de papel continua com o desenho dela.'}</p>
+          ${num ? `<div class="segmentos quebra">${[['', 'Sem total'], ['soma', 'Soma do dia'], ['media', 'Média do dia'], ['ultimo', 'Último valor']].map(([t, n]) => `<button data-k="tot:${t}">${n}</button>`).join('')}</div>` : ''}
+          <div class="chips">${c.novo ? '<button class="chip-liga" data-k="sai:relatorio"><span class="marca-saida"></span> No relatório</button>' : ''}<button class="chip-liga" data-k="sai:api"><span class="marca-saida"></span> Na API do escritório</button></div></div>
         ${sistema ? `<div class="avisos-bloco"><b>Só você (dono)</b>
           ${num ? `<div class="segmentos quebra">${[[0, 'Sem vírgula'], [1, '1 casa'], [2, '2 casas']].map(([d, n]) => `<button data-k="dec:${d}">${n}</button>`).join('')}</div>
           <p class="sub">A vírgula vale para o que for anotado daqui para frente; o que já foi anotado continua como está.</p>` : ''}
@@ -136,12 +148,16 @@
       if (k === 'av-mais') { avisos.splice(0, avisos.length, ...lerAvisos(f)); avisos.push({ quando: '<', valor: null, nivel: 'alerta', texto: '' }); return desenharAvisos(f); }
       if (k.startsWith('av-x:')) { avisos.splice(0, avisos.length, ...lerAvisos(f)); avisos.splice(Number(k.slice(5)), 1); return desenharAvisos(f); }
       if (k.startsWith('u:')) { f.querySelector('#f-unidade').value = k.slice(2); return; }
+      if (k.startsWith('tot:')) { saida.total = k.slice(4); return desenharSaida(f); }
+      if (k.startsWith('sai:')) { saida[k.slice(4)] = !saida[k.slice(4)]; return desenharSaida(f); }
       if (k.startsWith('dec:')) { est.dec = Number(k.slice(4)); return desenharSistema(f); }
       if (k === 'oculto') { est.oculto = !est.oculto; return desenharSistema(f); }
       if (k !== 'ok') return;
       const label = f.querySelector('#f-label').value.trim();
       if (!label) return toast('O quadro precisa de um nome', 'erro');
       const m = { label, labelCurto: f.querySelector('#f-curto').value.trim(), dica: f.querySelector('#f-dica').value.trim() };
+      const umaSaida = Object.assign({}, saida.total ? { total: saida.total } : {}, saida.relatorio ? {} : { relatorio: false }, saida.api ? {} : { api: false });
+      m.saida = Object.keys(umaSaida).length ? umaSaida : '';
       if (num) {
         m.unidade = f.querySelector('#f-unidade').value.trim();
         const mn = f.querySelector('#f-min').value.trim(), mx = f.querySelector('#f-max').value.trim();
@@ -155,7 +171,7 @@
       }
       if (sistema) { if (num) m.dec = est.dec; if (est.oculto) m.oculto = true; }
       fechar(m);
-    }, { classe: 'largo com-form', aoAbrir: (f) => { if (num) desenharAvisos(f); if (sistema) desenharSistema(f); } });
+    }, { classe: 'largo com-form', aoAbrir: (f) => { if (num) desenharAvisos(f); if (sistema) desenharSistema(f); desenharSaida(f); } });
     if (resp === undefined) return;
     const todas = copia(configSistema().folhas || {});
     todas[pid] = todas[pid] || {};
@@ -196,9 +212,9 @@
   }
   /** As unidades sugeridas (o dono também pode digitar outra). */
   const chipsDeUnidades = (pre) => `<div class="chips unidades">${window.Folhas.UNIDADES.map(([g, us]) => us.map((u) => `<button class="chip-liga" data-k="${pre}:${esc(u)}" title="${esc(g)}">${esc(u)}</button>`).join('')).join('')}</div>`;
-  const TIPOS_DE_CAMPO = [['num', 'Número'], ['text', 'Texto'], ['choice', 'Opções'], ['time', 'Hora'], ['check', 'Marcar OK']];
+  const TIPOS_DE_CAMPO = [['num', 'Só números'], ['letras', 'Só letras'], ['text', 'Letras e números'], ['choice', 'Letras prontas (opções)'], ['time', 'Hora'], ['check', 'Marcar OK']];
   function nomeDoTipo(c) {
-    const t = (TIPOS_DE_CAMPO.find((x) => x[0] === c.type) || [0, c.type])[1];
+    const t = (TIPOS_DE_CAMPO.find((x) => x[0] === (c.soLetras ? 'letras' : c.type)) || [0, c.type])[1];
     if (c.type === 'num') return `${t}${c.unidade ? ` em ${c.unidade}` : ''}, ${c.dec ? `${c.dec} casa${c.dec > 1 ? 's' : ''} depois da vírgula` : 'sem vírgula'}`;
     return c.type === 'choice' ? `${t}: ${(c.opcoes || []).join(', ')}` : t;
   }
@@ -206,7 +222,7 @@
      escritório que o operador também preenche. O desenho do papel não muda: o que for novo aparece no aplicativo,
      no Monitorar, no XML e na API. Campo novo não se apaga: arquiva (os valores antigos continuam guardados). */
   async function editarEstruturaDaFolha(pid) {
-    if (!pode('sistema')) return toast('Só o dono do sistema, no tablet chefe nível 3', 'erro');
+    if (!pode('sistema')) return toast('Só o dono do sistema', 'erro');
     const p = prancheta(pid);
     const todas = copia(configSistema().folhas || {});
     const m = todas[pid] = todas[pid] || {};
@@ -222,7 +238,7 @@
     };
     for (;;) {
       const resp = await abrirModal(`<h3>Estrutura da folha: ${esc(p.nome).replace(/-/g, '\u2011')}</h3>
-        <p class="dica">Só você (dono, no tablet chefe nível 3) mexe aqui. O desenho do papel não muda: o que for novo aparece no aplicativo, no Monitorar, no XML e na API.</p>
+        <p class="dica">Só você (dono do sistema) mexe aqui. O desenho do papel não muda: o que for novo aparece no aplicativo, no Monitorar, no XML e na API.</p>
         <div class="form-pessoa form-folha">
           ${escritorio.length ? '<b>Campos do escritório que o operador também preenche</b><div id="est-operador"></div>' : ''}
           <b>Campos novos</b><div id="est-novos"></div>
@@ -236,7 +252,12 @@
         if (k.startsWith('arq:')) { const c = novos[Number(k.slice(4))]; if (c.arquivado) delete c.arquivado; else c.arquivado = true; return desenhar(f); }
         if (k === 'ok') fechar(true);
       }, { classe: 'largo com-form', aoAbrir: (f) => desenhar(f) });
-      if (resp === 'novo') { const c = await criarCampoNovo(p, novos); if (c) novos.push(c); continue; }
+      if (resp === 'novo') {
+        const c = await criarCampoNovo(p, novos);
+        if (c && c.avisos) { m[c.id] = { avisos: c.avisos }; delete c.avisos; }
+        if (c) novos.push(c);
+        continue;
+      }
       if (!resp) return;
       break;
     }
@@ -246,7 +267,48 @@
     toast('Estrutura salva. Os tablets recebem na próxima sincronização.');
     render();
   }
-  /** Um campo novo: nome, tipo, unidade e vírgula (número) ou as opções. O id nunca é reaproveitado. */
+  /** 3.0: área nova (só o dono). Nasce sem folhas: depois do nome, já pede a primeira tabela dela. */
+  async function criarArea() {
+    if (!pode('sistema')) return toast('Só o dono do sistema', 'erro');
+    const nome = await textoLivre({ titulo: 'Nova área', dica: 'O nome que aparece nos tablets, como Moenda. Depois você cria as tabelas e cadastra os operadores dela.', max: 30 });
+    if (!nome) return;
+    if (todosSetores.some((s) => s.nome.toLowerCase() === nome.toLowerCase())) return toast('Já tem uma área com esse nome', 'erro');
+    const todas = copia(configSistema().folhas || {});
+    let id;
+    do { id = 'a_' + Math.random().toString(36).slice(2, 10); } while (!/^a_[a-z0-9]{3,20}$/.test(id) || setorPorId(id));
+    todas._areas = Object.assign({}, todas._areas, { [id]: { nome } });
+    salvarFolhas(todas, `criou a área ${nome}`);
+    render();
+    return criarTabela(id);
+  }
+  /** 3.0: tabela nova num setor (só o dono): hora a hora, como a caldeira. Depois do nome, abre os campos dela. */
+  async function criarTabela(setorId) {
+    if (!pode('sistema')) return toast('Só o dono do sistema', 'erro');
+    const s = setorPorId(setorId);
+    const nome = await textoLivre({ titulo: `Nova tabela na ${s.nome}`, dica: 'O nome que aparece para o operador. A tabela é hora a hora; os campos você escolhe em seguida.', max: 40 });
+    if (!nome) return;
+    const removidas = (configSistema().folhas || {})._removidas || []; // o nome de uma tabela removida volta a ficar livre
+    if (Object.entries(C.pranchetas).some(([id, p]) => !removidas.includes(id) && (p.nome || '').toLowerCase() === nome.toLowerCase())) return toast('Já tem uma folha com esse nome', 'erro');
+    const todas = copia(configSistema().folhas || {});
+    let pid;
+    do { pid = 't_' + Math.random().toString(36).slice(2, 10); } while (!/^t_[a-z0-9]{3,20}$/.test(pid) || C.pranchetas[pid]);
+    todas._tabelas = Object.assign({}, todas._tabelas, { [pid]: { nome, setor: setorId } });
+    salvarFolhas(todas, `criou a tabela ${nome} na ${s.nome}`);
+    render();
+    return editarEstruturaDaFolha(pid);
+  }
+  /** 3.0: desligar a tabela dá para desfazer; remover de vez não. O que já foi anotado não se apaga: continua no banco e nas cópias. */
+  async function removerTabela(setorId, pid) {
+    if (!pode('sistema')) return toast('Só o dono do sistema', 'erro');
+    const p = prancheta(pid);
+    if (!(await confirmar(`Remover ${p.nome} de vez?`, `Some da ${setorPorId(setorId).nome}, dos tablets e dos relatórios. O que já foi anotado nela continua guardado no banco e nas cópias. Para só parar de usar, com volta, toque em Desligar.`, 'Remover de vez', true))) return;
+    const todas = copia(configSistema().folhas || {});
+    todas._removidas = [...new Set([...(todas._removidas || []), pid])];
+    salvarFolhas(todas, `removeu a tabela ${p.nome} da ${setorPorId(setorId).nome}`);
+    toast('Tabela removida. Os tablets recebem na próxima sincronização.');
+    render();
+  }
+  /** Um campo novo: nome, tipo, unidade e vírgula (número) ou as opções, e o mínimo e o máximo que viram avisos. O id nunca é reaproveitado. */
   async function criarCampoNovo(p, novos) {
     const est = { type: 'num', dec: 0 };
     const desenhar = (f) => {
@@ -260,7 +322,9 @@
         <label>Nome do campo <input id="cn-nome" maxlength="40" autocomplete="off" placeholder="Ex.: Temperatura da saída"></label>
         <b>Tipo</b><div class="segmentos quebra">${TIPOS_DE_CAMPO.map(([t, n]) => `<button data-k="t:${t}">${n}</button>`).join('')}</div>
         <div id="cn-num"><label>Unidade <input id="cn-unidade" maxlength="12" autocomplete="off"></label>${chipsDeUnidades('cu')}
-          <b>Vírgula</b><div class="segmentos quebra">${[[0, 'Sem vírgula'], [1, '1 casa'], [2, '2 casas']].map(([d, n]) => `<button data-k="d:${d}">${n}</button>`).join('')}</div></div>
+          <b>Vírgula</b><div class="segmentos quebra">${[[0, 'Sem vírgula'], [1, '1 casa'], [2, '2 casas']].map(([d, n]) => `<button data-k="d:${d}">${n}</button>`).join('')}</div>
+          <label>Mínimo permitido <small>abaixo disso, aparece o aviso; pode ficar em branco</small><input id="cn-min" inputmode="decimal" autocomplete="off"></label>
+          <label>Máximo permitido <small>acima disso, aparece o aviso; pode ficar em branco</small><input id="cn-max" inputmode="decimal" autocomplete="off"></label></div>
         <label id="cn-opcoes">Opções <small>separe por vírgula</small><input id="cn-op" maxlength="200" autocomplete="off" placeholder="Ex.: Sim, Não"></label>
       </div>
       <div class="acoes-modal"><button class="btn" data-k="x">Cancelar</button><button class="btn primario" data-k="ok">Criar</button></div>`,
@@ -275,8 +339,18 @@
       if ([...camposDaFolha(p), ...novos].some((c) => (c.label || '').toLowerCase() === label.toLowerCase())) return toast('Já tem um campo com esse nome nesta folha', 'erro');
       let id;
       do { id = 'x_' + Math.random().toString(36).slice(2, 10); } while (!/^x_[a-z0-9]{3,20}$/.test(id) || novos.some((c) => c.id === id));
-      const c = { id, label, type: est.type };
-      if (est.type === 'num') { c.dec = est.dec; const u = f.querySelector('#cn-unidade').value.trim(); if (u) c.unidade = u; }
+      const c = est.type === 'letras' ? { id, label, type: 'text', soLetras: true } : { id, label, type: est.type };
+      if (est.type === 'num') {
+        c.dec = est.dec;
+        const u = f.querySelector('#cn-unidade').value.trim();
+        if (u) c.unidade = u;
+        const min = numeroDe(f.querySelector('#cn-min').value), max = numeroDe(f.querySelector('#cn-max').value);
+        if (min != null && max != null && min >= max) return toast('O mínimo precisa ser menor que o máximo', 'erro');
+        const avisos = [];
+        if (min != null) avisos.push({ quando: '<', valor: min, nivel: 'alerta', texto: `${label} abaixo do mínimo de ${fmtNum(min)}${u ? ` ${u}` : ''}`, curto: `${label} baixo`.slice(0, 20) });
+        if (max != null) avisos.push({ quando: '>', valor: max, nivel: 'alerta', texto: `${label} acima do máximo de ${fmtNum(max)}${u ? ` ${u}` : ''}`, curto: `${label} alto`.slice(0, 20) });
+        if (avisos.length) c.avisos = avisos;
+      }
       if (est.type === 'choice') {
         c.opcoes = [...new Set(f.querySelector('#cn-op').value.split(',').map((x) => x.trim()).filter(Boolean))];
         if (!c.opcoes.length) return toast('Escreva as opções, separadas por vírgula', 'erro');

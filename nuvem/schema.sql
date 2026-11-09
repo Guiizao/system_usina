@@ -14,6 +14,20 @@ CREATE TABLE IF NOT EXISTS registros (
 CREATE INDEX IF NOT EXISTS registros_data ON registros (data);
 CREATE INDEX IF NOT EXISTS registros_seq ON registros (seq);
 
+-- 3.0: cada zeramento guarda uma cópia completa; o mesmo id pode aparecer em várias cópias.
+CREATE TABLE IF NOT EXISTS registros_apagados (
+  id TEXT NOT NULL,
+  data TEXT NOT NULL,
+  prancheta TEXT NOT NULL,
+  setor TEXT,
+  chave TEXT,
+  seq INTEGER NOT NULL,
+  atualizadoEm INTEGER,
+  apagado INTEGER NOT NULL DEFAULT 0,
+  json TEXT NOT NULL,
+  apagado_em INTEGER NOT NULL
+);
+
 -- quantas anotações cada dia tem (a lista de dias sai daqui, sem ler o banco inteiro)
 CREATE TABLE IF NOT EXISTS dias (
   data TEXT PRIMARY KEY,
@@ -63,4 +77,26 @@ CREATE TABLE IF NOT EXISTS tentativas_entrada (
   erros INTEGER NOT NULL,
   bloqueios INTEGER NOT NULL DEFAULT 0,
   ate INTEGER NOT NULL DEFAULT 0
+);
+
+-- 3.0: o banco é a fonte de tudo; os aparelhos falam direto com ele
+CREATE TABLE IF NOT EXISTS aparelhos (
+  id TEXT PRIMARY KEY,
+  json TEXT NOT NULL,
+  vistoEm INTEGER NOT NULL
+);
+CREATE TABLE IF NOT EXISTS liberados_setor (
+  aparelho TEXT PRIMARY KEY,
+  pessoa TEXT NOT NULL,
+  ate INTEGER NOT NULL
+);
+
+-- 3.0: o que já foi para o Servidor da Usina (só a produção de cada dia fechado)
+CREATE TABLE IF NOT EXISTS usina_envios (
+  dia TEXT PRIMARY KEY,
+  seq INTEGER NOT NULL DEFAULT 0,
+  ok INTEGER NOT NULL DEFAULT 0,
+  em INTEGER NOT NULL DEFAULT 0,
+  status INTEGER NOT NULL DEFAULT 0,
+  erro TEXT NOT NULL DEFAULT ''
 );

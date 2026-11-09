@@ -57,3 +57,14 @@ HIDROLISE = [
     ["04:11", "04:42", "3,5", "03", "16", "5,2", "70", "16", "MASSA"],
     ["04:42", "05:13", "3,5", "03", "16", "5,2", "70", "16", "MASSA"],
 ]
+
+# Caldeira (Caldeira.jpg e Caldeira 2.jpg, a mesma folha): uma lista por item, da coluna das 7 até a das 6. Traço e vazio contam como vazio.
+CALDEIRA = {
+    "pressao": ["6K"] * 14 + ["5K", "6K", "7K", "6K", "7K", "6K", "8K", "8K", "8K", "8K"],
+    "temp_agua": ["42", "33", "5,6"] + [""] * 21,
+    "descarga_fundo": ["02", "03", "01"] * 8,
+    "descarga_garrafa": ["OK"] + [""] * 23,
+    "retirada_cinza": [""] * 15 + ["OK"] + [""] * 8,
+    "inicio_aquec": [""] * 24,
+    "parada": [""] * 24,
+}

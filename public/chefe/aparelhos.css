@@ -22,3 +22,10 @@
 .ficha dd { margin: 0; font-weight: 700; overflow-wrap: anywhere; }
 :root[data-dispositivo="celular"] .ficha { grid-template-columns: 1fr; gap: 0; }
 :root[data-dispositivo="celular"] .ficha dd { margin-bottom: 6px; }
+/* 3.0: sala de controle do dono */
+.numeros-sala { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 8px; margin-bottom: 12px; }
+.numeros-sala > div { display: grid; gap: 2px; padding: 10px 12px; border-radius: 10px; background: var(--papel); border: 1px solid var(--linha-clara); }
+.numeros-sala b { font-size: 26px; }
+.numeros-sala span { font-size: 15px; color: var(--tinta-2); }
+.tela-sala .titulo-secao { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; }
+.tela-sala .filtros-registro { margin: 8px 0; }

@@ -39,3 +39,15 @@ main.registro { max-width: 1100px; }
 .reg-texto small { color: var(--tinta-2); font-size: 14px; }
 .reg-texto ul { margin: 4px 0 0; padding-left: 18px; font-size: 15px; }
 .reg-texto s { color: var(--tinta-2); }
+/* 3.0: funções em categorias e a prévia da pessoa em cada nível do tablet chefe */
+.categoria-funcao { margin: 10px 0 4px; font-size: 15px; font-weight: 700; color: var(--tinta-2); text-align: left; }
+.previa-pessoa { grid-column: 1 / -1; }
+.tabela-previa { width: 100%; margin-top: 10px; border-collapse: collapse; table-layout: fixed; }
+.tabela-previa th, .tabela-previa td { padding: 8px 6px; border-bottom: 1px solid var(--linha-clara); font-size: 15px; overflow-wrap: anywhere; }
+.tabela-previa th:not(:first-child), .tabela-previa td:not(:first-child) { width: 4.6em; text-align: center; }
+.tabela-previa thead th:first-child { text-align: left; }
+.tabela-previa td.sim { color: var(--verde-escuro); }
+.tabela-previa td.sim svg.ico { width: 18px; height: 18px; }
+.tabela-previa td.nao { color: var(--tinta-2); }
+/* 3.0: outro aparelho anotando nesta folha, ainda sem salvar */
+.rascunho-outro { display: block; margin: 8px 0; }

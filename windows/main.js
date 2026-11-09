@@ -2,7 +2,7 @@
 /* Programa do Windows (2.16, decisão do Guilherme): o painel administrativo pela nuvem. A central continua no tablet
    chefe; o computador não liga central, não abre porta no firewall e não entrega APK. Ele só mostra as telas que vêm
    dentro do programa ou as atualizadas com assinatura (2.18), num endereço local. A pessoa entra pela nuvem. */
-const { app, BrowserWindow, Menu, Tray, dialog, shell, nativeImage, session } = require('electron');
+const { app, BrowserWindow, Menu, Tray, dialog, shell, nativeImage, session, ipcMain } = require('electron');
 const fs = require('node:fs');
 const http = require('node:http');
 const path = require('node:path');
@@ -64,7 +64,26 @@ function externo(url) {
 }
 const local = (url) => { try { return new URL(url).origin === endereco; } catch { return false; } };
 
+/* 3.0: a cópia dos dados, em Documentos/Usina/BackupUsina. Só a tela do programa pede, só com nome de cópia e sempre nessa pasta. */
+const NOME_DA_COPIA = /^(\d{4}-\d{2}-\d{2}|copia-[\w-]{1,80})\.json$/;
+function lerCopia(evento, nome) {
+  if (!evento.senderFrame || !local(evento.senderFrame.url)) throw new Error('pedido de fora do programa');
+  if (!NOME_DA_COPIA.test(String(nome))) throw new Error('cópia inválida');
+  try { return fs.readFileSync(path.join(app.getPath('documents'), 'Usina', 'BackupUsina', nome), 'utf8'); } catch (e) { return ''; }
+}
+function guardarCopia(evento, nome, texto) {
+  if (!evento.senderFrame || !local(evento.senderFrame.url)) throw new Error('pedido de fora do programa');
+  if (!NOME_DA_COPIA.test(String(nome)) || typeof texto !== 'string' || texto.length > 20 * 1024 * 1024) throw new Error('cópia inválida');
+  const pasta = path.join(app.getPath('documents'), 'Usina', 'BackupUsina');
+  fs.mkdirSync(pasta, { recursive: true });
+  const provisorio = path.join(pasta, `${nome}.tmp`);
+  fs.writeFileSync(provisorio, texto, 'utf8');
+  fs.renameSync(provisorio, path.join(pasta, nome));
+}
+
 async function ligar() {
+  ipcMain.handle('guardar-copia', guardarCopia);
+  ipcMain.handle('ler-copia', lerCopia);
   atualizador = new AtualizadorTelas({ publico,
     destino: path.join(process.env.LOCALAPPDATA || path.join(app.getPath('appData'), '..', 'Local'), 'Pranchetas'),
     versao: app.isPackaged ? app.getVersion() : lerVersao(publico) });
@@ -74,7 +93,7 @@ async function ligar() {
   await session.defaultSession.clearStorageData({ storages: ['serviceworkers', 'cachestorage'] }).catch(() => {});
   const icone = nativeImage.createFromPath(path.join(publico, 'icons', 'icon-512.png'));
   janela = new BrowserWindow({ title: 'Pranchetas Ubirálcool', width: 1440, height: 900, show: false, icon: icone, autoHideMenuBar: true,
-    webPreferences: { contextIsolation: true, nodeIntegration: false, sandbox: true } });
+    webPreferences: { contextIsolation: true, nodeIntegration: false, sandbox: true, preload: path.join(__dirname, 'preload.js') } });
   janela.setMenu(null);
   // registro da janela (fica com o programa): ajuda a achar tela branca, erro de página ou travamento
   const registro = (...x) => { try { fs.appendFileSync(path.join(app.getPath('userData'), 'janela.log'), new Date().toISOString() + ' ' + x.join(' ') + '\n'); } catch { /* sem registro, segue */ } };
