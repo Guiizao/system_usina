@@ -4,6 +4,24 @@
    Depois do sinal de igual vem JSON puro, porque o servidor do tablet chefe (Java) também lê este arquivo. */
 window.NOVIDADES = [
   {
+    "versao": "3.1.0",
+    "data": "2026-11-09",
+    "itens": [
+      "Entrar pela nuvem: a troca de turno não derruba mais quem está no celular ou no computador. O acesso dura 5 dias no celular e 1 dia no computador, ou 7 marcando Lembrar. O dono muda esses prazos em Sistema.",
+      "Enviar e imprimir um período: somando, sai uma folha por área, com total das quantidades e média, mínima e máxima das medições. Sem somar, sai uma folha por dia. O Resumo segue a mesma escolha.",
+      "Dá para incluir o Cálculo de produção e o Rastreamento no envio e no Resumo. Dia que não foi salvo no escritório sai marcado como calculado, não conferido.",
+      "Escritório: quando as folhas mudam depois de salvar, aparece o aviso com o botão Atualizar, que refaz as contas e mantém o que foi digitado. Mudar os quilos de um produto já refaz a matéria-prima e o resto da conta.",
+      "A etiqueta usa o lote corrigido do álcool. Pela nuvem, o PDF e a etiqueta saem com o que está na tela.",
+      "Relatórios: cartões do mesmo tamanho, sem a caixa quebrada no tablet, e nome comprido não estoura mais.",
+      "Teclado de letras no padrão do celular, com vírgula, ponto, acento, apagar e página de símbolos. O teclado numérico da Hidrólise não mudou.",
+      "Depois de ler uma folha, o operador aparece numa lista para escolher, no lugar do teclado.",
+      "Leitor de folhas: agora lê Destilaria e Nova Destilaria, descobre sozinho se a foto está deitada e aprende com as correções. O que veio do aprendido aparece marcado, para conferir.",
+      "Folha de outro turno na Hidrólise e na Sacarificação: hora diferente continua a sequência do dia, mesmo que o papel diga linha 1. Hora igual é a mesma dorna e só preenche o que falta. O dia agora aceita até 60 dornas.",
+      "Na leitura, quem tem permissão cadastra na hora o operador que faltava.",
+      "No celular, a chave Painel novo em Ajustes liga a abertura animada e os sons. Vem desligada. No computador o painel novo é o único, e o tablet continua como está."
+    ]
+  },
+  {
     "versao": "3.0.1",
     "data": "2026-11-03",
     "itens": [

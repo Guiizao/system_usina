@@ -43,6 +43,43 @@ try {
     })()`);
     igual(r, [null, { valor: 'Cleber', preenche: false }, { valor: 'Cleber', preenche: true }, { valor: 'Cleber', preenche: false }, null]);
   });
+  await teste(g, 'dornas de outro turno: hora diferente continua a sequência; hora igual é a mesma e só completa o vazio', async () => {
+    const r = await a.avaliar(`(() => {
+      const d = '2020-03-03', pid = 'hid_anexo1';
+      for (let n = 1; n <= 12; n++) gravar(d, pid, n, n === 3 ? { inicio: pad2(6 + n) + ':00', phf: '5.0' } : { inicio: pad2(6 + n) + ':00', phf: '5.0', brix: '20' }, { operador: 'Turno A' });
+      const ler = window.LeitorFolhas.lerCelula; window.LeitorFolhas.lerCelula = (x) => x;
+      const cel = (valor) => ({ r: { valor, confianca: 1 }, vazia: false });
+      const folha = (linhas) => interpretarLeitura(pid, d, { linhas: linhas.map((x, m) => ({ m, celulas: Object.fromEntries(Object.entries(x).map(([k, v]) => [k, cel(v)])) })) });
+      const ver = (L) => L.linhas.map((l) => [l.chave, l.existe, l.incluir]);
+      const L = folha([{ inicio: '19:00', phf: '4.8' }, { inicio: '20:00', phf: '4.9' }, { inicio: '08:00', phf: '4.1' }, { inicio: '09:00', phf: '9.9', brix: '22' }]);
+      const antes = ver(L);
+      salvarLeitura({ pid, leitura: L });
+      const salvo = [13, 14, 2, 3].map((n) => { const x = pegar(d, pid, n); return [x.valores.inicio, x.valores.phf, x.valores.brix, x.operador]; });
+      const sacarificacao = pegar(d, 'hid_anexo2', 13).valores.horario;
+      const denovo = ver(folha([{ inicio: '19:00', phf: '4.8' }]));
+      for (let n = 15; n <= prancheta(pid).maxLinhas; n++) gravar(d, pid, n, { inicio: pad2(n % 24) + ':30' }, { operador: 'x' });
+      const cheia = folha([{ inicio: '23:59', phf: '5.5' }]).linhas[0];
+      window.LeitorFolhas.lerCelula = ler;
+      return { antes, salvo, sacarificacao, denovo, semLugar: cheia.semLugar, incluiCheia: cheia.incluir };
+    })()`);
+    igual(r.antes, [[13, false, true], [14, false, true], [2, true, false], [3, true, true]]);
+    igual(r.salvo, [['19:00', '4.8', undefined, 'Lido da folha'], ['20:00', '4.9', undefined, 'Lido da folha'], ['08:00', '5.0', '20', 'Turno A'], ['09:00', '5.0', '22', 'Turno A']].map((x) => x.map((v) => (v === undefined ? null : v))));
+    igual(r.sacarificacao, '19:00');
+    igual(r.denovo, [[13, true, false]]);
+    igual([r.semLugar, r.incluiCheia], [true, false]);
+  });
+  await teste(g, 'dia com mais de 25 dornas: a folha estica até a última linha e o PDF fica numa página', async () => {
+    const r = await a.avaliar(`(async () => {
+      const d = '2020-03-04', pid = 'hid_anexo1';
+      for (let n = 1; n <= 36; n++) gravar(d, pid, n, { inicio: pad2(n % 24) + ':10', phf: '5.0' }, { operador: 'x' });
+      const vazia = papel().folha(pid, '2020-03-05'), cheia = papel().folha(pid, d);
+      const num = (f) => Object.values(f.grade.cel).filter((c) => c.st && c.st.b && typeof c.v === 'number').length;
+      const pdf = window.criarPdf([cheia], Object.assign({ fmtNum, titulo: 't' }, await pecasPdf()));
+      let s = ''; for (let i = 0; i < pdf.length; i++) s += String.fromCharCode(pdf[i]);
+      return [num(vazia), num(cheia), (s.match(/\\/Type \\/Page /g) || []).length];
+    })()`);
+    igual(r, [25, 36, 1]);
+  });
   if (temFotos) {
     await teste(g, 'Destilaria deitada: acha o giro e lê os blocos na ordem das horas', async () => {
       const r = await ler('20261106_071636.jpg.jpeg', 'destilaria', 'destilaria');

@@ -42,17 +42,34 @@ try {
     igual(await a.avaliar(`!!document.querySelector('#abertura-nova')`), false);
     await a.fechar();
   });
+  await teste(g, 'PC: painel novo sempre, sem chave; tablet não mostra chave', async () => {
+    const pc = await abrir('p9', TAMANHOS.computador, 'central', false);
+    igual(await pc.avaliar(`[document.documentElement.hasAttribute('data-painel-novo'), /Painel novo/.test(blocoPainelNovo()), /Sons do painel/.test(blocoPainelNovo())]`), [true, false, true]);
+    await pc.fechar();
+    const t = await abrir('p10', TAMANHOS.tablet, 'central', false);
+    igual(await t.avaliar('blocoPainelNovo()'), '');
+    await t.fechar();
+  });
+  await teste(g, 'trocar o aparelho para setor tira o painel novo na hora', async () => {
+    const a = await abrir('p8', TAMANHOS.computador, 'central', true);
+    certo(await a.avaliar(`document.documentElement.hasAttribute('data-painel-novo')`), 'ligado no chefe');
+    await a.avaliar(`document.querySelector('#app main').insertAdjacentHTML('afterbegin', '<button id="t" data-a="papel" data-id="caldeira">x</button>'); 1`);
+    await dormir(2800);
+    await a.tocar('#t');
+    igual(await a.avaliar(`document.documentElement.hasAttribute('data-painel-novo')`), false);
+    await a.fechar();
+  });
   await teste(g, 'tablet chefe e tablet de setor não têm abertura', async () => {
     for (const [papel, n] of [['central', 'p4'], ['caldeira', 'p5']]) {
       const a = await abrir(n, TAMANHOS.tablet, papel, true);
       await dormir(400);
       igual(await a.avaliar(`!!document.querySelector('#abertura-nova')`), false, papel);
-      if (papel === 'caldeira') igual(await a.avaliar(`document.documentElement.hasAttribute('data-painel-novo')`), false, 'setor');
+      igual(await a.avaliar(`document.documentElement.hasAttribute('data-painel-novo')`), false, papel);
       await a.fechar();
     }
   });
   await teste(g, 'chave em Ajustes liga, desliga e guarda; o som tem chave própria', async () => {
-    const a = await abrir('p6', TAMANHOS.computador, 'central', false);
+    const a = await abrir('p6', TAMANHOS.celular, 'central', false);
     await a.avaliar(`(() => { document.querySelector('#app main').insertAdjacentHTML('afterbegin', '<div id="t">' + blocoPainelNovo() + '</div>'); return 1; })()`);
     await a.tocar('#t [data-a="painel-novo"][data-valor="1"]');
     igual(await a.avaliar('cfg.painelNovo'), true);

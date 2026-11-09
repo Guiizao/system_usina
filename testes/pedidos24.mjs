@@ -99,7 +99,11 @@ export async function testarPedidos24(nav, ligar, porta, grupo) {
       await esc.tocar('[data-a="gerar-hoje"]');
       await esc.esperar('document.body.innerText.includes("Excel guardado em RelatoriosUsina")', 15000, 'Excel guardado');
       certo(fs.readdirSync(path.join(c.pastaRelatorios, hoje())).some((n) => n.endsWith('.xlsx')), 'sem o Excel na pasta');
+      // 3.1: Apagar fica dentro de Abrir e corrigir
+      await esc.tocar(`[data-a="relatorio-abrir"][data-data="${hoje()}"]`);
       await esc.tocar(`[data-a="relatorio-apagar"][data-data="${hoje()}"]`); await esc.tocar('[data-k="sim"]');
+      await esc.esperar('!document.querySelector("[data-a=\\"relatorio-apagar\\"]")', 10000, 'botão saiu');
+      await esc.tocar('[data-a="relatorios"]');
       await esc.esperar('document.body.innerText.includes("ainda sem Excel guardado")', 10000, 'arquivo apagado');
       certo(!fs.existsSync(path.join(c.pastaRelatorios, hoje())) || !fs.readdirSync(path.join(c.pastaRelatorios, hoje())).length, 'o arquivo continua na pasta');
       igual(await esc.avaliar(deHoje), 1, 'o dia continua na lista');

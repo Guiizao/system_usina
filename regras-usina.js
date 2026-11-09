@@ -205,7 +205,7 @@ function decidirConfig(atual, r, aparelho) {
   for (const k of mudancasDaConfig({ valores: antes }, { valores })) {
     if (k === 'folhas') continue;
     // no tablet de setor só os operadores (ajustes); no tablet chefe, o resto da usina
-    const precisa = k === 'niveisChefe' ? ['sistema'] : !chefe ? (k === 'operadores' ? ['ajustes', 'usina'] : null) : ['usina'];
+    const precisa = k === 'niveisChefe' ? ['sistema'] : r.prancheta === 'memoria_leitor' ? (chefe ? ['ler_folha'] : null) : !chefe ? (k === 'operadores' ? ['ajustes', 'usina'] : null) : ['usina'];
     if ((!precisa || !precisa.some((f) => funcoes.has(f))) && naoPode(k)) return { aceita: false, motivo: 'sem_permissao' };
   }
   if ('niveisChefe' in valores) {

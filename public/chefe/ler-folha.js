@@ -162,10 +162,38 @@
     });
     linhas.forEach((l) => {
       l.temValor = Object.values(l.celulas).some((c) => c.valor !== '' && c.valor != null);
-      l.existe = !!pegar(data, pid, l.chave);
+      l.naFolha = l.chave;
+      l.existe = porHora && !!pegar(data, pid, l.chave);
       l.incluir = l.temValor && !l.existe;
     });
-    return { pid, data, colunas: cols, linhas };
+    const leitura = { pid, data, colunas: cols, linhas };
+    posicionarLinhas(leitura, true);
+    return leitura;
+  }
+
+  /** O Nº escrito no papel recomeça a cada turno e não diz em que linha do dia a anotação fica. Quem diz é o horário:
+      igual ao de uma linha salva, é a mesma (só completa o que está vazio); diferente, continua a sequência do dia. */
+  function posicionarLinhas(L, inicio) {
+    const p = prancheta(L.pid);
+    if (p.tipo === 'insumo' || p.tipo === 'grade') return; // estas têm a hora impressa na linha do papel
+    const salvas = dornasDoDia(L.data, L.pid), usadas = new Set();
+    const nomeHora = Object.keys(L.colunas).find((n) => L.colunas[n].spec.tipo === 'hora');
+    const campoHora = nomeHora && L.colunas[nomeHora].campo;
+    let proxima = salvas.reduce((m, r) => Math.max(m, Number(r.chave)), 0) + 1;
+    L.linhas.forEach((l) => {
+      const lidos = Object.entries(l.celulas).filter(([n, c]) => L.colunas[n].campo !== '_operador' && c.valor !== '' && c.valor != null).map(([n, c]) => [L.colunas[n].campo, String(c.valor)]);
+      const hora = (lidos.find(([c]) => c === campoHora) || [])[1];
+      const salva = lidos.length ? salvas.find((r) => !usadas.has(r) && (hora ? r.valores[campoHora] === hora : lidos.every(([c, x]) => r.valores[c] === x))) || null : null;
+      const mudou = inicio || (l.salva || null) !== salva;
+      l.salva = salva; l.existe = !!salva; l.semLugar = false;
+      if (salva) {
+        usadas.add(salva); l.chave = Number(salva.chave);
+        if (mudou) l.incluir = lidos.some(([c]) => vazio(salva.valores[c]));
+        return;
+      }
+      if (mudou) l.incluir = l.temValor;
+      if (l.temValor && proxima > p.maxLinhas) { l.semLugar = true; l.incluir = false; } else if (l.incluir) l.chave = proxima++;
+    });
   }
 
   function escolherFolhaParaLer(data) {
@@ -252,7 +280,7 @@
           <thead><tr><th class="inc">Salvar</th><th>${porHora ? 'Hora' : 'Nº'}</th>${cols.map(([, col]) => `<th>${esc(col.rotulo)}</th>`).join('')}</tr></thead>
           <tbody>${visiveis.map(([l, i]) => `<tr class="${l.incluir ? '' : 'fora'}">
             <td class="inc"><button class="marca-linha ${l.incluir ? 'sel' : ''}" data-a="leitura-linha" data-i="${i}" aria-label="Salvar esta linha">${l.incluir ? ico('certo') : ''}</button></td>
-            <td class="chave"><b>${porHora ? rotuloHoraPapel(l.chave) : l.chave}</b>${l.existe ? '<small>já anotada</small>' : ''}</td>
+            <td class="chave"><b>${porHora ? rotuloHoraPapel(l.chave) : l.incluir || l.existe ? l.chave : '—'}</b>${l.existe ? `<small>${l.salva && l.incluir ? 'completa o vazio' : 'já anotada'}</small>` : ''}${l.semLugar ? `<small>sem linha livre (máximo ${p.maxLinhas})</small>` : ''}${!porHora && (l.incluir || l.existe) && l.naFolha !== l.chave ? `<small>na folha: ${l.naFolha}</small>` : ''}</td>
             ${cols.map(([nome, col]) => { const c = l.celulas[nome] || { valor: '', confianca: 1 }; const duv = emDuvida(nome, c);
               return `<td><button class="cel-leitura ${duv ? 'duvida' : ''} ${c.valor === '' ? 'vazia' : ''}" data-a="leitura-cel" data-i="${i}" data-c="${nome}" data-conf="${Math.round((c.confianca || 0) * 100)}">
                 ${c.imagem ? `<img src="${c.imagem}" alt="">` : ''}<b>${esc(textoDoValor(col, c.valor)) || '&nbsp;'}</b>${c.aprendido ? '<small class="aprendido">aprendido</small>' : ''}</button></td>`; }).join('')}
@@ -319,6 +347,7 @@
     linha.celulas[nome] = Object.assign({}, cel, { valor, confianca: 1, aprendido: false });
     linha.temValor = Object.values(linha.celulas).some((c) => c.valor !== '');
     if (linha.temValor && !linha.existe) linha.incluir = true;
+    posicionarLinhas(L); // corrigir a hora pode mudar a linha de lugar
     render();
   }
 
@@ -334,8 +363,9 @@
         else valores[col.campo] = String(c.valor);
       });
       if (p.tipo === 'insumo' && valores.qtd) valores.unidade = p.unidade;
+      if (l.salva) Object.keys(valores).forEach((c) => { if (!vazio(l.salva.valores[c])) delete valores[c]; }); // o que já foi anotado não muda
       if (!Object.keys(valores).length) return;
-      gravar(L.data, L.pid, l.chave, valores, { operador: operador || 'Lido da folha', origem: 'foto' });
+      gravar(L.data, L.pid, l.chave, valores, { operador: (l.salva && l.salva.operador) || operador || 'Lido da folha', origem: 'foto' });
       n++;
       // 3.0: a folha da Hidrólise preenche o resto como no tablet: a Sacarificação da mesma dorna (os insumos vêm logo abaixo)
       if (p.tipo === 'dornas') acompanharDorna(L.data, L.pid, Number(l.chave));

@@ -128,20 +128,10 @@
 
   /** 2.17: abertura do programa do Windows, uma vez por vez que ele abre (recarregar depois de uma queda não repete):
       o U da Ubirálcool se monta e o nome sobe (design/abertura.css). Não pega toque nenhum. */
-  /** 3.1: chave "Painel novo", por aparelho. Tablet de setor nunca tem abertura nem som. */
-  const painelNovoAqui = () => !!cfg.painelNovo && (ehCentral() || !!cfg.soNuvem);
-  let carregandoAberturas = null;
-  const carregarAberturas = () => carregandoAberturas || (carregandoAberturas = new Promise((ok, erro) => {
-    const s = document.createElement('script'); s.src = 'design/aberturas.js'; s.onload = ok; s.onerror = erro; document.head.appendChild(s);
-  }));
   /** Som das telas: 0 toque, 1 confirmar, 2 aviso, 3 erro. */
   function somDoPainel(i) {
     if (!painelNovoAqui() || cfg.somDesligado || !window.Aberturas) return;
     window.Aberturas.somDaTela(i);
-  }
-  function aplicarPainelNovo() {
-    document.documentElement.toggleAttribute('data-painel-novo', painelNovoAqui());
-    if (painelNovoAqui()) carregarAberturas().catch(() => {});
   }
   document.addEventListener('pointerdown', (e) => { if (e.target.closest && e.target.closest('.btn, .atalho, [data-a]')) somDoPainel(0); }, true);
   /** Sorteia uma das 10 aberturas (até 2 segundos); um toque pula. */

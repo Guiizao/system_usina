@@ -42,6 +42,20 @@
   /** Setores ligados, já com as pranchetas ligadas de cada um. */
   const setores = () => setoresAtivos().map((s) => Object.assign({}, s, { pranchetas: pranchetasDo(s.id) }));
   const ehCentral = () => cfg.papel === 'central';
+  /** 3.1: no PC o painel novo é o único; no celular depende da chave; tablet (chefe ou setor) fica no painel de sempre. */
+  const painelNovoAqui = () => {
+    const r = document.documentElement.dataset;
+    return (ehCentral() || !!cfg.soNuvem) && (r.pc === '1' || (r.dispositivo === 'celular' && !!cfg.painelNovo));
+  };
+  let carregandoAberturas = null;
+  const carregarAberturas = () => carregandoAberturas || (carregandoAberturas = new Promise((ok, erro) => {
+    const s = document.createElement('script'); s.src = 'design/aberturas.js'; s.onload = ok; s.onerror = erro; document.head.appendChild(s);
+  }));
+  /** Chamada a cada desenho da tela: o papel, a conexão e o tamanho da janela mudam sem recarregar. */
+  function aplicarPainelNovo() {
+    document.documentElement.toggleAttribute('data-painel-novo', painelNovoAqui());
+    if (painelNovoAqui()) carregarAberturas().catch(() => {});
+  }
   const ehEscritorio = () => cfg.papel === 'escritorio'; // versão 2.13: o aparelho do Escritório (não é setor nem tablet chefe)
 
   /* Operadores: cada um tem a sua senha de 4 números, para ninguém anotar no nome do outro.

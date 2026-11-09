@@ -53,6 +53,7 @@
   /** Redesenha a tela. Mantém a posição da rolagem quando continua na mesma tela. */
   function render(trocouDeTela) {
     aoAtualizarEdicao = null;
+    aplicarPainelNovo();
     aplicarFolhas(); // mudança nas folhas que chegou do tablet chefe
     let v = view();
     if (cfg.bloqueio && !DEMO_IMG) v = { tela: 'bloqueado-adm' };

@@ -24,7 +24,7 @@ Object.assign(window.USINA.pranchetas, {
       envio: { inicio: 'inicio', fim: 'fim' },
       codigo: 'Anexo I - POP 011',
       titulo: 'Monitoramento do Processo de Hidrólise',
-      maxLinhas: 25,
+      maxLinhas: 60,
       papel: { modelo: 'pop011', titulo: 'Anexo I-Pop 011-Monitoramento do Processo de Hidrólise' },
       // A ordem abaixo é a das COLUNAS DO PAPEL (tabela e Excel saem assim)
       campos: [
@@ -80,7 +80,7 @@ Object.assign(window.USINA.pranchetas, {
       rotulo: 'Dorna',
       codigo: 'Anexo II - POP 011',
       titulo: 'Monitoramento do Processo de Sacarificação',
-      maxLinhas: 25,
+      maxLinhas: 60,
       papel: { modelo: 'pop011', titulo: 'Anexo II-Pop 011-Monitoramento do Processo de SACARIFICAÇÃO' },
       campos: [
         { id: 'horario', label: 'Horário', type: 'time', agoraAoCriar: true },

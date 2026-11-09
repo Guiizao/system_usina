@@ -92,7 +92,9 @@
       const colunas = ['Nº', ...p.campos.map((c) => c.papel || c.label), 'Responsável'];
       const regs = ctx.listar(data, pid);
       const linhas = [];
-      for (let n = 1; n <= (p.maxLinhas || 25); n++) {
+      // o papel tem 25 linhas; dia com mais dornas estica a folha até a última usada
+      const ate = Math.min(p.maxLinhas || 25, Math.max(25, ...regs.map((x) => Number(x.chave)).filter(Number.isFinite)));
+      for (let n = 1; n <= ate; n++) {
         const r = regs.find((x) => Number(x.chave) === n);
         linhas.push({ rotulo: n, valores: [n, ...p.campos.map((c) => (r ? valorCampo(c, r.valores[c.id]) : '')), r ? r.operador || '' : ''], preenchida: !!r });
       }
@@ -122,7 +124,7 @@
       g.altura(t0, 26);
       linhas.forEach((l, j) => {
         l.valores.forEach((v, i) => g.set(t0 + 1 + j, i, v, Object.assign({ sz: 9, al: i === n - 1 || i === n - 2 ? 'l' : 'c', borda: true, b: i === 0 }, casas(p.campos[i - 1], v))));
-        g.altura(t0 + 1 + j, 22);
+        g.altura(t0 + 1 + j, Math.max(14, Math.min(22, Math.floor(550 / linhas.length)))); // mais linhas, mais baixas, para seguir numa página
       });
       // aprovação
       const a0 = t0 + 1 + linhas.length + 1;

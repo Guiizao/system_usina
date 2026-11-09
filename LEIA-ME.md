@@ -4,6 +4,18 @@ Troca as pranchetas de papel (POP 011, POP-03-FOR-004, controles diários da cal
 
 Guia com o passo a passo ilustrado: https://claude.ai/artifact/CmJHBvqjeGRWHVYE5R9fWU
 
+## Sessão, envio somado e leitor novo (versão 3.1)
+
+Quem entra pela nuvem no celular ou no computador não cai mais na troca de turno. O prazo fica na nuvem: 5 dias no celular, 1 no computador e 7 com Lembrar, nunca mais de 7. Tablet com token de aparelho não vence. Ao publicar esta versão, todo mundo que usa pela nuvem precisa entrar de novo uma vez, porque as sessões antigas não têm prazo guardado.
+
+No envio e na impressão de um período, Somar gera uma folha por área. Cada campo numérico tem uma marca que diz se soma ou faz média (`agrega` em `setores/<setor>/pranchetas.js`); sem a marca, vale a regra de `bibliotecas/consolidar.js`. Cálculo de produção e Rastreamento são sempre do dia inteiro, mesmo com um turno desmarcado, e a folha diz isso.
+
+No escritório, Atualizar traz o que mudou nas folhas sem perder o que foi digitado.
+
+O leitor lê Destilaria e Nova Destilaria além das quatro folhas antigas. Correções ficam em `memoria_leitor` e servem de sugestão para células parecidas. Assinatura pela memória acerta pouco: a pessoa sempre confere.
+
+O Painel novo é o único no computador. No celular é uma chave por aparelho, em Ajustes, desligada no início. Tablet (chefe ou setor) fica no painel de sempre.
+
 ## Escritório segue a data do painel (versão 3.0.1)
 
 Só as telas mudaram: vai pela atualização rápida, sem instalar APK nem exe em quem já está na 3.0.0. O quadro Escritório do painel e o menu lateral usam a data escolhida; no dia de hoje, que ainda não fechou, continuam no último dia que fechou (`diaDoEscritorio`, em `chefe/escritorio.js`). O lote leva a data do fechamento: o painel em 31/10 mostra o lote de 01/11.

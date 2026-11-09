@@ -65,11 +65,9 @@ try {
       nuvem: { sal, iteracoes: 1000, verificador: pbkdf2Sync('4567', sal, 1000, 32, 'sha256').toString('hex') },
     }] } })).status, 200);
   });
-  await teste(g, 'chave antiga 2.16 funciona, Sair revoga e nova entrada nao ressuscita a antiga', async () => {
+  await teste(g, 'chave antiga 2.16 sem prazo deixa de valer (3.1) e nova entrada nao a ressuscita', async () => {
     const p = JSON.parse(db.prepare("SELECT json FROM pessoas WHERE id = 'ana'").get().json);
     const antiga = createHmac('sha256', segredo).update(`leitura|pc-legado|ana|${p.nuvem.selado}`).digest('hex');
-    igual((await sync(antiga, 'pc-legado')).status, 200);
-    igual((await sair(antiga, 'pc-legado')).status, 200);
     igual((await sync(antiga, 'pc-legado')).status, 401);
     const nova = await entrar('pc-legado'); igual(nova.status, 200); certo(nova.json.token !== antiga);
     igual((await sync(nova.json.token, 'pc-legado')).status, 200);

@@ -385,7 +385,7 @@
         toast('Aviso cancelado'); return render();
       }
       case 'ler-folha': return comecarLeitura(v.data || dataProducao());
-      case 'leitura-linha': { const l = v.leitura.linhas[Number(b.dataset.i)]; if (l.temValor) l.incluir = !l.incluir; return render(); }
+      case 'leitura-linha': { const l = v.leitura.linhas[Number(b.dataset.i)]; if (l.temValor && !l.semLugar) l.incluir = !l.incluir; posicionarLinhas(v.leitura); return render(); }
       case 'leitura-cel': return corrigirCelula(v, Number(b.dataset.i), b.dataset.c);
       case 'leitura-salvar': return salvarLeitura(v);
       case 'relatorio-enviar': return enviarDia(b.dataset.data);

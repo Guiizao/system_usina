@@ -27,6 +27,7 @@ Troca as pranchetas de papel da usina por tablets no Wi-Fi. A raiz não tem `pac
 | Só as telas, em 15 tamanhos (computador e Full HD, tablets, Tab S9+, tela dividida e celulares, em pé e deitados) | `node testes/rodar-telas.mjs` |
 | Só a versão 2.12 | `node testes/rodar-niveis212.mjs` e `node testes/rodar-papel212.mjs` |
 | Só a versão 3.0 | `node testes/banco30.mjs`, `sala30.mjs`, `tabelas30.mjs`, `aovivo30.mjs`, `sem-nuvem30.mjs`, `usina30.mjs`, `fase0-30.mjs`, `leitor30.mjs` e `menus30.mjs` |
+| Só a versão 3.1 | `node testes/sessao31.mjs`, `soma31.mjs`, `rastreio31.mjs`, `relatorios31.mjs`, `teclado31.mjs`, `leitor31.mjs` e `painel31.mjs` |
 | Tudo (cerca de 20 minutos) | `node testes/rodar-tudo.mjs`, resultado em `testes/saida/resultado.txt` |
 | Gerar o APK | `powershell -ExecutionPolicy Bypass -File apk\gerar-apk.ps1` |
 | Gerar o instalador do Windows | `powershell -ExecutionPolicy Bypass -File windows\gerar-windows.ps1` |

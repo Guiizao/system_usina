@@ -125,15 +125,15 @@ export async function testarAjustes2161(nav, ligar, porta, grupo) {
       await chefe.tocar('[data-a="voltar"]'); await chefe.tocar('[data-a="voltar"]');
     });
 
-    await teste(grupo, 'envio: as 6 áreas ficam 3 + 3 e os 3 turnos numa linha (caixas iguais, nenhuma sozinha)', async () => {
+    await teste(grupo, 'envio: as 6 áreas e as 2 opções ficam 4 + 4 e os 3 turnos numa linha (caixas iguais, nenhuma sozinha)', async () => {
       await semNotificacao(chefe);
       await chefe.tocar('[data-a="compartilhar"][data-destino="whatsapp"]');
       await chefe.esperar('!!document.querySelector(".modal .setores-envio button")', 8000, 'janela de envio');
       await dormir(300);
       const linhas = (sel) => chefe.avaliar(`[...new Set([...document.querySelectorAll(${JSON.stringify(sel + ' button')})].map((b) => Math.round(b.getBoundingClientRect().top)))].length`);
-      igual(await chefe.avaliar('document.querySelectorAll(".setores-envio button").length'), 6);
+      igual(await chefe.avaliar('document.querySelectorAll(".setores-envio button").length'), 8);
       igual(await linhas('.setores-envio'), 2, 'áreas em 2 linhas');
-      igual(await chefe.avaliar('document.querySelector(".setores-envio").dataset.colunas'), '3', 'áreas 3 + 3');
+      igual(await chefe.avaliar('document.querySelector(".setores-envio").dataset.colunas'), '4', 'áreas 4 + 4');
       igual(await linhas('.turnos-envio'), 1, 'turnos numa linha');
       await chefe.foto(path.join(FOTOS, 'envio-tablet.png'));
       await chefe.tocar('.modal [data-k="x"]');

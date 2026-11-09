@@ -75,7 +75,7 @@ export async function testarPedidos210(nav, ligar, porta, grupo) {
       await semNotificacao(chefe);
       await chefe.avaliar('(() => { window.__arquivos = []; const o = URL.createObjectURL; URL.createObjectURL = (b) => { window.__arquivos.push(b); return o.call(URL, b); }; return true; })()');
       await chefe.tocar('[data-a="compartilhar"][data-destino="baixar"]');
-      const outros = await chefe.avaliar('[...document.querySelectorAll(".setores-envio [data-k^=\\"s:\\"]")].map((b) => b.dataset.k).filter((k) => k !== "s:hidrolise")');
+      const outros = await chefe.avaliar('[...document.querySelectorAll(".setores-envio [data-k^=\\"s:\\"], .setores-envio [data-k^=\\"x:\\"]")].map((b) => b.dataset.k).filter((k) => k !== "s:hidrolise")');
       for (const k of outros) await chefe.tocar(`.setores-envio [data-k="${k}"]`);
       await chefe.tocar('[data-k="f:pdf"]');
       await chefe.esperar('window.__arquivos.length > 0', 15000, 'arquivo PDF');

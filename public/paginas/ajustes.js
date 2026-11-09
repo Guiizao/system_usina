@@ -7,11 +7,13 @@
    * Ajustes deste aparelho (com a senha do encarregado)
    * ========================================================= */
   /** 2.18: ajustes do computador pela nuvem (o programa do Windows atualiza as telas sozinho pela nuvem). */
-  /** 3.1: a chave do painel novo, neste aparelho. */
+  /** 3.1: a chave do painel novo, neste aparelho: só no celular (no PC ele é o único, no tablet não existe). */
   function blocoPainelNovo() {
     const seg = (a, atual, ops) => `<div class="segmentos">${ops.map(([x, rot]) => `<button class="${atual === x ? 'sel' : ''}" data-a="${a}" data-valor="${x}">${rot}</button>`).join('')}</div>`;
-    return `<h3 style="margin-top:14px">Painel novo</h3>${seg('painel-novo', cfg.painelNovo ? '1' : '0', [['0', 'Desligado'], ['1', 'Ligado']])}
-      ${cfg.painelNovo ? `<h3 style="margin-top:14px">Sons do painel</h3>${seg('som-painel', cfg.somDesligado ? '0' : '1', [['1', 'Ligados'], ['0', 'Desligados']])}` : ''}`;
+    const raiz = document.documentElement.dataset, pc = raiz.pc === '1', celular = raiz.dispositivo === 'celular';
+    if (!pc && !celular) return '';
+    return `${celular ? `<h3 style="margin-top:14px">Painel novo</h3>${seg('painel-novo', cfg.painelNovo ? '1' : '0', [['0', 'Desligado'], ['1', 'Ligado']])}` : ''}
+      ${pc || cfg.painelNovo ? `<h3 style="margin-top:14px">Sons do painel</h3>${seg('som-painel', cfg.somDesligado ? '0' : '1', [['1', 'Ligados'], ['0', 'Desligados']])}` : ''}`;
   }
   function telaAjustesNuvem(v) {
     const seg = (a, atual, ops) => `<div class="segmentos">${ops.map(([x, rot]) => `<button class="${atual === x ? 'sel' : ''}" data-a="${a}" data-valor="${x}">${rot}</button>`).join('')}</div>`;

@@ -82,6 +82,8 @@ export async function abrirNavegador({ porta = 9340 + Math.floor(Math.random() *
     await cdp('Runtime.enable', {}, sessionId);
     await cdp('Log.enable', {}, sessionId);
     await cdp('Page.enable', {}, sessionId);
+    // no PC a abertura do painel novo cobriria a tela no começo de cada teste; painel31 chama a abertura de propósito
+    await cdp('Page.addScriptToEvaluateOnNewDocument', { source: `try { sessionStorage.setItem('abertura', '1'); } catch (e) {}` }, sessionId);
     // HORA=07:30 node testes/...: os aparelhos acham que é essa hora de hoje (a central não): reproduz o que só falha num horário
     if (/^\d\d:\d\d$/.test(process.env.HORA || '')) {
       const alvo = new Date(); alvo.setHours(...process.env.HORA.split(':').map(Number), 0, 0);

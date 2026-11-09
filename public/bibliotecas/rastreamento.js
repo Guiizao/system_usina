@@ -58,6 +58,7 @@
     });
     if (mudanca && typeof mudanca.campo === 'string') aplicar(mudanca.campo, mudanca.valor);
     else if (mudanca) percorrer(mudanca);
+    if (alterados.has('alcool.lote') && !(v.origem['vinhaca.lote'] || '').startsWith('digitado')) v.vinhaca.lote = v.alcool.lote; // o lote da vinhaça é o do álcool, até alguém digitar outro
     const depende = (...campos) => !mudanca || campos.some((c) => alterados.has(c));
     const calcularCampo = (obj, chave, caminho, resultado, origem) => {
       if (opcoes.manterDigitados && (v.origem[caminho] || '').startsWith('digitado')) { alterados.add(caminho); return; }
@@ -86,7 +87,7 @@
     const v = {
       fechamento, lote: codigo,
       alcool: { producao: '', lote: codigo, validade: meses(fechamento, cfg.validadeAlcoolMeses) },
-      vinhaca: { producao: '', lote: '', validade: dias(fechamento, cfg.validadeVinhacaDias) }, volumeDestilado: '',
+      vinhaca: { producao: '', lote: codigo, validade: dias(fechamento, cfg.validadeVinhacaDias) }, volumeDestilado: '',
       pi: { hidrolise: '', vinho: '' },
       calculo: { mpKg: '', fator: numero(cfg.fatorMateriaPrima), brixInicial: '', brixFinal: '', alcoolDestilaria: '', alcoolNova: '' },
       hidrolise: { ph: '', brix: '', temp: '' }, alcoolParam: { inpm: '', gl: '', acidez: '' },

@@ -25,4 +25,4 @@
     document.documentElement.dataset.escala = cfg.escala || 'normal';
     document.body.style.zoom = z;
   }
-  window.addEventListener('resize', () => { ajustarEscala(); rolarDepois = true; arrumarQuadros(); agendarCaber(); });
+  window.addEventListener('resize', () => { ajustarEscala(); aplicarPainelNovo(); rolarDepois = true; arrumarQuadros(); agendarCaber(); });

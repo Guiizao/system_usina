@@ -67,7 +67,7 @@ export async function testarRastreamento213(grupo) {
     perto(v.pi.vinho, 15000 / .29 * 22 / 13);
     igual(v.fechamento, '2026-10-08'); igual(v.lote, 'UB26I080700'); igual(v.alcool.lote, v.lote);
     igual(v.calculo.alcoolDestilaria, 2400); igual(v.calculo.alcoolNova, 200); igual(v.alcool.producao, 2600);
-    igual(v.vinhaca.producao, ''); igual(v.vinhaca.lote, '');
+    igual(v.vinhaca.producao, ''); igual(v.vinhaca.lote, v.lote);
     igual(v.origem['calculo.alcoolDestilaria'], 'soma de 24 horas da Destilaria');
   });
   await teste(grupo, 'validade por fechamento, viradas de mês/ano e 29 de fevereiro', () => {
@@ -155,6 +155,11 @@ export async function testarRastreamento213(grupo) {
     R.recalcular(v, { campo: '__proto__.poluido', valor: true }); igual({}.poluido, undefined);
     R.recalcular(v, { campo: 'calculo.fator', valor: 0 }); igual(v.pi.hidrolise, ''); igual(v.pi.vinho, '');
     R.recalcular(v, { campo: 'hidrolise.ph', valor: '6,25' }); igual(v.hidrolise.ph, 6.25);
+  });
+  await teste(grupo, 'lote da vinhaça acompanha o do álcool até alguém digitar outro', () => {
+    const v = exemplo(forms()).valores;
+    R.recalcular(v, { campo: 'alcool.lote', valor: 'A1' }); igual(v.vinhaca.lote, 'A1');
+    R.recalcular(v, { campo: 'vinhaca.lote', valor: 'V9' }); R.recalcular(v, { campo: 'alcool.lote', valor: 'A2' }); igual(v.vinhaca.lote, 'V9');
   });
   await teste(grupo, 'etiqueta: 50 L = 40,45 kg líquido e 42,70 kg bruto; tara ausente fica vazia', () => {
     const C = forms(); igual(R.etiqueta(C, 50), { volume: 50, pesoLiquido: 40.45, pesoBruto: 42.7 });
