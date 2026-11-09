@@ -127,6 +127,8 @@
         cfg.tema = cfg.tema === 'escuro' ? 'claro' : 'escuro'; salvarCfg(); aplicarTema();
         return render();
       case 'tema-fixo': cfg.tema = b.dataset.valor; salvarCfg(); aplicarTema(); return render();
+      case 'painel-novo': cfg.painelNovo = b.dataset.valor === '1'; salvarCfg(); aplicarPainelNovo(); return render();
+      case 'som-painel': cfg.somDesligado = b.dataset.valor === '0'; salvarCfg(); return render();
       case 'escala': cfg.escala = b.dataset.valor; salvarCfg(); ajustarEscala(); return render();
       case 'conectar': return conectar();
       case 'procurar-central': return procurarCentral();

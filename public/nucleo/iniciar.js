@@ -128,7 +128,38 @@
 
   /** 2.17: abertura do programa do Windows, uma vez por vez que ele abre (recarregar depois de uma queda não repete):
       o U da Ubirálcool se monta e o nome sobe (design/abertura.css). Não pega toque nenhum. */
+  /** 3.1: chave "Painel novo", por aparelho. Tablet de setor nunca tem abertura nem som. */
+  const painelNovoAqui = () => !!cfg.painelNovo && (ehCentral() || !!cfg.soNuvem);
+  let carregandoAberturas = null;
+  const carregarAberturas = () => carregandoAberturas || (carregandoAberturas = new Promise((ok, erro) => {
+    const s = document.createElement('script'); s.src = 'design/aberturas.js'; s.onload = ok; s.onerror = erro; document.head.appendChild(s);
+  }));
+  /** Som das telas: 0 toque, 1 confirmar, 2 aviso, 3 erro. */
+  function somDoPainel(i) {
+    if (!painelNovoAqui() || cfg.somDesligado || !window.Aberturas) return;
+    window.Aberturas.somDaTela(i);
+  }
+  function aplicarPainelNovo() {
+    document.documentElement.toggleAttribute('data-painel-novo', painelNovoAqui());
+    if (painelNovoAqui()) carregarAberturas().catch(() => {});
+  }
+  document.addEventListener('pointerdown', (e) => { if (e.target.closest && e.target.closest('.btn, .atalho, [data-a]')) somDoPainel(0); }, true);
+  /** Sorteia uma das 10 aberturas (até 2 segundos); um toque pula. */
+  async function aberturaNova() {
+    const raiz = document.documentElement;
+    if (!(raiz.dataset.pc === '1' || raiz.dataset.dispositivo === 'celular')) return;
+    try { if (sessionStorage.getItem('abertura')) return; sessionStorage.setItem('abertura', '1'); } catch (e) { /* mostra */ }
+    const tela = document.createElement('div'); tela.id = 'abertura-nova'; tela.innerHTML = '<canvas></canvas>';
+    document.body.appendChild(tela);
+    const fim = () => { if (window.Aberturas) window.Aberturas.parar(); tela.remove(); };
+    tela.addEventListener('pointerdown', fim);
+    try {
+      await carregarAberturas();
+      if (tela.isConnected) window.Aberturas.tocar(Math.floor(Math.random() * window.Aberturas.total), tela.firstChild, !cfg.somDesligado, fim);
+    } catch (e) { fim(); }
+  }
   function mostrarAbertura() {
+    if (painelNovoAqui()) return aberturaNova();
     if (!/Electron\//.test(navigator.userAgent)) return;
     try { if (sessionStorage.getItem('abertura')) return; sessionStorage.setItem('abertura', '1'); } catch (e) { /* sem a memória da sessão: mostra */ }
     const el = document.getElementById('abertura');
@@ -138,6 +169,7 @@
 
   aplicarTema();
   ajustarEscala();
+  aplicarPainelNovo();
   document.documentElement.toggleAttribute('data-cheia', !!cfg.telaCheia);
   // lembrete de anotar: também na demonstração, para a faixa sumir e voltar como no aparelho de verdade
   setInterval(verificarLembrete, 10000);

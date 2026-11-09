@@ -3,6 +3,8 @@
 
 /* 2.17: uma vez ao abrir o programa (nucleo/iniciar.js mostrarAbertura): o U se monta de baixo para cima, depois o nome
    e a mensagem sobem. Cerca de 1,2 s no total, pelo --ritmo de design/movimento.css; não pega toque nenhum. */
+#abertura-nova { position: fixed; inset: 0; z-index: 300; background: #0e1110; }
+#abertura-nova canvas { display: block; width: 100%; height: 100%; }
 #abertura { position: fixed; inset: 0; z-index: 300; display: grid; place-items: center; align-content: center; gap: 8px;
   background: var(--chao); color: var(--tinta); pointer-events: none; }
 #abertura img { width: 132px; height: 132px; animation: aberturaLogo calc(.62s * var(--ritmo)) var(--suave) both; }

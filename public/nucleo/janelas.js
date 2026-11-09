@@ -255,6 +255,7 @@
   function toast(msg, tipo = 'ok') {
     const t = document.getElementById('toast');
     if (!ICONE_DO_TOAST[tipo]) tipo = 'ok';
+    somDoPainel(tipo === 'erro' ? 3 : tipo === 'aviso' ? 2 : 1);
     clearTimeout(toastSaindo);
     t.innerHTML = `<span class="toast-ico">${ico(ICONE_DO_TOAST[tipo])}</span><span class="toast-texto">${esc(msg)}</span>`
       + `<button class="toast-x" aria-label="Fechar">${ico('fechar')}</button>`;

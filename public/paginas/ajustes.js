@@ -7,12 +7,19 @@
    * Ajustes deste aparelho (com a senha do encarregado)
    * ========================================================= */
   /** 2.18: ajustes do computador pela nuvem (o programa do Windows atualiza as telas sozinho pela nuvem). */
+  /** 3.1: a chave do painel novo, neste aparelho. */
+  function blocoPainelNovo() {
+    const seg = (a, atual, ops) => `<div class="segmentos">${ops.map(([x, rot]) => `<button class="${atual === x ? 'sel' : ''}" data-a="${a}" data-valor="${x}">${rot}</button>`).join('')}</div>`;
+    return `<h3 style="margin-top:14px">Painel novo</h3>${seg('painel-novo', cfg.painelNovo ? '1' : '0', [['0', 'Desligado'], ['1', 'Ligado']])}
+      ${cfg.painelNovo ? `<h3 style="margin-top:14px">Sons do painel</h3>${seg('som-painel', cfg.somDesligado ? '0' : '1', [['1', 'Ligados'], ['0', 'Desligados']])}` : ''}`;
+  }
   function telaAjustesNuvem(v) {
     const seg = (a, atual, ops) => `<div class="segmentos">${ops.map(([x, rot]) => `<button class="${atual === x ? 'sel' : ''}" data-a="${a}" data-valor="${x}">${rot}</button>`).join('')}</div>`;
     const sub = 'Deste computador';
     if (v.cat === 'tela') return telaDaParte('Tela', sub, `<section class="bloco">
           <h3>Tamanho das letras e botões</h3>${seg('escala', cfg.escala || 'normal', [['menor', 'Menor'], ['normal', 'Normal'], ['maior', 'Maior']])}
           <h3 style="margin-top:14px">Cores</h3>${seg('tema-fixo', cfg.tema === 'escuro' ? 'escuro' : 'claro', [['claro', `${ico('sol')} Claro`], ['escuro', `${ico('lua')} Escuro`]])}
+          ${blocoPainelNovo()}
         </section>`);
     if (v.cat === 'aplicativo') return telaDaParte('Aplicativo', sub, `<section class="bloco">
           <dl class="kv"><dt>Versão</dt><dd>${VERSAO}</dd></dl>
@@ -50,6 +57,7 @@
             <h3 style="margin-top:14px">Tela cheia</h3>
             <p class="sub" style="margin:0 0 8px">Ligada, some a barra de cima com bateria e hora. Para ver a barra, arraste o dedo da borda da tela.</p>
             <div class="segmentos"><button class="${!cfg.telaCheia ? 'sel' : ''}" data-a="tela-cheia" data-valor="0">Desligada</button><button class="${cfg.telaCheia ? 'sel' : ''}" data-a="tela-cheia" data-valor="1">${ico('telaCheia')} Ligada</button></div>
+            ${ehCentral() ? blocoPainelNovo() : ''}
             ${NO_APK ? '' : `<div class="linha-botoes"><button class="btn pequeno" data-a="instalar">${ico('instalar')} Instalar na tela inicial</button></div>`}
           </section>`);
     if (v.cat === 'operadores' && s) return telaDaParte('Operadores', sub, blocoOperadores(s, v));
