@@ -65,6 +65,11 @@
     return v;
   }
   const valoresDaTela = (v) => v.valores || (v.valores = valoresDoDia(v.data));
+  /** A produção de um dia, para o envio e o Resumo: o que foi salvo ou, sem salvar, a conta das folhas. */
+  function producaoDoDia(dia) {
+    const v = valoresDoDia(dia);
+    return { dia, conferido: !!rastreioGuardado(dia), alcool: v.alcool.producao, vinhaca: v.vinhaca.producao, hidrolisado: v.pi.hidrolise, vinho: v.pi.vinho, inpm: v.alcoolParam.inpm, brix: v.calculo.brixInicial, lote: v.lote };
+  }
   function navDiaEscritorio(dia) {
     return `<div class="nav-data"><button class="btn" data-a="esc-dia" data-n="-1" aria-label="Dia anterior">${ico('voltar')}</button>
       <div class="data-grande"><b>${fmtData(somarDias(dia, 1))}</b><span>fechou às 07:00 · produção desde ${fmtData(dia).slice(0, 5)} 07:00</span></div>
@@ -118,6 +123,7 @@
           ${linhaEsc(x, 'alcool.producao', 'Produção de álcool', 'L', true)}${linhaEsc(x, 'volumeDestilado', 'Volume destilado', 'L')}
           ${linhaEsc(x, 'vinhaca.producao', 'Produção de vinhaça', 'L', true)}</section>
         <div class="linha-botoes"><button class="btn" data-a="esc-recalcular">${ico('relogio')} Refazer com as anotações de agora</button>
+          ${pode('relatorios') ? `<button class="btn" data-a="relatorio-enviar" data-data="${v.data}">${ico('enviar')} Enviar ou imprimir</button>` : ''}
           ${botaoSalvarEsc()}
       </main>`;
   }

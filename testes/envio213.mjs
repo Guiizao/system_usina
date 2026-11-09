@@ -3,7 +3,7 @@
  * Versão 2.13, no aplicativo (demonstração): a folha de enviar com áreas, turnos, um dia ou um período e o formato.
  *   - Resumo de um período soma os insumos de todos os dias;
  *   - tirar um turno tira as anotações daquele turno da soma;
- *   - Excel de um período: uma aba por folha de cada dia, e a aba "Totais do período" quando pede para somar.
+ *   - Excel de um período somando: uma aba por área, mais o cálculo e o rastreamento de cada dia (3.1).
  */
 import { teste, certo, igual } from './teste.mjs';
 import { TAMANHOS, dormir } from './navegador.mjs';
@@ -41,7 +41,7 @@ export async function testarEnvio213(nav, url, grupo) {
       await a.tocar('.modal [data-k="f:texto"]');
       const t = await textoDoWhatsApp();
       certo(/Período de .* \(2 dias\)/.test(t), 'cabeçalho do período: ' + t.slice(0, 160));
-      certo(t.includes('TOTAIS DO PERÍODO'), 'totais do período');
+      certo(t.includes('*HIDRÓLISE*'), 'um bloco por área');
       totalTodos = (t.match(/• LPHERA: ([^\n]*)/) || [])[1] || '';
       certo(totalTodos && totalTodos !== 'nada adicionado', 'LPHERA somado: ' + totalTodos);
     });
@@ -59,7 +59,7 @@ export async function testarEnvio213(nav, url, grupo) {
       certo(lphera !== totalTodos, `a soma mudou sem os turnos do dia (${lphera} x ${totalTodos})`);
     });
 
-    await teste(grupo, 'Excel de um período: uma aba por folha de cada dia e a aba dos totais', async () => {
+    await teste(grupo, 'Excel de um período somando: uma aba por área, o cálculo e o rastreamento de cada dia', async () => {
       await abrir();
       await a.tocar('[data-a="compartilhar"][data-destino="outros"]'); await dormir(300);
       await escolherPeriodo(ontem, hoje);
@@ -67,13 +67,13 @@ export async function testarEnvio213(nav, url, grupo) {
       let info = null;
       for (let i = 0; i < 40 && !info; i++) {
         info = await a.avaliar(`(async () => { const b = window.__blobs.find((x) => x.type && x.type.includes('spreadsheet')); if (!b) return null;
-          const t = new TextDecoder('latin1').decode(new Uint8Array(await b.arrayBuffer())); return { tamanho: b.size, totais: t.includes('Totais do per'), abas: (t.match(/<sheet /g) || []).length }; })()`);
+          const t = new TextDecoder('latin1').decode(new Uint8Array(await b.arrayBuffer())); return { tamanho: b.size, abas: (t.match(/<sheet /g) || []).length }; })()`);
         if (!info) await dormir(200);
       }
       certo(info, 'o Excel não foi montado');
       certo(info.tamanho > 2000, 'Excel com conteúdo');
-      certo(info.totais, 'aba Totais do período');
-      certo(info.abas >= 5 && info.abas % 2 === 1, `abas: ${info.abas} (as folhas dos 2 dias e a dos totais)`);
+      const areas = await a.avaliar('setores().length');
+      igual(info.abas, areas + 1 + 2, 'abas');
     });
   } finally { await a.fechar(); }
 }

@@ -10,8 +10,21 @@
   let LOGO_PNG = null;
   fetch('icons/logo.png').then((r) => r.arrayBuffer()).then((b) => { LOGO_PNG = new Uint8Array(b); }).catch(() => {});
   let modelosPapel = null;
+  // dia sem salvar: a folha de rastreamento sai com o que foi calculado (o papel normal lê só o que está salvo)
+  let rascunhoRastreio = null;
+  const pegarParaPapel = (data, pid, chave) => (rascunhoRastreio && pid === PID_RASTREIO && rascunhoRastreio.dia === data ? { valores: rascunhoRastreio.valores } : pegar(data, pid, chave));
+  function folhaDoRastreamento(dia, valores) {
+    const naoConferido = !valores && !rastreioGuardado(dia);
+    const x = valores || (naoConferido ? valoresDoDia(dia) : null);
+    rascunhoRastreio = x ? { dia, valores: Object.assign({}, x, { operadores: String(x.operadores || '').split(/s*-s*|s*,s*/).filter(Boolean) }) } : null;
+    try {
+      const f = papel().folha(PID_RASTREIO, dia), g = f.grade;
+      if (naoConferido) g.bloco(g.linhas, 0, g.linhas, g.larguras.length - 1, 'Calculado das anotações, não conferido', { b: true, al: 'c', sz: 9 });
+      return f;
+    } finally { rascunhoRastreio = null; }
+  }
   const papel = () => modelosPapel || (modelosPapel = window.ModelosPapel.montar({
-    C, prancheta, setorDaPrancheta, turnos: turnosDaPrancheta, listar: listarPapel, pegar, fmtData, fmtNum, rotuloHoraPapel, HORAS, linhasDeHora, totalInsumo, extrasOperador, somarDias,
+    C, prancheta, setorDaPrancheta, turnos: turnosDaPrancheta, listar: listarPapel, pegar: pegarParaPapel, fmtData, fmtNum, rotuloHoraPapel, HORAS, linhasDeHora, totalInsumo, extrasOperador, somarDias,
     medicaoDoDia: (data) => medicaoDoDia(data), fermentacaoDoDia,
   }));
   function planilhaDaPrancheta(pid, data) {
@@ -28,10 +41,9 @@
     return new Blob([partes.join('\n')], { type: 'application/xml' });
   }
   /** Imprime as folhas do dia iguais ao papel (no Android abre a impressão do sistema, que também salva em PDF). */
-  async function imprimirFolhas(dias, setorIds) {
-    const pids = folhasDosSetores(setorIds);
+  async function imprimirFolhas(dias, setorIds, somar, extras) {
     const l = listaDeDias(dias);
-    return imprimirHtml(l.flatMap((data) => pids.map((pid) => window.ModelosPapel.paraHtml(papel().folha(pid, data), 'icons/logo.png', fmtNum))).join(''), `Pranchetas ${fmtData(l[0])}`);
+    return imprimirHtml(folhasDoEnvio(l, setorIds, somar, extras).map((f) => window.ModelosPapel.paraHtml(f, 'icons/logo.png', fmtNum)).join(''), `Pranchetas ${fmtData(l[0])}`);
   }
   /** Imprime um pedaço de HTML (folhas, etiquetas). No Android abre a impressão do sistema, que também salva em PDF. */
   async function imprimirHtml(html, nome) {
@@ -52,22 +64,62 @@
     window.print();
   }
   const folhasDosSetores = (setorIds) => setores().filter((s) => setorIds.includes(s.id)).flatMap((s) => s.pranchetas.flatMap(folhasDe));
+  /** A conta do período de uma folha, respeitando os turnos marcados no envio. */
+  const consolidadoDaFolha = (pid, dias) => window.Consolidar.daFolha(prancheta(pid), Object.fromEntries(dias.map((d) => [d, listarPapel(d, pid)])), dias);
+  const comUnidade = (x) => (x.unidade ? `${x.rotulo} (${x.unidade})` : x.rotulo);
+  const diasCurtos = (dias) => dias.map((d) => fmtData(d).slice(0, 5)).join(', ');
+  const folhasMedidas = (setor) => setor.pranchetas.flatMap(folhasDe).filter((pid) => prancheta(pid).tipo !== 'insumo');
+  /** Período somado: uma folha por área, com total das quantidades e média, mínima e máxima das medições. */
+  function folhaSomadaDoSetor(setor, dias) {
+    const secoes = [], rodape = [];
+    folhasMedidas(setor).forEach((pid) => {
+      const p = prancheta(pid), r = consolidadoDaFolha(pid, dias);
+      const linhas = [...r.quantidades.map((x) => [comUnidade(x), x.total, '', '', '', '']), ...r.medicoes.map((x) => [comUnidade(x), '', x.media, x.minima, x.maxima, x.leituras])];
+      if (linhas.length) secoes.push({ titulo: p.nome, colunas: ['Campo', 'Total', 'Média', 'Mínima', 'Máxima', 'Leituras'], linhas });
+      if (r.operadores.length) rodape.push(`${p.nome}. Operadores: ${r.operadores.join(', ')}`);
+      if (r.diasSemAnotacao.length) rodape.push(`${p.nome}. Sem anotação em: ${diasCurtos(r.diasSemAnotacao)}`);
+    });
+    const insumos = totaisDoEnvio(dias, [setor.id]);
+    if (insumos.length) secoes.push({ titulo: 'Insumos', colunas: ['Insumo', 'Quantidade', 'Unidade'], linhas: insumos.map((x) => [x.insumo, x.quantidade, x.unidade]) });
+    return window.ModelosPapel.folhaDeTabela({ nome: setor.nome, titulo: `${setor.nome}, de ${fmtData(dias[0])} a ${fmtData(dias[dias.length - 1])}`, secoes, rodape });
+  }
+  const NUM_PRODUCAO = [['alcool', 'Álcool', 'L'], ['vinhaca', 'Vinhaça', 'L'], ['hidrolisado', 'Hidrolisado', 'L'], ['vinho', 'Vinho', 'L']];
+  /** Cálculo de produção de um dia, ou de vários já somados. */
+  function folhaDeProducao(dias) {
+    const lista = dias.map(producaoDoDia), r = lista.length === 1 ? lista[0] : window.Consolidar.producao(lista);
+    const naoConferidos = lista.filter((x) => !x.conferido);
+    const linhas = [...NUM_PRODUCAO.map(([k, nome, u]) => [nome, r[k], u]), ['INPM médio', r.inpm, '°'], ['Brix médio', r.brix, '°Bx']];
+    return window.ModelosPapel.folhaDeTabela({
+      nome: 'Cálculo de produção', titulo: dias.length === 1 ? `Cálculo de produção de ${fmtData(dias[0])}` : `Cálculo de produção, de ${fmtData(dias[0])} a ${fmtData(dias[dias.length - 1])}`,
+      secoes: [{ titulo: 'Produção', colunas: ['Item', 'Valor', 'Unidade'], linhas }],
+      rodape: [`Lote: ${[...new Set(lista.map((x) => x.lote).filter(Boolean))].join(', ')}`, ...(naoConferidos.length ? [`Calculado das anotações, não conferido: ${diasCurtos(naoConferidos.map((x) => x.dia))}`] : [])],
+    });
+  }
+  /** O que sai no Excel, no PDF e na impressão: as folhas de cada dia ou uma por área, e o cálculo e o rastreamento marcados. */
+  function folhasDoEnvio(l, setorIds, somar, extras = []) {
+    const somado = somar && l.length > 1;
+    const doDia = (f, dia) => Object.assign(f, { dia });
+    const folhas = somado
+      ? setores().filter((s) => setorIds.includes(s.id)).map((s) => folhaSomadaDoSetor(s, l))
+      : l.flatMap((data) => folhasDosSetores(setorIds).map((pid) => doDia(papel().folha(pid, data), data)));
+    if (extras.includes('calculo')) folhas.push(...(somado ? [folhaDeProducao(l)] : l.map((d) => doDia(folhaDeProducao([d]), d))));
+    if (extras.includes('rastreamento')) folhas.push(...l.map((d) => doDia(folhaDoRastreamento(d), d))); // cada dia tem o seu lote, mesmo somando
+    return folhas;
+  }
   const MIME = { xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', xml: 'application/xml', pdf: 'application/pdf' };
-  function gerarArquivo(formato, dias, setorIds, somar) {
+  function gerarArquivo(formato, dias, setorIds, somar, extras) {
     const pids = folhasDosSetores(setorIds);
     const l = listaDeDias(dias);
     // o relatório do dia (todos os setores) tem sempre o mesmo nome: um por dia; só alguns setores ganham o nome deles
     const parcial = setorIds.length < setores().length;
     const nome = `Pranchetas_${nomeDosDias(l)}${parcial ? '_' + setorIds.join('-') : ''}`;
     if (formato === 'xml') return new File([gerarXml(l, pids)], nome + '.xml', { type: MIME.xml });
-    // vários dias: uma aba por folha de cada dia (o nome da aba leva o dia); "somar" põe a aba com os totais no começo
-    const abas = l.flatMap((data) => pids.map((pid) => { const a = planilhaDaPrancheta(pid, data); if (l.length > 1) a.name = `${String(a.name || pid).slice(0, 24)} ${data.slice(8, 10)}-${data.slice(5, 7)}`; return a; }));
-    if (somar) {
-      const cel = (v, b) => ({ v, st: { borda: true, b: !!b } });
-      const linhas = [[cel(`Totais de ${fmtData(l[0])} a ${fmtData(l[l.length - 1])}`, true), '', '', ''], [cel('Setor', true), cel('Insumo', true), cel('Quantidade', true), cel('Unidade', true)],
-        ...totaisDoEnvio(l, setorIds).map((x) => [cel(x.setor), cel(x.insumo), cel(x.quantidade), cel(x.unidade)])];
-      abas.unshift({ name: 'Totais do período', rows: linhas, widths: [24, 30, 14, 10], heights: {}, merges: ['A1:D1'], paisagem: false });
-    }
+    // vários dias sem somar: uma aba por folha de cada dia (o nome da aba leva o dia)
+    const abas = folhasDoEnvio(l, setorIds, somar, extras).map((f) => {
+      const a = window.ModelosPapel.paraPlanilha(f);
+      if (f.dia && l.length > 1) a.name = `${String(a.name).slice(0, 24)} ${f.dia.slice(8, 10)}-${f.dia.slice(5, 7)}`;
+      return a;
+    });
     return new File([window.criarXlsx(abas, LOGO_PNG)], nome + '.xlsx', { type: MIME.xlsx });
   }
   /** PDF das folhas (pdf.js): uma página para cada folha de papel. A letra e o logo são buscados uma vez só. */
@@ -91,13 +143,12 @@
     pecasDoPdf = { fontes: [normal, negrito], logo };
     return pecasDoPdf;
   }
-  async function gerarPdf(dias, setorIds) {
-    const pids = folhasDosSetores(setorIds);
+  async function gerarPdf(dias, setorIds, somar, extras) {
     const l = listaDeDias(dias);
     const parcial = setorIds.length < setores().length;
     const nome = `Pranchetas_${nomeDosDias(l)}${parcial ? '_' + setorIds.join('-') : ''}`;
     const pecas = await pecasPdf();
-    const bytes = window.criarPdf(l.flatMap((data) => pids.map((pid) => papel().folha(pid, data))), Object.assign({ fmtNum, titulo: `Pranchetas Ubirálcool ${fmtData(l[0])}` }, pecas));
+    const bytes = window.criarPdf(folhasDoEnvio(l, setorIds, somar, extras), Object.assign({ fmtNum, titulo: `Pranchetas Ubirálcool ${fmtData(l[0])}` }, pecas));
     return new File([bytes], nome + '.pdf', { type: MIME.pdf });
   }
   const paraBase64 = (arquivo) => new Promise((ok, erro) => {

@@ -604,5 +604,26 @@
     return linhas.join('\n');
   }
 
-  window.ModelosPapel = { montar, paraPlanilha, paraHtml, paraXml };
+  /** Folha simples de tabela (3.1): período somado e cálculo de produção. Não imita nenhum formulário de papel. */
+  function folhaDeTabela({ nome, titulo, secoes, rodape = [] }) {
+    const n = Math.max(2, ...secoes.map((s) => s.colunas.length));
+    const g = new Grade([34, ...Array(n - 1).fill(13)]);
+    let r = 0;
+    g.bloco(r, 0, r, n - 1, titulo, { b: true, al: 'c', sz: 14, quebra: true }); g.altura(r, 26); r++;
+    const linha = (vals, st) => {
+      vals.forEach((v, c) => g.bloco(r, c, r, c === vals.length - 1 ? n - 1 : c, v, Object.assign({ borda: true, al: c ? 'c' : 'l', quebra: true }, st)));
+      r++;
+    };
+    secoes.forEach((s) => {
+      r++;
+      g.bloco(r, 0, r, n - 1, s.titulo, { b: true, sz: 11, borda: true }); r++;
+      linha(s.colunas, { b: true });
+      s.linhas.forEach((l) => linha(l, {}));
+    });
+    if (rodape.length) r++;
+    rodape.forEach((t) => { g.bloco(r, 0, r, n - 1, t, { sz: 9, quebra: true }); r++; });
+    return { nome, nomePlanilha: nome.replace(/[\\/:*?[\]]/g, '-').slice(0, 31), paisagem: false, grade: g, dados: { secoes, rodape } };
+  }
+
+  window.ModelosPapel = { montar, paraPlanilha, paraHtml, paraXml, folhaDeTabela };
 })();

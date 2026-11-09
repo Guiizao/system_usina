@@ -81,9 +81,11 @@
   /* Enviar, guardar ou imprimir (versão 2.13): uma folha que sobe de baixo (puxa para baixo para fechar, ou tela inteira),
      com as áreas, os turnos, um dia ou um período e o formato. Resolve { formato, setores, turnos, dias, somar } ou undefined.
      soSetores: para imprimir (sem formato). */
+  const EXTRAS_ENVIO = [{ id: 'calculo', nome: 'Cálculo de produção', icone: 'grafico' }, { id: 'rastreamento', nome: 'Rastreamento', icone: 'documento' }];
   function escolherEnvio(titulo, data, soSetores) {
     const todos = setores();
     const marcados = new Set(todos.map((s) => s.id));
+    const extras = new Set(EXTRAS_ENVIO.map((x) => x.id));
     // turnos (2.13.4): com todos os setores no mesmo modelo, cada botão mostra o horário; misturados, só o nome
     const modelosT = [...new Set(todos.map((s) => turnosDoSetor(s.id)))];
     const listaT = modelosT.length === 1 ? modelosT[0] : C.turnos;
@@ -92,13 +94,13 @@
     let modo = 'dia', dia = data || hoje, de = somarDias(dia, -6), ate = dia, somar = true;
     const chip = (k, sel, icone, nome) => `<button data-k="${k}" class="${sel ? 'sel' : ''}">${ico(sel ? 'certo' : icone)}<span>${esc(nome)}</span></button>`;
     const desenhar = (f) => {
-      f.querySelector('.setores-envio').innerHTML = todos.map((s) => chip(`s:${s.id}`, marcados.has(s.id), s.icone, s.nome)).join('');
+      f.querySelector('.setores-envio').innerHTML = todos.map((s) => chip(`s:${s.id}`, marcados.has(s.id), s.icone, s.nome)).join('') + EXTRAS_ENVIO.map((x) => chip(`x:${x.id}`, extras.has(x.id), x.icone, x.nome)).join('');
       f.querySelector('.turnos-envio').innerHTML = listaT.map((t) => chip(`t:${t.id}`, turnos.has(t.id), 'relogio', modelosT.length === 1 ? `${t.nome}, ${faixaTurno(t)}` : t.nome)).join('');
       f.querySelectorAll('[data-k^="m:"]').forEach((b) => b.classList.toggle('sel', b.dataset.k === 'm:' + modo));
       f.querySelector('.dia-envio').innerHTML = modo === 'dia'
         ? `<div class="nav-data"><button class="btn" data-k="d:-1" aria-label="Dia anterior">${ico('voltar')}</button><div class="data-grande"><b>${fmtData(dia)}</b><span>${dia === hoje ? 'hoje' : diaSemana(dia)}</span></div><button class="btn" data-k="d:1" aria-label="Próximo dia" ${dia >= hoje ? 'disabled' : ''}>${ico('seta')}</button></div>`
         : `<div class="periodo-envio"><label>De <input type="date" id="env-de" value="${de}" max="${hoje}"></label><label>Até <input type="date" id="env-ate" value="${ate}" max="${hoje}"></label></div>
-           <button class="chip-liga ${somar ? 'sel' : ''}" data-k="somar">${ico(somar ? 'certo' : 'fechar')} Somar as folhas do período (vai no Excel e no Resumo)</button>`;
+           <button class="chip-liga ${somar ? 'sel' : ''}" data-k="somar">${ico(somar ? 'certo' : 'fechar')} Somar as folhas do período (Excel, PDF, impressão e Resumo; o XML sai dia a dia)</button>`;
     };
     const lerPeriodo = (f) => {
       if (modo === 'dia') return [dia];
@@ -132,6 +134,7 @@
       if (k === 'x') return fechar(undefined);
       if (k === 'tamanho') { const m = f.querySelector('.modal'); m.classList.toggle('cheia'); b.querySelector('span').textContent = m.classList.contains('cheia') ? 'Metade' : 'Tela inteira'; return; }
       if (k.startsWith('s:')) { const id = k.slice(2); if (marcados.has(id)) marcados.delete(id); else marcados.add(id); }
+      if (k.startsWith('x:')) { const id = k.slice(2); if (extras.has(id)) extras.delete(id); else extras.add(id); }
       if (k.startsWith('t:')) { const id = Number(k.slice(2)); if (turnos.has(id)) turnos.delete(id); else turnos.add(id); }
       if (k.startsWith('m:')) {
         if (modo === 'periodo') { de = (f.querySelector('#env-de') || {}).value || de; ate = (f.querySelector('#env-ate') || {}).value || ate; }
@@ -140,11 +143,11 @@
       if (k.startsWith('d:')) { const d = somarDias(dia, Number(k.slice(2))); if (d <= hoje) dia = d; }
       if (k === 'somar') { de = (f.querySelector('#env-de') || {}).value || de; ate = (f.querySelector('#env-ate') || {}).value || ate; somar = !somar; }
       if (k.startsWith('f:')) {
-        if (!marcados.size) return toast('Escolha pelo menos uma área', 'erro');
+        if (!marcados.size && (!extras.size || k === 'f:xml')) return toast('Escolha pelo menos uma área', 'erro');
         if (!turnos.size) return toast('Escolha pelo menos um turno', 'erro');
         const dias = lerPeriodo(f);
         if (!dias) return;
-        return fechar({ formato: k.slice(2), setores: todos.filter((s) => marcados.has(s.id)).map((s) => s.id), turnos: [...turnos], totalTurnos: listaT.length, dias, somar: modo === 'periodo' && somar });
+        return fechar({ formato: k.slice(2), setores: todos.filter((s) => marcados.has(s.id)).map((s) => s.id), turnos: [...turnos], totalTurnos: listaT.length, dias, somar: modo === 'periodo' && somar, extras: [...extras] });
       }
       desenhar(f);
     }, { classe: 'largo folha-baixo', fundo: 'de-baixo', aoAbrir: (f) => { desenhar(f); puxarParaFechar(f); } });
@@ -182,8 +185,8 @@
     turnosDoEnvio = escolha.turnos.length < (escolha.totalTurnos || C.turnos.length) ? new Set(escolha.turnos) : null;
     try {
       if (escolha.formato === 'texto') return { texto: resumoDoEnvio(escolha) };
-      if (escolha.formato === 'pdf') return { arquivo: await gerarPdf(escolha.dias, escolha.setores) };
-      return { arquivo: gerarArquivo(escolha.formato, escolha.dias, escolha.setores, escolha.somar) };
+      if (escolha.formato === 'pdf') return { arquivo: await gerarPdf(escolha.dias, escolha.setores, escolha.somar, escolha.extras) };
+      return { arquivo: gerarArquivo(escolha.formato, escolha.dias, escolha.setores, escolha.somar, escolha.extras) };
     } finally { turnosDoEnvio = null; }
   }
   /** Os totais de cada insumo, somados nos dias (e turnos) escolhidos. */
@@ -200,14 +203,35 @@
   }
   function resumoDoEnvio(escolha) {
     const nomesTurnos = escolha.turnos.length < (escolha.totalTurnos || C.turnos.length) ? ` · turnos: ${C.turnos.filter((t) => escolha.turnos.includes(t.id)).map((t) => t.nome).join(', ')}` : '';
-    if (escolha.dias.length === 1) return resumoDoDia(escolha.dias[0], escolha.setores) + (nomesTurnos ? `\n\n(${nomesTurnos.slice(3)})` : '');
+    const extras = escolha.extras || [];
+    const comProducao = (texto, dias) => [texto, blocoDeProducao(dias.map(producaoDoDia), extras)].filter(Boolean).join('\n\n');
+    if (!escolha.somar || escolha.dias.length === 1) return escolha.dias.map((d) => comProducao(resumoDoDia(d, escolha.setores), [d])).join('\n\n') + (nomesTurnos ? `\n\n(${nomesTurnos.slice(3)})` : '');
     const de = escolha.dias[0], ate = escolha.dias[escolha.dias.length - 1];
-    const linhas = ['*PRANCHETAS UBIRÁLCOOL*', `Período de ${fmtData(de)} a ${fmtData(ate)} (${escolha.dias.length} dias)${nomesTurnos}`, '', '*TOTAIS DO PERÍODO (insumos)*'];
-    let setorAtual = '';
-    totaisDoEnvio(escolha.dias, escolha.setores).forEach((x) => {
-      if (x.setor !== setorAtual) { setorAtual = x.setor; linhas.push('', `*${x.setor.toUpperCase()}*`); }
-      linhas.push(`• ${x.insumo}: ${x.quantidade ? `${fmtNum(x.quantidade)} ${x.unidade}` : 'nada adicionado'}`);
+    const linhas = ['*PRANCHETAS UBIRÁLCOOL*', `Período de ${fmtData(de)} a ${fmtData(ate)} (${escolha.dias.length} dias)${nomesTurnos}`];
+    setores().filter((s) => escolha.setores.includes(s.id)).forEach((s) => {
+      linhas.push('', `*${s.nome.toUpperCase()}*`);
+      const inicio = linhas.length, folhas = folhasMedidas(s);
+      folhas.forEach((pid) => {
+        const r = consolidadoDaFolha(pid, escolha.dias), pre = folhas.length > 1 ? `${prancheta(pid).nome}, ` : '';
+        r.quantidades.forEach((x) => linhas.push(`• ${pre}${comUnidade(x)}: ${fmtNum(x.total)}`));
+        r.medicoes.forEach((x) => linhas.push(`• ${pre}${comUnidade(x)}: média ${fmtNum(x.media)} (mín. ${fmtNum(x.minima)}, máx. ${fmtNum(x.maxima)})`));
+      });
+      totaisDoEnvio(escolha.dias, [s.id]).forEach((x) => linhas.push(`• ${x.insumo}: ${x.quantidade ? `${fmtNum(x.quantidade)} ${x.unidade}` : 'nada adicionado'}`));
+      if (linhas.length === inicio) linhas.push('• Nada anotado no período');
     });
+    return comProducao(linhas.join('\n'), escolha.dias);
+  }
+  /** Bloco de produção do Resumo: um dia, ou os dias já somados. Sem nada marcado, não sai. */
+  function blocoDeProducao(lista, extras) {
+    if (!extras.length || !lista.length) return '';
+    const r = lista.length === 1 ? lista[0] : window.Consolidar.producao(lista);
+    const num = (v) => (v === '' || v == null ? '—' : fmtNum(String(Math.round(v * 100) / 100)));
+    const linhas = [`*PRODUÇÃO${lista.some((x) => !x.conferido) ? ' (calculado, não conferido)' : ''}*`];
+    if (extras.includes('calculo')) {
+      NUM_PRODUCAO.forEach(([k, nome, u]) => linhas.push(`• ${nome}: ${num(r[k])} ${u}`));
+      linhas.push(`• INPM médio: ${num(r.inpm)}`, `• Brix médio: ${num(r.brix)}`);
+    }
+    if (extras.includes('rastreamento')) linhas.push(`• Lote: ${[...new Set(lista.map((x) => x.lote).filter(Boolean))].join(', ') || '—'}`);
     return linhas.join('\n');
   }
   /** Imprimir: escolhe os setores e abre a impressão (dia antigo é buscado na central antes). */
@@ -216,7 +240,7 @@
     if (!escolha) return;
     for (const d of escolha.dias) await buscarDia(d);
     turnosDoEnvio = escolha.turnos.length < (escolha.totalTurnos || C.turnos.length) ? new Set(escolha.turnos) : null;
-    try { return await imprimirFolhas(escolha.dias, escolha.setores); } finally { turnosDoEnvio = null; }
+    try { return await imprimirFolhas(escolha.dias, escolha.setores, escolha.somar, escolha.extras); } finally { turnosDoEnvio = null; }
   }
   let toastTimer, toastSaindo;
   function esconderToast() {
