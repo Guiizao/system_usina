@@ -215,7 +215,10 @@
   function barraCelular(v) {
     if (!painelNovoCel() || TELAS_SEM_BARRA.includes(v.tela)) return '';
     const ativo = { central: 'abrir-painel', 'setores-cel': 'setores-cel', relatorios: 'relatorios', 'mais-cel': 'mais-cel' }[v.tela];
-    const t = (a, icone, nome) => `<button class="${ativo === a ? 'at' : ''}" data-a="${a}">${ico(icone)}<span>${nome}</span></button>`;
+    // a marca verde sai do botão de antes: a barra velha ainda está na tela quando a nova é montada
+    const velho = document.querySelector('.pn-barra .at'), alvo = ativo && document.querySelector(`.pn-barra [data-a="${ativo}"]`);
+    const marca = alvo && alvo !== velho ? `class="at vem" style="${velho ? `--de:${velho.offsetLeft - alvo.offsetLeft}px` : '--esc:.5;--op:0'}"` : 'class="at"';
+    const t = (a, icone, nome) => `<button ${ativo === a ? marca : ''} data-a="${a}">${ico(icone)}<span>${nome}</span></button>`;
     return `<nav class="pn-barra" aria-label="Navegação">${t('abrir-painel', 'casa', 'Início')}${pnVeSetores() ? t('setores-cel', 'grade', 'Setores') : '<span class="vago"></span>'}<button class="ia" data-a="assistente" aria-label="Assistente">${ico('brilho')}</button>${veNoChefe('relatorios') ? t('relatorios', 'pasta', 'Relatórios') : '<span class="vago"></span>'}${t('mais-cel', 'menu', 'Mais')}</nav>`;
   }
   // deslizar da beirada direita abre o Mais

@@ -231,10 +231,15 @@ main.escritorio.pn-producao { max-width: none; grid-template-columns: minmax(0, 
 .pn-chave::after { content: ""; position: absolute; left: 4px; top: 4px; width: 32px; height: 32px; border-radius: 50%; background: var(--branco); transition: transform calc(.2s * var(--ritmo, 1)) cubic-bezier(.22, 1, .36, 1); }
 .pn-chave.on { background: var(--verde); }
 .pn-chave.on::after { transform: translateX(22px); }
-.pn-barra { flex: none; display: flex; align-items: flex-end; justify-content: space-around; gap: 2px; padding: 5px 6px calc(6px + env(safe-area-inset-bottom)); background: var(--papel); box-shadow: 0 -2px 10px var(--pn-sombra); }
+/* z-index: o botão da IA sobe por cima da tela, e cartão com posição própria cortava ele */
+.pn-barra { position: relative; z-index: 30; flex: none; display: flex; align-items: flex-end; justify-content: space-around; gap: 2px; padding: 5px 6px calc(6px + env(safe-area-inset-bottom)); background: var(--papel); box-shadow: 0 -2px 10px var(--pn-sombra); }
 .pn-barra button:not(.ia), .pn-barra .vago { flex: 1 1 0; min-width: 0; min-height: 48px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; font-size: 13px; color: var(--tinta-2); }
+.pn-barra button:not(.ia), .pn-barra button:not(.ia) > * { position: relative; }
 .pn-barra .at { color: var(--verde-escuro) !important; font-weight: 700; }
-.pn-barra .ia { width: 64px; height: 64px; flex: none; margin-top: -26px; display: grid; place-items: center; border-radius: 50%; background: var(--verde); color: var(--branco); border: 5px solid var(--chao); }
+.pn-barra .at::before { content: ""; position: absolute; top: 0; left: 50%; width: 60px; height: 30px; margin-left: -30px; border-radius: 15px; background: var(--verde-fundo); }
+.pn-barra .vem::before { animation: pn-marca calc(.26s * var(--ritmo, 1)) cubic-bezier(.22, 1, .36, 1) both; }
+@keyframes pn-marca { from { transform: translateX(var(--de, 0)) scaleX(var(--esc, 1)); opacity: var(--op, 1); } }
+.pn-barra .ia { position: relative; z-index: 1; width: 64px; height: 64px; flex: none; margin-top: -26px; display: grid; place-items: center; border-radius: 50%; background: var(--verde); color: var(--branco); border: 5px solid var(--chao); }
 .pn-barra .ia svg.ico { width: 28px; height: 28px; }
 :root[data-tema="escuro"] .pn-barra .ia { color: var(--ambar-tinta); }
 
@@ -255,5 +260,5 @@ main.escritorio.pn-producao { max-width: none; grid-template-columns: minmax(0, 
 @keyframes pn-pisca { to { opacity: .35; } }
 @media (prefers-reduced-motion: reduce) {
   #app.troca .pn-e, #app.troca .pn-barras i, #app.troca .pn-linha .total, #app.troca .pn-linha .dest, #app.troca .pn-tanque .liquido,
-  #app.troca .pn-tabela .p i, #app.troca .pn-setores s, .pn-tanque .onda, .ia-gaveta.entrando, .ia-esperando i { animation: none; }
+  #app.troca .pn-tabela .p i, #app.troca .pn-setores s, .pn-tanque .onda, .ia-gaveta.entrando, .ia-esperando i, .pn-barra .vem::before { animation: none; }
 }
