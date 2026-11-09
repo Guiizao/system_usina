@@ -17,6 +17,7 @@ import { situacaoDoServidorDaUsina } from './usina.js';
 import leitura from '../../api-leitura.js';
 import Juncao from '../../public/nucleo/juncao.js';
 import RegrasUsina from '../../regras-usina.js';
+import { assistente } from './assistente.js';
 
 const { criadasSemSaber, juntarLinhas } = RegrasUsina;
 const MAX_POR_PEDIDO = 500;
@@ -750,6 +751,7 @@ export function criarBanco(h) {
     }
     const quem = await autenticar(req, env);
     if (!quem) return responder(401, { erro: 'Credencial do aparelho inválida' });
+    if (p === '/banco/assistente') return assistente(req, env, quem, { responder, corpoFila, contexto, autenticar });
     if (p === '/banco/api/sync' && req.method === 'POST') return apiSync(req, env, quem, url);
     if (p === '/banco/api/registros') return apiRegistros(env, url);
     if (p === '/banco/api/dias' && req.method === 'GET') return apiDias(env);
