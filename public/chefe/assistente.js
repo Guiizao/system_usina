@@ -74,7 +74,7 @@
     const pergunta = ia.rascunho.trim();
     if (!pergunta || ia.ocupado) return;
     const dono = ia.dono;
-    const historico = ia.msgs.slice(-6).map((m) => ({ de: m.de, texto: m.texto }));
+    const historico = ia.msgs.filter((m, i, l) => !m.semFuncao && !(l[i + 1] && l[i + 1].semFuncao)).slice(-10).map((m) => ({ de: m.de, texto: m.memoria || m.texto })); // recusa no histórico puxa outra recusa
     ia.msgs.push({ de: 'eu', texto: pergunta }); ia.rascunho = ''; ia.ocupado = true;
     render(); iaRolar();
     let resposta;

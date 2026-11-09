@@ -11,6 +11,7 @@
 
   const DIAS_NA_LISTA = 90; // a lista abre com 90 dias; os mais antigos vêm no botão (com anos de dados, a tela não fica pesada)
   function telaRelatorios(v) {
+    if (painelNovoCel()) return telaRelatoriosCel(v);
     const guardados = new Map((v.dias || []).map((d) => [d.data, d.arquivos || []]));
     const todos = [...new Set([...(v.diasComDados || []), ...guardados.keys()])].sort().reverse();
     const dias = todos.slice(0, v.quantos || DIAS_NA_LISTA);
@@ -33,6 +34,88 @@
         ${todos.length > dias.length ? `<div class="linha-botoes"><button class="btn" data-a="relatorios-mais">${ico('mais')} Ver dias mais antigos</button></div>` : ''}
       </main>`;
   }
+  /* 3.1.5: no celular com o painel novo, os dias num calendário. Quanto mais anotações, mais escuro o verde.
+     Tocar num dia espreme o calendário até sumir e abre o dia; o Voltar faz o contrário. Cabe na tela como o Início. */
+  const MESES = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
+  const SEM_FOLHA = ['avisos', 'avisos-recibo', 'registro', 'rastreamento'];
+  function anotacoesPorDia() {
+    const n = new Map();
+    for (const r of Object.values(registros)) if (!r.apagado && C.pranchetas[r.prancheta] && !SEM_FOLHA.includes(r.prancheta)) n.set(r.data, (n.get(r.data) || 0) + 1);
+    return n;
+  }
+  function telaRelatoriosCel(v) {
+    const hoje = dataProducao(), ontem = somarDias(hoje, -1), guardados = new Map((v.dias || []).map((d) => [d.data, d.arquivos || []]));
+    const conta = anotacoesPorDia(), comDados = new Set([...(v.diasComDados || []), ...guardados.keys(), ...conta.keys()]);
+    const mes = v.mes || hoje.slice(0, 7), [ano, m] = mes.split('-').map(Number), nomeMes = MESES[m - 1].toLowerCase();
+    const anim = matchMedia('(prefers-reduced-motion: reduce)').matches ? '' : v.anim || ''; v.anim = ''; // só o desenho logo depois do toque anima; o de 5 em 5 segundos não
+    const vazio = new Date(ano, m - 1, 1).getDay(), doMes = Array.from({ length: new Date(ano, m, 0).getDate() }, (_, i) => `${mes}-${String(i + 1).padStart(2, '0')}`);
+    const max = Math.max(1, ...doMes.map((d) => conta.get(d) || 0));
+    const nivel = (d) => { const n = conta.get(d) || 0, q = n / max; return !n ? (comDados.has(d) ? 1 : 0) : q > 0.75 ? 4 : q > 0.5 ? 3 : q > 0.25 ? 2 : 1; };
+    // o calendário espreme na direção do dia tocado e volta a crescer a partir dele
+    const origem = (d) => { if (!d || d.slice(0, 7) !== mes) return '50% 30%'; const i = vazio + Number(d.slice(8)) - 1; return `${(((i % 7) + 0.5) / 7 * 100).toFixed(1)}% ${18 + Math.floor(i / 7) * 8}%`; };
+    const outro = (k) => { const x = new Date(ano, m - 1 + k, 1); return `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, '0')}`; };
+    const anos = [...new Set([ano, Number(hoje.slice(0, 4)), ...[...comDados].map((d) => Number(d.slice(0, 4)))])].sort();
+    const hora = (t) => new Date(t).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+    const celula = (d) => {
+      const nv = nivel(d), dd = Number(d.slice(8)), cls = `n${nv}${d === hoje ? ' hoje' : ''}`;
+      return nv ? `<button class="${cls}" data-a="rel-dia" data-data="${d}" aria-label="${fmtData(d)}: ${conta.get(d) ? contar(conta.get(d), 'anotação', 'anotações') : 'anotações no servidor'}">${dd}</button>`
+        : `<span class="${cls}${d > hoje ? ' futuro' : ''}">${dd}</span>`;
+    };
+    const calendario = (cls, d) => {
+      const diasNoMes = doMes.filter((x) => comDados.has(x)).length, anotacoes = doMes.reduce((t, x) => t + (conta.get(x) || 0), 0);
+      const topo = doMes.reduce((b, x) => ((conta.get(x) || 0) > (conta.get(b) || 0) ? x : b), doMes[0]);
+      const alcool = pnVeProducao() ? doMes.filter((x) => x <= hoje).map((x) => pnDia(x).alcool).filter((a) => a !== '' && Number.isFinite(Number(a))) : [];
+      return `<div class="rel-cal ${cls}" style="transform-origin:${origem(d)}">
+      <section class="rel-card">
+        <div class="rel-mes"><button class="pn-ic" data-a="rel-mes" data-mes="${outro(-1)}" aria-label="Mês anterior">${ico('voltar')}</button>
+          <select id="rel-mes" aria-label="Mês">${MESES.map((n, i) => `<option value="${i + 1}" ${i + 1 === m ? 'selected' : ''}>${n}</option>`).join('')}</select>
+          <select id="rel-ano" aria-label="Ano">${anos.map((a) => `<option ${a === ano ? 'selected' : ''}>${a}</option>`).join('')}</select>
+          <button class="pn-ic" data-a="rel-mes" data-mes="${outro(1)}" aria-label="Próximo mês" ${outro(1) > hoje.slice(0, 7) ? 'disabled' : ''}>${ico('seta')}</button></div>
+        <div class="rel-semana" aria-hidden="true">${['D', 'S', 'T', 'Q', 'Q', 'S', 'S'].map((x) => `<span>${x}</span>`).join('')}</div>
+        <div class="rel-grade ${anim === 'mes' ? 'troca-mes' : ''}">${'<span class="vazio"></span>'.repeat(vazio)}${doMes.map(celula).join('')}</div>
+        <div class="rel-legenda"><small>Menos</small><i class="n1"></i><i class="n2"></i><i class="n3"></i><i class="n4"></i><small>Mais anotações</small></div>
+      </section>
+      <section class="rel-card rel-resumo-mes"><h3>Resumo de ${nomeMes}</h3>
+        ${!cfg.demo && !v.carregado ? '<p>Buscando os dias...</p>' : diasNoMes ? `<div class="rel-tres"><div><b>${diasNoMes}</b><small>${diasNoMes === 1 ? 'dia anotado' : 'dias anotados'}</small></div><div><b>${pnNum(anotacoes)}</b><small>anotações</small></div>${pnVeProducao() ? `<div><b>${alcool.length ? pnComUn(alcool.reduce((t, a) => t + Number(a), 0), 'L') : '-'}</b><small>de álcool</small></div>` : ''}</div>
+        ${conta.get(topo) ? `<p>Dia com mais anotações: <b>${fmtData(topo).slice(0, 5)}</b>, ${pnNum(conta.get(topo))}. Toque num dia para abrir.</p>` : '<p>Toque num dia para abrir.</p>'}` : `<p>Nada anotado em ${nomeMes} de ${ano}.</p>`}</section>
+      <section class="rel-card rel-atalhos"><h3>Atalhos</h3><div>
+        <button class="btn" data-a="rel-dia" data-data="${hoje}">${ico('planilha')} Hoje</button>
+        <button class="btn" data-a="relatorio-enviar" data-data="${ontem}">${ico('enviar')} Enviar ontem</button>
+        ${cfg.soNuvem ? '' : `<button class="btn" data-a="gerar-hoje">${ico('planilha')} Gerar o Excel de hoje</button>`}
+      </div></section></div>`;
+    };
+    const painel = (cls, d) => {
+      const n = conta.get(d) || 0, arqs = guardados.get(d) || [], excel = arqs.some((a) => /\.xlsx$/i.test(a.nome));
+      const doDia = setores().map((s) => [s, s.pranchetas.flatMap(folhasDe).flatMap((pid) => listar(d, pid)).filter((r) => !r.apagado)]);
+      const porSetor = doDia.filter(([, l]) => l.length), maior = Math.max(1, ...porSetor.map(([, l]) => l.length));
+      const quem = [...new Set(doDia.flatMap(([, l]) => l.map((r) => r.operador)).filter(Boolean))].sort(), fora = listaForaDoLimite(d);
+      return `<section class="rel-card rel-painel ${cls}">
+        <button class="rel-volta" data-a="rel-voltar">${ico('voltar')} Calendário</button>
+        <h2>${diaSemana(d)}, ${fmtData(d)}${d === hoje ? ' (hoje)' : ''}</h2>
+        <p class="sub">${n ? contar(n, 'anotação', 'anotações') : 'Nada anotado neste aparelho'}${cfg.soNuvem ? '' : ` · ${excel ? 'Excel guardado' : 'ainda sem Excel guardado'}`}</p>
+        ${porSetor.length ? `<div class="rel-setores">${porSetor.map(([s, l]) => `<div><span>${esc(s.nome)}</span><u><s style="width:${(l.length / maior * 100).toFixed(1)}%"></s></u><b>${l.length}</b></div>`).join('')}</div>` : ''}
+        ${quem.length ? `<h3>Quem anotou</h3><div class="rel-quem">${quem.map((q) => `<span>${esc(q)}</span>`).join('')}</div>` : ''}
+        ${fora.length ? `<h3>Fora do limite <mark>${fora.length}</mark></h3><div class="rel-fora">${fora.slice(0, 3).map((x) => `<div><time>${hora(x.em)}</time><span><b>${esc(x.txt)}</b><small>${esc(x.onde)}</small></span></div>`).join('')}</div>` : ''}
+        <div class="rel-acoes">
+          <button class="btn primario" data-a="relatorio-abrir" data-data="${d}" data-arq="${arqs.length ? 1 : ''}">${ico('seta')} Abrir e corrigir</button>
+          <button class="btn" data-a="relatorio-enviar" data-data="${d}">${ico('enviar')} Enviar</button>
+          <button class="btn" data-a="relatorio-resumo" data-data="${d}">${ico('documento')} Resumo</button>
+          ${arqs.length && pode('pessoas') ? `<button class="btn perigo" data-a="relatorio-apagar" data-data="${d}">${ico('lixeira')} Apagar o arquivo</button>` : ''}
+        </div></section>`;
+    };
+    const miolo = anim === 'abre' ? calendario('sai', v.diaSel) + painel('entra', v.diaSel)
+      : anim === 'fecha' && v.diaAntes ? painel('sai', v.diaAntes) + calendario('entra', v.diaAntes)
+      : v.diaSel ? painel('', v.diaSel) : calendario('', '');
+    return `${cabecalho('Relatórios', 'Um por dia, com todos os setores', true)}<main class="pn-cel cabe"><div class="pn-miolo"><div class="rel-pilha">${miolo}</div></div></main>`;
+  }
+  document.addEventListener('change', (e) => {
+    if (e.target.id !== 'rel-mes' && e.target.id !== 'rel-ano') return;
+    const v = view();
+    v.mes = `${document.getElementById('rel-ano').value}-${String(document.getElementById('rel-mes').value).padStart(2, '0')}`; v.anim = 'mes';
+    render();
+  });
+  // o que saiu espremido não fica ocupando lugar até o próximo redesenho; sem ele, a tela volta a caber do tamanho certo
+  document.addEventListener('animationend', (e) => { if (e.target.matches('.rel-pilha > .sai')) { e.target.remove(); pnCaberNaTela(); } });
   /** 2.16: o resumo do dia (setores, totais por turno) para ver e enviar sem abrir o Excel. */
   async function verResumo(data) {
     await buscarDia(data);

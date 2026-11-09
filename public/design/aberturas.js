@@ -166,6 +166,9 @@ function cadencia(t,pouso,raiz,tipo='piano',modo='sus',v=.075){
   acorde(t+pouso,[raiz,raiz+4,raiz+7,raiz+12],tipo,v,.6);
   baixo(t+pouso,raiz-24,.14,.42);
 }
+// 3.1.5: 3,3 s de animação e 0,7 s até a tela (iniciar.js), 4 s ao todo. O som foi feito para a versão de até 2 s:
+// começa mais tarde, para o acorde de cada um (o "pouso" da cadencia) continuar caindo junto com a logo.
+const ABRE=3300,POUSO=[1.23,1.02,1.09,1.21,1.25,1.39,1.35,1.40,1.36,1.12];
 const SOM=[
   // 1 Neon: cinco cometas, contorno elétrico e resolução em Ré.
   t=>{[.05,.225,.40,.575,.75].forEach((x,i)=>ar(t+x,.2,650,2400,.2,i%2? .8:-.8,0));
@@ -230,7 +233,7 @@ function pingo(t,de,para,sobe,dura,v){const g=A.createGain();sai(g,0,.05);const 
 const UI=[t=>pingo(t,360,760,.05,.1,.2),t=>{marimba(t,NOTA(74),.38,0,.32);marimba(t+.105,NOTA(81),.46,0,.4);},t=>{sino(t,NOTA(79),.34,-.1,.7,1.7);sino(t+.17,NOTA(86),.26,.1,.8,1.9);},t=>{marimba(t,NOTA(52),.6,0,.2);marimba(t+.15,NOTA(48),.66,0,.24);},t=>pingo(t,620,340,.04,.07,.22)];
 return{ligar,tocar(i){if(A.state==='suspended')A.resume();novoBus(A.currentTime);UI[i](A.currentTime+.02);},get pronto(){return !!A;},UI};
 })();
-const MOD=[['Neon',m1,3350,2000],['Riscos',m2,F2+1500,1800],['Turbilhão',m3,3250,1900],['Laser',m4,3200,1700],['Faíscas',m5,3450,2000],['Dorna',m6,3480,2000],['Gotas',m7,3500,2000],['Vapor',m8,3550,2000],['Vidro',m9,3250,1800],['Eclipse',m10,3400,1900]].map(([n,f,d0,d])=>[n,(g,T)=>f(g,T*d0/d),d]);
+const MOD=[['Neon',m1,3350,2000],['Riscos',m2,F2+1500,1800],['Turbilhão',m3,3250,1900],['Laser',m4,3200,1700],['Faíscas',m5,3450,2000],['Dorna',m6,3480,2000],['Gotas',m7,3500,2000],['Vapor',m8,3550,2000],['Vidro',m9,3250,1800],['Eclipse',m10,3400,1900]].map(([n,f,d0,d])=>[n,(g,T)=>f(g,T*d0/ABRE),ABRE,ABRE/d]);
 let cv = null, Q = null;
 function medir(){const r=cv.getBoundingClientRect(),pr=Math.min(2,devicePixelRatio||1),W=Math.round(r.width*pr),H=Math.round(r.height*pr);if(Q&&Q.W===W&&Q.H===H)return Q;cv.width=W;cv.height=H;Q={W,H,sc:tela(W,H),m1:tela(W>>1,H>>1),m2:tela(W>>2,H>>2),m3:tela(W>>3,H>>3),b1:tela(W>>2,H>>2),b2:tela(W>>3,H>>3),bg:fundo(W,H)};return Q;}
 function metade(de,para){const q=para.getContext('2d');q.clearRect(0,0,para.width,para.height);q.imageSmoothingEnabled=true;q.imageSmoothingQuality='high';q.drawImage(de,0,0,para.width,para.height);}
@@ -243,13 +246,13 @@ const c=cv.getContext('2d');c.globalCompositeOperation='source-over';c.globalAlp
   /** Toca a abertura i no canvas; aoFim é chamado ao terminar. */
   function tocar(i, canvas, comSom, aoFim) {
     cv = canvas; Q = null;
-    const [, f, D] = MOD[i], id = ++vez, ini = performance.now() + (comSom ? 100 : 0);
+    const [, f, D, k] = MOD[i], id = ++vez, ini = performance.now() + (comSom ? 100 : 0);
     if (matchMedia('(prefers-reduced-motion:reduce)').matches) { pinta(f, D); setTimeout(aoFim, 350); return; }
     if (comSom) {
       try {
         if (!A) ligar(new (window.AudioContext || window.webkitAudioContext)());
         if (A.state === 'suspended') A.resume();
-        novoBus(A.currentTime); SOM[i](A.currentTime + 0.1);
+        novoBus(A.currentTime); SOM[i](A.currentTime + 0.1 + POUSO[i] * (k - 1));
       } catch (e) { /* sem áudio, a abertura sai muda */ }
     }
     const lp = (a) => { if (id !== vez) return; const T = a - ini; pinta(f, Math.max(0, Math.min(D, T))); if (T < D) requestAnimationFrame(lp); else aoFim(); };

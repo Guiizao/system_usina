@@ -2,5 +2,9 @@
  * © 2026 Guilherme. Todos os direitos reservados. Uso somente com autorização do autor (veja LICENCA.txt). */
 
 /* 3.1: as 10 aberturas em canvas (design/aberturas.js), uma vez ao abrir. */
-#abertura-nova { position: fixed; inset: 0; z-index: 300; background: #0e1110; }
+#abertura-nova { position: fixed; inset: 0; z-index: 300; background: #0e1110; transition: opacity .7s cubic-bezier(.4, 0, .2, 1); }
 #abertura-nova canvas { display: block; width: 100%; height: 100%; }
+/* 3.1.5: a saída leva 0,7 s; a logo que voa até o cabeçalho é a .abertura-voa (nucleo/iniciar.js) */
+#abertura-nova.saindo { opacity: 0; pointer-events: none; }
+.abertura-voa { position: fixed; z-index: 301; margin: 0; box-sizing: border-box; background: var(--branco); transform-origin: 0 0; pointer-events: none; }
+@media (prefers-reduced-motion: reduce) { #abertura-nova { transition-duration: .2s; } }

@@ -23,22 +23,23 @@ try {
     igual(await a.avaliar(`[!!document.querySelector('#abertura-nova'), document.documentElement.hasAttribute('data-painel-novo'), !!window.Aberturas]`), [false, false, false]);
     await a.fechar();
   });
-  await teste(g, 'ligado no celular: a abertura desenha, termina em até 2,6 s e sai sozinha', async () => {
+  await teste(g, 'ligado no celular: a abertura desenha, termina em até 4,6 s e sai sozinha', async () => {
     const a = await abrir('p2', TAMANHOS.celular, 'central', true);
     certo(await a.avaliar(`document.documentElement.hasAttribute('data-painel-novo')`), 'marca');
     await dormir(700);
     certo(await a.avaliar(`!!window.Aberturas && !!document.querySelector('#abertura-nova canvas')`), 'canvas');
     const claro = await a.avaliar(`(() => { const c = document.querySelector('#abertura-nova canvas'); const d = c.getContext('2d').getImageData(c.width / 2 - 60, c.height / 2 - 60, 120, 120).data; let m = 0; for (let i = 0; i < d.length; i += 4) m = Math.max(m, d[i + 1]); return m; })()`);
     certo(claro > 60, 'desenhou algo: ' + claro);
-    await dormir(1900);
-    igual(await a.avaliar(`!!document.querySelector('#abertura-nova')`), false);
+    await dormir(3900);
+    igual(await a.avaliar(`!!document.querySelector('#abertura-nova') || !!document.querySelector('.abertura-voa')`), false);
     await a.fechar();
   });
   await teste(g, 'um toque pula a abertura', async () => {
     const a = await abrir('p3', TAMANHOS.computador, 'central', true);
     await dormir(300);
     await a.avaliar(`document.querySelector('#abertura-nova').dispatchEvent(new PointerEvent('pointerdown', { bubbles: true })); 1`);
-    await dormir(80);
+    certo(await a.avaliar(`document.querySelector('#abertura-nova').classList.contains('saindo')`), 'começou a sair');
+    await dormir(800);
     igual(await a.avaliar(`!!document.querySelector('#abertura-nova')`), false);
     await a.fechar();
   });
@@ -54,7 +55,7 @@ try {
     const a = await abrir('p8', TAMANHOS.computador, 'central', true);
     certo(await a.avaliar(`document.documentElement.hasAttribute('data-painel-novo')`), 'ligado no chefe');
     await a.avaliar(`document.querySelector('#app main').insertAdjacentHTML('afterbegin', '<button id="t" data-a="papel" data-id="caldeira">x</button>'); 1`);
-    await dormir(2800);
+    await dormir(4800);
     await a.tocar('#t');
     igual(await a.avaliar(`document.documentElement.hasAttribute('data-painel-novo')`), false);
     await a.fechar();
@@ -71,13 +72,13 @@ try {
   await teste(g, 'chave em Ajustes liga, desliga e guarda; o som tem chave própria', async () => {
     const a = await abrir('p6', TAMANHOS.celular, 'central', false);
     await a.avaliar(`(() => { document.querySelector('#app main').insertAdjacentHTML('afterbegin', '<div id="t">' + blocoPainelNovo() + '</div>'); return 1; })()`);
-    await a.tocar('#t [data-a="painel-novo"][data-valor="1"]');
+    await a.tocar('#t [data-a="painel-novo"][data-valor="1"]'); await dormir(700);
     igual(await a.avaliar('cfg.painelNovo'), true);
     await a.avaliar(`document.querySelector('#app main').insertAdjacentHTML('afterbegin', '<div id="t">' + blocoPainelNovo() + '</div>'); 1`);
     await a.tocar('#t [data-a="som-painel"][data-valor="0"]');
     igual(await a.avaliar('cfg.somDesligado'), true);
     await a.avaliar(`document.querySelector('#app main').insertAdjacentHTML('afterbegin', '<div id="t">' + blocoPainelNovo() + '</div>'); 1`);
-    await a.tocar('#t [data-a="painel-novo"][data-valor="0"]');
+    await a.tocar('#t [data-a="painel-novo"][data-valor="0"]'); await dormir(700);
     igual(await a.avaliar('[cfg.painelNovo, document.documentElement.hasAttribute("data-painel-novo")]'), [false, false]);
     await a.fechar();
   });
@@ -86,7 +87,7 @@ try {
     igual(await a.avaliar(`[!!document.querySelector('.pn-heroi'), !!document.querySelector('.pn-barra')]`), [false, false]);
     await a.avaliar(`cfg.painelNovo = true; pilha = [telaInicial()]; render(true); 1`);
     igual(await a.avaliar(`[!!document.querySelector('.pn-heroi'), document.querySelectorAll('.pn-barra button, .pn-barra .vago').length]`), [true, 5]);
-    await dormir(2800);
+    await dormir(4800);
     const naoRola = `(() => { const m = document.querySelector('.pn-cel.cabe'); return m.scrollHeight - m.clientHeight; })()`;
     certo(await a.avaliar(naoRola) <= 1, 'o início cabe sem rolar');
     certo(await a.avaliar(`(() => { const l = document.querySelector('.pn-graf .media'); return !l || [...document.querySelectorAll('.pn-graf button span')].every((s) => s.getBoundingClientRect().bottom <= l.getBoundingClientRect().top); })()`), 'o traço da média não passa em cima dos números');
@@ -132,7 +133,7 @@ try {
   await teste(g, 'som: avançar toca um, voltar toca outro, e os dois desenham', async () => {
     const a = await abrir('p18', TAMANHOS.computador, 'central', true);
     await a.esperar('!!window.Aberturas', 8000, 'as aberturas');
-    await dormir(2800);
+    await dormir(4800);
     const iniciados = await a.avaliar(`(async () => { let n = 0; const s = OscillatorNode.prototype.start; OscillatorNode.prototype.start = function (...x) { n++; return s.apply(this, x); }; window.Aberturas.somDaTela(0); window.Aberturas.somDaTela(4); OscillatorNode.prototype.start = s; return n; })()`);
     igual(iniciados, 2);
     await a.avaliar(`window.sons = []; window.Aberturas.somDaTela = (i) => window.sons.push(i); ir({ tela: 'relatorios' }); 1`);
@@ -154,8 +155,10 @@ try {
     const a = await abrir('p16', TAMANHOS.celular, 'central', false);
     await a.avaliar(`cfg.painelNovo = true; pilha = [telaInicial()]; ir({ tela: 'relatorios' }); 1`);
     await dormir(200);
-    const dia = await a.avaliar(`document.querySelectorAll('[data-a="relatorio-abrir"]')[1].dataset.data`);
-    await a.tocar('[data-a="relatorio-abrir"]', undefined, { indice: 1 });
+    const dia = await a.avaliar(`document.querySelectorAll('.rel-grade [data-a="rel-dia"]')[1].dataset.data`);
+    await a.tocar('.rel-grade [data-a="rel-dia"]', undefined, { indice: 1 }); await dormir(800);
+    igual(await a.avaliar(`[!!document.querySelector('.rel-painel'), !!document.querySelector('.rel-cal')]`), [true, false], 'o calendário saiu e o dia ficou');
+    await a.tocar('[data-a="relatorio-abrir"]');
     await a.esperar(`view().tela === 'setores-cel'`, 5000, 'setores do dia');
     igual(await a.avaliar(`view().data`), dia);
     await a.tocar('.pn-setores [data-a="abrir-setor"]');
@@ -192,7 +195,7 @@ try {
   });
   await teste(g, 'as 10 aberturas desenham sem erro', async () => {
     const a = await abrir('p7', TAMANHOS.celular, 'central', true);
-    await dormir(2800);
+    await dormir(4800);
     const r = await a.avaliar(`(async () => {
       const c = document.createElement('canvas'); c.style.cssText = 'width:300px;height:300px;position:fixed;left:0;top:0'; document.body.appendChild(c);
       const res = [];
@@ -201,7 +204,7 @@ try {
     })()`);
     igual(r.erros, []);
     igual(r.res.length, 10);
-    certo(r.res.every((ms) => ms >= 1600 && ms <= 2600), r.res.join(','));
+    certo(r.res.every((ms) => ms >= 3200 && ms <= 3900), r.res.join(',')); // 3,3 s de animação; a saída de 0,7 s é do iniciar.js
     await a.fechar();
   });
 } finally { if (nav) await nav.fechar(); if (c) await c.desligar(); }

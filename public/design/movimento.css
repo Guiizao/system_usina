@@ -18,6 +18,11 @@
 :root { --suave: cubic-bezier(.2, .8, .2, 1); }
 /* Troca de tela */
 #app.troca main, #app.troca .barra-trabalho { animation: entrarTela var(--mov-tela) var(--suave) both; }
+/* 3.1.5: troca entre o painel de antes e o novo (toques.js, startViewTransition) */
+::view-transition-old(root) { animation: trocaPainelSai calc(.42s * var(--ritmo)) cubic-bezier(.4, 0, .2, 1) both; }
+::view-transition-new(root) { animation: trocaPainelEntra calc(.56s * var(--ritmo)) cubic-bezier(.22, 1, .36, 1) calc(.08s * var(--ritmo)) both; }
+@keyframes trocaPainelSai { to { opacity: 0; transform: scale(.94); filter: blur(4px); } }
+@keyframes trocaPainelEntra { from { opacity: 0; transform: scale(1.05); } }
 @keyframes entrarTela { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
 /* Toque nos botões */
 button { transition: background-color var(--mov-rapido), border-color var(--mov-rapido), color var(--mov-rapido), box-shadow var(--mov-rapido), transform var(--mov-toque); }

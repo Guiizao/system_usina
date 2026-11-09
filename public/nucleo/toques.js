@@ -127,7 +127,11 @@
         cfg.tema = cfg.tema === 'escuro' ? 'claro' : 'escuro'; salvarCfg(); aplicarTema();
         return render();
       case 'tema-fixo': cfg.tema = b.dataset.valor; salvarCfg(); aplicarTema(); return render();
-      case 'painel-novo': cfg.painelNovo = b.dataset.valor === '1'; salvarCfg(); aplicarPainelNovo(); return render();
+      case 'painel-novo': {
+        // a tela inteira muda: o painel de antes encolhe e some enquanto o outro cresce no lugar (movimento.css)
+        const trocar = () => { cfg.painelNovo = b.dataset.valor === '1'; salvarCfg(); aplicarPainelNovo(); render(); document.getElementById('app').classList.add('troca'); };
+        return document.startViewTransition && !matchMedia('(prefers-reduced-motion: reduce)').matches ? void document.startViewTransition(trocar) : trocar();
+      }
       case 'som-painel': cfg.somDesligado = b.dataset.valor === '0'; salvarCfg(); return render();
       case 'escala': cfg.escala = b.dataset.valor; salvarCfg(); ajustarEscala(); return render();
       case 'conectar': return conectar();
@@ -400,6 +404,9 @@
       case 'leitura-cel': return corrigirCelula(v, Number(b.dataset.i), b.dataset.c);
       case 'leitura-salvar': return salvarLeitura(v);
       case 'relatorio-enviar': return enviarDia(b.dataset.data);
+      case 'rel-dia': v.diaSel = b.dataset.data; v.anim = 'abre'; return render();
+      case 'rel-voltar': v.diaAntes = v.diaSel; v.diaSel = null; v.anim = 'fecha'; return render();
+      case 'rel-mes': v.mes = b.dataset.mes; v.anim = 'mes'; return render();
       case 'relatorio-abrir': return ir({ tela: painelNovoCel() && pnVeSetores() ? 'setores-cel' : 'central', data: b.dataset.data, temArquivo: b.dataset.arq ? b.dataset.data : '' });
       case 'relatorios-mais': v.quantos = (v.quantos || DIAS_NA_LISTA) + DIAS_NA_LISTA; return render();
       case 'relatorio-apagar': {

@@ -133,14 +133,31 @@
   }
   const TOQUE_DE_VOLTAR = '[data-a="voltar"], [data-a="voltar-conectar"], [data-a$="-cancelar"], [data-a="ia-fechar"], [data-k="x"], [data-k="nao"], [data-k="voltar"]';
   document.addEventListener('pointerdown', (e) => { const b = e.target.closest && e.target.closest('.btn, .atalho, [data-a]'); if (b) somDoPainel(b.matches(TOQUE_DE_VOLTAR) ? 4 : 0); }, true);
-  /** Sorteia uma das 10 aberturas (até 2 segundos); um toque pula. */
+  /** Sorteia uma das 10 aberturas (4 segundos com a passagem para a tela); um toque pula. */
   async function aberturaNova() {
     const raiz = document.documentElement;
     if (!(raiz.dataset.pc === '1' || raiz.dataset.dispositivo === 'celular')) return;
     try { if (sessionStorage.getItem('abertura')) return; sessionStorage.setItem('abertura', '1'); } catch (e) { /* mostra */ }
     const tela = document.createElement('div'); tela.id = 'abertura-nova'; tela.innerHTML = '<canvas></canvas>';
     document.body.appendChild(tela);
-    const fim = () => { if (window.Aberturas) window.Aberturas.parar(); tela.remove(); };
+    // sem corte seco: o fundo escuro some, a logo voa até o lugar dela no cabeçalho e o Início entra por baixo
+    const fim = () => {
+      if (window.Aberturas) window.Aberturas.parar();
+      if (tela.classList.contains('saindo')) return;
+      tela.classList.add('saindo');
+      const alvo = document.querySelector('.pn-oi img, .menu-marca img, .entrar-logo'), a = alvo && alvo.getBoundingClientRect();
+      const app = document.getElementById('app'); app.classList.remove('troca'); void app.offsetWidth; app.classList.add('troca');
+      if (a && a.width && !matchMedia('(prefers-reduced-motion: reduce)').matches) {
+        const r = tela.getBoundingClientRect(), lado = Math.min(r.width, r.height) * 132 / 205; // a placa da logo no canvas (aberturas.js)
+        const x = r.left + (r.width - lado) / 2, y = r.top + (r.height - lado) / 2, s = a.width / lado, cs = getComputedStyle(alvo), voa = alvo.cloneNode();
+        voa.className = 'abertura-voa';
+        Object.assign(voa.style, { left: `${x}px`, top: `${y}px`, width: `${lado}px`, height: `${lado}px`, padding: `${lado * 16 / 132}px`, borderRadius: `${lado * 26 / 132}px` });
+        document.body.appendChild(voa); alvo.style.visibility = 'hidden';
+        voa.animate([{ transform: 'none' }, { transform: `translate(${a.left - x}px, ${a.top - y}px) scale(${s})`, backgroundColor: cs.backgroundColor, borderRadius: `${parseFloat(cs.borderRadius) / s}px` }],
+          { duration: 700, easing: 'cubic-bezier(.65, 0, .35, 1)', fill: 'forwards' }).finished.then(() => { alvo.style.visibility = ''; voa.remove(); });
+      }
+      setTimeout(() => tela.remove(), 700);
+    };
     tela.addEventListener('pointerdown', fim);
     try {
       await carregarAberturas();
