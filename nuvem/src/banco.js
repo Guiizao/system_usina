@@ -205,7 +205,7 @@ export function criarBanco(h) {
     const recebido = senhaDoPedido(req);
     if (await mesmoSegredo(recebido, await tokenDoAparelho(env.SEGREDO_CENTRAL, aparelho))) return { aparelho, pc: false };
     const acesso = await leitorDaNuvem(env, aparelho, recebido);
-    return acesso ? { aparelho, pc: true } : null;
+    return acesso ? { aparelho, pc: true, expira: acesso.expira } : null;
   }
 
   /* ---------- aparelhos ligados ---------- */
@@ -744,8 +744,9 @@ export function criarBanco(h) {
       const protocolos = String(req.headers.get('Sec-WebSocket-Protocol') || '').split(',').map((x) => x.trim());
       const aparelho = url.searchParams.get('a'), token = protocolos[1] || '';
       const pedido = new Request(req.url, { headers: { 'X-Aparelho': aparelho || '', Authorization: 'Bearer ' + token } });
-      if (!(await autenticar(pedido, env)) || !env.SALA) return responder(401, { erro: 'Credencial inválida' });
-      return env.SALA.get(env.SALA.idFromName('usina')).fetch(`https://sala/entrar?a=${encodeURIComponent(aparelho)}`, req);
+      const quem = await autenticar(pedido, env);
+      if (!quem || !env.SALA) return responder(401, { erro: 'Credencial inválida' });
+      return env.SALA.get(env.SALA.idFromName('usina')).fetch(`https://sala/entrar?a=${encodeURIComponent(aparelho)}&expira=${quem.expira || 0}`, req);
     }
     const quem = await autenticar(req, env);
     if (!quem) return responder(401, { erro: 'Credencial do aparelho inválida' });
@@ -775,30 +776,49 @@ export class Sala {
       const par = new WebSocketPair();
       const aparelho = url.searchParams.get('a') || '';
       this.state.acceptWebSocket(par[1], [aparelho]);
-      par[1].serializeAttachment({ aparelho, desde: Date.now() });
+      par[1].serializeAttachment({ aparelho, desde: Date.now(), expira: Number(url.searchParams.get('expira')) || 0 });
+      await this.agendarPrazo();
       return new Response(null, { status: 101, webSocket: par[0], headers: { 'Sec-WebSocket-Protocol': 'pranchetas' } });
     }
     if (url.pathname === '/avisar') {
       const texto = await req.text();
-      for (const ws of this.state.getWebSockets()) { try { ws.send(texto); } catch (e) { /* já caiu */ } }
+      for (const ws of this.state.getWebSockets()) if (!this.vencido(ws)) { try { ws.send(texto); } catch (e) { /* já caiu */ } }
       return new Response(null, { status: 204 });
     }
     if (url.pathname === '/vivos') {
-      const lista = this.state.getWebSockets().map((ws) => ws.deserializeAttachment() || {});
+      const lista = this.state.getWebSockets().filter((ws) => !this.vencido(ws)).map((ws) => ws.deserializeAttachment() || {});
       return new Response(JSON.stringify(lista), { headers: { 'Content-Type': 'application/json' } });
     }
     return new Response(null, { status: 404 });
   }
   /** O "ping" é respondido sozinho. O rascunho (o que alguém está digitando, ainda não salvo) só passa pelos outros: não grava nada. */
   webSocketMessage(ws, msg) {
+    if (this.vencido(ws)) return;
     if (typeof msg !== 'string' || msg.length > 8000) return;
     let d;
     try { d = JSON.parse(msg); } catch (e) { return; }
     if (!d || d.tipo !== 'rascunho') return;
     const { aparelho } = ws.deserializeAttachment() || {};
     const texto = JSON.stringify({ tipo: 'rascunho', de: aparelho, pid: String(d.pid), data: String(d.data), chave: String(d.chave), quem: String(d.quem || '').slice(0, 60), valores: d.valores && typeof d.valores === 'object' ? d.valores : null });
-    for (const outro of this.state.getWebSockets()) if (outro !== ws) { try { outro.send(texto); } catch (e) { /* já caiu */ } }
+    for (const outro of this.state.getWebSockets()) if (outro !== ws && !this.vencido(outro)) { try { outro.send(texto); } catch (e) { /* já caiu */ } }
   }
+  vencido(ws) {
+    const { expira } = ws.deserializeAttachment() || {};
+    if (!expira || Date.now() < expira) return false;
+    try { ws.close(4401, 'O prazo da sessão acabou'); } catch (e) { /* já fechou */ }
+    return true;
+  }
+  async agendarPrazo() {
+    let proximo = Infinity;
+    for (const ws of this.state.getWebSockets()) {
+      if (this.vencido(ws)) continue;
+      const { expira } = ws.deserializeAttachment() || {};
+      if (expira) proximo = Math.min(proximo, expira);
+    }
+    if (Number.isFinite(proximo)) await this.state.storage.setAlarm(proximo);
+    else await this.state.storage.deleteAlarm();
+  }
+  async alarm() { await this.agendarPrazo(); }
   webSocketClose(ws) { try { ws.close(); } catch (e) { /* já fechou */ } }
   webSocketError(ws) { try { ws.close(); } catch (e) { /* já fechou */ } }
 }

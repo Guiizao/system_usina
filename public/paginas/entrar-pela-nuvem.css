@@ -12,6 +12,8 @@
 .entrar-cartao label { display: grid; gap: 6px; font-weight: 700; font-size: 17px; }
 .entrar-cartao select, .entrar-cartao input { min-height: 56px; font-size: 20px; padding: 0 14px; width: 100%; }
 .entrar-cartao select:disabled, .entrar-cartao input:disabled { opacity: .6; }
+.entrar-cartao .nuvem-lembrar { display: flex; align-items: center; gap: 10px; min-height: 44px; }
+.entrar-cartao .nuvem-lembrar input { flex: none; width: 24px; height: 24px; min-height: 24px; padding: 0; }
 .aviso-entrar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 0; padding: 10px 12px; border-radius: 12px;
   background: var(--ambar-fundo); color: var(--ambar-texto); font-weight: 700; }
 .aviso-entrar > span { flex: 1 1 180px; min-width: 0; }

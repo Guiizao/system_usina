@@ -90,11 +90,13 @@ const tokenDeLeitura = (segredo, aparelho, p, nonce = '') => assinar(segredo, `l
 // a conferência da senha fica selada com o segredo da central (que não está no banco): o banco sozinho não revela o PIN
 const selar = (segredo, verificador) => assinar(segredo, 'senha|' + verificador);
 async function leitorDaNuvem(env, aparelho, recebido) {
-  const linha = await env.DB.prepare(`SELECT p.json, s.nonce FROM acessos_nuvem a JOIN pessoas p ON p.id = a.pessoa
+  const linha = await env.DB.prepare(`SELECT p.json, s.nonce, t.expira FROM acessos_nuvem a JOIN pessoas p ON p.id = a.pessoa
+    JOIN prazos_nuvem t ON t.aparelho = a.aparelho
     LEFT JOIN sessoes_nuvem s ON s.aparelho = a.aparelho WHERE a.aparelho = ?`).bind(aparelho).first();
+  if (!linha || Date.now() >= linha.expira) return null;
   const p = linha && JSON.parse(linha.json);
-  const nonce = linha?.nonce || ''; // sem sessao: chave da 2.16 continua valendo ate sair ou entrar novamente
-  return veNaNuvem(p) && (await mesmoSegredo(recebido, await tokenDeLeitura(env.SEGREDO_CENTRAL, aparelho, p, nonce))) ? { pessoa: p, nonce } : null;
+  const nonce = linha.nonce || '';
+  return veNaNuvem(p) && (await mesmoSegredo(recebido, await tokenDeLeitura(env.SEGREDO_CENTRAL, aparelho, p, nonce))) ? { pessoa: p, nonce, expira: linha.expira } : null;
 }
 
 async function sair(req, env) {
@@ -124,6 +126,13 @@ function devolverTentativa(env, chave) {
   return env.DB.prepare(`UPDATE tentativas_entrada SET erros = MAX(0, erros - 1),
     bloqueios = MAX(0, bloqueios - CASE WHEN ate > 0 THEN 1 ELSE 0 END), ate = 0 WHERE chave = ?`).bind(chave);
 }
+function prazoDaSessao(tipo, lembrar, cfgSessao, agora) {
+  const padrao = { celularDias: 5, pcDias: 1, lembrarDias: 7 };
+  const campo = tipo === 'celular' ? 'celularDias' : tipo === 'pc' ? (lembrar === true ? 'lembrarDias' : 'pcDias') : null;
+  const valor = campo ? cfgSessao?.[campo] : 1;
+  const dias = typeof valor === 'number' && Number.isFinite(valor) ? valor : (padrao[campo] || 1);
+  return agora + Math.max(1, Math.min(7, Math.floor(dias))) * 86400000;
+}
 async function entrar(req, env) {
   if (req.method !== 'POST') return responder(405, { erro: 'Use POST' });
   let corpo;
@@ -141,7 +150,8 @@ async function entrar(req, env) {
     const ok = chaves[i] === geral ? await reservarTentativa(env, geral, agora, LIMITE_GERAL_POR_HORA, [3600000, 3600000]) : await reservarTentativa(env, chaves[i], agora);
     if (!ok) {
       for (const c of chaves.slice(0, i)) await devolverTentativa(env, c).run();
-      return responder(429, { erro: 'Muitas tentativas. Aguarde o desbloqueio.' });
+      const prazo = await env.DB.prepare(`SELECT MAX(ate) AS ate FROM tentativas_entrada WHERE chave IN (${chaves.map(() => '?').join(',')})`).bind(...chaves).first();
+      return responder(429, { erro: 'Muitas tentativas. Aguarde o desbloqueio.', esperaSegundos: Math.max(1, Math.ceil(((prazo?.ate || agora) - agora) / 1000)) });
     }
   }
   const enc = new TextEncoder();
@@ -165,6 +175,8 @@ async function entrar(req, env) {
   if (!pessoa) return responder(401, { erro: 'Senha errada (ou essa pessoa não vê pela nuvem: precisa de Relatórios ou Escritório)' });
   const { id, nome, nivel, funcoes } = pessoa;
   const nonce = crypto.randomUUID();
+  const sistema = await env.DB.prepare("SELECT json FROM registros WHERE id = 'config|sistema|geral'").first();
+  const expira = prazoDaSessao(corpo.tipo, corpo.lembrar, sistema ? JSON.parse(sistema.json).valores?.sessaoNuvem : null, agora);
   const data = new Date(agora + FUSO * 60000).toISOString().slice(0, 10), linha = 'nuvem-' + crypto.randomUUID();
   const registro = { id: `${data}|registro|${linha}`, data, prancheta: 'registro', setor: 'central', chave: linha,
     criadoEm: agora, atualizadoEm: agora, aparelho, operador: nome, apagado: false,
@@ -175,9 +187,10 @@ async function entrar(req, env) {
     env.DB.prepare("DELETE FROM tentativas_entrada WHERE chave LIKE 'todos:%' AND chave <> ?").bind(geral),
     env.DB.prepare('INSERT INTO acessos_nuvem (aparelho, pessoa) VALUES (?, ?) ON CONFLICT(aparelho) DO UPDATE SET pessoa = excluded.pessoa').bind(aparelho, id),
     env.DB.prepare('INSERT INTO sessoes_nuvem (aparelho, nonce) VALUES (?, ?) ON CONFLICT(aparelho) DO UPDATE SET nonce = excluded.nonce').bind(aparelho, nonce),
+    env.DB.prepare('INSERT INTO prazos_nuvem (aparelho, expira) VALUES (?, ?) ON CONFLICT(aparelho) DO UPDATE SET expira = excluded.expira').bind(aparelho, expira),
     ...consultasPendentes(env, aparelho, info?.valor || '', [registro]),
   ]);
-  return responder(200, { token: await tokenDeLeitura(env.SEGREDO_CENTRAL, aparelho, pessoa, nonce), pessoa: { id, nome, nivel, funcoes } });
+  return responder(200, { token: await tokenDeLeitura(env.SEGREDO_CENTRAL, aparelho, pessoa, nonce), pessoa: { id, nome, nivel, funcoes }, expira });
 }
 /** Limita os bytes recebidos também quando não há Content-Length. */
 async function corpoFila(req, limite = MAX_FILA_BYTES) {

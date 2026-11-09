@@ -13,6 +13,7 @@
   const FUNCOES_NA_NUVEM = ['relatorios', 'escritorio'];
   // 2.17: entra escolhendo o nome (a lista vem da nuvem) e digitando a senha; o endereço fica na aba Servidor
   const nuvemForm = { url: '', pessoas: null, erro: '', buscando: false };
+  const tipoDoAparelho = () => (NO_APK || matchMedia('(pointer: coarse)').matches ? 'celular' : 'pc');
 
   /** Os nomes de quem pode entrar pela nuvem (só id e nome). Sem achar a nuvem, a tela diz por quê. */
   async function carregarNomesDaNuvem() {
@@ -54,6 +55,7 @@
           : `<option value="">Escolha o seu nome</option>${lista.map((p) => `<option value="${esc(p.id)}" ${p.id === cfg.ultimaPessoaNuvem ? 'selected' : ''}>${esc(p.nome)}</option>`).join('')}`}</select></label>
         ${nuvemForm.erro ? `<p class="aviso-entrar">${ico('alerta')} <span>${esc(nuvemForm.erro)}</span> <button type="button" class="btn pequeno" data-a="nuvem-nomes">Tentar de novo</button></p>` : ''}
         <label>Senha<input id="nuvem-senha" type="password" inputmode="numeric" maxlength="8" autocomplete="current-password" ${sem ? 'disabled' : ''}></label>
+        ${tipoDoAparelho() === 'pc' ? '<label class="nuvem-lembrar"><input id="nuvem-lembrar" type="checkbox">Lembrar neste computador por 7 dias</label>' : ''}
         <button class="btn primario largo" type="submit" ${sem ? 'disabled' : ''}>${ico('cadeado')} Entrar</button>
         ${params.get('nuvem') ? '' : `<button type="button" class="btn largo" data-a="voltar-conectar">${ico('wifi')} Conectar na rede da usina</button>`}
         <p class="sub">O que aparece depois de entrar depende das permissões de cada pessoa.</p>
@@ -80,10 +82,11 @@
     if (!/^\d{4,8}$/.test(pin)) return toast('A senha tem de 4 a 8 números', 'aviso');
     let r, d = {};
     try {
-      r = await fetch(url + '/aparelho/entrar', { method: 'POST', cache: 'no-store', redirect: 'error', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ aparelho: cfg.deviceId, pin, pessoa }) });
+      const tipo = tipoDoAparelho(), lembrar = tipo === 'pc' && !!document.getElementById('nuvem-lembrar')?.checked;
+      r = await fetch(url + '/aparelho/entrar', { method: 'POST', cache: 'no-store', redirect: 'error', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ aparelho: cfg.deviceId, pin, pessoa, tipo, lembrar }) });
       d = await r.json().catch(() => ({}));
     } catch (e) { return toast('Sem internet ou endereço errado: não achei a nuvem.', 'erro'); }
-    if (r.status === 429) return toast(d.erro || 'Muitas senhas erradas. Espere um pouco e tente de novo.', 'erro');
+    if (r.status === 429) return toast(`Muitas senhas erradas. Tente de novo em ${Math.max(1, Math.ceil((Number(d.esperaSegundos) || 60) / 60))} min.`, 'erro');
     if (r.status === 423) return toast('Este aparelho está bloqueado pelo administrador.', 'erro');
     if (!r.ok || !d.token || !d.pessoa) {
       const s = document.getElementById('nuvem-senha'); if (s) { s.value = ''; s.focus(); }
@@ -91,7 +94,7 @@
     }
     const funcoes = d.pessoa.funcoes || [];
     Object.assign(cfg, {
-      soNuvem: true, nuvemUrl: url, nuvemToken: d.token, papel: 'central', chave: null, demo: false,
+      soNuvem: true, nuvemUrl: url, nuvemToken: d.token, nuvemExpira: d.expira, papel: 'central', chave: null, demo: false,
       pessoa: Object.assign({}, d.pessoa, { funcoes }), pessoaTurno: turnoDaPessoa(),
       nuvemSeq: null, nuvemOrdem: 0, geracao: d.geracao || cfg.geracao || '', ultimaPessoaNuvem: pessoa,
     });
@@ -106,7 +109,7 @@
   /** Sair pela nuvem: volta para a tela de entrar (o que já chegou continua guardado neste aparelho). */
   function sairDaNuvem() {
     const url = (cfg.nuvemUrl || '').replace(/\/+$/, ''), token = cfg.nuvemToken, aparelho = cfg.deviceId;
-    cfg.pessoa = null; cfg.nuvemToken = ''; cfg.soNuvem = true; salvarCfg();
+    cfg.pessoa = null; cfg.nuvemToken = ''; cfg.nuvemExpira = null; cfg.soNuvem = true; salvarCfg();
     pilha = [{ tela: 'nuvem-entrar' }]; render(true);
     // Sair do aparelho nao depende da internet; a chave enviada e a que existia antes de limpar cfg.
     if (token && enderecoNuvemSeguro(url)) {

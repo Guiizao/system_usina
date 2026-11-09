@@ -72,6 +72,11 @@ CREATE TABLE IF NOT EXISTS sessoes_nuvem (
   aparelho TEXT PRIMARY KEY,
   nonce TEXT NOT NULL
 );
+-- 3.1: prazo fixo da sessão; tabela separada permite reaplicar a migração.
+CREATE TABLE IF NOT EXISTS prazos_nuvem (
+  aparelho TEXT PRIMARY KEY,
+  expira INTEGER NOT NULL
+);
 CREATE TABLE IF NOT EXISTS tentativas_entrada (
   chave TEXT PRIMARY KEY,
   erros INTEGER NOT NULL,

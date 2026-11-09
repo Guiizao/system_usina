@@ -48,6 +48,9 @@
     const d = dataProducao(), t = turnoAtual().id, h = new Date().getHours();
     fechamentoDoDia(d);
     travarPorInatividade();
+    if (cfg.soNuvem && cfg.pessoa && cfg.nuvemExpira && Date.now() >= cfg.nuvemExpira) {
+      sairDaNuvem(); toast('O prazo acabou: entre de novo com a sua senha', 'aviso');
+    }
     if (d !== ultimaData) {
       if (rascunhoSujo()) salvarRascunho(true);
       ultimaData = d; ultimoTurno = t; ultimaHora = h;

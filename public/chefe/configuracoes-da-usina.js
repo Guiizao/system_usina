@@ -132,6 +132,15 @@
         <h2>${ico('servidor')} Nuvem (internet)</h2>
         ${htmlNuvem()}
       </section>` : ''}
+      ${pode('sistema') ? `<section class="bloco">
+        <h2>${ico('cadeado')} Prazo de acesso pela nuvem</h2>
+        <p class="sub">Vale para as próximas entradas. O uso não renova o prazo.</p>
+        ${[['celularDias', 'Celular', 5], ['pcDias', 'PC', 1], ['lembrarDias', 'PC com Lembrar', 7]].map(([campo, nome, padrao]) => {
+          const dias = (configSistema().sessaoNuvem || {})[campo] ?? padrao;
+          return `<div class="linha-config"><div><b><label for="sessao-${campo}">${nome}</label></b></div>
+            <select id="sessao-${campo}" data-sessao-nuvem="${campo}">${Array.from({ length: 7 }, (_, i) => i + 1).map((d) => `<option value="${d}" ${d === dias ? 'selected' : ''}>${d} ${d === 1 ? 'dia' : 'dias'}</option>`).join('')}</select></div>`;
+        }).join('')}
+      </section>` : ''}
       <section class="bloco">
         <h2>${ico('camera')} Ler folha de papel</h2>
         <p class="sub">A foto da folha de papel vira anotação. Quando todos estiverem no tablet, dá para desligar: o botão some do tablet chefe.</p>
@@ -169,6 +178,14 @@
   }
   /** 2.16: "Ler folha de papel" pode ser desligado quando todos estiverem no tablet (pedido do Guilherme). */
   const lerFolhaLigada = () => configSistema().lerFolha !== false;
+  document.addEventListener('change', (e) => {
+    const campo = e.target.dataset.sessaoNuvem;
+    if (!campo || !pode('sistema') || !['celularDias', 'pcDias', 'lembrarDias'].includes(campo)) return;
+    const dias = Number(e.target.value);
+    if (!Number.isInteger(dias) || dias < 1 || dias > 7) return;
+    salvarConfigSistema({ sessaoNuvem: Object.assign({ celularDias: 5, pcDias: 1, lembrarDias: 7 }, configSistema().sessaoNuvem, { [campo]: dias }) });
+    render();
+  });
   function mudarConfigLista(tipo, setorId, pid) {
     const cs = configSistema();
     if (tipo === 'setor') {

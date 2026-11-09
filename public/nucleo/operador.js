@@ -20,7 +20,7 @@
       return;
     }
     if (ehCentral()) {
-      if (cfg.pessoa && !cfg.demo) {
+      if (cfg.pessoa && !cfg.demo && !cfg.soNuvem) {
         if (cfg.pessoaTurno !== turnoDaPessoa()) sairDoChefe('o turno acabou');
       }
       return;

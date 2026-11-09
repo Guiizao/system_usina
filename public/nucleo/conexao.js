@@ -170,7 +170,7 @@
         .map((r) => (r.data === 'config' ? Object.assign({}, r, { base: r.rev || 0 }) : r));
       const erros = errosGuardados.slice();
       const antesDoEnvio = Date.now();
-      const r1 = await pedir('api/sync', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ aparelho: cfg.deviceId, papel: cfg.papel, nome: nomeDesteAparelho(), info: infoAparelho, tipo: tipoDoAparelho(), rede: (navigator.connection || {}).type || '', operador: operadorAtual(), versao: VERSAO, geracao: cfg.geracao || '', novaConexao: !!cfg.novaConexao, registros: envio, erros }) }, 15000);
+      const r1 = await pedir('api/sync', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ aparelho: cfg.deviceId, papel: cfg.papel, nome: nomeDesteAparelho(), info: infoAparelho, tipo: tipoParaSincronia(), rede: (navigator.connection || {}).type || '', operador: operadorAtual(), versao: VERSAO, geracao: cfg.geracao || '', novaConexao: !!cfg.novaConexao, registros: envio, erros }) }, 15000);
       if (viaBanco) {
         if (r1.status === 401) {
           // a chave do banco não vale mais: pela nuvem, entra de novo; com a ponte do Wi-Fi, continua por ela
@@ -424,7 +424,7 @@
     const m = Math.round(sync.relogio / 60000);
     return Math.abs(m) < 2 ? 'certo' : `${Math.abs(m)} min ${m > 0 ? 'atrasado' : 'adiantado'}`;
   };
-  const tipoDoAparelho = () => (document.documentElement.dataset.pc === '1' ? 'computador' : Math.min(screen.width || 0, screen.height || 0) < 600 ? 'celular' : 'tablet');
+  const tipoParaSincronia = () => (document.documentElement.dataset.pc === '1' ? 'computador' : Math.min(screen.width || 0, screen.height || 0) < 600 ? 'celular' : 'tablet');
   /** O banco é chamado se há o que mandar, se ele avisou que mudou algo, ou depois de um tempo sem falar. */
   function bancoPrecisa() {
     if (sync.temNovidade || !sync.bancoEm) return true;
