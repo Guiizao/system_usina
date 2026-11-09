@@ -3,7 +3,10 @@
 /* Parte do aplicativo: no navegador cada parte é um arquivo; no APK elas viram um app.js só (apk/juntar-app.js). */
 'use strict';
 
-  const ia = { aberto: false, entrando: false, msgs: [], ocupado: false, rascunho: '' };
+  const ia = { aberto: false, entrando: false, msgs: [], ocupado: false, rascunho: '', dono: '' };
+  const iaPessoa = () => { const p = pessoaAtual(); return p ? p.id || p.nome : ''; };
+  /** Trocou a pessoa neste aparelho: a conversa da anterior não aparece para a próxima. */
+  function iaDaPessoaAtual() { const q = iaPessoa(); if (ia.dono !== q) Object.assign(ia, { dono: q, msgs: [], rascunho: '', ocupado: false }); }
   const iaDisponivel = () => cfg.demo || (!!cfg.soNuvem && !soVer());
   function iaRespostaHtml(m, i) {
     if (m.de === 'eu') return `<div class="ia-eu">${esc(m.texto)}</div>`;
@@ -17,8 +20,8 @@
     return `<main class="ia-conversa" id="ia-conversa">${ia.msgs.length ? ia.msgs.map(iaRespostaHtml).join('') : '<p class="sub pn-vazio">Pergunte sobre produção, folhas, avisos ou relatórios. Responde só o que você pode ver.</p>'}${ia.ocupado ? '<section class="ia-resp ia-esperando" aria-label="Pensando"><i></i><i></i><i></i></section>' : ''}</main>
       <div class="ia-campo"><input id="ia-texto" type="text" maxlength="500" autocomplete="off" placeholder="Escreva sua pergunta" aria-label="Sua pergunta" value="${esc(ia.rascunho)}"><button class="btn primario" data-a="ia-enviar" aria-label="Enviar" ${ia.ocupado ? 'disabled' : ''}>${ico('enviar')}</button></div>`;
   }
-  const telaAssistente = () => `${cabecalho('Assistente', 'Só o que você pode ver e fazer', true)}${htmlConversa()}`;
-  const gavetaAssistente = () => (ia.aberto && painelNovoPc() ? `<aside class="ia-gaveta ${ia.entrando ? 'entrando' : ''}" aria-label="Assistente"><header><b>${ico('brilho')} Assistente</b><small>responde só o que você pode ver</small><button class="pn-ic" data-a="ia-fechar" aria-label="Fechar">${ico('fechar')}</button></header>${htmlConversa()}</aside>` : '');
+  const telaAssistente = () => { iaDaPessoaAtual(); return `${cabecalho('Assistente', 'Só o que você pode ver e fazer', true)}${htmlConversa()}`; };
+  const gavetaAssistente = () => (iaDaPessoaAtual(), ia.aberto && painelNovoPc() ? `<aside class="ia-gaveta ${ia.entrando ? 'entrando' : ''}" aria-label="Assistente"><header><b>${ico('brilho')} Assistente</b><small>responde só o que você pode ver</small><button class="pn-ic" data-a="ia-fechar" aria-label="Fechar">${ico('fechar')}</button></header>${htmlConversa()}</aside>` : '');
   function abrirAssistente() {
     // a gaveta desliza só ao abrir: o redesenho de 5 em 5 segundos não pode repetir
     if (painelNovoPc()) { ia.aberto = ia.entrando = true; render(); ia.entrando = false; return; }
@@ -28,6 +31,7 @@
   async function iaEnviar() {
     const pergunta = ia.rascunho.trim();
     if (!pergunta || ia.ocupado) return;
+    const dono = ia.dono;
     const historico = ia.msgs.slice(-6).map((m) => ({ de: m.de, texto: m.texto }));
     ia.msgs.push({ de: 'eu', texto: pergunta }); ia.rascunho = ''; ia.ocupado = true;
     render(); iaRolar();
@@ -41,6 +45,7 @@
       }
     } catch (e) { resposta = { texto: 'Sem conexão com o assistente agora.' }; }
     finally { clearTimeout(t); }
+    if (iaPessoa() !== dono) return; // trocou de pessoa enquanto esperava: a resposta era da anterior
     ia.msgs.push(Object.assign({ de: 'ia', texto: '' }, resposta)); ia.ocupado = false;
     render(); iaRolar();
   }

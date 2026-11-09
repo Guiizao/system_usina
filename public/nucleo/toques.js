@@ -331,7 +331,7 @@
       }
       case 'dia': return ir(Object.assign({}, v, { data: somarDias(v.data, Number(b.dataset.n)) }), true);
       case 'dia-hoje': return ir(Object.assign({}, v, { data: dataProducao() }), true);
-      case 'abrir-setor': return ir({ tela: 'prancheta', pid: pranchetasDasAbas(b.dataset.id)[0], data: v.data, monitor: soConsulta() || undefined });
+      case 'abrir-setor': if (!pnVeSetores()) return; return ir({ tela: 'prancheta', pid: pranchetasDasAbas(b.dataset.id)[0], data: v.data, monitor: soConsulta() || undefined });
       case 'compartilhar': return compartilhar(b.dataset.destino, v.data || dataProducao());
       case 'relatorios': return ir({ tela: 'relatorios' });
       case 'assistente': return abrirAssistente();
@@ -398,7 +398,7 @@
       case 'leitura-cel': return corrigirCelula(v, Number(b.dataset.i), b.dataset.c);
       case 'leitura-salvar': return salvarLeitura(v);
       case 'relatorio-enviar': return enviarDia(b.dataset.data);
-      case 'relatorio-abrir': return ir({ tela: 'central', data: b.dataset.data, temArquivo: b.dataset.arq ? b.dataset.data : '' });
+      case 'relatorio-abrir': return ir({ tela: painelNovoCel() && pnVeSetores() ? 'setores-cel' : 'central', data: b.dataset.data, temArquivo: b.dataset.arq ? b.dataset.data : '' });
       case 'relatorios-mais': v.quantos = (v.quantos || DIAS_NA_LISTA) + DIAS_NA_LISTA; return render();
       case 'relatorio-apagar': {
         if (!(await confirmar(`Apagar o arquivo de ${fmtData(b.dataset.data)}?`, 'O Excel e o XML guardados deste dia são apagados. As anotações continuam no sistema e dá para gerar o arquivo de novo.', 'Apagar', true))) return;

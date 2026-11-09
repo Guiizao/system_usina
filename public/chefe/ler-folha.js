@@ -186,7 +186,7 @@
       const lidos = Object.entries(l.celulas).filter(([n, c]) => L.colunas[n].campo !== '_operador' && c.valor !== '' && c.valor != null).map(([n, c]) => [L.colunas[n].campo, String(c.valor)]);
       const hora = (lidos.find(([c]) => c === campoHora) || [])[1];
       const salva = lidos.length ? salvas.find((r) => !usadas.has(r) && (hora ? r.valores[campoHora] === hora : lidos.every(([c, x]) => r.valores[c] === x))) || null : null;
-      const mudou = inicio || (l.salva || null) !== salva;
+      const mudou = inicio || (l.salva ? l.salva.chave : null) !== (salva ? salva.chave : null);
       l.salva = salva; l.existe = !!salva; l.semLugar = false;
       if (salva) {
         usadas.add(salva); l.chave = Number(salva.chave);
@@ -370,6 +370,7 @@
 
   function salvarLeitura(v) {
     const L = v.leitura; const p = prancheta(L.pid);
+    posicionarLinhas(L); // o que chegou pela sincronização durante a conferência conta
     let n = 0;
     L.linhas.forEach((l) => {
       if (!l.incluir) return;
@@ -380,9 +381,10 @@
         else valores[col.campo] = String(c.valor);
       });
       if (p.tipo === 'insumo' && valores.qtd) valores.unidade = p.unidade;
-      if (l.salva) Object.keys(valores).forEach((c) => { if (!vazio(l.salva.valores[c])) delete valores[c]; }); // o que já foi anotado não muda
+      const atual = l.salva || (!l.existe && pegar(L.data, L.pid, l.chave)) || null;
+      if (atual) Object.keys(valores).forEach((c) => { if (!vazio(atual.valores[c])) delete valores[c]; }); // o que já foi anotado não muda
       if (!Object.keys(valores).length) return;
-      gravar(L.data, L.pid, l.chave, valores, { operador: (l.salva && l.salva.operador) || operador || 'Lido da folha', origem: 'foto' });
+      gravar(L.data, L.pid, l.chave, valores, { operador: (atual && atual.operador) || operador || 'Lido da folha', origem: 'foto' });
       n++;
       // 3.0: a folha da Hidrólise preenche o resto como no tablet: a Sacarificação da mesma dorna (os insumos vêm logo abaixo)
       if (p.tipo === 'dornas') acompanharDorna(L.data, L.pid, Number(l.chave));

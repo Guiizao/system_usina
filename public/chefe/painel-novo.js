@@ -6,6 +6,7 @@
   const painelNovoPc = () => painelNovoAqui() && document.documentElement.dataset.pc === '1';
   const painelNovoCel = () => painelNovoAqui() && document.documentElement.dataset.dispositivo === 'celular';
   const pnVeProducao = () => veNoChefe('escritorio') || veNoChefe('relatorios');
+  const pnVeSetores = () => veNoChefe('corrigir') || veNoChefe('relatorios');
   const pnComUn = (n, un, casas) => { const t = pnNum(n, casas); return t === '-' ? t : `${t} ${un}`; };
   const pnNum = (n, casas = 0) => (n === '' || n == null || !Number.isFinite(Number(n)) ? '-' : Number(n).toLocaleString('pt-BR', { maximumFractionDigits: casas }));
 
@@ -139,11 +140,11 @@
             <ol class="pn-etapas">${passo('balanca', 'Ralo / Pesagem', 'Matéria-prima do dia', pnNum(d.mp, 1), 'kg')}${passo('tanque', 'Hidrólise', d.brix === '' ? 'Sem Brix ainda' : `Brix ${pnNum(d.brix, 1)}`, pnNum(d.hidrolisado), 'L')}${passo('regua', 'Vinho e Fermentação', d.brixFinal === '' ? 'Sem Brix final' : `Brix final ${pnNum(d.brixFinal, 1)}`, pnNum(d.vinho), 'L')}${passo('fabrica', 'Destilaria e Nova', d.alcool === '' ? 'Faltam leituras' : 'Soma das duas', pnNum(d.alcool), 'L', d.alcool === '')}${passo('baixar', 'Vinhaça', 'Destilado menos álcool', pnNum(d.vinhaca), 'L')}</ol></section>
         </div>` : ''}
         <div class="pn-l3">
-          ${veNoChefe('corrigir') || veNoChefe('relatorios') ? `<section class="pn-c pn-e"><div class="cab"><h2>Setores agora</h2><small>${esc(turnoAtual().nome)}</small></div>
+          ${pnVeSetores() ? `<section class="pn-c pn-e"><div class="cab"><h2>Setores agora</h2><small>${esc(turnoAtual().nome)}</small></div>
             <div class="pn-tabela"><div class="tit"><span>Setor</span><span>Quem está</span><span>Última</span><span>Preenchimento</span><span>Situação</span></div>
             ${pnSetoresAgora(data).map((x) => `<button class="lin" data-a="abrir-setor" data-id="${x.s.id}"><span class="s"><i>${ico(x.s.icone)}</i><span><b>${esc(x.s.nome)}</b>${x.agora ? `<small>${esc(x.agora)}</small>` : ''}</span></span><span class="q">${x.quem ? `<em>${pnIniciais(x.quem)}</em>` : ''}<span>${x.quem ? esc(x.quem) : '-'}${x.aparelho ? `<small>${esc(x.aparelho)}</small>` : ''}</span></span><span>${x.hora || '-'}</span><span class="p"><u><i style="width:${x.total ? x.feitas / x.total * 100 : 0}%"></i></u>${x.feitas}/${x.total}</span><span><mark class="${x.situacao[0]}">${x.situacao[1]}</mark></span></button>`).join('')}</div></section>` : ''}
           <div class="pn-col">
-            ${veNoChefe('corrigir') || veNoChefe('relatorios') ? blocoForaDoLimite(data) || `<section class="pn-c pn-e"><div class="cab"><h2>Fora do limite</h2></div><p class="sub pn-vazio">Nada fora do limite neste dia.</p></section>` : ''}
+            ${pnVeSetores() ? blocoForaDoLimite(data) || `<section class="pn-c pn-e"><div class="cab"><h2>Fora do limite</h2></div><p class="sub pn-vazio">Nada fora do limite neste dia.</p></section>` : ''}
             ${veNoChefe('escritorio') ? `<section class="pn-c pn-e pn-fecha"><div class="cab"><h2>Fechamento do dia</h2><small>Lote <b>${esc(d.lote)}</b></small></div>
               <div class="chips"><mark class="${d.alcool === '' ? 'a' : 'v'}">${d.alcool === '' ? 'Faltam leituras' : 'Cálculos'}</mark><mark class="${salvo ? 'v' : 'a'}">${salvo ? 'Rastreamento salvo' : 'Falta rastreamento'}</mark></div>
               <div class="linha-botoes"><button class="btn" data-a="esc-abrir" data-t="esc-calculos" data-dia="${dia}">${ico('grafico')} Cálculos</button><button class="btn" data-a="esc-abrir" data-t="esc-rastreamento" data-dia="${dia}">${ico('documento')} Rastreamento</button>${veNoChefe('relatorios') ? `<button class="btn primario" data-a="compartilhar" data-destino="escritorio">${ico('enviar')} Enviar</button>` : ''}</div></section>` : ''}
@@ -173,10 +174,12 @@
       </main>`;
   }
   function telaSetoresCel(v) {
+    if (!pnVeSetores()) return telaInicioCel(v);
     const data = v.data || dataProducao(), lista = pnSetoresAgora(data), alertas = listaForaDoLimite(data), pendentes = lista.filter((x) => x.situacao[0] === 'a').length;
     return `<header class="pn-oi pn-e"><div><b>Setores</b><small>${esc(turnoAtual().nome)}, ${fmtData(data).slice(0, 5)}</small></div>${pendentes ? `<mark class="a">${contar(pendentes, 'pendente', 'pendentes')}</mark>` : ''}</header>
       <main class="pn-cel"><div class="pn-setores">${lista.map((x) => `<button class="pn-e ${x.situacao[0] === 'a' || x.situacao[0] === 'r' ? 'w' : ''}" data-a="abrir-setor" data-id="${x.s.id}"><i>${ico(x.s.icone)}</i><b>${esc(x.s.nome)}</b><small>${x.agora ? esc(x.agora) : x.quem ? `${esc(x.quem)}${x.hora ? `, ${x.hora}` : ''}` : x.situacao[1]}</small><u><s style="width:${x.total ? x.feitas / x.total * 100 : 0}%"></s></u></button>`).join('')}</div>
-        ${alertas.length ? `<section class="pn-c pn-e pn-alerta"><span>${ico('alerta')}</span><div><b>${alertas.length} fora do limite</b><small>${esc(alertas[0].onde)}</small></div></section>` : ''}</main>`;
+        ${alertas.length ? `<section class="pn-c pn-e pn-alerta"><span>${ico('alerta')}</span><div><b>${alertas.length} fora do limite</b><small>${esc(alertas[0].onde)}</small></div></section>` : ''}
+        ${v.temArquivo === data && veNoChefe('relatorios') ? `<div class="linha-botoes"><button class="btn pequeno perigo" data-a="relatorio-apagar" data-data="${data}">${ico('lixeira')} Apagar o arquivo</button></div>` : ''}</main>`;
   }
   function telaMaisCel() {
     const p = pessoaAtual(), abertos = veNoChefe('avisos') ? avisosEmAberto().length : 0, dia = diaDoEscritorio(dataProducao());
@@ -187,7 +190,7 @@
     return `<header class="pn-oi"><div><b>Mais</b></div></header>
       <main class="pn-cel pn-mais">
         <section class="pn-c pn-e pn-quem"><em>${p ? pnIniciais(p.nome) : ''}</em><div><b>${esc(p ? p.nome : 'Ninguém entrou')}</b><small>${esc(p ? p.nivel || '' : '')}</small></div><button class="btn pequeno" data-a="pessoa">${p ? 'Trocar' : 'Entrar'}</button></section>
-        <section class="pn-c pn-e pn-quem"><div><b>Painel novo</b><small>Desligado, volta para o painel de antes</small></div><button class="pn-chave ${cfg.painelNovo ? 'on' : ''}" role="switch" aria-checked="${!!cfg.painelNovo}" aria-label="Painel novo" data-a="painel-novo" data-valor="${cfg.painelNovo ? '0' : '1'}"></button></section>
+        <section class="pn-c pn-e pn-quem"><div><b>Painel novo</b><small>Se desligar, volta para o painel de antes</small></div><button class="pn-chave ${cfg.painelNovo ? 'on' : ''}" role="switch" aria-checked="${!!cfg.painelNovo}" aria-label="Painel novo" data-a="painel-novo" data-valor="${cfg.painelNovo ? '0' : '1'}"></button></section>
         ${acompanhar.length ? `<h3>Acompanhar</h3><div class="pn-tiles" data-n="${acompanhar.length}">${acompanhar.join('')}</div>` : ''}
         <h3>Administrar</h3><div class="pn-tiles" data-n="${administrar.length}">${administrar.join('')}</div>
       </main>`;
@@ -213,7 +216,7 @@
     if (!painelNovoCel() || TELAS_SEM_BARRA.includes(v.tela)) return '';
     const ativo = { central: 'abrir-painel', 'setores-cel': 'setores-cel', relatorios: 'relatorios', 'mais-cel': 'mais-cel' }[v.tela];
     const t = (a, icone, nome) => `<button class="${ativo === a ? 'at' : ''}" data-a="${a}">${ico(icone)}<span>${nome}</span></button>`;
-    return `<nav class="pn-barra" aria-label="Navegação">${t('abrir-painel', 'casa', 'Início')}${t('setores-cel', 'grade', 'Setores')}<button class="ia" data-a="assistente" aria-label="Assistente">${ico('brilho')}</button>${veNoChefe('relatorios') ? t('relatorios', 'pasta', 'Relatórios') : '<span class="vago"></span>'}${t('mais-cel', 'menu', 'Mais')}</nav>`;
+    return `<nav class="pn-barra" aria-label="Navegação">${t('abrir-painel', 'casa', 'Início')}${pnVeSetores() ? t('setores-cel', 'grade', 'Setores') : '<span class="vago"></span>'}<button class="ia" data-a="assistente" aria-label="Assistente">${ico('brilho')}</button>${veNoChefe('relatorios') ? t('relatorios', 'pasta', 'Relatórios') : '<span class="vago"></span>'}${t('mais-cel', 'menu', 'Mais')}</nav>`;
   }
   // deslizar da beirada direita abre o Mais
   let pnInicioToque = null;

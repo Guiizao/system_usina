@@ -226,7 +226,7 @@ export async function testarRobustezAparelhos(nav, ligar, porta, grupo) {
       certo(dias.includes(diasAtras(10)) && dias.includes(diasAtras(18)), 'não guardou os últimos 20 dias: ' + dias.length + ' dia(s)');
       for (let i = 0; i < 40; i++) await esc.tocar('[data-a="dia"][data-n="-1"]');
       await esc.esperar('Number(document.querySelector(".numeros b, .pn-nums b").textContent) > 200', 20000, 'anotações do dia de 40 dias atrás');
-      const n = await esc.avaliar('document.querySelector(".numeros b").textContent');
+      const n = await esc.avaliar('document.querySelector(".numeros b, .pn-nums b").textContent');
       return `${Math.round(tamanho / 1000)} mil letras guardadas; dia de 40 dias atrás com ${n} anotações`;
     });
     await esc.fechar();

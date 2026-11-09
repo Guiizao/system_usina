@@ -68,6 +68,23 @@ try {
     igual(r.denovo, [[13, true, false]]);
     igual([r.semLugar, r.incluiCheia], [true, false]);
   });
+  await teste(g, 'anotação que chega durante a conferência não é sobrescrita pela foto', async () => {
+    const r = await a.avaliar(`(() => {
+      const d = '2020-03-07', pid = 'hid_anexo1', ler = window.LeitorFolhas.lerCelula; window.LeitorFolhas.lerCelula = (x) => x;
+      const cel = (valor) => ({ r: { valor, confianca: 1 }, vazia: false });
+      const L = interpretarLeitura(pid, d, { linhas: [{ m: 0, celulas: { inicio: cel('10:00'), phf: cel('4.8') } }] }); window.LeitorFolhas.lerCelula = ler;
+      const antes = L.linhas[0].chave;
+      gravar(d, pid, 1, { inicio: '07:00', phf: '5.5' }, { operador: 'Tablet' });
+      salvarLeitura({ pid, leitura: L });
+      const pidI = setores().flatMap((s) => s.pranchetas.flatMap(folhasDe)).find((x) => prancheta(x).tipo === 'insumo');
+      const LI = { pid: pidI, data: d, colunas: { qtd: { campo: 'qtd', spec: { tipo: 'decimal' } } }, linhas: [{ chave: '07:00', incluir: true, existe: false, celulas: { qtd: { valor: '5' } } }] };
+      gravar(d, pidI, '07:00', { qtd: '9' }, { operador: 'Tablet' });
+      salvarLeitura({ pid: pidI, leitura: LI });
+      const x = pegar(d, pid, 1), y = pegar(d, pid, 2), z = pegar(d, pidI, '07:00');
+      return [antes, x.valores.phf, x.operador, y.valores.inicio, y.valores.phf, z.valores.qtd, z.operador];
+    })()`);
+    igual(r, [1, '5.5', 'Tablet', '10:00', '4.8', '9', 'Tablet']);
+  });
   await teste(g, 'leitura em andamento fica guardada no aparelho e sai ao salvar ou cancelar', async () => {
     const r = await a.avaliar(`(async () => {
       const cel = (valor) => ({ r: { valor, confianca: 1 }, vazia: false }), ler = window.LeitorFolhas.lerCelula; window.LeitorFolhas.lerCelula = (x) => x;

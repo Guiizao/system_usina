@@ -111,6 +111,39 @@ try {
     igual(await a.avaliar('[view().tela, view().form.setor, view().form.texto, ia.aberto]'), ['avisos', 'caldeira', 'Medir', false]);
     await a.fechar();
   });
+  await teste(g, 'trocar de pessoa limpa a conversa do assistente e descarta a resposta pendente', async () => {
+    const a = await abrir('p14', TAMANHOS.computador, 'central', false);
+    await a.avaliar(`cfg.demo = false; cfg.soNuvem = true; cfg.nuvemUrl = 'http://nuvem.invalid'; cfg.pessoa = { id: 'a', nome: 'Ana', funcoes: ['relatorios'] }; window.fetch = () => new Promise((ok) => { window.soltar = ok; }); abrirAssistente(); ia.msgs.push({ de: 'ia', texto: 'Produção 123' }); render(); 1`);
+    igual(await a.avaliar(`document.querySelectorAll('.ia-gaveta .ia-resp').length`), 1);
+    await a.avaliar(`ia.rascunho = 'Quanto deu?'; iaEnviar(); cfg.pessoa = { id: 'b', nome: 'Beto', funcoes: [] }; render(); window.soltar({ ok: true, json: async () => ({ texto: 'Resposta da Ana' }) }); 1`);
+    await dormir(200);
+    igual(await a.avaliar(`[ia.msgs.length, ia.ocupado, ia.rascunho, document.querySelectorAll('.ia-gaveta .ia-resp').length]`), [0, false, '', 0]);
+    await a.fechar();
+  });
+  await teste(g, 'celular: Abrir e corrigir de um dia antigo leva aos setores daquele dia', async () => {
+    const a = await abrir('p16', TAMANHOS.celular, 'central', false);
+    await a.avaliar(`cfg.painelNovo = true; pilha = [telaInicial()]; ir({ tela: 'relatorios' }); 1`);
+    await dormir(200);
+    const dia = await a.avaliar(`document.querySelectorAll('[data-a="relatorio-abrir"]')[1].dataset.data`);
+    await a.tocar('[data-a="relatorio-abrir"]', undefined, { indice: 1 });
+    await a.esperar(`view().tela === 'setores-cel'`, 5000, 'setores do dia');
+    igual(await a.avaliar(`view().data`), dia);
+    await a.tocar('.pn-setores [data-a="abrir-setor"]');
+    igual(await a.avaliar(`[view().tela, view().data]`), ['prancheta', dia]);
+    await a.fechar();
+  });
+  await teste(g, 'celular: sem corrigir nem relatórios não há Setores nem abertura de folha', async () => {
+    const a = await nav.novoAparelho('p15', TAMANHOS.celular);
+    await a.ir(url + 'central&funcoes=avisos', 'document.querySelector("#app main")');
+    await a.avaliar(`cfg.painelNovo = true; pilha = [telaInicial()]; render(true); 1`);
+    igual(await a.avaliar(`[document.querySelector('.pn-barra').children.length, !!document.querySelector('.pn-barra [data-a="setores-cel"]')]`), [5, false]);
+    await a.avaliar(`ir({ tela: 'setores-cel', data: dataProducao() }); 1`);
+    igual(await a.avaliar(`!!document.querySelector('.pn-setores')`), false);
+    await a.avaliar(`const b = document.createElement('button'); b.dataset.a = 'abrir-setor'; b.dataset.id = setores()[0].id; document.querySelector('#app').appendChild(b); b.click(); 1`);
+    await dormir(100);
+    igual(await a.avaliar(`view().tela`), 'setores-cel', 'não abriu a folha');
+    await a.fechar();
+  });
   await teste(g, 'quem não vê produção não recebe os números no painel novo', async () => {
     const a = await nav.novoAparelho('p13', TAMANHOS.computador);
     await a.ir(url + 'central&funcoes=corrigir', 'document.querySelector("#app main")');

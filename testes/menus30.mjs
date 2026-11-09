@@ -112,10 +112,10 @@ try {
   await teste(g, '3.0.1: no computador, o menu Escritório também abre no dia do painel', async () => {
     const pc = await nav.novoAparelho('computador', TAMANHOS.computador);
     try {
-      await pc.ir(`${c.url}/?demo&papel=central&op=Guilherme`, '!!document.querySelector(".escritorio-bloco")');
+      await pc.ir(`${c.url}/?demo&papel=central&op=Guilherme`, '!!document.querySelector(".pn-visao")');
       const MENU = '[data-a="esc-abrir"][data-t="escritorio"]';
       igual(await pc.avaliar(`document.querySelector('${MENU}').dataset.dia`), await pc.avaliar('somarDias(dataProducao(), -1)'));
-      for (let i = 0; i < 2; i++) await pc.tocar('.barra-dia [data-a="dia"][data-n="-1"]');
+      for (let i = 0; i < 2; i++) await pc.tocar('.nav-data [data-a="dia"][data-n="-1"]');
       const dia = await pc.avaliar('somarDias(dataProducao(), -2)');
       igual(await pc.avaliar(`document.querySelector('${MENU}').dataset.dia`), dia);
       await pc.tocar(MENU);
