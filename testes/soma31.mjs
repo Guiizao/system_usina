@@ -67,7 +67,7 @@ await teste(g, 'todo campo numérico de todas as folhas tem classificação', as
   }
   for (const k of ['hid_anexo1.cal', 'hid_anexo1.anti', 'hid_anexo1.enzi', 'hid_anexo2.enz', 'hid_anexo2.anti', 'destilaria.producao']) igual(marca[k], 'soma', k);
   igual(marca['hid_anexo2.sac'], 'nenhum');
-  igual(marca['nova_destilaria.producao_lth'], 'media');
+  igual(marca['nova_destilaria.producao_lth'], 'soma');
   igual(marca['destilaria.carregamento'], 'media');
   igual(marca['destilaria.inpm'], 'media');
 });

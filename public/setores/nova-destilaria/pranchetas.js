@@ -27,7 +27,7 @@ Object.assign(window.USINA.pranchetas, {
         { id: 'cond_b', label: 'Condensador B', labelCurto: 'B', unidade: '°C', type: 'num', dec: 1 },
         { id: 'cond_p', label: 'Condensador P', labelCurto: 'P', unidade: '°C', type: 'num', dec: 1 },
         { id: 'vapor', label: 'Vapor Caldeira', labelCurto: 'Vapor', unidade: 'kgf', type: 'num', dec: 1 },
-        { id: 'producao_lth', label: 'Produção LT/H', labelCurto: 'LT/H', type: 'num', dec: 0 },
+        { id: 'producao_lth', label: 'Produção LT/H', labelCurto: 'LT/H', type: 'num', agrega: 'soma', dec: 0 },
         { id: 'inpm', label: 'INPM', unidade: '°', type: 'num', dec: 1, min: 80, max: 100 },
       ],
       grupos: [

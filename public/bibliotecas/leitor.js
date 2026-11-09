@@ -33,6 +33,17 @@
       colunas: [0, 0.048, 0.086, 0.125, 0.162, 0.2, 0.247, 0.294, 0.341, 0.388, 0.424, 0.47, 0.517, 0.553, 0.59, 0.626, 0.664, 0.706, 0.738, 0.774, 0.81, 0.849, 0.882, 0.924, 0.962, 1],
       fileiras: [0, 0.058, 0.221, 0.386, 0.552, 0.663, 0.777, 0.888, 1],
       nomes: ['horas', 'inicio_aquec', 'parada', 'pressao', 'temp_agua', 'descarga_fundo', 'descarga_garrafa', 'retirada_cinza'] },
+    // Destilaria: três blocos de horas (7 a 15, 16 a 0 e 1 a 7), cada um com as horas e 5 itens. Medido nas fotos de 30/10 a 05/11.
+    destilaria: { linhas: 24, deitada: true, tol: 0.015, horaNaDireita: true,
+      colunas: [0, 0.1142, 0.2255, 0.3347, 0.443, 0.5523, 0.6634, 0.7745, 0.8865, 1],
+      fileiras: [0, 0.0446, 0.0971, 0.1491, 0.1994, 0.2498, 0.2981, 0.3387, 0.3865, 0.4389, 0.4878, 0.5402, 0.5927, 0.6431, 0.6841, 0.7288, 0.7833, 0.8358, 0.8872, 0.9413, 1],
+      nomes: ['horas', 'temp_pe_a', 'producao', 'carregamento', 'vapor', 'inpm'],
+      celula: (c, m) => { const b = Math.floor(m / 9); return [c + b * 7, m - b * 9]; } },
+    // Nova Destilaria: as 24 horas numa tabela só. O papel de 11/2026 ainda tem Início Aquecimento e não tem a B4.
+    nova: { linhas: 24, deitada: true, tol: 0.015,
+      colunas: [0, 0.0483, 0.095, 0.1389, 0.1799, 0.2259, 0.2614, 0.3012, 0.3434, 0.3851, 0.4247, 0.4585, 0.4962, 0.5353, 0.5702, 0.6102, 0.6545, 0.7022, 0.7502, 0.7931, 0.8334, 0.8721, 0.9171, 0.9579, 1],
+      fileiras: [0, 0.0909, 0.181, 0.2719, 0.3628, 0.452, 0.543, 0.634, 0.7265, 0.8157, 0.9074, 1],
+      nomes: ['horas', 'inicio_aquec', 'coluna_hidro', 'coluna_b', 'coluna_p', 'cond_hidro', 'cond_b', 'cond_p', 'vapor', 'producao_lth', 'inpm'] },
   };
 
   /* ---------------- carregar OpenCV e a rede ---------------- */
@@ -197,7 +208,7 @@
   function tabelaPorFileiras(pts, molde) {
     const fil = fileiras(pts, 8).filter((f) => f.length >= molde.colunas.length * 0.6);
     const ys = fil.map((f) => f.reduce((s, p) => s + p[1], 0) / f.length);
-    const casado = casarColunas(ys, molde.fileiras, molde.tol);
+    const casado = casarColunas(ys, molde.fileiras, molde.tol, 3); // sombra na parte de baixo da folha some com as últimas linhas
     if (!casado || casado.achou < molde.fileiras.length * 0.7) return null;
     const altura = casado.pos[casado.pos.length - 1] - casado.pos[0];
     const miolo = casado.pos.map((y) => { const k = ys.indexOf(y); return k >= 0 ? fil[k] : null; });
@@ -224,11 +235,13 @@
       return { a, b, n: c.length };
     });
   }
-  function casarColunas(xs, molde, tol = 0.022) {
+  function casarColunas(xs, molde, tol = 0.022, sobra = 1) {
     const n = molde.length;
     let melhor = null;
     // a borda da tabela pode ter ficado fora da foto: também tenta casar sem a primeira ou sem a última linha do molde
-    for (const [a, b] of [[0, n - 1], [1, n - 1], [0, n - 2]]) {
+    const pontas = [[0, n - 1]];
+    for (let d = 1; d <= sobra; d++) pontas.push([d, n - 1], [0, n - 1 - d]);
+    for (const [a, b] of pontas) {
       for (let i = 0; i < xs.length; i++) {
         for (let j = xs.length - 1; j > i; j--) {
           const larg = (xs[j] - xs[i]) / (molde[b] - molde[a]), L = xs[i] - molde[a] * larg;
@@ -376,6 +389,16 @@
     return r;
   }
   const NOTA_CHAVE_LIDA = -30; // soma das 6 primeiras linhas: acima disso, a coluna impressa foi lida mesmo
+  /** Folha deitada: de cabeça para baixo a grade encaixa do mesmo jeito; quem decide o giro é a fileira impressa das horas. */
+  function notaDasHoras(g, molde) {
+    const meio = (a, b) => [a[0] + (b[0] - a[0]) * 0.55, a[1] + (b[1] - a[1]) * 0.55];
+    let s = 0;
+    for (let m = 0; m < 6; m++) {
+      const P = g.P, cel = molde.horaNaDireita ? { img: g.img, P: [[meio(P[0][m], P[0][m + 1]), P[0][m + 1]], [meio(P[1][m], P[1][m + 1]), P[1][m + 1]]] } : null;
+      s += ctc(cel ? lerCelulaBruta(cel, 0, 0) : lerCelulaBruta(g, 0, m), String(7 + m));
+    }
+    return s;
+  }
   /** Cada linha da folha já vem com a sua identificação impressa (1, 2, 3... ou 07:00, 08:00...). A rede lê isso muito bem, então é
       a coluna impressa que diz onde a tabela começa: o cabeçalho nunca entra como linha, nem com a foto cortada ou torta. */
   function alinharPelaChave(g, molde) {
@@ -540,18 +563,20 @@
     // foto tirada de lado ou de cabeça para baixo: testa os giros e fica com o que encaixa melhor no molde
     const deitada = (cinza.cols > cinza.rows) !== !!molde.deitada;
     const giros = deitada ? [cv.ROTATE_90_CLOCKWISE, cv.ROTATE_90_COUNTERCLOCKWISE, null, cv.ROTATE_180] : [null, cv.ROTATE_180, cv.ROTATE_90_CLOCKWISE, cv.ROTATE_90_COUNTERCLOCKWISE];
-    let g = null;
+    let g = null; const tentativas = [];
     for (const giro of giros) {
       let img = cinza;
       if (giro !== null) { img = new cv.Mat(); cv.rotate(cinza, img, giro); }
       const t = acharGrade(img, molde);
       if (giro !== null) liberar(img);
       if (t) {
+        t.giro = giro === null ? 0 : giro === cv.ROTATE_180 ? 180 : giro === cv.ROTATE_90_CLOCKWISE ? 90 : 270;
         // o giro certo é o que deixa ler a coluna impressa; sem ela, o que encaixa melhor no molde
-        t.alinhada = molde.chave ? alinharPelaChave(t, molde) : { inicio: t.folga, nota: t.achou };
+        t.alinhada = molde.chave ? alinharPelaChave(t, molde) : { inicio: t.folga, nota: notaDasHoras(t, molde) };
+        tentativas.push({ giro: t.giro, achou: t.achou, nota: Math.round(t.alinhada.nota) });
         if (!g || t.alinhada.nota > g.alinhada.nota) { if (g) liberar(g.img); g = t; } else liberar(t.img);
       }
-      if (g && (molde.chave ? g.alinhada.nota > NOTA_CHAVE_LIDA : g.achou === molde.colunas.length)) break;
+      if (g && g.alinhada.nota > NOTA_CHAVE_LIDA) break;
       await new Promise((ok) => setTimeout(ok, 0));
     }
     liberar(cinza);
@@ -564,7 +589,8 @@
       const celulas = {};
       for (const nome of nomes) {
         const c = molde.nomes.indexOf(nome);
-        const bruta = molde.fileiras ? recortarCelula(g.img, g.P, c, m) : recortarCelula(g.img, g.P, inicio + m, c);
+        const [fila, coluna] = molde.celula ? molde.celula(c, m) : molde.fileiras ? [c, m] : [inicio + m, c];
+        const bruta = recortarCelula(g.img, g.P, fila, coluna);
         // com a unidade do lado (6K) a letra é mais alta que a célula: o traço de cima a baixo é a perna do K, não um risco
         const limpa = limparCelula(bruta, !!colunasPedidas[nome].spec.sufixos);
         const prep = preparar(limpa);
@@ -578,7 +604,7 @@
       await new Promise((ok) => setTimeout(ok, 0));
     }
     liberar(g.img);
-    return { linhas, molde: nomeMolde };
+    return { linhas, molde: nomeMolde, giro: g.giro, achou: g.achou, nota: g.alinhada.nota, tentativas };
   }
 
   window.LeitorFolhas = { carregar, lerFoto, lerCelula, MOLDES, candidatos,

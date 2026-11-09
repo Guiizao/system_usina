@@ -14,6 +14,7 @@
     if (p.papel && p.papel.modelo === 'pop011') return pid === 'hid_anexo1' ? 'anexo1' : pid === 'hid_anexo2' ? 'anexo2' : null;
     if (p.tipo === 'insumo') return 'pop03';
     if (p.papel && p.papel.modelo === 'caldeira' && !p.novaTabela) return 'caldeira';
+    if (p.papel && ['destilaria', 'nova'].includes(p.papel.modelo)) return p.papel.modelo;
     return null;
   }
   const folhasQueLeio = () => setores().flatMap((s) => s.pranchetas.flatMap(folhasDe).map((pid) => ({ pid, setor: s }))).filter((x) => moldeDaFolha(x.pid));
@@ -24,6 +25,13 @@
     if (c.type === 'choice') return { tipo: 'opcoes', exato: true, opcoes: opcoesDe(c) };
     if (c.type === 'num') return { tipo: 'decimal', inteiro: true, min: c.min != null ? c.min : 0, max: c.max != null ? c.max : 200, sufixos: c.unidade === 'kgf' ? ['K', 'KG', 'KF', 'KGF'] : [] };
     return specDoCampo(c);
+  }
+  /** Destilarias: a coluna é escrita com ou sem vírgula (1055 é 105,5), mas produção é número cheio (160) e o vapor da Destilaria vem com K. */
+  function specDaDestilaria(c, molde) {
+    if (c.id === 'producao' || c.id === 'producao_lth') return { tipo: 'quantidade', max: 1500 };
+    if (c.id === 'vapor') return molde === 'destilaria' ? { tipo: 'decimal', inteiro: true, min: 0, max: 20, sufixos: ['K', 'KG', 'KF', 'KGF'] } : { tipo: 'decimal', min: 0, max: 20 };
+    if (c.id === 'carregamento') return { tipo: 'decimal', min: 0, max: 150 };
+    return { tipo: 'decimal', min: c.min != null ? c.min : 20, max: c.max != null ? c.max : 130 };
   }
   function specDoCampo(c) {
     if (!c) return { tipo: 'texto' };
@@ -46,6 +54,8 @@
       cols.operador = { campo: '_operador', rotulo: 'Operador', spec: pessoa, limiar: 0.95 };
     } else if (molde === 'caldeira') {
       p.itens.forEach((c) => { cols[c.id] = { campo: c.id, rotulo: c.labelCurto || c.label, spec: specDaCaldeira(c), c }; });
+    } else if (molde === 'destilaria' || molde === 'nova') {
+      p.itens.forEach((c) => { cols[c.id] = { campo: c.id, rotulo: c.labelCurto || c.label, spec: specDaDestilaria(c, molde), c, numero: c.id === 'producao' || c.id === 'producao_lth' }; });
     } else {
       p.campos.forEach((c) => { cols[c.id] = { campo: c.id, rotulo: c.labelCurto || c.label, spec: specDoCampo(c), c }; });
       cols.responsavel = { campo: '_operador', rotulo: 'Responsável', spec: pessoa, limiar: 0.95 };
