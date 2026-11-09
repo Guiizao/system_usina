@@ -139,7 +139,7 @@ try {
   });
   await teste(g, 'trocar de pessoa limpa a conversa do assistente e descarta a resposta pendente', async () => {
     const a = await abrir('p14', TAMANHOS.computador, 'central', false);
-    await a.avaliar(`cfg.demo = false; cfg.soNuvem = true; cfg.nuvemUrl = 'http://nuvem.invalid'; cfg.pessoa = { id: 'a', nome: 'Ana', funcoes: ['relatorios'] }; window.fetch = () => new Promise((ok) => { window.soltar = ok; }); abrirAssistente(); ia.msgs.push({ de: 'ia', texto: 'Produção 123' }); render(); 1`);
+    await a.avaliar(`cfg.demo = false; cfg.soNuvem = true; cfg.nuvemUrl = 'http://nuvem.invalid'; cfg.nuvemToken = 't'; cfg.pessoa = { id: 'a', nome: 'Ana', funcoes: ['relatorios', 'assistente'] }; window.fetch = () => new Promise((ok) => { window.soltar = ok; }); abrirAssistente(); ia.msgs.push({ de: 'ia', texto: 'Produção 123' }); render(); 1`);
     igual(await a.avaliar(`document.querySelectorAll('.ia-gaveta .ia-resp').length`), 1);
     await a.avaliar(`ia.rascunho = 'Quanto deu?'; iaEnviar(); cfg.pessoa = { id: 'b', nome: 'Beto', funcoes: [] }; render(); window.soltar({ ok: true, json: async () => ({ texto: 'Resposta da Ana' }) }); 1`);
     await dormir(200);

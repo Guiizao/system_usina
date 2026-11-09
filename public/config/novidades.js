@@ -4,6 +4,14 @@
    Depois do sinal de igual vem JSON puro, porque o servidor do tablet chefe (Java) também lê este arquivo. */
 window.NOVIDADES = [
   {
+    "versao": "3.1.3",
+    "data": "2026-11-09",
+    "itens": [
+      "Assistente: nova permissão Usar o assistente (IA) na ficha de cada pessoa, em Pessoas. Quem tem usa em qualquer aparelho com internet, no Wi-Fi ou nos dados móveis, inclusive no tablet chefe, sem sair dele. Quem não tem não vê o assistente.",
+      "Dono e administradores já vêm com a permissão ligada. Para os outros, é só ligar na ficha da pessoa."
+    ]
+  },
+  {
     "versao": "3.1.2",
     "data": "2026-11-09",
     "itens": [

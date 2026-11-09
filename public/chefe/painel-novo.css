@@ -232,10 +232,10 @@ main.escritorio.pn-producao { max-width: none; grid-template-columns: minmax(0, 
 .pn-chave::after { content: ""; position: absolute; left: 4px; top: 4px; width: 32px; height: 32px; border-radius: 50%; background: var(--branco); transition: transform calc(.2s * var(--ritmo, 1)) cubic-bezier(.22, 1, .36, 1); }
 .pn-chave.on { background: var(--verde); }
 .pn-chave.on::after { transform: translateX(22px); }
-/* A curva anda com o botão escolhido: a camada tem a largura da barra, então o translateX em % cai no meio de cada uma das 5 vagas. z-index: a bolha sobe por cima da tela. */
+/* A curva anda com o botão escolhido: a camada tem a largura da barra, então o translateX em % cai no meio de cada uma das --n vagas (4 sem o assistente). z-index: a bolha sobe por cima da tela. */
 /* overflow-x: a camada é bem mais larga que a tela, e o foco num campo poderia rolar o #app por causa dela */
-.pn-barra { position: relative; z-index: 30; flex: none; overflow-x: clip; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); height: calc(68px + env(safe-area-inset-bottom)); padding-bottom: env(safe-area-inset-bottom); }
-.pn-barra-fundo { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; transform: translateX(calc((var(--i) + .5) * 20%)); }
+.pn-barra { position: relative; z-index: 30; flex: none; overflow-x: clip; display: grid; grid-template-columns: repeat(var(--n), minmax(0, 1fr)); height: calc(68px + env(safe-area-inset-bottom)); padding-bottom: env(safe-area-inset-bottom); }
+.pn-barra-fundo { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; transform: translateX(calc((var(--i) + .5) * 100% / var(--n))); }
 .pn-barra-fundo svg { position: absolute; top: 0; left: -1000px; width: 2000px; height: 100%; fill: var(--papel); filter: drop-shadow(0 -2px 6px var(--pn-sombra)); }
 .pn-barra-fundo i { position: absolute; top: -21px; left: -25px; width: 50px; height: 50px; border-radius: 50%; background: var(--verde); }
 .pn-barra svg.ico { width: 24px; height: 24px; }
@@ -253,7 +253,7 @@ main.escritorio.pn-producao { max-width: none; grid-template-columns: minmax(0, 
 .pn-barra.vem .saiu svg.ico { animation: pn-ico-desce calc(.26s * var(--ritmo, 1)) ease-out var(--atraso, 0ms) both; }
 .pn-barra.vem .at span { animation: pn-nome-desce calc(.34s * var(--ritmo, 1)) cubic-bezier(.22, 1, .36, 1) var(--atraso, 0ms) both; }
 .pn-barra.vem .saiu span { animation: pn-nome-sobe calc(.26s * var(--ritmo, 1)) ease-out var(--atraso, 0ms) both; }
-@keyframes pn-curva { from { transform: translateX(calc((var(--de) + .5) * 20%)); } }
+@keyframes pn-curva { from { transform: translateX(calc((var(--de) + .5) * 100% / var(--n))); } }
 @keyframes pn-ico-sobe { from { transform: none; color: var(--tinta-2); } }
 @keyframes pn-ico-desce { from { transform: translateY(-18px); color: var(--branco); } }
 @keyframes pn-nome-desce { from { transform: none; } }

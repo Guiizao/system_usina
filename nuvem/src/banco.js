@@ -763,7 +763,7 @@ export function criarBanco(h) {
     if (p === '/banco/api/liberar' && req.method === 'POST') return apiLiberar(req, env, quem);
     return responder(404, { erro: 'rota desconhecida' });
   }
-  return { rota, gravar, novidades, sincronia, avisar, seqAtual, selarSegredos, abrirSegredos };
+  return { contexto, rota, gravar, novidades, sincronia, avisar, seqAtual, selarSegredos, abrirSegredos };
 }
 
 /* A sala dos aparelhos ligados: uma só para a usina. Com a hibernação da Cloudflare, conexão parada não custa nada. */

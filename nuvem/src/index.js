@@ -173,7 +173,7 @@ async function entrar(req, env) {
     if (await mesmoSegredo(await selar(env.SEGREDO_CENTRAL, hex(bits)), p.nuvem.selado)) { pessoa = p; break; }
   }
   if (!pessoa) return responder(401, { erro: 'Senha errada (ou essa pessoa não vê pela nuvem: precisa de Relatórios ou Escritório)' });
-  const { id, nome, nivel, funcoes } = pessoa;
+  const { id, nome, nivel } = pessoa;
   const nonce = crypto.randomUUID();
   const sistema = await env.DB.prepare("SELECT json FROM registros WHERE id = 'config|sistema|geral'").first();
   const expira = prazoDaSessao(corpo.tipo, corpo.lembrar, sistema ? JSON.parse(sistema.json).valores?.sessaoNuvem : null, agora);
@@ -190,6 +190,9 @@ async function entrar(req, env) {
     env.DB.prepare('INSERT INTO prazos_nuvem (aparelho, expira) VALUES (?, ?) ON CONFLICT(aparelho) DO UPDATE SET expira = excluded.expira').bind(aparelho, expira),
     ...consultasPendentes(env, aparelho, info?.valor || '', [registro]),
   ]);
+  const ctx = await banco.contexto(env, { aparelho, pc: true });
+  // o que vale pela nuvem segue o salvo na pessoa (sem sistema e conexão); só o assistente é recalculado, para quem foi salvo antes da 3.1.3
+  const funcoes = [...pessoa.funcoes.filter((f) => f !== 'assistente'), ...(ctx.regras.funcoesNoAparelho(aparelho).has('assistente') ? ['assistente'] : [])];
   return responder(200, { token: await tokenDeLeitura(env.SEGREDO_CENTRAL, aparelho, pessoa, nonce), pessoa: { id, nome, nivel, funcoes }, expira });
 }
 /** Limita os bytes recebidos também quando não há Content-Length. */

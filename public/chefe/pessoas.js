@@ -30,7 +30,7 @@
     if (Array.isArray(p.funcoes)) return new Set(p.funcoes);
     const todas = C.funcoes.map((f) => f.id);
     if (p.dono) return new Set([...todas, 'pessoas', 'chefes', 'sistema']); // sem a central (demonstração): o dono pode tudo
-    if (p.nivel === 'administrador') return new Set([...todas, 'pessoas']);
+    if (p.nivel === 'administrador') { const s = new Set([...todas, 'pessoas']); if ((p.extras || {}).assistente === false) s.delete('assistente'); return s; }
     const nivel = C.niveis[p.nivel] || { funcoes: [] };
     const s = new Set(nivel.funcoes === 'todas' ? todas : nivel.funcoes);
     Object.entries(p.extras || {}).forEach(([f, sim]) => { if (sim) s.add(f); else s.delete(f); });
@@ -380,7 +380,7 @@
   }
   /** Os quadradinhos das funções (marcado = pode). */
   const categorias = (lista) => [...new Set(lista.map((f) => f.categoria || 'Outras'))].map((nome) => [nome, lista.filter((f) => (f.categoria || 'Outras') === nome)]);
-  const chipsDeFuncoes = (marcadas, prefixo) => categorias(C.funcoes).map(([nome, lista]) => `<h4 class="categoria-funcao">${esc(nome)}</h4><div class="chips funcoes">${lista.map((f) => `<button class="chip-liga ${marcadas.has(f.id) ? 'sel' : ''}" data-k="${prefixo}:${f.id}">${marcadas.has(f.id) ? ico('certo') : ico('fechar')} ${esc(f.nome)}</button>`).join('')}</div>`).join('');
+  const chipsDeFuncoes = (marcadas, prefixo, lista = C.funcoes) => categorias(lista).map(([nome, lista]) => `<h4 class="categoria-funcao">${esc(nome)}</h4><div class="chips funcoes">${lista.map((f) => `<button class="chip-liga ${marcadas.has(f.id) ? 'sel' : ''}" data-k="${prefixo}:${f.id}">${marcadas.has(f.id) ? ico('certo') : ico('fechar')} ${esc(f.nome)}</button>`).join('')}</div>`).join('');
   async function editarPessoa(v, id) {
     const atual = id ? (v.lista.pessoas.find((p) => p.id === id) || null) : null;
     const estado = { nivel: atual ? atual.nivel : 'encarregado', extras: atual ? Object.assign({}, atual.extras) : { conexao: true }, ativo: atual ? atual.ativo : true,
@@ -396,7 +396,7 @@
     const marcadas = () => funcoesDe({ nivel: estado.nivel, extras: estado.extras });
     const desenhar = (f) => {
       f.querySelectorAll('[data-k^="n:"]').forEach((b) => b.classList.toggle('sel', b.dataset.k === 'n:' + estado.nivel));
-      f.querySelector('#funcoes-pessoa').innerHTML = estado.nivel === 'administrador' ? '<p class="sub">O administrador pode tudo, inclusive pessoas e permissões.</p>' : chipsDeFuncoes(marcadas(), 'f');
+      f.querySelector('#funcoes-pessoa').innerHTML = estado.nivel === 'administrador' ? '<p class="sub">O administrador pode tudo, inclusive pessoas e permissões.</p>' + (atual && atual.id === v.lista.donoId ? '' : chipsDeFuncoes(marcadas(), 'f', C.funcoes.filter((x) => x.id === 'assistente'))) : chipsDeFuncoes(marcadas(), 'f');
       f.querySelector('[data-k="ativo"]').classList.toggle('sel', estado.ativo);
       f.querySelectorAll('[data-k^="v:"]').forEach((b) => b.classList.toggle('sel', b.dataset.k === (estado.soFixos ? 'v:fixos' : 'v:todos')));
       f.querySelector('#fixos-pessoa').hidden = !estado.soFixos;
@@ -442,7 +442,7 @@
       if (pin && !/^\d{4,8}$/.test(pin)) return toast('A senha tem de 4 a 8 números', 'erro');
       if (!atual && !pin) return toast('Escolha a senha da pessoa', 'erro');
       if (estado.soFixos && !estado.fixos.size) return toast('Escolha pelo menos um aparelho (ou "Qualquer aparelho")', 'erro');
-      const r = await postJson('api/pessoas', { acao: 'salvar', pessoa: { id: atual ? atual.id : '', nome, nivel: estado.nivel, extras: estado.nivel === 'administrador' ? {} : estado.extras, ativo: estado.ativo, pin, aparelhos: estado.soFixos ? [...estado.fixos] : [] } }, 15000).catch(() => null);
+      const r = await postJson('api/pessoas', { acao: 'salvar', pessoa: { id: atual ? atual.id : '', nome, nivel: estado.nivel, extras: estado.nivel !== 'administrador' ? estado.extras : estado.extras.assistente === false ? { assistente: false } : {}, ativo: estado.ativo, pin, aparelhos: estado.soFixos ? [...estado.fixos] : [] } }, 15000).catch(() => null);
       if (!r) return toast('Não consegui falar com a central', 'erro');
       const d = await r.json().catch(() => ({}));
       if (!r.ok) return toast(d.erro || 'A central recusou', 'erro');

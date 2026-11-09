@@ -24,7 +24,7 @@ const pessoaDoAparelho = (id) => { const s = fontes.config().sessoes[id]; return
 const tetoDoAparelho = (id) => { const a = fontes.config().aparelhosChefe[id]; return a && Array.isArray(a.teto) ? a.teto : null; };
 const FUNCOES_PADRAO = ['anotar', 'corrigir', 'avisos', 'relatorios', 'ler_folha', 'usina', 'folhas', 'conexao', 'integracoes', 'ajustes', 'registro', 'chefes', 'escritorio', 'trocar_funcao'];
 const FUNCOES_DO_NIVEL_1 = ['corrigir', 'relatorios', 'escritorio'];
-const funcoesDoForms = () => { try { return fontes.forms().funcoes.map((f) => f.id); } catch (e) { return FUNCOES_PADRAO; } };
+const funcoesDoForms = () => { try { return [...new Set([...fontes.forms().funcoes.map((f) => f.id), 'assistente'])]; } catch (e) { return [...FUNCOES_PADRAO, 'assistente']; } };
 const niveisDoForms = () => { try { return fontes.forms().niveis || {}; } catch (e) { return {}; } };
 
 const nivelDoAparelho = (id) => { const a = fontes.config().aparelhosChefe[id]; return a && [1, 2, 3].includes(a.nivel) ? a.nivel : 0; };
@@ -34,15 +34,23 @@ function funcoesDaPessoa(p) {
   if (!p) return new Set();
   const todas = funcoesDoForms();
   if (ehDono(p)) return new Set([...todas, 'pessoas', 'chefes', 'sistema']);
-  if (p.nivel === 'administrador') return new Set([...todas, 'pessoas']);
+  if (p.nivel === 'administrador') { const s = new Set([...todas, 'pessoas']); if ((p.extras || {}).assistente === false) s.delete('assistente'); return s; }
   const nv = niveisDoForms()[p.nivel] || { funcoes: [] };
   const s = new Set(nv.funcoes === 'todas' ? todas : nv.funcoes || []);
+  s.delete('assistente'); // fora do dono e administrador, só o extra pessoal concede IA
   Object.entries(p.extras || {}).forEach(([f, sim]) => { if (f === 'sistema' || f === 'pessoas') return; if (sim) s.add(f); else s.delete(f); });
   return s;
 }
 /** 2.17: fora dos aparelhos fixos da pessoa ela só consulta: o aparelho (chefe ou de setor) não ganha o nível dela. */
-const funcoesDaPessoaNoAparelho = (p, aparelho) =>
-  funcoesDaPessoa(p && Array.isArray(p.aparelhos) && p.aparelhos.length && !p.aparelhos.includes(aparelho) ? { nivel: 'consulta' } : p);
+function funcoesDaPessoaNoAparelho(p, aparelho) {
+  const proprias = funcoesDaPessoa(p);
+  if (!p || !Array.isArray(p.aparelhos) || !p.aparelhos.length || p.aparelhos.includes(aparelho)) return proprias;
+  const consulta = funcoesDaPessoa({ nivel: 'consulta' });
+  consulta.delete('assistente');
+  if (proprias.has('assistente')) consulta.add('assistente');
+  return consulta;
+}
+// shortcut: a central Java (apk/nativo) acompanha a permissão pessoal do assistente no próximo APK.
 /** O que quem está no aparelho pode fazer nele: a pessoa, o nível do aparelho e o limite dele. */
 function funcoesNoAparelho(aparelho) {
   const p = pessoaDoAparelho(aparelho);
@@ -56,10 +64,10 @@ function funcoesNoAparelho(aparelho) {
     const niveis = cfg && !cfg.apagado && cfg.valores && cfg.valores.niveisChefe;
     const permitidas = niveis && Array.isArray(niveis[nivel]) ? niveis[nivel] :
       (nivel === 1 ? FUNCOES_DO_NIVEL_1 : [...s].filter((f) => f !== 'conexao'));
-    [...s].forEach((f) => { if (f === 'sistema' || (!permitidas.includes(f) && !(f === 'conexao' && conexaoNaPessoa))) s.delete(f); });
+    [...s].forEach((f) => { if (f !== 'assistente' && (f === 'sistema' || (!permitidas.includes(f) && !(f === 'conexao' && conexaoNaPessoa)))) s.delete(f); });
   }
   const teto = tetoDoAparelho(aparelho);
-  if (teto && nivel !== 3) [...s].forEach((f) => { if (!teto.includes(f)) s.delete(f); });
+  if (teto && nivel !== 3) [...s].forEach((f) => { if (f !== 'assistente' && !teto.includes(f)) s.delete(f); });
   return s;
 }
 const podeNoAparelho = (aparelho, f) => funcoesNoAparelho(aparelho).has(f);

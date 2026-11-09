@@ -105,6 +105,8 @@ window.USINA = {
     { id: 'escritorio', categoria: 'Escritório', nome: 'Escritório: cálculos, rastreamento de lotes e etiqueta' },
     // versão 3.0: o tablet fixo num setor que opera em duas áreas
     { id: 'trocar_funcao', categoria: 'Aparelhos', nome: 'Trocar a função do aparelho (Ex.: tablet da hidrólise que opera em duas áreas)' },
+    // versão 3.1.3: é da pessoa e vale em qualquer aparelho; o que ela consulta ou faz continua limitado às outras permissões
+    { id: 'assistente', categoria: 'Escritório', nome: 'Usar o assistente (IA)' },
   ],
   // Níveis do tablet chefe (versão 2.12), do aparelho: a central guarda e confere.
   // O que a pessoa faz no aparelho = funções dela ∩ funções do nível ∩ limite do aparelho.

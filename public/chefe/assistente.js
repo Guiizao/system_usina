@@ -7,7 +7,8 @@
   const iaPessoa = () => { const p = pessoaAtual(); return p ? p.id || p.nome : ''; };
   /** Trocou a pessoa neste aparelho: a conversa da anterior não aparece para a próxima. */
   function iaDaPessoaAtual() { const q = iaPessoa(); if (ia.dono !== q) Object.assign(ia, { dono: q, msgs: [], rascunho: '', ocupado: false }); }
-  const iaDisponivel = () => cfg.demo || (!!cfg.soNuvem && !soVer());
+  // a pessoa precisa da permissão e o aparelho de falar com o banco; vale para quem entrou pela nuvem e para o tablet chefe
+  const iaDisponivel = () => cfg.demo || (!!pessoaAtual() && pode('assistente') && !!cfg.nuvemUrl && !!cfg.nuvemToken && !soVer() && (!!cfg.soNuvem || ehCentral()));
   const iaPeriodo = (m) => { const { de, ate } = m.consulta; return de === ate ? fmtData(de) : `${fmtData(de)} a ${fmtData(ate)}`; };
   const iaRotulo = (x) => { const [d, h] = String(x).split(' '), p = d.split('-'); return h && /^\d/.test(h) ? h : p.length === 3 ? `${p[2]}/${p[1]}` : String(x); };
   /** O gráfico é um desenho só: na conversa segue o tema; no arquivo sai sempre claro, com título, para quem recebe entender sozinho. */
@@ -57,12 +58,12 @@
       ${m.acao ? `<div class="ia-conf"><b>${m.acao.tipo === 'imprimir' ? 'Abrir a impressão?' : m.acao.tipo === 'enviar' ? 'Abrir o envio?' : 'Abrir o aviso?'}</b><p>${esc(m.acao.resumo || '')}</p><div class="linha-botoes"><button class="btn primario pequeno" data-a="ia-acao" data-i="${i}">Abrir</button><button class="btn pequeno" data-a="ia-cancelar" data-i="${i}">Cancelar</button></div></div>` : ''}</section>`;
   }
   function htmlConversa() {
-    if (!iaDisponivel()) return '<main class="ia-conversa"><p class="sub pn-vazio">O assistente funciona para quem entrou pela nuvem.</p></main>';
+    if (!iaDisponivel()) return '<main class="ia-conversa"><p class="sub pn-vazio">O assistente não está liberado para você neste aparelho.</p></main>';
     return `<main class="ia-conversa" id="ia-conversa">${ia.msgs.length ? ia.msgs.map(iaRespostaHtml).join('') : '<p class="sub pn-vazio">Pergunte sobre produção, folhas, avisos ou relatórios. Responde só o que você pode ver.</p>'}${ia.ocupado ? '<section class="ia-resp ia-esperando" aria-label="Pensando"><i></i><i></i><i></i></section>' : ''}</main>
       <div class="ia-campo"><input id="ia-texto" type="text" maxlength="500" autocomplete="off" placeholder="Escreva sua pergunta" aria-label="Sua pergunta" value="${esc(ia.rascunho)}"><button class="btn primario" data-a="ia-enviar" aria-label="Enviar" ${ia.ocupado ? 'disabled' : ''}>${ico('enviar')}</button></div>`;
   }
   const telaAssistente = () => { iaDaPessoaAtual(); return `${cabecalho('Assistente', 'Só o que você pode ver e fazer', true)}${htmlConversa()}`; };
-  const gavetaAssistente = () => (iaDaPessoaAtual(), ia.aberto && painelNovoPc() ? `<aside class="ia-gaveta ${ia.entrando ? 'entrando' : ''}" aria-label="Assistente"><header><b>${ico('brilho')} Assistente</b><small>responde só o que você pode ver</small><button class="pn-ic" data-a="ia-fechar" aria-label="Fechar">${ico('fechar')}</button></header>${htmlConversa()}</aside>` : '');
+  const gavetaAssistente = () => (iaDaPessoaAtual(), ia.aberto && painelNovoPc() && iaDisponivel() ?`<aside class="ia-gaveta ${ia.entrando ? 'entrando' : ''}" aria-label="Assistente"><header><b>${ico('brilho')} Assistente</b><small>responde só o que você pode ver</small><button class="pn-ic" data-a="ia-fechar" aria-label="Fechar">${ico('fechar')}</button></header>${htmlConversa()}</aside>` : '');
   function abrirAssistente() {
     // a gaveta desliza só ao abrir: o redesenho de 5 em 5 segundos não pode repetir
     if (painelNovoPc()) { ia.aberto = ia.entrando = true; render(); ia.entrando = false; return; }
@@ -82,7 +83,7 @@
       if (cfg.demo) resposta = { texto: 'Na demonstração o assistente não consulta o banco.' };
       else {
         const r = await fetch(`${cfg.nuvemUrl.replace(/\/+$/, '')}/banco/assistente`, { method: 'POST', signal: ctrl.signal, headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + cfg.nuvemToken, 'X-Aparelho': cfg.deviceId }, body: JSON.stringify({ pergunta, historico }) });
-        resposta = r.ok ? await r.json() : { texto: r.status === 429 ? 'Muitas perguntas nesta hora. Tente de novo mais tarde.' : r.status === 401 ? 'Sua entrada venceu. Entre de novo.' : 'O assistente não respondeu agora.' };
+        resposta = r.ok ? await r.json() : { texto: r.status === 429 ? 'Muitas perguntas nesta hora. Tente de novo mais tarde.' : r.status === 401 ? 'Sua entrada venceu. Entre de novo com a sua senha.' : r.status === 403 ? 'O assistente não está liberado para você.' : 'O assistente não respondeu agora.' };
       }
     } catch (e) { resposta = { texto: 'Sem conexão com o assistente agora.' }; }
     finally { clearTimeout(t); }

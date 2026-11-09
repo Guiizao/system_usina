@@ -190,7 +190,7 @@
   }
   /** Atalhos para as outras telas, só os que a pessoa pode usar. */
   function blocoIrPara() {
-    const itens = [...((pessoaAtual() || {}).dono && !soVer() ? [['sala', 'servidor', 'Sala de controle', '']] : []), ['graficos', 'grafico', 'Gráficos', ''], ['relatorios', 'pasta', 'Relatórios', 'relatorios'], ...(soVer() ? [] : [['aparelhos', 'wifi', 'Aparelhos', '']]),
+    const itens = [...(iaDisponivel() ? [['assistente', 'brilho', 'Assistente', '']] : []), ...((pessoaAtual() || {}).dono && !soVer() ? [['sala', 'servidor', 'Sala de controle', '']] : []), ['graficos', 'grafico', 'Gráficos', ''], ['relatorios', 'pasta', 'Relatórios', 'relatorios'], ...(soVer() ? [] : [['aparelhos', 'wifi', 'Aparelhos', '']]),
       ['pessoas', 'pessoas', 'Pessoas', 'pessoas'], ['registro', 'nota', 'Registro', 'registro'], ['config', 'ajustes', 'Usina', 'usina']]
       .filter(([, , , f]) => !f || veNoChefe(f));
     return `<section class="bloco ir-para"><h2>Ir para</h2><div class="grade-acoes">${itens.map(([a, i, t]) => `<button data-a="${a}">${ico(i)}<span>${t}</span></button>`).join('')}</div></section>`;
