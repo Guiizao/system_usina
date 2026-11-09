@@ -26,7 +26,7 @@ Object.assign(window.USINA.pranchetas, {
       itens: [
         { id: 'temp_pe_a', label: 'Temp. pé da coluna A', labelCurto: 'Pé coluna A', unidade: '°C', type: 'num', dec: 1 },
         // produção e carregamento com vírgula desde a 2.11 (pedido de 05/10/2026)
-        { id: 'producao', label: 'Produção Álcool', labelCurto: 'Produção', papel: 'PRODUÇÃO ÁLCOOL', type: 'num', dec: 1 },
+        { id: 'producao', label: 'Produção Álcool', labelCurto: 'Produção', papel: 'PRODUÇÃO ÁLCOOL', type: 'num', agrega: 'soma', dec: 1 },
         { id: 'carregamento', label: 'Carregamento', labelCurto: 'Carreg.', papel: 'CARREGAMENTO', type: 'num', dec: 1 },
         { id: 'vapor', label: 'Vapor / Caldeira', labelCurto: 'Vapor', papel: 'Vapor/ Caldeira', unidade: 'kgf', type: 'num', dec: 1 },
         { id: 'inpm', label: 'INPM', unidade: '°', type: 'num', dec: 1, min: 80, max: 100 },

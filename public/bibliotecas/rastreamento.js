@@ -154,7 +154,7 @@
     const pesoLiquido = n !== '' && n >= 0 && densidade !== '' ? arred(n * densidade) : '';
     return { volume: n, pesoLiquido, pesoBruto: pesoLiquido !== '' && tara !== '' ? arred(pesoLiquido + tara) : '' };
   }
-  const Rastreamento = { letraDoMes, lote, calcular, recalcular, etiqueta };
+  const Rastreamento = { letraDoMes, lote, calcular, recalcular, etiqueta, numero };
   if (typeof module === 'object' && module.exports) module.exports = Rastreamento;
   else raiz.Rastreamento = Rastreamento;
 })(typeof window !== 'undefined' ? window : this);

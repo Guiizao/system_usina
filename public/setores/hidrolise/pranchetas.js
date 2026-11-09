@@ -37,7 +37,7 @@ Object.assign(window.USINA.pranchetas, {
             { quando: '>=', valor: 7, nivel: 'atencao', texto: 'pH alto, 7 ou mais', curto: 'pH alto' },
           ],
         },
-        { id: 'cal', label: 'Cal', type: 'num', dec: 1, unidade: 'copos', dica: 'Quantos copos de cal (copo de 1 litro). Sem cal, deixe em branco.' },
+        { id: 'cal', label: 'Cal', type: 'num', agrega: 'soma', dec: 1, unidade: 'copos', dica: 'Quantos copos de cal (copo de 1 litro). Sem cal, deixe em branco.' },
         {
           id: 'brix', label: 'Brix', type: 'num', dec: 0, min: 3, max: 40, dica: 'Média 15 a 24. Acima de 25, quebre com água e enzima.',
           // 2.16.1 (pedido de 21/10): acima de 25. Com 26 já avisa; 25 não
@@ -49,8 +49,8 @@ Object.assign(window.USINA.pranchetas, {
           // pH depois da correção com cal: sem o aviso de pH baixo (ele vale só para o primeiro pH)
           id: 'phf2', label: 'pHf', type: 'num', dec: 1, min: 2, max: 9, dica: 'pH depois da cal. Média 4,9 a 5,3.',
         },
-        { id: 'anti', label: 'Anti.', type: 'num', dec: 0, dica: 'Antibiótico, quando for usado.' },
-        { id: 'enzi', label: 'Enzi.', type: 'num', dec: 0, padrao: '70', dica: 'Enzima da dorna de baixo. O normal é 70.' },
+        { id: 'anti', label: 'Anti.', type: 'num', agrega: 'soma', dec: 0, dica: 'Antibiótico, quando for usado.' },
+        { id: 'enzi', label: 'Enzi.', type: 'num', agrega: 'soma', dec: 0, padrao: '70', dica: 'Enzima da dorna de baixo. O normal é 70.' },
         {
           // 2.16: o BHX também avisa (pedido de 21/10: acima de 25 é Brix alto)
           id: 'bhx', label: 'BHX', type: 'num', dec: 0, min: 3, max: 40, dica: 'Brix depois da água e da enzima.',
@@ -84,7 +84,7 @@ Object.assign(window.USINA.pranchetas, {
       papel: { modelo: 'pop011', titulo: 'Anexo II-Pop 011-Monitoramento do Processo de SACARIFICAÇÃO' },
       campos: [
         { id: 'horario', label: 'Horário', type: 'time', agoraAoCriar: true },
-        { id: 'sac', label: 'SAC', type: 'num', dec: 0, padrao: '4', dica: 'Número da dorna de sacarificação.' },
+        { id: 'sac', label: 'SAC', type: 'num', agrega: 'nenhum', dec: 0, padrao: '4', dica: 'Número da dorna de sacarificação.' },
         {
           // é o pH final da Hidrólise, já corrigido: sem o aviso de pH baixo
           id: 'phf', label: 'PHF', type: 'num', dec: 1, min: 2, max: 9, dica: 'Média 4,9 a 5,3.',
@@ -95,8 +95,8 @@ Object.assign(window.USINA.pranchetas, {
             { quando: '>', valor: 25, nivel: 'alerta', texto: 'Brix acima de 25: quebre com água e enzima', curto: 'Brix alto' },
           ],
         },
-        { id: 'enz', label: 'ENZ.', type: 'num', dec: 0, padrao: '100', dica: 'Saczyme da dorna de cima. O normal é 100.' },
-        { id: 'anti', label: 'Anti.', type: 'num', dec: 0, padrao: '100', dica: 'Antibiótico da dorna de cima. O normal é 100.' },
+        { id: 'enz', label: 'ENZ.', type: 'num', agrega: 'soma', dec: 0, padrao: '100', dica: 'Saczyme da dorna de cima. O normal é 100.' },
+        { id: 'anti', label: 'Anti.', type: 'num', agrega: 'soma', dec: 0, padrao: '100', dica: 'Antibiótico da dorna de cima. O normal é 100.' },
       ],
       grupos: [
         { titulo: 'Horário e dorna', campos: ['horario', 'sac'] },
