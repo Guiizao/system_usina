@@ -233,23 +233,31 @@ main.escritorio.pn-producao { max-width: none; grid-template-columns: minmax(0, 
 .pn-chave.on { background: var(--verde); }
 .pn-chave.on::after { transform: translateX(22px); }
 /* A curva anda com o botão escolhido: a camada tem a largura da barra, então o translateX em % cai no meio de cada uma das 5 vagas. z-index: a bolha sobe por cima da tela. */
-.pn-barra { position: relative; z-index: 30; flex: none; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); height: calc(64px + env(safe-area-inset-bottom)); padding-bottom: env(safe-area-inset-bottom); }
+/* overflow-x: a camada é bem mais larga que a tela, e o foco num campo poderia rolar o #app por causa dela */
+.pn-barra { position: relative; z-index: 30; flex: none; overflow-x: clip; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); height: calc(68px + env(safe-area-inset-bottom)); padding-bottom: env(safe-area-inset-bottom); }
 .pn-barra-fundo { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; transform: translateX(calc((var(--i) + .5) * 20%)); }
-.pn-barra-fundo svg { position: absolute; top: 0; left: -1000px; width: 2000px; height: 140px; fill: var(--papel); filter: drop-shadow(0 -2px 6px var(--pn-sombra)); }
+.pn-barra-fundo svg { position: absolute; top: 0; left: -1000px; width: 2000px; height: 100%; fill: var(--papel); filter: drop-shadow(0 -2px 6px var(--pn-sombra)); }
 .pn-barra-fundo i { position: absolute; top: -21px; left: -25px; width: 50px; height: 50px; border-radius: 50%; background: var(--verde); }
-.pn-barra button, .pn-barra .vago { position: relative; min-width: 0; padding-top: 8px; display: flex; flex-direction: column; align-items: center; gap: 6px; font-size: 13px; line-height: 16px; color: var(--tinta-2); }
+.pn-barra svg.ico { width: 24px; height: 24px; }
+.pn-barra button, .pn-barra .vago { position: relative; min-width: 0; padding-top: 10px; display: flex; flex-direction: column; align-items: center; gap: 6px; font-size: 13px; line-height: 16px; color: var(--tinta-2); }
 .pn-barra .ia { color: var(--verde-escuro); }
 .pn-barra .at { color: var(--verde-escuro) !important; font-weight: 700; }
-.pn-barra .at svg.ico { color: var(--branco); transform: translateY(-16px); }
+/* -18px: do meio do ícone (y 22) ao meio da bolha (y 4). 6px: o nome desce para sair de baixo do recorte (fundo em y 36) */
+.pn-barra .at svg.ico { color: var(--branco); transform: translateY(-18px); }
+.pn-barra .at span { transform: translateY(6px); }
 :root[data-tema="escuro"] .pn-barra .at svg.ico { color: var(--ambar-tinta); }
 /* o toque também vale na parte da bolha que fica acima da barra */
 .pn-barra .at::before { content: ""; position: absolute; top: -22px; left: 50%; width: 52px; height: 30px; margin-left: -26px; }
-.pn-barra.vem .pn-barra-fundo { animation: pn-curva calc(.34s * var(--ritmo, 1)) cubic-bezier(.22, 1, .36, 1) both; }
-.pn-barra.vem .at svg.ico { animation: pn-ico-sobe calc(.34s * var(--ritmo, 1)) cubic-bezier(.22, 1, .36, 1) both; }
-.pn-barra.vem .saiu svg.ico { animation: pn-ico-desce calc(.26s * var(--ritmo, 1)) ease-out both; }
+.pn-barra.vem .pn-barra-fundo { animation: pn-curva calc(.34s * var(--ritmo, 1)) cubic-bezier(.22, 1, .36, 1) var(--atraso, 0ms) both; }
+.pn-barra.vem .at svg.ico { animation: pn-ico-sobe calc(.34s * var(--ritmo, 1)) cubic-bezier(.22, 1, .36, 1) var(--atraso, 0ms) both; }
+.pn-barra.vem .saiu svg.ico { animation: pn-ico-desce calc(.26s * var(--ritmo, 1)) ease-out var(--atraso, 0ms) both; }
+.pn-barra.vem .at span { animation: pn-nome-desce calc(.34s * var(--ritmo, 1)) cubic-bezier(.22, 1, .36, 1) var(--atraso, 0ms) both; }
+.pn-barra.vem .saiu span { animation: pn-nome-sobe calc(.26s * var(--ritmo, 1)) ease-out var(--atraso, 0ms) both; }
 @keyframes pn-curva { from { transform: translateX(calc((var(--de) + .5) * 20%)); } }
 @keyframes pn-ico-sobe { from { transform: none; color: var(--tinta-2); } }
-@keyframes pn-ico-desce { from { transform: translateY(-16px); color: var(--branco); } }
+@keyframes pn-ico-desce { from { transform: translateY(-18px); color: var(--branco); } }
+@keyframes pn-nome-desce { from { transform: none; } }
+@keyframes pn-nome-sobe { from { transform: translateY(6px); } }
 
 /* entrada: só ao trocar de tela (o redesenho de 5 em 5 segundos não pisca) */
 #app.troca .pn-e { animation: pn-entra calc(.36s * var(--ritmo, 1)) cubic-bezier(.22, 1, .36, 1) both; }
@@ -268,5 +276,5 @@ main.escritorio.pn-producao { max-width: none; grid-template-columns: minmax(0, 
 @keyframes pn-pisca { to { opacity: .35; } }
 @media (prefers-reduced-motion: reduce) {
   #app.troca .pn-e, #app.troca .pn-barras i, #app.troca .pn-linha .total, #app.troca .pn-linha .dest, #app.troca .pn-tanque .liquido,
-  #app.troca .pn-tabela .p i, #app.troca .pn-setores s, .pn-tanque .onda, .ia-gaveta.entrando, .ia-esperando i, .pn-barra.vem .pn-barra-fundo, .pn-barra.vem svg.ico { animation: none; }
+  #app.troca .pn-tabela .p i, #app.troca .pn-setores s, .pn-tanque .onda, .ia-gaveta.entrando, .ia-esperando i, .pn-barra.vem .pn-barra-fundo, .pn-barra.vem svg.ico, .pn-barra.vem span { animation: none; }
 }

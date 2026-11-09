@@ -212,15 +212,19 @@
     return `<section class="pn-c pn-quem pn-voce"><div><b>${p ? `Você está como ${esc(p.nome)}` : 'Ninguém entrou neste computador'}</b><small>${esc(p ? p.nivel || '' : '')}</small></div><button class="btn" data-a="pessoa">${p ? 'Entrar com outra pessoa' : 'Entrar'}</button></section>`;
   }
   const TELAS_SEM_BARRA = [...TELAS_SEM_MENU, 'prancheta', 'leitura', 'operador', 'trocar-funcao'];
+  let pnTroca = null;
   function barraCelular(v) {
     if (!painelNovoCel() || TELAS_SEM_BARRA.includes(v.tela)) return '';
     const ativo = { central: 'abrir-painel', 'setores-cel': 'setores-cel', relatorios: 'relatorios', 'mais-cel': 'mais-cel' }[v.tela];
     const itens = [['abrir-painel', 'casa', 'Início'], pnVeSetores() && ['setores-cel', 'grade', 'Setores'], ['assistente', 'brilho', 'Assistente'], veNoChefe('relatorios') && ['relatorios', 'pasta', 'Relatórios'], ['mais-cel', 'menu', 'Mais']];
     const achou = itens.findIndex((x) => x && x[0] === ativo), i = achou < 0 ? 2 : achou; // tela fora das abas: a bolha fica no assistente
     // a barra velha ainda está na tela quando a nova é montada: é de lá que a bolha sai
-    const velha = document.querySelector('.pn-barra'), de = velha ? Number(velha.style.getPropertyValue('--i')) : i;
+    const velha = document.querySelector('.pn-barra'), antes = velha ? Number(velha.style.getPropertyValue('--i')) : i, agora = Date.now();
+    if (antes !== i) pnTroca = { de: antes, para: i, em: agora };
+    // redesenho logo depois do toque (Relatórios faz isso) continua o movimento em vez de cortar
+    const indo = pnTroca && pnTroca.para === i && agora - pnTroca.em < 400, de = indo ? pnTroca.de : i, atraso = indo ? pnTroca.em - agora : 0;
     const botao = (x, n) => (x ? `<button class="${n === 2 ? 'ia ' : ''}${n === i ? 'at' : n === de ? 'saiu' : ''}" data-a="${x[0]}">${ico(x[1])}<span>${x[2]}</span></button>` : '<span class="vago"></span>');
-    return `<nav class="pn-barra${de === i ? '' : ' vem'}" style="--i:${i};--de:${de}" aria-label="Navegação"><div class="pn-barra-fundo"><svg viewBox="0 0 2000 140" aria-hidden="true"><path d="M0 0H942C958 0 964 8 970 18C977 30 988 36 1000 36C1012 36 1023 30 1030 18C1036 8 1042 0 1058 0H2000V140H0Z"/></svg><i></i></div>${itens.map(botao).join('')}</nav>`;
+    return `<nav class="pn-barra${de === i ? '' : ' vem'}" style="--i:${i};--de:${de};--atraso:${atraso}ms" aria-label="Navegação"><div class="pn-barra-fundo"><svg aria-hidden="true"><path d="M0 0H942C958 0 964 8 970 18C977 30 988 36 1000 36C1012 36 1023 30 1030 18C1036 8 1042 0 1058 0H2000V140H0Z"/></svg><i></i></div>${itens.map(botao).join('')}</nav>`;
   }
   // deslizar da beirada direita abre o Mais
   let pnInicioToque = null;
