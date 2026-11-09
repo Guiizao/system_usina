@@ -28,7 +28,7 @@
       { cat: 'sistema', icone: 'servidor', nome: 'Sistema', resumo: integra ? 'Nuvem, leitor de folha, registro e apagar' : 'Leitor de folha e registro' },
     ].filter(Boolean);
     const q = quadros.find((x) => x.cat && x.cat === v.cat);
-    if (!q) return telaDeQuadros('Configurações da usina', 'Vale para todos os tablets', quadros);
+    if (!q) { const inicio = telaDeQuadros('Configurações da usina', 'Vale para todos os tablets', quadros); return painelNovoPc() ? inicio.replace(/<main[^>]*>/, (m) => m + blocoVoceEsta()) : inicio; }
     const sub = 'Configurações da usina';
     if (q.cat === 'operadores') return telaDaParte(q.nome, sub, todosSetores.filter((s) => !s.soChefe && setorAtivo(s.id)).map((s) => blocoOperadores(s, v)).join(''));
     if (q.cat === 'areas') return telaDaParte(q.nome, sub, parteAreas(), `<div class="linha-botoes parte-acima">${pode('sistema') ? `<button class="btn primario pequeno" data-a="area-nova">${ico('mais')} Nova área</button>` : ''}${pode('folhas') ? `<button class="btn pequeno" data-a="folhas">${ico('lapis')} Campos, entrada e saída de cada folha</button>` : ''}</div>`);

@@ -68,6 +68,16 @@ try {
     igual(r.denovo, [[13, true, false]]);
     igual([r.semLugar, r.incluiCheia], [true, false]);
   });
+  await teste(g, 'leitura em andamento fica guardada no aparelho e sai ao salvar ou cancelar', async () => {
+    const r = await a.avaliar(`(async () => {
+      const cel = (valor) => ({ r: { valor, confianca: 1 }, vazia: false }), ler = window.LeitorFolhas.lerCelula; window.LeitorFolhas.lerCelula = (x) => x;
+      const L = interpretarLeitura('hid_anexo1', '2020-03-06', { linhas: [{ m: 0, celulas: { inicio: cel('10:00'), phf: cel('5.1') } }] }); window.LeitorFolhas.lerCelula = ler;
+      await leituraGuardar({ pid: 'hid_anexo1', data: '2020-03-06', leitura: L });
+      const g = await leituraLer(); await leituraApagar(); const fim = await leituraLer();
+      return [g.pid, g.data, g.leitura.linhas.length, g.leitura.linhas[0].celulas.phf.valor, fim === undefined];
+    })()`);
+    igual(r, ['hid_anexo1', '2020-03-06', 1, '5.1', true]);
+  });
   await teste(g, 'dia com mais de 25 dornas: a folha estica até a última linha e o PDF fica numa página', async () => {
     const r = await a.avaliar(`(async () => {
       const d = '2020-03-04', pid = 'hid_anexo1';

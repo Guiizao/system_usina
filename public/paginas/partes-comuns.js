@@ -15,6 +15,7 @@
         ${podeVoltar ? `<button class="voltar" data-a="voltar">${ico('voltar')}<span>Voltar</span></button>` : '<img class="logo" src="icons/logo-u.svg" alt="Ubirálcool">'}
         <div class="titulo ${String(titulo).length > 17 ? 'longo' : ''}"><div class="titulo-linha"><b>${esc(titulo)}</b><em class="turno-topo" id="turno-topo">${esc(turnoAtual().nome)}</em></div>${subtitulo ? `<span id="subtitulo-topo">${esc(subtitulo)}</span>` : ''}</div>
         ${atalhos ? `<div class="atalhos">${atalhos}</div>` : ''}
+        ${painelNovoPc() && iaDisponivel() ? `<button class="ia-busca" data-a="assistente">${ico('brilho')}<span>Pergunte ou peça algo ao assistente</span></button>` : ''}
         <div class="relogio"><b id="relogio">${horaAgora()}</b></div>
         ${atualizacao.nova ? `<button class="tema atualizar" data-a="atualizacao" aria-label="Atualizar o aplicativo para a versão ${esc(atualizacao.nova.versao)}">${ico('instalar')}<span>Atualizar</span></button>` : ''}
         ${configurado ? `<button class="tema status-con" id="status-con" data-a="status-con" aria-label="Conexão: central e nuvem">${luzesConexao()}</button>` : ''}
@@ -63,7 +64,7 @@
       pessoas: telaPessoas, registro: telaRegistro, graficos: telaGraficos, folhas: telaFolhas,
       aparelhos: telaAparelhos, 'bloqueado-adm': telaBloqueioAdm,
       escritorio: telaEscritorio, 'esc-calculos': telaEscCalculos, 'esc-rastreamento': telaEscRastreamento,
-      'nuvem-entrar': telaNuvemEntrar,
+      'nuvem-entrar': telaNuvemEntrar, 'setores-cel': telaSetoresCel, 'mais-cel': telaMaisCel, assistente: telaAssistente,
     };
     const chaveTela = JSON.stringify([v.tela, v.pid, v.data, v.monitor]);
     const outraTela = chaveTela !== ultimaChaveTela;
@@ -76,9 +77,11 @@
     app.classList.remove('troca', 'troca-linha');
     // computador (2.16): menu fixo à esquerda e a tela à direita (chefe/menu-pc.js)
     const html = (telas[v.tela] || telaInicio)(v);
+    const focoIa = !!document.activeElement && document.activeElement.id === 'ia-texto';
     const menu = comMenuPc();
     app.classList.toggle('com-menu', menu);
-    app.innerHTML = menu ? menuPc(v) + `<div class="area-pc">${html}</div>` : html;
+    app.innerHTML = menu ? menuPc(v) + `<div class="area-pc">${html}${gavetaAssistente()}</div>` : html + barraCelular(v);
+    if (focoIa) { const c = document.getElementById('ia-texto'); if (c) { c.focus(); c.setSelectionRange(c.value.length, c.value.length); } }
     ultimaChaveTela = chaveTela;
     if (mesmaTela) app.querySelectorAll(ROLAM).forEach((el, i) => { if (rolagens[i]) { el.scrollLeft = rolagens[i][0]; el.scrollTop = rolagens[i][1]; } });
     else rolarDepois = true; // abriu a tela ou trocou a linha: a escolhida vai para o meio

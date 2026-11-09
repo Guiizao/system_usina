@@ -83,6 +83,10 @@
   --verde-tinta-noite: #06170c;
 }
 
+/* Painel novo (3.1): cartão verde, barras e sombra dos cartões */
+:root { --pn-heroi: linear-gradient(135deg, #25994f, #1b7a3e 50%, #135c2e); --pn-heroi-2: #d8eedd; --pn-liquido: #bfe8ca; --pn-tanque-texto: #135c2e; --pn-barra: #a9cfb4; --pn-sombra: rgba(20, 30, 25, .08); }
+:root[data-tema="escuro"] { --pn-heroi: linear-gradient(135deg, #235a38, #1d3f2a); --pn-heroi-2: #b9dcc4; --pn-liquido: #4cae6e; --pn-tanque-texto: #0c1a12; --pn-barra: #35503f; --pn-sombra: rgba(0, 0, 0, .3); }
+
 /* Gráficos do dia: uma cor por série */
 :root { --serie-1: #1f62c4; --serie-2: #c2410c; --serie-3: #15803d; --serie-4: #7c3aed; }
 :root[data-tema="escuro"] { --serie-1: #6aa8ff; --serie-2: #ff9a5c; --serie-3: #5fd08a; --serie-4: #b794ff; }

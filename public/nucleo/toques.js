@@ -334,6 +334,14 @@
       case 'abrir-setor': return ir({ tela: 'prancheta', pid: pranchetasDasAbas(b.dataset.id)[0], data: v.data, monitor: soConsulta() || undefined });
       case 'compartilhar': return compartilhar(b.dataset.destino, v.data || dataProducao());
       case 'relatorios': return ir({ tela: 'relatorios' });
+      case 'assistente': return abrirAssistente();
+      case 'ia-fechar': ia.aberto = false; return render();
+      case 'ia-enviar': return iaEnviar();
+      case 'ia-acao': return iaConfirmar(Number(b.dataset.i));
+      case 'ia-cancelar': ia.msgs[Number(b.dataset.i)].acao = null; return render();
+      case 'pn-periodo': v.periodo = Number(b.dataset.n); return render();
+      case 'setores-cel': return ir({ tela: 'setores-cel', data: dataProducao() });
+      case 'mais-cel': return ir({ tela: 'mais-cel' });
       case 'relatorio-resumo': return verResumo(b.dataset.data);
       case 'ler-folha-ligar': if (!(await exigir('usina'))) return; salvarConfigSistema({ lerFolha: !lerFolhaLigada() }); return render();
       case 'avisos': return ir({ tela: 'avisos' });
@@ -385,7 +393,8 @@
         toast('Aviso cancelado'); return render();
       }
       case 'ler-folha': return comecarLeitura(v.data || dataProducao());
-      case 'leitura-linha': { const l = v.leitura.linhas[Number(b.dataset.i)]; if (l.temValor && !l.semLugar) l.incluir = !l.incluir; posicionarLinhas(v.leitura); return render(); }
+      case 'leitura-linha': { const l = v.leitura.linhas[Number(b.dataset.i)]; if (l.temValor && !l.semLugar) l.incluir = !l.incluir; posicionarLinhas(v.leitura); leituraGuardar(v); return render(); }
+      case 'leitura-cancelar': leituraApagar(); return voltar();
       case 'leitura-cel': return corrigirCelula(v, Number(b.dataset.i), b.dataset.c);
       case 'leitura-salvar': return salvarLeitura(v);
       case 'relatorio-enviar': return enviarDia(b.dataset.data);

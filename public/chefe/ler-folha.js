@@ -213,7 +213,20 @@
       inp.click();
     });
   }
+  /* A leitura em andamento fica guardada no aparelho: saiu ou fechou, ao voltar ela retoma. Os recortes são imagens e não cabem no localStorage. */
+  const bancoDaLeitura = () => new Promise((ok, erro) => { const r = indexedDB.open('usina-leitura', 1); r.onupgradeneeded = () => r.result.createObjectStore('l'); r.onsuccess = () => ok(r.result); r.onerror = () => erro(r.error); });
+  const naLeitura = async (modo, fazer) => { const db = await bancoDaLeitura(); return new Promise((ok, erro) => { const t = db.transaction('l', modo), r = fazer(t.objectStore('l')); t.oncomplete = () => { db.close(); ok(r.result); }; t.onerror = () => erro(t.error); }); };
+  const leituraGuardar = (v) => naLeitura('readwrite', (s) => s.put({ pid: v.pid, data: v.data, leitura: v.leitura, arquivo: v.arquivo || null }, 'atual')).catch(() => {});
+  const leituraLer = () => naLeitura('readonly', (s) => s.get('atual')).catch(() => null);
+  const leituraApagar = () => naLeitura('readwrite', (s) => s.delete('atual')).catch(() => {});
   async function comecarLeitura(data) {
+    const g = await leituraLer();
+    if (g && prancheta(g.pid)) {
+      const k = await abrirModal(`<h3>Continuar a leitura?</h3><p class="dica">${esc(prancheta(g.pid).nome)} de ${fmtData(g.data)}: lida antes e ainda não salva.</p><div class="acoes-modal"><button class="btn" data-k="nova">Começar outra</button><button class="btn primario" data-k="sim">Continuar</button></div>`, (x, b, fechar) => fechar(x));
+      if (!k) return;
+      if (k === 'sim') { posicionarLinhas(g.leitura); return ir({ tela: 'leitura', pid: g.pid, data: g.data, fase: 'revisar', leitura: g.leitura, arquivo: g.arquivo, foto: g.arquivo ? URL.createObjectURL(g.arquivo) : '' }); }
+      await leituraApagar();
+    }
     const pid = await escolherFolhaParaLer(data);
     if (!pid) return;
     const como = await abrirModal(`<h3>Foto da folha</h3><p class="dica">${esc(prancheta(pid).nome)} de ${fmtData(data)}</p>
@@ -226,7 +239,7 @@
     return lerFolhaDeArquivo(pid, data, arquivo);
   }
   async function lerFolhaDeArquivo(pid, data, arquivo) {
-    const v = { tela: 'leitura', pid, data, fase: 'lendo', texto: 'Preparando o leitor', foto: URL.createObjectURL(arquivo) };
+    const v = { tela: 'leitura', pid, data, fase: 'lendo', texto: 'Preparando o leitor', foto: URL.createObjectURL(arquivo), arquivo };
     ir(v);
     try {
       const molde = moldeDaFolha(pid);
@@ -239,6 +252,7 @@
       await new Promise((ok) => setTimeout(ok, 20));
       v.leitura = interpretarLeitura(pid, data, bruto);
       v.fase = 'revisar';
+      leituraGuardar(v);
     } catch (e) {
       v.fase = 'erro'; v.texto = (e && e.message) || 'Não consegui ler a foto';
     }
@@ -286,7 +300,7 @@
                 ${c.imagem ? `<img src="${c.imagem}" alt="">` : ''}<b>${esc(textoDoValor(col, c.valor)) || '&nbsp;'}</b>${c.aprendido ? '<small class="aprendido">aprendido</small>' : ''}</button></td>`; }).join('')}
           </tr>`).join('')}</tbody></table></div>` : '<div class="tela-aviso"><h1>Nada escrito nesta folha</h1><p>Não achei valores anotados. Confira se escolheu a folha certa ou tire outra foto.</p></div>'}
       </main>
-      <div class="rodape"><button class="btn" data-a="voltar">Cancelar</button><button class="btn primario" data-a="leitura-salvar" ${incluidas ? '' : 'disabled'}>${ico('certo')} Salvar ${contar(incluidas, 'linha', 'linhas')}</button></div>`;
+      <div class="rodape"><button class="btn" data-a="leitura-cancelar">Cancelar</button><button class="btn primario" data-a="leitura-salvar" ${incluidas ? '' : 'disabled'}>${ico('certo')} Salvar ${contar(incluidas, 'linha', 'linhas')}</button></div>`;
   }
 
   /** corrigir um valor: mostra a foto da célula grande e deixa digitar ou escolher */
@@ -348,6 +362,7 @@
     linha.temValor = Object.values(linha.celulas).some((c) => c.valor !== '');
     if (linha.temValor && !linha.existe) linha.incluir = true;
     posicionarLinhas(L); // corrigir a hora pode mudar a linha de lugar
+    leituraGuardar(v);
     render();
   }
 
@@ -370,6 +385,7 @@
       // 3.0: a folha da Hidrólise preenche o resto como no tablet: a Sacarificação da mesma dorna (os insumos vêm logo abaixo)
       if (p.tipo === 'dornas') acompanharDorna(L.data, L.pid, Number(l.chave));
     });
+    leituraApagar();
     const preencheuOutras = n && (p.tipo === 'dornas' || p.vemDe);
     if (preencheuOutras) somarInsumosDoDia(L.data); // LPHERA, Cal, Saczyme e Antibiótico de cada hora, para o operador conferir
     registrar('anotacao', `${quemEstaAqui()} salvou ${contar(n, 'linha lida', 'linhas lidas')} da folha de papel (${(prancheta(v.pid) || {}).nome || ''})`);
