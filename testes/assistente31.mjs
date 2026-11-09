@@ -155,7 +155,7 @@ try {
     registro('2026-10-01', 'destilaria', '8', { producao: 'inválido' });
     for (const dia of ['2026-01-01', '2026-10-01']) {
       escolher('consulta', { folha: 'destilaria', campo: 'producao', de: dia, ate: dia });
-      igual((await pedir()).json, { titulo: 'Produção Álcool, soma por dia', texto: 'Nada anotado nesse período.' });
+      igual((await pedir()).json, { titulo: 'Produção Álcool, soma por hora', texto: 'Nada anotado nesse período.' });
     }
   });
   await caso('consulta rejeita campos, folhas, argumentos e períodos inválidos antes de ler', async () => {
@@ -277,6 +277,17 @@ try {
       const r = await pedir({ corpo: { pergunta: 'O que pediram?' } });
       igual(r.json.linhas.length, 1); igual(r.json.linhas[0][1], '2 vezes');
     } finally { info('estado', { donoId: 'dono', aparelhosChefe: {}, setoresAparelhos: {} }); }
+  });
+  await caso('um dia só: folha com hora abre nas horas; dornas segue no dia', async () => {
+    const dia = '2026-11-05';
+    registro(dia, 'destilaria', '7', { producao: 1 }); registro(dia, 'destilaria', '8', { producao: 2 });
+    registro(dia, 'hid_anexo1', '1', { phf: '5' }, 'Ana', false, 'hidrolise');
+    escolher('consulta', { folha: 'destilaria', campo: 'producao', de: dia, ate: dia, por: 'dia' });
+    let r = (await pedir()).json;
+    igual(r.consulta.por, 'hora'); igual(r.serie.map((p) => p.x), [`${dia} 07:00`, `${dia} 08:00`]); igual(r.linhas[0][1], 3);
+    escolher('consulta', { folha: 'hid_anexo1', campo: 'phf', de: dia, ate: dia });
+    r = (await pedir()).json;
+    igual(r.consulta.por, 'dia'); igual(r.serie.length, 1);
   });
   await caso('insumo entra na consulta: soma a quantidade da folha', async () => {
     registro(de, 'ins_cal', '07:00', { qtd: '4' }, 'Ana', false, 'hidrolise'); registro(de, 'ins_cal', '09:00', { qtd: '6,5' }, 'Ana', false, 'hidrolise');

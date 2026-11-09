@@ -152,7 +152,9 @@ async function executar(env, ctx, aparelho, nome, a, periodo) {
 function consultar(forms, regs, a, periodo) {
   const p = forms.pranchetas[a.folha];
   const campo = catalogo(forms).find((p) => p.pid === a.folha).campos.find((c) => c.id === a.campo);
-  const por = a.por ?? 'dia', operacao = a.operacao ?? Consolidar.agregaDoCampo(campo);
+  // um dia só em barra única não diz nada: quando a folha tem hora, o gráfico abre nas horas
+  const por = (a.por ?? 'dia') === 'dia' && periodo.dias.length === 1 && ['grade', 'insumo'].includes(p.tipo) ? 'hora' : a.por ?? 'dia';
+  const operacao = a.operacao ?? Consolidar.agregaDoCampo(campo);
   const rotulo = campo.label || campo.id, unidade = campo.unidade || '';
   const titulo = `${rotulo}, ${operacao === 'media' ? 'média' : 'soma'} ${por === 'total' ? 'do período' : `por ${por}`}`;
   // Usa o mesmo filtro e conversão dos relatórios, inclusive ao substituir a operação padrão.
