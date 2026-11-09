@@ -157,7 +157,7 @@
         const d = somarDias(v.data, Number(b.dataset.n));
         if (d > dataProducao()) return;
         buscarDia(d); renovarEscritorio();
-        pilha[pilha.length - 1] = Object.assign({}, v, { data: d }); return render();
+        pilha[pilha.length - 1] = Object.assign({}, v, { data: d, valores: null, sujo: false }); return render();
       }
       case 'esc-abrir': {
         if (ehCentral() && !(await exigir('escritorio'))) return;
@@ -168,6 +168,10 @@
       }
       case 'esc-campo': return mudarCampoEsc(v, b.dataset.c, b.dataset.r);
       case 'esc-salvar': return salvarEsc(v);
+      case 'esc-atualizar': {
+        v.valores = prepararValores(window.Rastreamento.atualizar(valoresDaTela(v), window.Rastreamento.calcular(C, v.data, anotacoesDoDia(v.data))));
+        v.sujo = true; return render();
+      }
       case 'esc-recalcular': {
         if (!(await confirmar('Refazer com as anotações de agora?', 'Os números voltam a ser os das folhas dos setores. O que foi digitado aqui se perde (até salvar, nada muda no que já está salvo).', 'Refazer'))) return;
         v.valores = prepararValores(window.Rastreamento.calcular(C, v.data, anotacoesDoDia(v.data))); v.sujo = true; return render();

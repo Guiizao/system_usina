@@ -85,10 +85,13 @@
     const dia = v.data;
     const salvo = rastreioGuardado(dia);
     const lote = window.Rastreamento.lote(C, somarDias(dia, 1));
+    const mudou = salvo && window.Rastreamento.diferencas(valoresDaTela(v), window.Rastreamento.calcular(C, dia, anotacoesDoDia(dia))).length;
     const quando = salvo && salvo.valores.salvoEm ? new Date(salvo.valores.salvoEm).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : '';
     return `${cabecalho('Escritório', cfg.escritorio ? `${cfg.escritorio.nome} · cálculos, rastreamento e etiqueta` : 'Cálculos, rastreamento e etiqueta', false, `<button class="atalho" data-a="esc-sair">${ico('cadeado')}<span>Sair</span></button>`)}
       <main class="escritorio">
         <div class="barra-dia">${navDiaEscritorio(dia)}<div class="lote-dia"><small>Lote do dia</small><b>${esc(lote)}</b></div></div>
+        ${mudou ? '<div class="bloco"><p>As folhas mudaram. Atualizar mantendo o que foi digitado?</p><button class="btn" data-a="esc-atualizar">Atualizar</button></div>' : ''}
+        ${v.sujo ? '<div class="linha-botoes"><p>Atualizado. Salve para guardar os números.</p>' + botaoSalvarEsc() : ''}
         <div class="papeis">
           <button class="papel-cartao" data-a="esc-abrir" data-t="esc-calculos"><span class="escolha-ico">${ico('grafico')}</span><b>Cálculos da produção</b><small>Matéria-prima, hidrolisado, vinho, álcool e vinhaça</small></button>
           <button class="papel-cartao" data-a="esc-abrir" data-t="esc-rastreamento"><span class="escolha-ico">${ico('documento')}</span><b>Rastreamento de lotes e etiqueta</b><small>Folha POP 03 - FOR 011 e o adesivo das bombonas</small></button>
@@ -204,9 +207,14 @@
   async function arquivoEsc(v, formato) {
     if (!soVer() && (v.sujo || !rastreioGuardado(v.data)) && !(await salvarEsc(v))) return null;
     const nome = `Rastreamento_${somarDias(v.data, 1)}`;
-    if (formato === 'xml') return new File([gerarXml(v.data, [PID_RASTREIO])], nome + '.xml', { type: MIME.xml });
-    if (formato === 'pdf') { const pecas = await pecasPdf(); return new File([window.criarPdf([papel().folha(PID_RASTREIO, v.data)], Object.assign({ fmtNum, titulo: nome }, pecas))], nome + '.pdf', { type: MIME.pdf }); }
-    return new File([window.criarXlsx([planilhaDaPrancheta(PID_RASTREIO, v.data)], LOGO_PNG)], nome + '.xlsx', { type: MIME.xlsx });
+    const folha = folhaDoRastreamento(v.data, soVer() ? valoresDaTela(v) : undefined);
+    if (formato === 'xml') {
+      const X = window.xmlEscape;
+      const xml = '<?xml version="1.0" encoding="UTF-8"?>\n' + `<pranchetas empresa="${X(C.empresa)}" data="${v.data}" gerado="${new Date().toISOString()}">\n${window.ModelosPapel.paraXml(folha, v.data, X)}\n</pranchetas>`;
+      return new File([xml], nome + '.xml', { type: MIME.xml });
+    }
+    if (formato === 'pdf') { const pecas = await pecasPdf(); return new File([window.criarPdf([folha], Object.assign({ fmtNum, titulo: nome }, pecas))], nome + '.pdf', { type: MIME.pdf }); }
+    return new File([window.criarXlsx([window.ModelosPapel.paraPlanilha(folha)], LOGO_PNG)], nome + '.xlsx', { type: MIME.xlsx });
   }
   async function enviarRastreamento(v) {
     const formato = await abrirModal(`<h3>Rastreamento de ${fmtData(somarDias(v.data, 1))}</h3><p class="dica">Qual arquivo?</p>
@@ -228,7 +236,7 @@
   }
   async function imprimirFolhaEsc(v) {
     if (!soVer() && (v.sujo || !rastreioGuardado(v.data)) && !(await salvarEsc(v))) return;
-    imprimirHtml(window.ModelosPapel.paraHtml(papel().folha(PID_RASTREIO, v.data), 'icons/logo.png', fmtNum), `Rastreamento ${fmtData(somarDias(v.data, 1))}`);
+    imprimirHtml(window.ModelosPapel.paraHtml(folhaDoRastreamento(v.data, soVer() ? valoresDaTela(v) : undefined), 'icons/logo.png', fmtNum), `Rastreamento ${fmtData(somarDias(v.data, 1))}`);
   }
 
   /* ---------- Etiqueta das bombonas (igual ao adesivo de 01/10/2026) ---------- */
@@ -252,7 +260,7 @@
         <p class="et-produto">${esc(e.produto)}</p>
         <div class="et-onu">ONU ${esc(e.onu)}</div>
         <p class="et-dados"><b>Nome apropriado para embarque:</b> ${esc(e.nomeEmbarque)}<br><b>Classe ou subclasse de risco:</b> ${esc(e.classeRisco)}<br><b>Grupo de embalagem:</b> ${esc(e.grupoEmbalagem)}<br><b>Número de risco:</b> ${esc(e.numeroRisco)}</p>
-        <div class="et-lote"><b>LOTE: ${esc(x.lote)}</b><small>DATA FABRICAÇÃO: ${esc(dataBr(x.fechamento))}</small><small>VALIDADE: ${esc(dataBr(x.alcool.validade))}</small></div>
+        <div class="et-lote"><b>LOTE: ${esc(window.Rastreamento.loteDaEtiqueta(x))}</b><small>DATA FABRICAÇÃO: ${esc(dataBr(x.fechamento))}</small><small>VALIDADE: ${esc(dataBr(x.alcool.validade))}</small></div>
       </div>
       <div class="et-dir">
         <p><b>Composição Química:</b> ${esc(e.composicao)}<br><b>Responsável técnico:</b> ${esc(e.responsavel)}<br>${esc(e.registro)}</p>
@@ -265,7 +273,7 @@
   }
   async function etiquetaEsc(v) {
     if (!soVer() && (v.sujo || !rastreioGuardado(v.data)) && !(await salvarEsc(v))) return;
-    const x = valoresDoDia(v.data);
+    const x = soVer() ? valoresDaTela(v) : valoresDoDia(v.data);
     const volumes = C.rastreamento.etiqueta.volumes;
     let volume = volumes[0], qtd = 1;
     const desenhar = (f) => {
@@ -273,7 +281,7 @@
       f.querySelector('#et-qtd').textContent = qtd;
       f.querySelectorAll('[data-k^="vol:"]').forEach((b) => b.classList.toggle('sel', Number(b.dataset.k.slice(4)) === volume));
     };
-    const ok = await abrirModal(`<h3>Etiqueta das bombonas</h3><p class="dica">Lote ${esc(x.lote)}, fabricação ${esc(dataBr(x.fechamento))}. Duas etiquetas por folha A4.</p>
+    const ok = await abrirModal(`<h3>Etiqueta das bombonas</h3><p class="dica">Lote ${esc(window.Rastreamento.loteDaEtiqueta(x))}, fabricação ${esc(dataBr(x.fechamento))}. Duas etiquetas por folha A4.</p>
       <div class="segmentos">${volumes.map((n) => `<button data-k="vol:${n}">${n} L</button>`).join('')}</div>
       <div class="qtd-etiquetas"><span>Quantas etiquetas?</span><button class="btn" data-k="menos" aria-label="Menos uma">−</button><b id="et-qtd"></b><button class="btn" data-k="mais">${ico('mais')}</button></div>
       <div class="et-previa" id="et-previa"></div>
@@ -287,6 +295,6 @@
       desenhar(f);
     }, { classe: 'largo', aoAbrir: desenhar });
     if (!ok) return;
-    imprimirHtml(`<div class="folha-etiquetas">${Array.from({ length: qtd }, () => etiquetaHtml(x, volume)).join('')}</div>`, `Etiqueta ${x.lote}`);
-    registrar('anotacao', `${quemNoEscritorio()} imprimiu ${qtd} etiqueta${qtd > 1 ? 's' : ''} do lote ${x.lote}`);
+    imprimirHtml(`<div class="folha-etiquetas">${Array.from({ length: qtd }, () => etiquetaHtml(x, volume)).join('')}</div>`, `Etiqueta ${window.Rastreamento.loteDaEtiqueta(x)}`);
+    registrar('anotacao', `${quemNoEscritorio()} imprimiu ${qtd} etiqueta${qtd > 1 ? 's' : ''} do lote ${window.Rastreamento.loteDaEtiqueta(x)}`);
   }

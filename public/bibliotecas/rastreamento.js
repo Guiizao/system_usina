@@ -37,7 +37,7 @@
   }
 
   /** Aplica {campo:'pi.hidrolise', valor:123}, mapa de caminhos ou objeto parcial; altera e devolve valores. */
-  function recalcular(v, mudanca) {
+  function recalcular(v, mudanca, opcoes = {}) {
     v.origem = v.origem || {};
     const alterados = new Set();
     const aplicar = (campo, valor) => {
@@ -60,11 +60,14 @@
     else if (mudanca) percorrer(mudanca);
     const depende = (...campos) => !mudanca || campos.some((c) => alterados.has(c));
     const calcularCampo = (obj, chave, caminho, resultado, origem) => {
+      if (opcoes.manterDigitados && (v.origem[caminho] || '').startsWith('digitado')) { alterados.add(caminho); return; }
       obj[chave] = Number.isFinite(resultado) ? resultado : '';
       v.origem[caminho] = obj[chave] === '' ? '' : origem;
       alterados.add(caminho);
     };
     const c = v.calculo;
+    if ([...alterados].some((campo) => /^mp\.\d+\.kg$/.test(campo))) calcularCampo(c, 'mpKg', 'calculo.mpKg',
+      soma(v.mp.map((m) => numero(m.kg)).filter((n) => n !== '')), 'soma da matéria-prima por produto');
     if (depende('calculo.mpKg', 'calculo.fator')) calcularCampo(v.pi, 'hidrolise', 'pi.hidrolise',
       c.mpKg !== '' && c.fator > 0 ? c.mpKg / c.fator : NaN, 'matéria-prima (kg) ÷ fator');
     if (depende('pi.hidrolise', 'calculo.brixInicial', 'calculo.brixFinal')) calcularCampo(v.pi, 'vinho', 'pi.vinho',
@@ -148,13 +151,42 @@
     return v;
   }
 
+  const caminho = (v, c) => c.split('.').reduce((o, k) => o == null ? undefined : o[k], v);
+  const digitado = (v, c) => ((v.origem || {})[c] || '').startsWith('digitado');
+  const derivados = new Set(['pi.hidrolise', 'pi.vinho', 'alcool.producao', 'vinhaca.producao']);
+  function atualizar(salvo, novo) {
+    const v = JSON.parse(JSON.stringify(salvo));
+    const mpDigitada = Object.keys(v.origem || {}).some((c) => c.startsWith('mp.') && digitado(v, c));
+    if (!mpDigitada) {
+      v.mp = JSON.parse(JSON.stringify(novo.mp));
+      Object.keys(v.origem || {}).filter((c) => c.startsWith('mp.')).forEach((c) => { delete v.origem[c]; });
+      Object.keys(novo.origem || {}).filter((c) => c.startsWith('mp.')).forEach((c) => { v.origem[c] = novo.origem[c]; });
+    }
+    for (const c of Object.keys(novo.origem || {})) {
+      if (derivados.has(c) || digitado(salvo, c) || c.startsWith('mp.')) continue;
+      const valor = c === 'calculo.mpKg' && mpDigitada ? soma(v.mp.map((m) => numero(m.kg)).filter((n) => n !== '')) : caminho(novo, c);
+      recalcular(v, { campo: c, valor }, { manterDigitados: true });
+      v.origem[c] = c === 'calculo.mpKg' && mpDigitada ? 'soma da matéria-prima por produto' : novo.origem[c];
+    }
+    return v;
+  }
+  function diferencas(salvo, novo) {
+    const atualizado = atualizar(salvo, novo);
+    const caminhos = Object.keys(novo.origem || {}).filter((c) => !c.startsWith('mp.'));
+    const mp = (v) => (v.mp || []).filter((m) => Object.values(m).some((x) => x !== '' && x != null));
+    const lista = caminhos.filter((c) => JSON.stringify(caminho(salvo, c)) !== JSON.stringify(caminho(atualizado, c)));
+    if (JSON.stringify(mp(salvo)) !== JSON.stringify(mp(atualizado))) lista.push('mp');
+    return lista;
+  }
+  const loteDaEtiqueta = (x) => x.alcool.lote || x.lote;
+
   function etiqueta(C, volume) {
     const c = C.rastreamento.etiqueta, n = numero(volume), densidade = numero(c.densidade), tara = numero(c.tara[volume]);
     const arred = (x) => Math.round((x + Number.EPSILON) * 100) / 100;
     const pesoLiquido = n !== '' && n >= 0 && densidade !== '' ? arred(n * densidade) : '';
     return { volume: n, pesoLiquido, pesoBruto: pesoLiquido !== '' && tara !== '' ? arred(pesoLiquido + tara) : '' };
   }
-  const Rastreamento = { letraDoMes, lote, calcular, recalcular, etiqueta, numero };
+  const Rastreamento = { letraDoMes, lote, calcular, recalcular, etiqueta, numero, diferencas, atualizar, loteDaEtiqueta };
   if (typeof module === 'object' && module.exports) module.exports = Rastreamento;
   else raiz.Rastreamento = Rastreamento;
 })(typeof window !== 'undefined' ? window : this);
