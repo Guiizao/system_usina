@@ -377,6 +377,22 @@
     liberar(gf, fundo, t, r);
     return { entrada: out, tinta: escuros / (h * w) };
   }
+  /** Resumo da célula para a memória de correções: 32 x 12 quadros de tinta, sem guardar a imagem. */
+  function vetorDaCelula(limpa) {
+    const b = new cv.Mat(); cv.threshold(limpa, b, 150, 255, cv.THRESH_BINARY_INV);
+    const r = cv.boundingRect(b);
+    if (r.width < 3 || r.height < 3) { liberar(b); return null; }
+    const roi = b.roi(r), p = new cv.Mat(); cv.resize(roi, p, new cv.Size(32, 12), 0, 0, cv.INTER_AREA);
+    let s = ''; for (let i = 0; i < p.data.length; i++) s += Math.min(9, Math.round(p.data[i] / 28));
+    liberar(b, roi, p);
+    return s;
+  }
+  /** Quanto duas células se parecem (0 a 1). */
+  function semelhanca(a, b) {
+    let mn = 0, mx = 0;
+    for (let i = 0; i < a.length; i++) { const x = +a[i], y = +b[i]; mn += Math.min(x, y); mx += Math.max(x, y); }
+    return mx ? mn / mx : 0;
+  }
   function paraImagemUrl(cel) {
     const c = document.createElement('canvas'); cv.imshow(c, cel); return c.toDataURL('image/jpeg', 0.8);
   }
@@ -595,7 +611,7 @@
         const limpa = limparCelula(bruta, !!colunasPedidas[nome].spec.sufixos);
         const prep = preparar(limpa);
         const vazia = prep.tinta < 0.012; // quase sem tinta: nem passa na rede (e a rede ainda pode dizer "vazio")
-        celulas[nome] = { vazia, risco: !!limpa.risco, imagem: paraImagemUrl(bruta), r: vazia ? null : rodarRede(prep.entrada) };
+        celulas[nome] = { vazia, risco: !!limpa.risco, imagem: paraImagemUrl(bruta), r: vazia ? null : rodarRede(prep.entrada), vet: vazia ? null : vetorDaCelula(limpa) };
         liberar(bruta, limpa);
         feitas++;
       }
@@ -607,7 +623,7 @@
     return { linhas, molde: nomeMolde, giro: g.giro, achou: g.achou, nota: g.alinhada.nota, tentativas };
   }
 
-  window.LeitorFolhas = { carregar, lerFoto, lerCelula, MOLDES, candidatos,
+  window.LeitorFolhas = { carregar, lerFoto, lerCelula, MOLDES, candidatos, semelhanca,
     // etapas soltas, para testar e comparar com o treino
     _interno: { imagemParaCinza, mascaras, angulo, girar, cruzamentos, fileiras, colunas, acharGrade, alinharPelaChave, ctc, recortarCelula, limparCelula, preparar, rodarRede, livre, get cv() { return cv; } } };
 })();

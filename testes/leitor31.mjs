@@ -30,6 +30,19 @@ try {
     igual(await a.avaliar(`LeitorFolhas.MOLDES.destilaria.celula(1, 23)`), [15, 5]);
     igual(await a.avaliar(`Object.keys(colunasDaLeitura('nova_destilaria')).includes('coluna_b4')`), false);
   });
+  await teste(g, 'memória: 2 parecidas nada, 3 sugerem, 5 preenchem e outro valor parecido só sugere', async () => {
+    const r = await a.avaliar(`(() => {
+      const V = '9'.repeat(384), L = (v, n) => { for (let i = 0; i < n; i++) lembrarCorrecao('hid_anexo1', 'responsavel', V, v); };
+      const res = [];
+      L('Cleber', 2); res.push(palpiteDaMemoria('hid_anexo1', 'responsavel', V));
+      L('Cleber', 1); res.push(palpiteDaMemoria('hid_anexo1', 'responsavel', V));
+      L('Cleber', 2); res.push(palpiteDaMemoria('hid_anexo1', 'responsavel', V));
+      L('Arlindo', 1); res.push(palpiteDaMemoria('hid_anexo1', 'responsavel', V));
+      res.push(palpiteDaMemoria('hid_anexo1', 'responsavel', '0'.repeat(384)));
+      return res;
+    })()`);
+    igual(r, [null, { valor: 'Cleber', preenche: false }, { valor: 'Cleber', preenche: true }, { valor: 'Cleber', preenche: false }, null]);
+  });
   if (temFotos) {
     await teste(g, 'Destilaria deitada: acha o giro e lê os blocos na ordem das horas', async () => {
       const r = await ler('20261106_071636.jpg.jpeg', 'destilaria', 'destilaria');

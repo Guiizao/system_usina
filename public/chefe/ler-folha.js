@@ -75,6 +75,23 @@
     return 1 - d[a.length][b.length] / Math.max(a.length, b.length);
   }
 
+  /* 3.1: memória das correções. Cada correção guarda um resumo da célula (sem a imagem) e o valor certo, e viaja como configuração.
+     Com 3 células parecidas para o mesmo valor, sugere; com 5 ou mais e sem outro valor parecido, já preenche, e a pessoa ainda confere. */
+  const PID_MEMORIA = 'memoria_leitor', PARECIDA = 0.25, MAX_POR_VALOR = 25;
+  const memoriaDaColuna = (pid, nome) => Object.values(registros).filter((r) => r.prancheta === PID_MEMORIA && !r.apagado && r.valores.pid === pid && r.valores.nome === nome);
+  function palpiteDaMemoria(pid, nome, vet) {
+    if (!vet) return null;
+    const n = {};
+    memoriaDaColuna(pid, nome).forEach((r) => { if (window.LeitorFolhas.semelhanca(vet, r.valores.vet) >= PARECIDA) n[r.valores.valor] = (n[r.valores.valor] || 0) + 1; });
+    const [a, b] = Object.entries(n).sort((x, y) => y[1] - x[1]);
+    return a && a[1] >= 3 ? { valor: a[0], preenche: a[1] >= 5 && !b } : null;
+  }
+  function lembrarCorrecao(pid, nome, vet, valor) {
+    // shortcut: para de guardar depois de 25 exemplos do mesmo valor; quando a memória precisar se renovar, trocar os mais antigos
+    if (!vet || memoriaDaColuna(pid, nome).filter((r) => r.valores.valor === valor).length >= MAX_POR_VALOR) return;
+    gravar('config', PID_MEMORIA, `${pid}:${nome}:${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`, { pid, nome, valor, vet });
+  }
+
   /** transforma o que a rede leu em valores da prancheta, linha por linha (com as horas em ordem) */
   function interpretarLeitura(pid, data, bruto) {
     const p = prancheta(pid); const cols = colunasDaLeitura(pid);
@@ -110,7 +127,13 @@
             if (melhor && melhor[1] >= 0.6) lido = { valor: melhor[0], confianca: Math.min(1, lido.confianca + 0.2) };
           }
         }
-        celulas[nome] = { valor: lido.valor, confianca: lido.confianca, alternativas: lido.alternativas || [], imagem: cel.imagem, tinta: !cel.vazia };
+        const palpite = cel.vazia ? null : palpiteDaMemoria(pid, nome, cel.vet);
+        let aprendido = false;
+        if (palpite && palpite.valor !== lido.valor) {
+          if (palpite.preenche) { lido = { valor: palpite.valor, confianca: Math.min(lido.confianca, 0.79), alternativas: lido.alternativas }; aprendido = true; }
+          else lido.alternativas = [{ valor: palpite.valor }, ...(lido.alternativas || [])];
+        }
+        celulas[nome] = { valor: lido.valor, confianca: lido.confianca, alternativas: lido.alternativas || [], imagem: cel.imagem, tinta: !cel.vazia, vet: cel.vet, aprendido };
         if (col.spec.tipo === 'hora' && nome !== 'fim' && lido.valor) horaAnterior = lido.valor;
         if (nome === 'fim' && lido.valor) horaAnterior = lido.valor;
       });
@@ -232,7 +255,7 @@
             <td class="chave"><b>${porHora ? rotuloHoraPapel(l.chave) : l.chave}</b>${l.existe ? '<small>já anotada</small>' : ''}</td>
             ${cols.map(([nome, col]) => { const c = l.celulas[nome] || { valor: '', confianca: 1 }; const duv = emDuvida(nome, c);
               return `<td><button class="cel-leitura ${duv ? 'duvida' : ''} ${c.valor === '' ? 'vazia' : ''}" data-a="leitura-cel" data-i="${i}" data-c="${nome}" data-conf="${Math.round((c.confianca || 0) * 100)}">
-                ${c.imagem ? `<img src="${c.imagem}" alt="">` : ''}<b>${esc(textoDoValor(col, c.valor)) || '&nbsp;'}</b></button></td>`; }).join('')}
+                ${c.imagem ? `<img src="${c.imagem}" alt="">` : ''}<b>${esc(textoDoValor(col, c.valor)) || '&nbsp;'}</b>${c.aprendido ? '<small class="aprendido">aprendido</small>' : ''}</button></td>`; }).join('')}
           </tr>`).join('')}</tbody></table></div>` : '<div class="tela-aviso"><h1>Nada escrito nesta folha</h1><p>Não achei valores anotados. Confira se escolheu a folha certa ou tire outra foto.</p></div>'}
       </main>
       <div class="rodape"><button class="btn" data-a="voltar">Cancelar</button><button class="btn primario" data-a="leitura-salvar" ${incluidas ? '' : 'disabled'}>${ico('certo')} Salvar ${contar(incluidas, 'linha', 'linhas')}</button></div>`;
@@ -254,6 +277,7 @@
       ${tipo !== 'opcoes' ? `<div class="visor">${esc(texto) || '<span class="apagado">vazio</span>'}</div>` : ''}
       ${alternativas.length ? `<p class="dica">Pode ser: ${alternativas.map((a) => `<button class="btn pequeno" data-k="alt:${esc(a.valor)}">${esc(textoDoValor(col, a.valor))}</button>`).join(' ')}</p>` : ''}
       ${teclado}
+      ${col.campo === '_operador' && pode('usina') ? `<p class="dica"><button class="btn pequeno" data-k="cadastrar">${ico('mais')} Cadastrar quem falta</button></p>` : ''}
       <div class="acoes-modal"><button class="btn" data-k="vazio">Deixar vazio</button><button class="btn primario" data-k="ok">Pronto</button></div>`,
     (k, b, fechar, fundo) => {
       const visor = fundo.querySelector('.visor');
@@ -261,6 +285,7 @@
       if (k.startsWith('op:')) return fechar({ valor: k.slice(3) });
       if (k.startsWith('alt:')) return fechar({ valor: k.slice(4) });
       if (k === 'vazio') return fechar({ valor: '' });
+      if (k === 'cadastrar') return fechar({ cadastrar: true });
       if (k === 'ok') {
         const inp = fundo.querySelector('#txt-leitura');
         return fechar({ valor: inp ? inp.value.trim().toUpperCase() : texto });
@@ -269,6 +294,16 @@
       if (/^[0-9:,]$/.test(k) && texto.length < 8) { texto += k; return mostrar(); }
     }, { classe: 'largo', aoAbrir: (fundo) => { const inp = fundo.querySelector('#txt-leitura'); if (inp) { inp.value = cel.valor || ''; inp.focus(); } } });
     if (!resultado) return;
+    if (resultado.cadastrar) {
+      const setor = setorDaPrancheta(L.pid);
+      const novo = await textoLivre({ titulo: `Novo operador da ${setor.nome}`, dica: 'Escreva como deve aparecer na prancheta.' });
+      if (novo) {
+        salvarOperadores(setor.id, [...operadoresDo(setor.id), { nome: novo, senha: '' }]);
+        col.spec = Object.assign({}, col.spec, { tipo: 'opcoes', opcoes: operadoresDo(setor.id).map((o) => o.nome) });
+        toast(`${novo} cadastrado sem senha`);
+      }
+      return corrigirCelula(v, i, nome);
+    }
     let valor = resultado.valor;
     if (valor && tipo === 'hora') {
       const d = valor.replace(/\D/g, '');
@@ -280,7 +315,8 @@
       valor = valor.replace(',', '.');
       if (!/^\d+(\.\d+)?$/.test(valor)) return toast('Número inválido', 'erro');
     }
-    linha.celulas[nome] = Object.assign({}, cel, { valor, confianca: 1 });
+    if (valor && valor !== cel.valor) lembrarCorrecao(L.pid, nome, cel.vet, valor);
+    linha.celulas[nome] = Object.assign({}, cel, { valor, confianca: 1, aprendido: false });
     linha.temValor = Object.values(linha.celulas).some((c) => c.valor !== '');
     if (linha.temValor && !linha.existe) linha.incluir = true;
     render();

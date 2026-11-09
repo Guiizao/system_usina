@@ -20,6 +20,7 @@ main.leitura { padding-bottom: 12px; }
 .cel-leitura { display: flex; flex-direction: column; align-items: stretch; gap: 2px; min-width: 86px; min-height: 42px; width: 100%; padding: 4px; border-radius: 8px; border: 2px solid transparent; }
 .cel-leitura img { height: 30px; width: 100%; object-fit: contain; object-position: left center; background: var(--branco); border-radius: 4px; }
 .cel-leitura b { font-size: 20px; min-height: 26px; }
+.cel-leitura .aprendido { font-size: 12px; font-weight: 700; color: var(--verde-escuro); }
 .cel-leitura.duvida { background: var(--ambar-fundo); border-color: var(--ambar); color: var(--ambar-texto); }
 .cel-leitura.vazia b { color: var(--tinta-2); }
 .celula-grande { display: block; width: 100%; max-height: 140px; object-fit: contain; background: var(--branco); border-radius: 8px; border: 2px solid var(--linha-clara); margin: 8px 0; }
