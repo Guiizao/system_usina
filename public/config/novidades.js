@@ -4,6 +4,13 @@
    Depois do sinal de igual vem JSON puro, porque o servidor do tablet chefe (Java) também lê este arquivo. */
 window.NOVIDADES = [
   {
+    "versao": "3.1.2",
+    "data": "2026-11-09",
+    "itens": [
+      "Celular: barra de baixo nova. O botão escolhido sobe numa bolha verde e a curva da barra acompanha o toque. O Assistente fica no meio da barra."
+    ]
+  },
+  {
     "versao": "3.1.1",
     "data": "2026-11-09",
     "itens": [

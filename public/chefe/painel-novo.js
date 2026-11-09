@@ -215,11 +215,12 @@
   function barraCelular(v) {
     if (!painelNovoCel() || TELAS_SEM_BARRA.includes(v.tela)) return '';
     const ativo = { central: 'abrir-painel', 'setores-cel': 'setores-cel', relatorios: 'relatorios', 'mais-cel': 'mais-cel' }[v.tela];
-    // a marca verde sai do botão de antes: a barra velha ainda está na tela quando a nova é montada
-    const velho = document.querySelector('.pn-barra .at'), alvo = ativo && document.querySelector(`.pn-barra [data-a="${ativo}"]`);
-    const marca = alvo && alvo !== velho ? `class="at vem" style="${velho ? `--de:${velho.offsetLeft - alvo.offsetLeft}px` : '--esc:.5;--op:0'}"` : 'class="at"';
-    const t = (a, icone, nome) => `<button ${ativo === a ? marca : ''} data-a="${a}">${ico(icone)}<span>${nome}</span></button>`;
-    return `<nav class="pn-barra" aria-label="Navegação">${t('abrir-painel', 'casa', 'Início')}${pnVeSetores() ? t('setores-cel', 'grade', 'Setores') : '<span class="vago"></span>'}<button class="ia" data-a="assistente" aria-label="Assistente">${ico('brilho')}</button>${veNoChefe('relatorios') ? t('relatorios', 'pasta', 'Relatórios') : '<span class="vago"></span>'}${t('mais-cel', 'menu', 'Mais')}</nav>`;
+    const itens = [['abrir-painel', 'casa', 'Início'], pnVeSetores() && ['setores-cel', 'grade', 'Setores'], ['assistente', 'brilho', 'Assistente'], veNoChefe('relatorios') && ['relatorios', 'pasta', 'Relatórios'], ['mais-cel', 'menu', 'Mais']];
+    const achou = itens.findIndex((x) => x && x[0] === ativo), i = achou < 0 ? 2 : achou; // tela fora das abas: a bolha fica no assistente
+    // a barra velha ainda está na tela quando a nova é montada: é de lá que a bolha sai
+    const velha = document.querySelector('.pn-barra'), de = velha ? Number(velha.style.getPropertyValue('--i')) : i;
+    const botao = (x, n) => (x ? `<button class="${n === 2 ? 'ia ' : ''}${n === i ? 'at' : n === de ? 'saiu' : ''}" data-a="${x[0]}">${ico(x[1])}<span>${x[2]}</span></button>` : '<span class="vago"></span>');
+    return `<nav class="pn-barra${de === i ? '' : ' vem'}" style="--i:${i};--de:${de}" aria-label="Navegação"><div class="pn-barra-fundo"><svg viewBox="0 0 2000 140" aria-hidden="true"><path d="M0 0H942C958 0 964 8 970 18C977 30 988 36 1000 36C1012 36 1023 30 1030 18C1036 8 1042 0 1058 0H2000V140H0Z"/></svg><i></i></div>${itens.map(botao).join('')}</nav>`;
   }
   // deslizar da beirada direita abre o Mais
   let pnInicioToque = null;

@@ -85,7 +85,7 @@ try {
     const a = await abrir('p11', TAMANHOS.celular, 'central', false);
     igual(await a.avaliar(`[!!document.querySelector('.pn-heroi'), !!document.querySelector('.pn-barra')]`), [false, false]);
     await a.avaliar(`cfg.painelNovo = true; pilha = [telaInicial()]; render(true); 1`);
-    igual(await a.avaliar(`[!!document.querySelector('.pn-heroi'), document.querySelector('.pn-barra').children.length]`), [true, 5]);
+    igual(await a.avaliar(`[!!document.querySelector('.pn-heroi'), document.querySelectorAll('.pn-barra button, .pn-barra .vago').length]`), [true, 5]);
     await dormir(2800);
     await a.tocar('.pn-barra [data-a="setores-cel"]');
     certo(await a.avaliar(`document.querySelectorAll('.pn-setores button').length === setores().length`), 'um cartão por setor');
@@ -162,7 +162,7 @@ try {
     const a = await nav.novoAparelho('p15', TAMANHOS.celular);
     await a.ir(url + 'central&funcoes=avisos', 'document.querySelector("#app main")');
     await a.avaliar(`cfg.painelNovo = true; pilha = [telaInicial()]; render(true); 1`);
-    igual(await a.avaliar(`[document.querySelector('.pn-barra').children.length, !!document.querySelector('.pn-barra [data-a="setores-cel"]')]`), [5, false]);
+    igual(await a.avaliar(`[document.querySelectorAll('.pn-barra button, .pn-barra .vago').length, !!document.querySelector('.pn-barra [data-a="setores-cel"]')]`), [5, false]);
     await a.avaliar(`ir({ tela: 'setores-cel', data: dataProducao() }); 1`);
     igual(await a.avaliar(`!!document.querySelector('.pn-setores')`), false);
     await a.avaliar(`const b = document.createElement('button'); b.dataset.a = 'abrir-setor'; b.dataset.id = setores()[0].id; document.querySelector('#app').appendChild(b); b.click(); 1`);
