@@ -126,8 +126,6 @@
     }
   }
 
-  /** 2.17: abertura do programa do Windows, uma vez por vez que ele abre (recarregar depois de uma queda não repete):
-      o U da Ubirálcool se monta e o nome sobe (design/abertura.css). Não pega toque nenhum. */
   /** Som das telas: 0 toque, 1 confirmar, 2 aviso, 3 erro. */
   function somDoPainel(i) {
     if (!painelNovoAqui() || cfg.somDesligado || !window.Aberturas) return;
@@ -149,12 +147,8 @@
     } catch (e) { fim(); }
   }
   function mostrarAbertura() {
-    if (painelNovoAqui()) return aberturaNova();
-    if (!/Electron\//.test(navigator.userAgent)) return;
-    try { if (sessionStorage.getItem('abertura')) return; sessionStorage.setItem('abertura', '1'); } catch (e) { /* sem a memória da sessão: mostra */ }
-    const el = document.getElementById('abertura');
-    el.hidden = false;
-    setTimeout(() => { el.classList.add('saindo'); setTimeout(() => { el.hidden = true; }, 220); }, movimentoReduzido() ? 250 : 1250);
+    // o programa do Windows abre com ela antes mesmo de entrar na nuvem
+    if (painelNovoAqui() || /Electron\//.test(navigator.userAgent)) aberturaNova();
   }
 
   aplicarTema();

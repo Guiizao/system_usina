@@ -3,7 +3,7 @@
 /* Parte do aplicativo: no navegador cada parte é um arquivo; no APK elas viram um app.js só (apk/juntar-app.js). */
 'use strict';
 
-  const ia = { aberto: false, msgs: [], ocupado: false, rascunho: '' };
+  const ia = { aberto: false, entrando: false, msgs: [], ocupado: false, rascunho: '' };
   const iaDisponivel = () => cfg.demo || (!!cfg.soNuvem && !soVer());
   function iaRespostaHtml(m, i) {
     if (m.de === 'eu') return `<div class="ia-eu">${esc(m.texto)}</div>`;
@@ -18,9 +18,10 @@
       <div class="ia-campo"><input id="ia-texto" type="text" maxlength="500" autocomplete="off" placeholder="Escreva sua pergunta" aria-label="Sua pergunta" value="${esc(ia.rascunho)}"><button class="btn primario" data-a="ia-enviar" aria-label="Enviar" ${ia.ocupado ? 'disabled' : ''}>${ico('enviar')}</button></div>`;
   }
   const telaAssistente = () => `${cabecalho('Assistente', 'Só o que você pode ver e fazer', true)}${htmlConversa()}`;
-  const gavetaAssistente = () => (ia.aberto && painelNovoPc() ? `<aside class="ia-gaveta" aria-label="Assistente"><header><b>${ico('brilho')} Assistente</b><small>responde só o que você pode ver</small><button class="pn-ic" data-a="ia-fechar" aria-label="Fechar">${ico('fechar')}</button></header>${htmlConversa()}</aside>` : '');
+  const gavetaAssistente = () => (ia.aberto && painelNovoPc() ? `<aside class="ia-gaveta ${ia.entrando ? 'entrando' : ''}" aria-label="Assistente"><header><b>${ico('brilho')} Assistente</b><small>responde só o que você pode ver</small><button class="pn-ic" data-a="ia-fechar" aria-label="Fechar">${ico('fechar')}</button></header>${htmlConversa()}</aside>` : '');
   function abrirAssistente() {
-    if (painelNovoPc()) { ia.aberto = true; return render(); }
+    // a gaveta desliza só ao abrir: o redesenho de 5 em 5 segundos não pode repetir
+    if (painelNovoPc()) { ia.aberto = ia.entrando = true; render(); ia.entrando = false; return; }
     return ir({ tela: 'assistente' });
   }
   function iaRolar() { requestAnimationFrame(() => { const c = document.getElementById('ia-conversa'); if (c) c.scrollTop = c.scrollHeight; }); }

@@ -15,7 +15,7 @@
         ${podeVoltar ? `<button class="voltar" data-a="voltar">${ico('voltar')}<span>Voltar</span></button>` : '<img class="logo" src="icons/logo-u.svg" alt="Ubirálcool">'}
         <div class="titulo ${String(titulo).length > 17 ? 'longo' : ''}"><div class="titulo-linha"><b>${esc(titulo)}</b><em class="turno-topo" id="turno-topo">${esc(turnoAtual().nome)}</em></div>${subtitulo ? `<span id="subtitulo-topo">${esc(subtitulo)}</span>` : ''}</div>
         ${atalhos ? `<div class="atalhos">${atalhos}</div>` : ''}
-        ${painelNovoPc() && iaDisponivel() ? `<button class="ia-busca" data-a="assistente">${ico('brilho')}<span>Pergunte ou peça algo ao assistente</span></button>` : ''}
+        ${painelNovoPc() && iaDisponivel() ? `<button class="ia-busca" data-a="assistente">${ico('brilho')}<span>${cfg.escala === 'maior' ? 'Assistente' : 'Pergunte ou peça algo ao assistente'}</span></button>` : ''}
         <div class="relogio"><b id="relogio">${horaAgora()}</b></div>
         ${atualizacao.nova ? `<button class="tema atualizar" data-a="atualizacao" aria-label="Atualizar o aplicativo para a versão ${esc(atualizacao.nova.versao)}">${ico('instalar')}<span>Atualizar</span></button>` : ''}
         ${configurado ? `<button class="tema status-con" id="status-con" data-a="status-con" aria-label="Conexão: central e nuvem">${luzesConexao()}</button>` : ''}

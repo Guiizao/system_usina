@@ -3421,7 +3421,7 @@ public class ServidorCentral {
       if ("folhas".equals(k)) continue;
       if (mesmoJson(va == null ? null : va.opt(k), vn.opt(k))) continue;
       // no tablet de setor só os operadores (ajustes); no tablet chefe, o resto da usina
-      boolean pode = "niveisChefe".equals(k) ? funcoes.contains("sistema") : "memoria_leitor".equals(r.optString("prancheta")) ? chefe && funcoes.contains("ler_folha") : chefe ? funcoes.contains("usina") : "operadores".equals(k) && (funcoes.contains("ajustes") || funcoes.contains("usina"));
+      boolean pode = "niveisChefe".equals(k) ? funcoes.contains("sistema") : chefe ? funcoes.contains("usina") : "operadores".equals(k) && (funcoes.contains("ajustes") || funcoes.contains("usina"));
       if (pode) continue;
       if (!antigo) return new Object[] { false, null, "sem_permissao" };
       comoEstava(vn, va, k);

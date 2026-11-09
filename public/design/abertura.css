@@ -1,18 +1,6 @@
 /* Pranchetas Ubirálcool - abertura do programa do Windows
  * © 2026 Guilherme. Todos os direitos reservados. Uso somente com autorização do autor (veja LICENCA.txt). */
 
-/* 2.17: uma vez ao abrir o programa (nucleo/iniciar.js mostrarAbertura): o U se monta de baixo para cima, depois o nome
-   e a mensagem sobem. Cerca de 1,2 s no total, pelo --ritmo de design/movimento.css; não pega toque nenhum. */
+/* 3.1: as 10 aberturas em canvas (design/aberturas.js), uma vez ao abrir. */
 #abertura-nova { position: fixed; inset: 0; z-index: 300; background: #0e1110; }
 #abertura-nova canvas { display: block; width: 100%; height: 100%; }
-#abertura { position: fixed; inset: 0; z-index: 300; display: grid; place-items: center; align-content: center; gap: 8px;
-  background: var(--chao); color: var(--tinta); pointer-events: none; }
-#abertura img { width: 132px; height: 132px; animation: aberturaLogo calc(.62s * var(--ritmo)) var(--suave) both; }
-#abertura b { margin-top: 12px; font-size: 32px; animation: aberturaSobe calc(.3s * var(--ritmo)) var(--suave) calc(.42s * var(--ritmo)) both; }
-#abertura span { font-size: 17px; color: var(--tinta-2); animation: aberturaSobe calc(.3s * var(--ritmo)) var(--suave) calc(.5s * var(--ritmo)) both; }
-#abertura.saindo { animation: aberturaSai var(--mov-painel) ease-out both; }
-@keyframes aberturaLogo { from { clip-path: inset(100% 0 0 0); transform: scale(.94); } to { clip-path: inset(0 0 0 0); transform: none; } }
-@keyframes aberturaSobe { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
-@keyframes aberturaSai { from { opacity: 1; } to { opacity: 0; } }
-/* menos movimento: só aparece e some, sem montar nem subir */
-@media (prefers-reduced-motion: reduce) { #abertura img, #abertura b, #abertura span { animation: none; } }

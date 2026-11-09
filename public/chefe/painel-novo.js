@@ -97,13 +97,16 @@
       const folhas = s.pranchetas.flatMap(folhasDe);
       const regs = folhas.flatMap((pid) => listar(data, pid)).sort((a, b) => b.atualizadoEm - a.atualizadoEm);
       const feitas = folhas.filter((pid) => listar(data, pid).length).length;
-      const pends = data === dataProducao() ? s.pranchetas.map((pid) => resumoPrancheta(pid, data)).filter((r) => r.estado === 'pendente').length : 0;
+      const resumos = data === dataProducao() ? s.pranchetas.map((pid) => resumoPrancheta(pid, data)) : [];
+      const pends = resumos.filter((r) => r.estado === 'pendente').length;
+      const agora = [resumos.find((r) => r.estado === 'pendente'), resumos.find((r) => r.estado === 'andamento')].filter(Boolean).map((r) => r.texto.replace(/\.$/, '')).join('. ');
       const disp = st && st.aparelhos.find((a) => a.papel === s.id);
       const quem = (disp && disp.online && disp.operador) || (regs[0] && regs[0].operador) || '';
+      const aparelho = cfg.demo || soVer() ? '' : disp ? (disp.bloqueio ? 'Bloqueado' : disp.online ? `Ligado${disp.operador ? `, ${disp.operador}` : ''}` : situacaoDoAparelho(disp)) : 'Tablet não conectado';
       const hora = regs[0] ? new Date(regs[0].atualizadoEm).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '';
       const nAlertas = alertas.filter((a) => a.setor === s.id).length;
       const situacao = nAlertas ? ['r', contar(nAlertas, 'alerta', 'alertas')] : pends ? ['a', `Faltam ${pends}`] : regs.length ? ['v', 'Em dia'] : ['n', 'Sem anotação'];
-      return { s, quem, hora, feitas, total: folhas.length, situacao };
+      return { s, quem, hora, feitas, total: folhas.length, situacao, agora, aparelho };
     });
   }
   const pnIniciais = (nome) => esc(String(nome).trim().slice(0, 2));
@@ -128,7 +131,7 @@
             ${mini('baixar', 'Vinhaça', pnNum(d.vinhaca), 'L', d.vinhaca, ontem.vinhaca)}${mini('balanca', 'Matéria-prima', pnNum(d.mp, 1), 'kg', d.mp, ontem.mp)}</div>` : ''}
           <section class="pn-c pn-folhas pn-e"><div class="cab"><h2>Folhas do dia</h2>${pend ? `<small>${contar(pend, 'pendente', 'pendentes')}</small>` : ''}</div>
             <div class="corpo"><svg viewBox="0 0 136 80" class="pn-gauge" role="img" aria-label="${pnNum(pct * 100)}% das folhas com anotação"><path class="tr" d="M14 72a54 54 0 0 1 108 0"/><path class="val" d="M14 72a54 54 0 0 1 108 0" stroke-dasharray="${(pct * meia).toFixed(1)} ${meia.toFixed(1)}"/><text x="68" y="68" text-anchor="middle">${pnNum(pct * 100)}%</text></svg>
-              <dl class="pn-nums"><div><dt>Anotações</dt><dd>${todos.length}</dd></div><div><dt>Folhas</dt><dd>${comNota} de ${feitas.length}</dd></div><div data-num="ligados"><dt>Aparelhos</dt><dd>${cfg.demo && !sync.status ? '-' : ligados}</dd></div></dl></div></section>
+              <dl class="pn-nums"><div><dt>Anotações</dt><dd><b>${todos.length}</b></dd></div><div><dt>Folhas</dt><dd><b>${comNota} de ${feitas.length}</b></dd></div><div data-num="ligados"><dt>Aparelhos</dt><dd><b>${cfg.demo && !sync.status ? '-' : ligados}</b></dd></div></dl></div></section>
         </div>
         ${ve ? `<div class="pn-l2">
           <section class="pn-c pn-e"><div class="cab"><h2>Produção de álcool</h2><span class="pn-leg"><i class="t"></i>Total<i class="d"></i>Destilaria${media !== '' ? `<i class="m"></i>Média ${pnNum(media)} L` : ''}</span>${pnPeriodos(v)}</div>${pnGrafico(serie)}</section>
@@ -138,7 +141,7 @@
         <div class="pn-l3">
           ${veNoChefe('corrigir') || veNoChefe('relatorios') ? `<section class="pn-c pn-e"><div class="cab"><h2>Setores agora</h2><small>${esc(turnoAtual().nome)}</small></div>
             <div class="pn-tabela"><div class="tit"><span>Setor</span><span>Quem está</span><span>Última</span><span>Preenchimento</span><span>Situação</span></div>
-            ${pnSetoresAgora(data).map((x) => `<button class="lin" data-a="abrir-setor" data-id="${x.s.id}"><span class="s"><i>${ico(x.s.icone)}</i><b>${esc(x.s.nome)}</b></span><span class="q">${x.quem ? `<em>${pnIniciais(x.quem)}</em>${esc(x.quem)}` : '-'}</span><span>${x.hora || '-'}</span><span class="p"><u><i style="width:${x.total ? x.feitas / x.total * 100 : 0}%"></i></u>${x.feitas}/${x.total}</span><span><mark class="${x.situacao[0]}">${x.situacao[1]}</mark></span></button>`).join('')}</div></section>` : ''}
+            ${pnSetoresAgora(data).map((x) => `<button class="lin" data-a="abrir-setor" data-id="${x.s.id}"><span class="s"><i>${ico(x.s.icone)}</i><span><b>${esc(x.s.nome)}</b>${x.agora ? `<small>${esc(x.agora)}</small>` : ''}</span></span><span class="q">${x.quem ? `<em>${pnIniciais(x.quem)}</em>` : ''}<span>${x.quem ? esc(x.quem) : '-'}${x.aparelho ? `<small>${esc(x.aparelho)}</small>` : ''}</span></span><span>${x.hora || '-'}</span><span class="p"><u><i style="width:${x.total ? x.feitas / x.total * 100 : 0}%"></i></u>${x.feitas}/${x.total}</span><span><mark class="${x.situacao[0]}">${x.situacao[1]}</mark></span></button>`).join('')}</div></section>` : ''}
           <div class="pn-col">
             ${veNoChefe('corrigir') || veNoChefe('relatorios') ? blocoForaDoLimite(data) || `<section class="pn-c pn-e"><div class="cab"><h2>Fora do limite</h2></div><p class="sub pn-vazio">Nada fora do limite neste dia.</p></section>` : ''}
             ${veNoChefe('escritorio') ? `<section class="pn-c pn-e pn-fecha"><div class="cab"><h2>Fechamento do dia</h2><small>Lote <b>${esc(d.lote)}</b></small></div>
@@ -172,7 +175,7 @@
   function telaSetoresCel(v) {
     const data = v.data || dataProducao(), lista = pnSetoresAgora(data), alertas = listaForaDoLimite(data), pendentes = lista.filter((x) => x.situacao[0] === 'a').length;
     return `<header class="pn-oi pn-e"><div><b>Setores</b><small>${esc(turnoAtual().nome)}, ${fmtData(data).slice(0, 5)}</small></div>${pendentes ? `<mark class="a">${contar(pendentes, 'pendente', 'pendentes')}</mark>` : ''}</header>
-      <main class="pn-cel"><div class="pn-setores">${lista.map((x) => `<button class="pn-e ${x.situacao[0] === 'a' || x.situacao[0] === 'r' ? 'w' : ''}" data-a="abrir-setor" data-id="${x.s.id}"><i>${ico(x.s.icone)}</i><b>${esc(x.s.nome)}</b><small>${x.quem ? `${esc(x.quem)}${x.hora ? `, ${x.hora}` : ''}` : x.situacao[1]}</small><u><s style="width:${x.total ? x.feitas / x.total * 100 : 0}%"></s></u></button>`).join('')}</div>
+      <main class="pn-cel"><div class="pn-setores">${lista.map((x) => `<button class="pn-e ${x.situacao[0] === 'a' || x.situacao[0] === 'r' ? 'w' : ''}" data-a="abrir-setor" data-id="${x.s.id}"><i>${ico(x.s.icone)}</i><b>${esc(x.s.nome)}</b><small>${x.agora ? esc(x.agora) : x.quem ? `${esc(x.quem)}${x.hora ? `, ${x.hora}` : ''}` : x.situacao[1]}</small><u><s style="width:${x.total ? x.feitas / x.total * 100 : 0}%"></s></u></button>`).join('')}</div>
         ${alertas.length ? `<section class="pn-c pn-e pn-alerta"><span>${ico('alerta')}</span><div><b>${alertas.length} fora do limite</b><small>${esc(alertas[0].onde)}</small></div></section>` : ''}</main>`;
   }
   function telaMaisCel() {
@@ -188,6 +191,18 @@
         ${acompanhar.length ? `<h3>Acompanhar</h3><div class="pn-tiles" data-n="${acompanhar.length}">${acompanhar.join('')}</div>` : ''}
         <h3>Administrar</h3><div class="pn-tiles" data-n="${administrar.length}">${administrar.join('')}</div>
       </main>`;
+  }
+  /** Coluna da direita de Produção no computador: de onde veio o álcool, rastreamento, insumos e a semana. */
+  function pnLadoProducao(v, x) {
+    const dia = v.data, des = Number(x.calculo.alcoolDestilaria) || 0, nova = Number(x.calculo.alcoolNova) || 0, total = des + nova, volta = 2 * Math.PI * 52, salvo = !!rastreioGuardado(dia);
+    const parte = (nome, classe, n) => `<li><i class="${classe}"></i><span>${nome}</span><b>${pnComUn(n, 'L')}</b></li>`;
+    return `<aside class="pn-lado">
+      <section class="pn-c pn-donut"><svg viewBox="0 0 130 130" role="img" aria-label="Álcool do dia por destilaria"><circle class="t" cx="65" cy="65" r="52"/><circle class="d" cx="65" cy="65" r="52" stroke-dasharray="${(total ? des / total * volta : 0).toFixed(1)} ${volta.toFixed(1)}" transform="rotate(-90 65 65)"/><text class="l" x="65" y="58" text-anchor="middle">Álcool</text><text class="n" x="65" y="80" text-anchor="middle">${pnComUn(total || '', 'L')}</text></svg>
+        <div><h2>De onde veio</h2><ul>${parte('Destilaria', 'v', x.calculo.alcoolDestilaria)}${parte('Nova Destilaria', 'g', x.calculo.alcoolNova)}</ul></div></section>
+      <section class="pn-c"><div class="cab"><h2>Rastreamento e etiqueta</h2><mark class="${salvo ? 'v' : 'a'}" style="margin-left:auto">${salvo ? 'Salvo' : 'Falta salvar'}</mark></div><p class="sub" style="margin:0 0 10px">Preenchidos com as folhas deste dia.</p><button class="btn largo" data-a="esc-abrir" data-t="esc-rastreamento" data-dia="${dia}">${ico('documento')} Abrir folha e etiqueta</button></section>
+      ${veNoChefe('relatorios') ? blocoTotais(dia) : ''}
+      <section class="pn-c"><div class="cab"><h2>Álcool nos últimos 7 dias</h2></div>${pnBarras(pnSerie(dia, 7))}</section>
+    </aside>`;
   }
   function blocoVoceEsta() {
     const p = pessoaAtual();

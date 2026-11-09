@@ -114,7 +114,7 @@
   function telaEscCalculos(v) {
     const x = valoresDaTela(v);
     return `${cabecalho('Cálculos da produção', `Lote ${x.lote} · ${fmtData(x.fechamento)} 07:00`, true, atalhosEsc(v))}
-      <main class="escritorio">
+      <main class="escritorio ${painelNovoPc() ? 'pn-producao' : ''}"><div class="esc-coluna">
         <section class="bloco"><h2>${ico('tanque')} Hidrolisado e vinho</h2>
           <p class="sub">Conta do Lucas: hidrolisado = matéria‑prima ÷ fator; vinho = hidrolisado × Brix inicial ÷ Brix final.</p>
           ${linhaEsc(x, 'calculo.mpKg', 'Matéria‑prima do dia', 'kg')}${linhaEsc(x, 'calculo.fator', 'Fator da matéria‑prima', '')}
@@ -128,7 +128,7 @@
         <div class="linha-botoes"><button class="btn" data-a="esc-recalcular">${ico('relogio')} Refazer com as anotações de agora</button>
           ${pode('relatorios') ? `<button class="btn" data-a="relatorio-enviar" data-data="${v.data}">${ico('enviar')} Enviar ou imprimir</button>` : ''}
           ${botaoSalvarEsc()}
-      </main>`;
+      </div>${painelNovoPc() ? pnLadoProducao(v, x) : ''}</main>`;
   }
   /** Célula da folha: mostra o valor e abre para mudar. */
   function celEsc(x, c, rotulo, num) {

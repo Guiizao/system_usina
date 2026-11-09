@@ -87,6 +87,8 @@
     return a && a[1] >= 3 ? { valor: a[0], preenche: a[1] >= 5 && !b } : null;
   }
   function lembrarCorrecao(pid, nome, vet, valor) {
+    // shortcut: a central do tablet (Java) ainda exige usina para memoria_leitor; igualar à nuvem no próximo APK, que uma mudança no Java obrigaria agora
+    if (!pode('usina') && !cfg.soNuvem && !sync.viaBanco) return;
     // shortcut: para de guardar depois de 25 exemplos do mesmo valor; quando a memória precisar se renovar, trocar os mais antigos
     if (!vet || memoriaDaColuna(pid, nome).filter((r) => r.valores.valor === valor).length >= MAX_POR_VALOR) return;
     gravar('config', PID_MEMORIA, `${pid}:${nome}:${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`, { pid, nome, valor, vet });

@@ -23,7 +23,7 @@
           const excel = (guardados.get(d) || []).some((a) => /\.xlsx$/i.test(a.nome));
           return `<section class="bloco relatorio-dia">
             <div class="relatorio-cab"><span class="escolha-ico">${ico('planilha')}</span>
-              <div><b>Folhas de ${fmtData(d)}</b><small>${diaSemana(d)}${d === dataProducao() ? ' (hoje)' : ''}${cfg.soNuvem ? '' : ` · ${excel ? 'Excel guardado em RelatoriosUsina' : 'ainda sem Excel guardado'}`}</small></div></div>
+              <div><b>Folhas de ${fmtData(d)}</b><small>${diaSemana(d)}${d === dataProducao() ? ' (hoje)' : ''}${cfg.soNuvem ? '' : ` · ${excel ? 'Excel guardado em RelatoriosUsina' : 'ainda sem Excel guardado'}`}</small></div>${painelNovoPc() && veNoChefe('escritorio') ? `<mark class="pn-marca ${rastreioGuardado(d) ? 'v' : 'a'}">${rastreioGuardado(d) ? 'Rastreamento salvo' : 'Falta rastreamento'}</mark>` : ''}</div>
             <div class="linha-botoes">
               <button class="btn pequeno primario" data-a="relatorio-abrir" data-data="${d}" data-arq="${(guardados.get(d) || []).length ? 1 : ''}">${ico('seta')} Abrir e corrigir</button>
               <button class="btn pequeno" data-a="relatorio-enviar" data-data="${d}">${ico('enviar')} Enviar ou imprimir</button>

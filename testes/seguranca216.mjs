@@ -138,7 +138,7 @@ export async function testarTextoSeguranca216(g) {
     let modal;
     const c = vm.createContext({ C: { inicioDoDia: 7 }, cfg: { soNuvem: true }, texto,
       pessoaAtual: () => ({ nome: texto }), ico: () => '', pode: () => true, soVer: () => false, avisosEmAberto: () => [],
-      setores: () => [{ id: 'setor', nome: texto, pranchetas: ['insumo'] }], diaFechado: () => '2026-10-20', diaDoEscritorio: () => '2026-10-20', view: () => ({ tela: 'central' }),
+      setores: () => [{ id: 'setor', nome: texto, pranchetas: ['insumo'] }], diaFechado: () => '2026-10-20', diaDoEscritorio: () => '2026-10-20', lerFolhaLigada: () => false, view: () => ({ tela: 'central' }),
       totaisPorTurno: () => totais, folhasDe: (p) => [p], prancheta: () => ({ nome: texto, tipo: 'insumo' }),
       resumoPrancheta: () => ({ texto }), listarPapel: () => [], buscarDia: async () => {},
       abrirModal: async (html) => { modal = html; return 'x'; }, fetch: async () => ({ arrayBuffer: async () => new ArrayBuffer(0) }) });

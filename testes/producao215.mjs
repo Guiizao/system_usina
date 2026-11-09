@@ -108,9 +108,9 @@ export async function testarProducao(ligar, porta, grupo) {
         igual((await sync(n1, [reg(ids[0], { valor: '11' })])).recusados.length, 0);
       }
     });
-    await teste(grupo, 'memória do leitor: quem lê folha grava sem precisar de usina; tablet de setor é recusado', async () => {
+    await teste(grupo, 'memória do leitor: quem lê folha grava sem usina (na central do tablet só no próximo APK); tablet de setor é recusado', async () => {
       const mem = (chave) => reg(`config|memoria_leitor|${chave}`, { pid: 'caldeira', nome: 'temp', valor: '10', vet: [1, 2] }, { base: 0 });
-      igual((await sync(consulta, [mem('a')])).recusados.length, 0);
+      igual((await sync(consulta, [mem('a')])).recusados.length, /java/i.test(c.tipo) ? 1 : 0);
       igual((await sync(setor, [mem('b')])).recusados[0].motivo, 'sem_permissao');
     });
     await teste(grupo, 'escritório central respeita teto e a rota antiga do escritório continua aceita', async () => {

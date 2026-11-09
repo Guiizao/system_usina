@@ -16,6 +16,10 @@ O leitor lê Destilaria e Nova Destilaria além das quatro folhas antigas. Corre
 
 O Painel novo é o único no computador. No celular é uma chave por aparelho, em Ajustes, desligada no início. Tablet (chefe ou setor) fica no painel de sempre.
 
+O assistente roda na nuvem (`nuvem/src/assistente.js`, Workers AI). O modelo só escolhe uma ferramenta fechada; quem confere a permissão e escreve os números é o servidor. Imprimir, enviar e avisar só abrem a tela depois de a pessoa confirmar. Limite de 20 perguntas por hora por pessoa. Funciona para quem entrou pela nuvem.
+
+A regra nova de `memoria_leitor` (quem tem `ler_folha` grava sem precisar de `usina`) vale na nuvem e no `server.js`. Na central do tablet (Java) fica para o próximo APK, porque qualquer mudança no Java faz os tablets antigos pararem de receber as telas pela atualização rápida.
+
 ## Escritório segue a data do painel (versão 3.0.1)
 
 Só as telas mudaram: vai pela atualização rápida, sem instalar APK nem exe em quem já está na 3.0.0. O quadro Escritório do painel e o menu lateral usam a data escolhida; no dia de hoje, que ainda não fechou, continuam no último dia que fechou (`diaDoEscritorio`, em `chefe/escritorio.js`). O lote leva a data do fechamento: o painel em 31/10 mostra o lote de 01/11.

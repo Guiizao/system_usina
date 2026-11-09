@@ -227,28 +227,31 @@ export async function testarLogoEAbertura217(nav, g) {
       await tab.ir(c.url + '/?demo&papel=central', 'typeof render === "function"');
       await dormir(400);
       certo((await tab.avaliar('document.querySelector(".topo img.logo").getAttribute("src")')).endsWith('logo-u.svg'), 'topo');
-      certo(await tab.avaliar('document.getElementById("abertura").hidden'), 'sem abertura no tablet');
+      certo(!(await tab.avaliar('!!document.querySelector("#abertura-nova")')), 'sem abertura no tablet');
       certo(fs.readFileSync(path.join(APP, 'public', 'chefe', 'exportar.js'), 'utf8').includes("'icons/logo.png'"), 'documento impresso com a logo da empresa');
     });
     const pc = await nav.novoAparelho('windows', TAMANHOS.pcGrande); aparelhos.push(pc);
     await nav.cdp('Emulation.setUserAgentOverride', { userAgent: UA_ELECTRON }, pc.sessionId);
-    await teste(g, 'programa do Windows: a abertura aparece, o U se monta e some sozinha em até 1,8 s', async () => {
-      await pc.ir(c.url + '/?nuvem=1', '!!document.getElementById("abertura") && !document.getElementById("abertura").hidden');
-      for (const ms of [300, 800]) { await dormir(ms === 300 ? 150 : 500); await pc.foto(path.join(FOTOS, `abertura-${ms}ms.png`)); }
-      certo((await pc.avaliar('getComputedStyle(document.querySelector("#abertura img")).animationName')).includes('aberturaLogo'), 'o U anima');
-      await pc.esperar('document.getElementById("abertura").hidden', 1800, 'abertura sumiu');
+    await teste(g, 'programa do Windows: a abertura nova aparece antes de entrar e some sozinha em até 2,6 s', async () => {
+      await pc.ir(c.url + '/?nuvem=1', '!!document.querySelector(".entrar-cartao")');
+      await pc.avaliar(`sessionStorage.removeItem('abertura'); mostrarAbertura(); 1`);
+      await pc.esperar('!!document.querySelector("#abertura-nova canvas")', 3000, 'abertura');
+      await pc.foto(path.join(FOTOS, 'abertura-300ms.png'));
+      await pc.esperar('!document.querySelector("#abertura-nova")', 2800, 'abertura sumiu');
       certo((await pc.avaliar('document.querySelector(".entrar-cartao img.entrar-logo").getAttribute("src")')).endsWith('logo-u.svg'), 'logo na tela de entrar');
       await pc.foto(path.join(FOTOS, 'abertura-depois.png'));
-      await pc.recarregar();
-      await dormir(300);
-      certo(await pc.avaliar('document.getElementById("abertura").hidden'), 'recarregar (ex.: depois de uma queda) não repete a abertura');
+      await pc.avaliar('mostrarAbertura(); 1');
+      await dormir(200);
+      certo(!(await pc.avaliar('!!document.querySelector("#abertura-nova")')), 'recarregar (ex.: depois de uma queda) não repete a abertura');
     });
     const calmo = await nav.novoAparelho('windows calmo', TAMANHOS.computador); aparelhos.push(calmo);
     await nav.cdp('Emulation.setUserAgentOverride', { userAgent: UA_ELECTRON }, calmo.sessionId);
     await nav.cdp('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-reduced-motion', value: 'reduce' }] }, calmo.sessionId);
     await teste(g, 'menos movimento no Windows: a abertura some rápido', async () => {
-      await calmo.ir(c.url + '/?nuvem=1', '!!document.getElementById("abertura")');
-      await calmo.esperar('document.getElementById("abertura").hidden', 800, 'some em até 0,8 s');
+      await calmo.ir(c.url + '/?nuvem=1', '!!document.querySelector(".entrar-cartao")');
+      await calmo.avaliar(`sessionStorage.removeItem('abertura'); mostrarAbertura(); 1`);
+      await dormir(100);
+      await calmo.esperar('!document.querySelector("#abertura-nova")', 1500, 'some em até 1,5 s');
     });
     for (const a of aparelhos) certo(!a.erros.length, a.erros.join(' | '));
   } finally {
