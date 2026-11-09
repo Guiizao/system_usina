@@ -84,6 +84,9 @@
 }
 
 /* Painel novo (3.1): cartão verde, barras e sombra dos cartões */
+/* fundo com movimento do painel novo; --fv-forca é a mesma para os cinco efeitos (2,05 = 75% da escala aprovada) */
+:root { --fv-cor: #1b7a3e; --fv-base: .09; --fv-forca: 2.05; }
+:root[data-tema="escuro"] { --fv-cor: #4cae6e; --fv-base: .13; }
 /* o gráfico que sai em arquivo é sempre claro, em qualquer tema */
 :root { --ia-img-fundo: #ffffff; --ia-img-tinta: #1c2520; --ia-img-tinta-2: #55625a; --ia-img-linha: #d5dcd6; --ia-img-barra: #1b7a3e; }
 :root { --pn-heroi: linear-gradient(135deg, #25994f, #1b7a3e 50%, #135c2e); --pn-heroi-2: #d8eedd; --pn-liquido: #bfe8ca; --pn-tanque-texto: #135c2e; --pn-barra: #a9cfb4; --pn-sombra: rgba(20, 30, 25, .08); }

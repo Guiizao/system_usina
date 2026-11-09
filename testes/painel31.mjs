@@ -170,6 +170,16 @@ try {
     igual(await a.avaliar(`view().tela`), 'setores-cel', 'não abriu a folha');
     await a.fechar();
   });
+  await teste(g, 'fundo: cinco efeitos, um por vez, só no painel novo, atrás de tudo e sem reiniciar no redesenho', async () => {
+    const pc = await abrir('p19', TAMANHOS.computador, 'central', false);
+    igual(await pc.avaliar(`(() => { const f = document.getElementById('fundo-vivo'); return [getComputedStyle(f).display, f.querySelectorAll('.fv').length, f.querySelectorAll('.fv.ativo').length, document.documentElement.scrollWidth <= innerWidth]; })()`), ['block', 5, 1, true]);
+    await pc.avaliar(`window.camada = document.getElementById('fundo-vivo'); render(true); 1`);
+    igual(await pc.avaliar(`[window.camada.isConnected, !document.elementFromPoint(700, 300).closest('#fundo-vivo')]`), [true, true]);
+    await pc.fechar();
+    const t = await abrir('p20', TAMANHOS.tablet, 'central', false);
+    igual(await t.avaliar(`getComputedStyle(document.getElementById('fundo-vivo')).display`), 'none');
+    await t.fechar();
+  });
   await teste(g, 'quem não vê produção não recebe os números no painel novo', async () => {
     const a = await nav.novoAparelho('p13', TAMANHOS.computador);
     await a.ir(url + 'central&funcoes=corrigir', 'document.querySelector("#app main")');

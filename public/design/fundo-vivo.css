@@ -1,0 +1,25 @@
+/* Pranchetas Ubirálcool - fundo com movimento atrás do painel novo. Cor e força: --fv-* em cores.css. Só transform e opacity, para não pesar. */
+#fundo-vivo { display: none; }
+:root[data-painel-novo] #fundo-vivo { display: block; position: fixed; inset: 0; z-index: -1; overflow: hidden; pointer-events: none; }
+.fv { position: absolute; inset: 0; opacity: 0; transition: opacity calc(1.4s * var(--ritmo, 1)) ease; }
+.fv.ativo { opacity: 1; }
+.fv:not(.ativo) * { animation-play-state: paused; }
+
+.fv-onda { position: absolute; left: 0; bottom: 0; width: 200%; height: var(--h); animation: fv-anda calc(var(--t) * var(--ritmo, 1)) linear infinite; }
+.fv-onda path { fill: var(--fv-cor); opacity: calc(var(--o) * var(--fv-forca)); }
+@keyframes fv-anda { to { transform: translateX(-50%); } }
+
+.fv-nuvem { position: absolute; width: min(70vw, 760px); aspect-ratio: 1; border-radius: 50%; background: radial-gradient(closest-side, var(--fv-cor), transparent); opacity: 0; animation: fv-nuvem calc(var(--t) * var(--ritmo, 1)) ease-in-out var(--d) infinite; }
+@keyframes fv-nuvem { 0% { opacity: 0; transform: scale(.85); } 35%, 65% { opacity: calc(var(--fv-base) * 1.8 * var(--fv-forca)); } 100% { opacity: 0; transform: translate(var(--x), var(--y)) scale(1.2); } }
+
+.fv-bolha { position: absolute; bottom: -80px; border-radius: 50%; background: var(--fv-cor); opacity: 0; animation: fv-sobe calc(var(--t) * var(--ritmo, 1)) linear var(--d) infinite; }
+@keyframes fv-sobe { 0% { transform: none; opacity: 0; } 8%, 90% { opacity: calc(var(--fv-base) * var(--fv-forca)); } 100% { transform: translateY(-115vh); opacity: 0; } }
+
+.fv-pingo { position: absolute; width: var(--s); height: var(--s); border: 2px solid var(--fv-cor); border-radius: 50%; opacity: 0; animation: fv-anel calc(var(--t) * var(--ritmo, 1)) ease-out var(--d) infinite; }
+@keyframes fv-anel { 0% { transform: scale(.08); opacity: 0; } 12% { opacity: calc(var(--fv-base) * 1.6 * var(--fv-forca)); } 100% { transform: none; opacity: 0; } }
+
+.fv-luz { position: absolute; top: -30%; left: -45%; height: 160%; background: linear-gradient(90deg, transparent, var(--fv-cor), transparent); opacity: calc(var(--fv-base) * .9 * var(--fv-forca)); rotate: 18deg; animation: fv-luz calc(var(--t) * var(--ritmo, 1)) linear var(--d) infinite; }
+@keyframes fv-luz { to { translate: 200vw 0; } }
+
+@media (prefers-reduced-motion: reduce) { #fundo-vivo * { animation: none; } }
+@media print { #fundo-vivo { display: none !important; } }
