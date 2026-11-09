@@ -131,6 +131,26 @@ try {
     certo(/Produção Álcool: 30\b/.test(m), m);
   });
 
+  await teste(g2, 'turno desmarcado: a produção sai do dia inteiro e diz isso', async () => {
+    const t = await pv('return (await montarEnvio({ formato: "texto", dias: window.__D, setores: window.__ids, turnos: [1], totalTurnos: 3, somar: true, extras: ["calculo"] })).texto');
+    certo(t.includes('Dia inteiro, de todos os turnos'), t);
+    const inteiro = await pv('return (await montarEnvio({ formato: "texto", dias: window.__D, setores: window.__ids, turnos: C.turnos.map((x) => x.id), totalTurnos: C.turnos.length, somar: true, extras: ["calculo"] })).texto');
+    certo(!inteiro.includes('Dia inteiro'), inteiro);
+  });
+  await teste(g2, 'lote corrigido no álcool é o que sai na produção', async () => {
+    await pv(`const v = valoresDoDia('${D1}'); v.alcool.lote = 'LOTE-CORRIGIDO'; v.operadores = []; registros['${D1}|rastreamento|dia'] = { id: '${D1}|rastreamento|dia', data: '${D1}', prancheta: 'rastreamento', chave: 'dia', valores: v, apagado: false, atualizadoEm: 1 }; salvarRegistros();`);
+    igual(await pv(`return producaoDoDia('${D1}').lote`), 'LOTE-CORRIGIDO');
+    await pv(`delete registros['${D1}|rastreamento|dia']; salvarRegistros();`);
+  });
+  await teste(g2, 'área só de insumos avisa os dias sem anotação', async () => {
+    const h = await pv('const s = setores().find((x) => x.pranchetas.flatMap(folhasDe).every((p) => prancheta(p).tipo === "insumo")); return window.ModelosPapel.paraHtml(folhaSomadaDoSetor(s, window.__D), "", fmtNum)');
+    certo(h.includes('Sem anotação em:'), h.slice(0, 400));
+  });
+  await teste(g2, 'nome de operador com "s" não perde letra na folha do rastreamento', async () => {
+    const h = await pv(`const v = valoresDoDia('${D1}'); v.operadores = 'Marcos Silva - Ana'; return window.ModelosPapel.paraHtml(folhaDoRastreamento('${D1}', v), '', fmtNum)`);
+    certo(h.includes('Marcos Silva'), h.slice(0, 400));
+  });
+
   await teste(g2, 'Áreas tem Cálculo de produção e Rastreamento', async () => {
     await a.tocar('[data-a="compartilhar"][data-destino="whatsapp"]'); await dormir(300);
     igual(await pv('return [...document.querySelectorAll(".modal .setores-envio [data-k^=\'x:\']")].map((b) => [b.dataset.k, b.classList.contains("sel")])'), [['x:calculo', true], ['x:rastreamento', true]]);

@@ -232,6 +232,7 @@
       linhas.push(`• INPM médio: ${num(r.inpm)}`, `• Brix médio: ${num(r.brix)}`);
     }
     if (extras.includes('rastreamento')) linhas.push(`• Lote: ${[...new Set(lista.map((x) => x.lote).filter(Boolean))].join(', ') || '—'}`);
+    if (turnosDoEnvio) linhas.push(`(${AVISO_PRODUCAO_DO_DIA})`);
     return linhas.join('\n');
   }
   /** Imprimir: escolhe os setores e abre a impressão (dia antigo é buscado na central antes). */

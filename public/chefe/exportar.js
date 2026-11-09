@@ -16,7 +16,7 @@
   function folhaDoRastreamento(dia, valores) {
     const naoConferido = !valores && !rastreioGuardado(dia);
     const x = valores || (naoConferido ? valoresDoDia(dia) : null);
-    rascunhoRastreio = x ? { dia, valores: Object.assign({}, x, { operadores: String(x.operadores || '').split(/s*-s*|s*,s*/).filter(Boolean) }) } : null;
+    rascunhoRastreio = x ? { dia, valores: Object.assign({}, x, { operadores: String(x.operadores || '').split(/\s*-\s*|\s*,\s*/).filter(Boolean) }) } : null;
     try {
       const f = papel().folha(PID_RASTREIO, dia), g = f.grade;
       if (naoConferido) g.bloco(g.linhas, 0, g.linhas, g.larguras.length - 1, 'Calculado das anotações, não conferido', { b: true, al: 'c', sz: 9 });
@@ -79,10 +79,15 @@
       if (r.operadores.length) rodape.push(`${p.nome}. Operadores: ${r.operadores.join(', ')}`);
       if (r.diasSemAnotacao.length) rodape.push(`${p.nome}. Sem anotação em: ${diasCurtos(r.diasSemAnotacao)}`);
     });
+    if (!folhasMedidas(setor).length) { // área só de insumos: dia com zero é normal, dia sem nenhuma folha é que falta
+      const folhas = setor.pranchetas.flatMap(folhasDe), faltam = dias.filter((d) => !folhas.some((pid) => listarPapel(d, pid).length));
+      if (faltam.length) rodape.push(`Sem anotação em: ${diasCurtos(faltam)}`);
+    }
     const insumos = totaisDoEnvio(dias, [setor.id]);
     if (insumos.length) secoes.push({ titulo: 'Insumos', colunas: ['Insumo', 'Quantidade', 'Unidade'], linhas: insumos.map((x) => [x.insumo, x.quantidade, x.unidade]) });
     return window.ModelosPapel.folhaDeTabela({ nome: setor.nome, titulo: `${setor.nome}, de ${fmtData(dias[0])} a ${fmtData(dias[dias.length - 1])}`, secoes, rodape });
   }
+  const AVISO_PRODUCAO_DO_DIA = 'Dia inteiro, de todos os turnos: a produção não se separa por turno.';
   const NUM_PRODUCAO = [['alcool', 'Álcool', 'L'], ['vinhaca', 'Vinhaça', 'L'], ['hidrolisado', 'Hidrolisado', 'L'], ['vinho', 'Vinho', 'L']];
   /** Cálculo de produção de um dia, ou de vários já somados. */
   function folhaDeProducao(dias) {
@@ -92,7 +97,7 @@
     return window.ModelosPapel.folhaDeTabela({
       nome: 'Cálculo de produção', titulo: dias.length === 1 ? `Cálculo de produção de ${fmtData(dias[0])}` : `Cálculo de produção, de ${fmtData(dias[0])} a ${fmtData(dias[dias.length - 1])}`,
       secoes: [{ titulo: 'Produção', colunas: ['Item', 'Valor', 'Unidade'], linhas }],
-      rodape: [`Lote: ${[...new Set(lista.map((x) => x.lote).filter(Boolean))].join(', ')}`, ...(naoConferidos.length ? [`Calculado das anotações, não conferido: ${diasCurtos(naoConferidos.map((x) => x.dia))}`] : [])],
+      rodape: [`Lote: ${[...new Set(lista.map((x) => x.lote).filter(Boolean))].join(', ')}`, ...(naoConferidos.length ? [`Calculado das anotações, não conferido: ${diasCurtos(naoConferidos.map((x) => x.dia))}`] : []), ...(turnosDoEnvio ? [AVISO_PRODUCAO_DO_DIA] : [])],
     });
   }
   /** O que sai no Excel, no PDF e na impressão: as folhas de cada dia ou uma por área, e o cálculo e o rastreamento marcados. */

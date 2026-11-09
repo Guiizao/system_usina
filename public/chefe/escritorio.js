@@ -68,7 +68,7 @@
   /** A produção de um dia, para o envio e o Resumo: o que foi salvo ou, sem salvar, a conta das folhas. */
   function producaoDoDia(dia) {
     const v = valoresDoDia(dia);
-    return { dia, conferido: !!rastreioGuardado(dia), alcool: v.alcool.producao, vinhaca: v.vinhaca.producao, hidrolisado: v.pi.hidrolise, vinho: v.pi.vinho, inpm: v.alcoolParam.inpm, brix: v.calculo.brixInicial, lote: v.lote };
+    return { dia, conferido: !!rastreioGuardado(dia), alcool: v.alcool.producao, vinhaca: v.vinhaca.producao, hidrolisado: v.pi.hidrolise, vinho: v.pi.vinho, inpm: v.alcoolParam.inpm, brix: v.calculo.brixInicial, lote: window.Rastreamento.loteDaEtiqueta(v) };
   }
   function navDiaEscritorio(dia) {
     return `<div class="nav-data"><button class="btn" data-a="esc-dia" data-n="-1" aria-label="Dia anterior">${ico('voltar')}</button>
