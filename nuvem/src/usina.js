@@ -63,14 +63,15 @@ export async function enviarAoServidorDaUsina(env, agora, fusoMin) {
       turnoEncerrado: (C.turnos || []).find((t) => t.fim === inicio) || null, producao: api.dia(dia, registros) });
     let status = 0, erro = '';
     try {
+      // 'manual', não 'error': a Cloudflare recusa 'error' antes de o pedido sair (3.1.8: por isso nada chegava). Redirecionamento volta como 3xx e não é seguido.
       const r = await fetch(env.USINA_URL, {
-        method: 'POST', redirect: 'error', signal: AbortSignal.timeout(20000),
+        method: 'POST', redirect: 'manual', signal: AbortSignal.timeout(20000),
         headers: { 'Content-Type': 'application/json', 'X-Pranchetas-Segredo': env.USINA_CHAVE },
         body: corpo,
       });
       status = r.status;
       if (!r.ok) erro = `O Servidor da Usina respondeu ${r.status}`;
-    } catch (e) { erro = 'Sem resposta do Servidor da Usina'; }
+    } catch (e) { erro = `Sem resposta do Servidor da Usina${e && e.name === 'TimeoutError' ? ' em 20 segundos' : e && e.name && e.name !== 'Error' ? ` (${e.name})` : ''}`; } // só o tipo do erro: o texto dele pode citar o pedido
     await env.DB.prepare('INSERT INTO usina_envios (dia, seq, ok, em, status, erro) VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT(dia) DO UPDATE SET seq = excluded.seq, ok = excluded.ok, em = excluded.em, status = excluded.status, erro = excluded.erro')
       .bind(dia, seq, erro ? 0 : 1, agora, status, erro).run();
     if (erro) erros++; else ok++;
