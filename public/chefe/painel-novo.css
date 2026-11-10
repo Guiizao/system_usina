@@ -390,13 +390,21 @@ main.escritorio.pn-producao { max-width: none; grid-template-columns: minmax(0, 
 .rel-acoes { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .rel-acoes .btn { width: 100%; min-height: 52px; font-size: 17px; }
 .rel-acoes .btn:first-child, .rel-acoes .perigo { grid-column: 1 / -1; }
-/* espremido até sumir; o outro cresce no mesmo lugar */
-.rel-pilha > .sai { z-index: 1; pointer-events: none; animation: rel-espreme calc(.42s * var(--ritmo, 1)) cubic-bezier(.55, 0, .45, 1) forwards; }
-.rel-pilha > .entra { animation: rel-expande calc(.5s * var(--ritmo, 1)) cubic-bezier(.22, 1, .36, 1) calc(.14s * var(--ritmo, 1)) both; }
-.rel-painel.sai, .rel-painel.entra { transform-origin: 50% 0; }
-@keyframes rel-espreme { 55% { opacity: 1; } to { transform: scale(.9, 0); opacity: 0; } }
-@keyframes rel-expande { from { transform: scale(.9, 0); opacity: 0; } 45% { opacity: 1; } }
-.rel-painel.entra .rel-setores s { animation: pn-corre calc(.6s * var(--ritmo, 1)) cubic-bezier(.22, 1, .36, 1) calc(.3s * var(--ritmo, 1)) both; }
+/* 3.1.5: persiana (referência do Guilherme). 9 faixas fecham uma depois da outra (18 ms) em .22 s; com tudo coberto (.37 s) o que sai some
+   e o que entra aparece; .03 s depois as faixas abrem em .34 s. Na volta, de baixo para cima. */
+.rel-pilha > .sai { pointer-events: none; animation: rel-some 1ms steps(1, end) calc(.37s * var(--ritmo, 1)) forwards; }
+.rel-pilha > .entra { animation: rel-surge calc(.5s * var(--ritmo, 1)) cubic-bezier(.22, 1, .36, 1) calc(.37s * var(--ritmo, 1)) both; }
+.rel-persiana { z-index: 2; display: flex; flex-direction: column; border-radius: 22px; overflow: hidden; pointer-events: none; }
+.rel-persiana i { flex: 1; margin-bottom: -1px; background: var(--verde-fundo); clip-path: inset(0 0 100% 0); --d: calc(var(--i) * 18ms * var(--ritmo, 1));
+  animation: rel-fecha calc(.22s * var(--ritmo, 1)) cubic-bezier(.65, 0, .35, 1) var(--d) forwards, rel-abre calc(.34s * var(--ritmo, 1)) cubic-bezier(.65, 0, .35, 1) calc(var(--d) + .394s * var(--ritmo, 1)) forwards; }
+.rel-persiana.volta i { clip-path: inset(100% 0 0 0); animation-name: rel-fecha-volta, rel-abre-volta; }
+@keyframes rel-fecha { to { clip-path: inset(0); } }
+@keyframes rel-abre { from { clip-path: inset(0); } to { clip-path: inset(100% 0 0 0); } }
+@keyframes rel-fecha-volta { to { clip-path: inset(0); } }
+@keyframes rel-abre-volta { from { clip-path: inset(0); } to { clip-path: inset(0 0 100% 0); } }
+@keyframes rel-some { to { opacity: 0; } }
+@keyframes rel-surge { from { opacity: 0; transform: translateY(14px); } 1% { opacity: 1; } to { opacity: 1; transform: none; } }
+.rel-painel.entra .rel-setores s { animation: pn-corre calc(.6s * var(--ritmo, 1)) cubic-bezier(.22, 1, .36, 1) calc(.55s * var(--ritmo, 1)) both; }
 @media (max-height: 720px) { .rel-atalhos, .rel-fora div:nth-child(3) { display: none; } .rel-painel h2 { margin-top: 8px; font-size: 20px; } } /* tela baixa: o calendário já faz o mesmo que os atalhos */
 .rel-grade.troca-mes { animation: pn-entra calc(.3s * var(--ritmo, 1)) cubic-bezier(.22, 1, .36, 1) both; }
 /* entrada: só ao trocar de tela (o redesenho de 5 em 5 segundos não pisca) */
@@ -416,5 +424,5 @@ main.escritorio.pn-producao { max-width: none; grid-template-columns: minmax(0, 
 @keyframes pn-pisca { to { opacity: .35; } }
 @media (prefers-reduced-motion: reduce) {
   #app.troca .pn-e, #app.troca .pn-barras i, #app.troca .pn-linha .total, #app.troca .pn-linha .dest, #app.troca .pn-tanque .liquido,
-  #app.troca .pn-tabela .p i, #app.troca .pn-setores s, .pn-tanque .onda, .ia-gaveta.entrando, .ia-esperando i, .pn-barra.vem .pn-barra-fundo, .pn-barra.vem svg.ico, .pn-barra.vem span, #app.troca .pn-graf i, .rel-pilha > .sai, .rel-pilha > .entra, .rel-painel.entra .rel-setores s, .rel-grade.troca-mes, .pn-cam .falta > span::after, .pn-cam li.cheio::after, .pn-setores .on q, .pn-lin.nova { animation: none; }
+  #app.troca .pn-tabela .p i, #app.troca .pn-setores s, .pn-tanque .onda, .ia-gaveta.entrando, .ia-esperando i, .pn-barra.vem .pn-barra-fundo, .pn-barra.vem svg.ico, .pn-barra.vem span, #app.troca .pn-graf i, .rel-pilha > .sai, .rel-pilha > .entra, .rel-persiana i, .rel-painel.entra .rel-setores s, .rel-grade.troca-mes, .pn-cam .falta > span::after, .pn-cam li.cheio::after, .pn-setores .on q, .pn-lin.nova { animation: none; }
 }

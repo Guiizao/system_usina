@@ -193,7 +193,7 @@ try {
     igual(await a.avaliar(`[!!document.querySelector('.pn-visao'), !!document.querySelector('.pn-heroi'), !!document.querySelector('.pn-linha')]`), [true, false, false]);
     await a.fechar();
   });
-  await teste(g, 'as 10 aberturas desenham sem erro', async () => {
+  await teste(g, 'as 11 aberturas desenham sem erro', async () => {
     const a = await abrir('p7', TAMANHOS.celular, 'central', true);
     await dormir(4800);
     const r = await a.avaliar(`(async () => {
@@ -203,8 +203,8 @@ try {
       return { res, erros: window.__erros };
     })()`);
     igual(r.erros, []);
-    igual(r.res.length, 10);
-    certo(r.res.every((ms) => ms >= 3200 && ms <= 3900), r.res.join(',')); // 3,3 s de animação; a saída de 0,7 s é do iniciar.js
+    igual(r.res.length, 11);
+    certo(r.res.every((ms) => ms >= 3200 && ms <= 3900), r.res.join(',')); // 3,3 s de animação; a passagem de 0,8 s é do iniciar.js
     await a.fechar();
   });
 } finally { if (nav) await nav.fechar(); if (c) await c.desligar(); }

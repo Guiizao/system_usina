@@ -51,8 +51,6 @@
     const vazio = new Date(ano, m - 1, 1).getDay(), doMes = Array.from({ length: new Date(ano, m, 0).getDate() }, (_, i) => `${mes}-${String(i + 1).padStart(2, '0')}`);
     const max = Math.max(1, ...doMes.map((d) => conta.get(d) || 0));
     const nivel = (d) => { const n = conta.get(d) || 0, q = n / max; return !n ? (comDados.has(d) ? 1 : 0) : q > 0.75 ? 4 : q > 0.5 ? 3 : q > 0.25 ? 2 : 1; };
-    // o calendário espreme na direção do dia tocado e volta a crescer a partir dele
-    const origem = (d) => { if (!d || d.slice(0, 7) !== mes) return '50% 30%'; const i = vazio + Number(d.slice(8)) - 1; return `${(((i % 7) + 0.5) / 7 * 100).toFixed(1)}% ${18 + Math.floor(i / 7) * 8}%`; };
     const outro = (k) => { const x = new Date(ano, m - 1 + k, 1); return `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, '0')}`; };
     const anos = [...new Set([ano, Number(hoje.slice(0, 4)), ...[...comDados].map((d) => Number(d.slice(0, 4)))])].sort();
     const hora = (t) => new Date(t).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
@@ -61,11 +59,11 @@
       return nv ? `<button class="${cls}" data-a="rel-dia" data-data="${d}" aria-label="${fmtData(d)}: ${conta.get(d) ? contar(conta.get(d), 'anotação', 'anotações') : 'anotações no servidor'}">${dd}</button>`
         : `<span class="${cls}${d > hoje ? ' futuro' : ''}">${dd}</span>`;
     };
-    const calendario = (cls, d) => {
+    const calendario = (cls) => {
       const diasNoMes = doMes.filter((x) => comDados.has(x)).length, anotacoes = doMes.reduce((t, x) => t + (conta.get(x) || 0), 0);
       const topo = doMes.reduce((b, x) => ((conta.get(x) || 0) > (conta.get(b) || 0) ? x : b), doMes[0]);
       const alcool = pnVeProducao() ? doMes.filter((x) => x <= hoje).map((x) => pnDia(x).alcool).filter((a) => a !== '' && Number.isFinite(Number(a))) : [];
-      return `<div class="rel-cal ${cls}" style="transform-origin:${origem(d)}">
+      return `<div class="rel-cal ${cls}">
       <section class="rel-card">
         <div class="rel-mes"><button class="pn-ic" data-a="rel-mes" data-mes="${outro(-1)}" aria-label="Mês anterior">${ico('voltar')}</button>
           <select id="rel-mes" aria-label="Mês">${MESES.map((n, i) => `<option value="${i + 1}" ${i + 1 === m ? 'selected' : ''}>${n}</option>`).join('')}</select>
@@ -103,9 +101,11 @@
           ${arqs.length && pode('pessoas') ? `<button class="btn perigo" data-a="relatorio-apagar" data-data="${d}">${ico('lixeira')} Apagar o arquivo</button>` : ''}
         </div></section>`;
     };
-    const miolo = anim === 'abre' ? calendario('sai', v.diaSel) + painel('entra', v.diaSel)
-      : anim === 'fecha' && v.diaAntes ? painel('sai', v.diaAntes) + calendario('entra', v.diaAntes)
-      : v.diaSel ? painel('', v.diaSel) : calendario('', '');
+    // 3.1.5: persiana, como na referência do Guilherme: as faixas fecham de cima para baixo sobre o que sai e abrem mostrando o que entra (na volta, de baixo para cima)
+    const persiana = (volta) => `<div class="rel-persiana${volta ? ' volta' : ''}" aria-hidden="true">${Array.from({ length: 9 }, (_, i) => `<i style="--i:${volta ? 8 - i : i}"></i>`).join('')}</div>`;
+    const miolo = anim === 'abre' ? calendario('sai') + painel('entra', v.diaSel) + persiana(false)
+      : anim === 'fecha' && v.diaAntes ? painel('sai', v.diaAntes) + calendario('entra') + persiana(true)
+      : v.diaSel ? painel('', v.diaSel) : calendario('');
     return `${cabecalho('Relatórios', 'Um por dia, com todos os setores', true)}<main class="pn-cel cabe"><div class="pn-miolo"><div class="rel-pilha">${miolo}</div></div></main>`;
   }
   document.addEventListener('change', (e) => {
@@ -114,8 +114,11 @@
     v.mes = `${document.getElementById('rel-ano').value}-${String(document.getElementById('rel-mes').value).padStart(2, '0')}`; v.anim = 'mes';
     render();
   });
-  // o que saiu espremido não fica ocupando lugar até o próximo redesenho; sem ele, a tela volta a caber do tamanho certo
-  document.addEventListener('animationend', (e) => { if (e.target.matches('.rel-pilha > .sai')) { e.target.remove(); pnCaberNaTela(); } });
+  // o que saiu some com a persiana fechada e não fica ocupando lugar: a tela volta a caber do tamanho certo; a persiana sai quando a última faixa abre
+  document.addEventListener('animationend', (e) => {
+    if (e.target.matches('.rel-pilha > .sai')) { e.target.remove(); pnCaberNaTela(); }
+    else if (e.animationName.startsWith('rel-abre') && e.target.matches('.rel-persiana i[style="--i:8"]')) e.target.parentNode.remove();
+  });
   /** 2.16: o resumo do dia (setores, totais por turno) para ver e enviar sem abrir o Excel. */
   async function verResumo(data) {
     await buscarDia(data);

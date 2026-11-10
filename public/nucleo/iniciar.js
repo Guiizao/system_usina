@@ -140,23 +140,41 @@
     try { if (sessionStorage.getItem('abertura')) return; sessionStorage.setItem('abertura', '1'); } catch (e) { /* mostra */ }
     const tela = document.createElement('div'); tela.id = 'abertura-nova'; tela.innerHTML = '<canvas></canvas>';
     document.body.appendChild(tela);
-    // sem corte seco: o fundo escuro some, a logo voa até o lugar dela no cabeçalho e o Início entra por baixo
+    // 3.1.5, na linha da referência que o Guilherme mandou: a placa da logo se abre até a tela ficar toda verde, com a logo branca no meio,
+    // e o verde se fecha até virar a logo do cabeçalho (ou a do login), mostrando a tela por trás
     const fim = () => {
       if (window.Aberturas) window.Aberturas.parar();
       if (tela.classList.contains('saindo')) return;
       tela.classList.add('saindo');
-      const alvo = document.querySelector('.pn-oi img, .menu-marca img, .entrar-logo'), a = alvo && alvo.getBoundingClientRect();
-      const app = document.getElementById('app'); app.classList.remove('troca'); void app.offsetWidth; app.classList.add('troca');
-      if (a && a.width && !matchMedia('(prefers-reduced-motion: reduce)').matches) {
-        const r = tela.getBoundingClientRect(), lado = Math.min(r.width, r.height) * 132 / 205; // a placa da logo no canvas (aberturas.js)
-        const x = r.left + (r.width - lado) / 2, y = r.top + (r.height - lado) / 2, s = a.width / lado, cs = getComputedStyle(alvo), voa = alvo.cloneNode();
-        voa.className = 'abertura-voa';
-        Object.assign(voa.style, { left: `${x}px`, top: `${y}px`, width: `${lado}px`, height: `${lado}px`, padding: `${lado * 16 / 132}px`, borderRadius: `${lado * 26 / 132}px` });
-        document.body.appendChild(voa); alvo.style.visibility = 'hidden';
-        voa.animate([{ transform: 'none' }, { transform: `translate(${a.left - x}px, ${a.top - y}px) scale(${s})`, backgroundColor: cs.backgroundColor, borderRadius: `${parseFloat(cs.borderRadius) / s}px` }],
-          { duration: 700, easing: 'cubic-bezier(.65, 0, .35, 1)', fill: 'forwards' }).finished.then(() => { alvo.style.visibility = ''; voa.remove(); });
-      }
-      setTimeout(() => tela.remove(), 700);
+      const alvo = document.querySelector('.pn-oi img, .menu-marca img, .entrar-logo'), a = alvo && alvo.getBoundingClientRect(); // medido parado, antes da tela entrar
+      const app = document.getElementById('app'), entrar = () => { app.classList.remove('troca'); void app.offsetWidth; app.classList.add('troca'); };
+      if (!a || !a.width || matchMedia('(prefers-reduced-motion: reduce)').matches) { entrar(); setTimeout(() => tela.remove(), 700); return; }
+      const W = innerWidth, H = innerHeight, lado = Math.min(W, H) * 132 / 205, x = (W - lado) / 2, y = (H - lado) / 2; // a placa da logo no canvas (aberturas.js)
+      const cs = getComputedStyle(alvo), raiz = getComputedStyle(document.documentElement), pad = parseFloat(cs.paddingLeft) || 0;
+      const u0 = lado * 100 / 132, um = Math.min(W, H) * 0.2, u1 = a.width - 2 * pad, branco = raiz.getPropertyValue('--branco').trim(), verde = raiz.getPropertyValue('--abertura-verde').trim();
+      const caixa = (t, r, b, l, raio) => `inset(${t}px ${r}px ${b}px ${l}px round ${raio}px)`, logo = (px, py, u, cor) => ({ transform: `translate(${px}px, ${py}px) scale(${u / u0})`, filter: cor ? 'brightness(0) invert(1)' : 'brightness(1) invert(0)' });
+      const abre = 260, fecha = 560, k = abre / (abre + fecha), ABRE = 'cubic-bezier(.22, 1, .36, 1)', FECHA = 'cubic-bezier(.76, 0, .24, 1)';
+      const placa = document.createElement('div'); placa.className = 'abertura-voa';
+      placa.innerHTML = `<img src="${alvo.getAttribute('src')}" alt="" style="width:${u0}px;height:${u0}px">`;
+      document.body.appendChild(placa); alvo.style.visibility = 'hidden';
+      placa.animate([
+        { offset: 0, clipPath: caixa(y, x, y, x, lado * 26 / 132), backgroundColor: branco, easing: ABRE },
+        { offset: k, clipPath: caixa(0, 0, 0, 0, 44), backgroundColor: verde, easing: FECHA },
+        { offset: 0.86, backgroundColor: verde },
+        { offset: 1, clipPath: caixa(a.top, W - a.right, H - a.bottom, a.left, parseFloat(cs.borderTopLeftRadius) || 0), backgroundColor: cs.backgroundColor },
+      ], { duration: abre + fecha, fill: 'forwards' });
+      placa.firstChild.animate([
+        { offset: 0, ...logo(x + lado * 16 / 132, y + lado * 16 / 132, u0, false), easing: ABRE },
+        { offset: k, ...logo((W - um) / 2, (H - um) / 2, um, true), easing: FECHA },
+        { offset: 0.86, filter: 'brightness(0) invert(1)' },
+        { offset: 1, ...logo(a.left + pad, a.top + pad, u1, false) },
+      ], { duration: abre + fecha, fill: 'forwards' }).finished.then(() => {
+        alvo.style.visibility = ''; placa.remove();
+        alvo.animate([{ transform: 'scale(1.12)', filter: `drop-shadow(0 0 10px ${raiz.getPropertyValue('--abertura-brilho').trim()})` }, { transform: 'none', filter: 'drop-shadow(0 0 0 transparent)' }],
+          { duration: 520, easing: 'cubic-bezier(.22, 1, .36, 1)' });
+      });
+      // com a tela toda verde, a abertura já pode sair: a tela de verdade entra enquanto o verde se fecha
+      setTimeout(() => { tela.remove(); entrar(); }, abre);
     };
     tela.addEventListener('pointerdown', fim);
     try {
