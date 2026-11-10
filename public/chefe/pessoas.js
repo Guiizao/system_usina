@@ -315,7 +315,7 @@
     if (!p) return '';
     const dono = p.id === l.donoId;
     const dela = funcoesDe({ nivel: p.nivel, extras: p.extras, dono });
-    const vale = (f, n) => (n === 3 ? dono : dela.has(f) && f !== 'sistema' && (funcoesDoNivel(n).includes(f) || (f === 'conexao' && (p.extras || {}).conexao === true)));
+    const vale = (f, n) => (n === 3 ? dono : dela.has(f) && f !== 'sistema' && (f === 'assistente' || funcoesDoNivel(n).includes(f) || (f === 'conexao' && (p.extras || {}).conexao === true)));
     const celula = (f, n) => (vale(f, n) ? `<td class="sim" aria-label="Pode no nível ${n}">${ico('certo')}</td>` : `<td class="nao" aria-label="Não pode no nível ${n}">-</td>`);
     return `<section class="bloco previa-pessoa">
       <h2>${ico('pessoa')} O que cada pessoa pode, em cada nível</h2>
@@ -330,10 +330,12 @@
      com o que cada pessoa pode). A central confere. Sem escolha: nível 1 = corrigir, relatórios e escritório; nível 2 =
      tudo menos conectar tablets e trocar o código. */
   const funcoesDosNiveis = () => [...C.funcoes, { id: 'pessoas', categoria: 'Sistema', nome: 'Cadastrar pessoas e senhas' }];
+  /* 3.1.8: o assistente é permissão da pessoa e passa pelo nível, então não entra na lista de nenhum nível
+     (com ele na lista, a central do tablet chefe recusava a configuração inteira). */
   function funcoesDoNivel(n) {
     const salvo = (configSistema().niveisChefe || {})[n];
-    if (Array.isArray(salvo)) return salvo;
-    return n === 1 ? ['corrigir', 'relatorios', 'escritorio'] : funcoesDosNiveis().map((f) => f.id).filter((f) => f !== 'conexao');
+    if (Array.isArray(salvo)) return salvo.filter((f) => f !== 'assistente');
+    return n === 1 ? ['corrigir', 'relatorios', 'escritorio'] : funcoesDosNiveis().map((f) => f.id).filter((f) => f !== 'conexao' && f !== 'assistente');
   }
   function secaoNiveisChefe() {
     const nomes = (ids) => funcoesDosNiveis().filter((f) => ids.includes(f.id)).map((f) => f.nome.replace(/ \(.*\)$/, '').replace(/:.*$/, '')).join(' · ') || 'Nada';
@@ -344,7 +346,7 @@
   }
   async function editarNivelChefe(n) {
     const marcadas = new Set(funcoesDoNivel(n));
-    const lista = funcoesDosNiveis();
+    const lista = funcoesDosNiveis().filter((f) => f.id !== 'assistente');
     const desenhar = (f) => {
       f.querySelector('#funcoes-nivel').innerHTML = categorias(lista).map(([nome, doGrupo]) => `<h4 class="categoria-funcao">${esc(nome)}</h4><div class="chips funcoes">${doGrupo.map((x) => `<button class="chip-liga ${marcadas.has(x.id) ? 'sel' : ''}" data-k="f:${x.id}">${marcadas.has(x.id) ? ico('certo') : ico('fechar')} ${esc(x.nome)}</button>`).join('')}</div>`).join('');
     };

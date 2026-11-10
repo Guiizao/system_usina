@@ -100,7 +100,7 @@ export async function testarPedidos210(nav, ligar, porta, grupo) {
 
     await teste(grupo, 'Folhas e avisos: o chefe muda o aviso do pH e o nome do Brix; o tablet do setor já usa o novo', async () => {
       await semNotificacao(chefe);
-      await chefe.tocar('[data-a="pessoa"]'); await chefe.tocar('[data-k="folhas"]');
+      await chefe.tocar('[data-a="config"]'); await chefe.tocar('[data-a="folhas"]');
       await chefe.esperar('!!document.querySelector("main.tela-folhas")', 8000, 'tela Folhas e avisos');
       await chefe.tocar('[data-a="folha-campo"][data-pid="hid_anexo1"][data-id="phf"]');
       await chefe.avaliar('(() => { const d = document.querySelector(".aviso-editar"); d.querySelector(".av-valor").value = "4,5"; d.querySelector(".av-texto").value = "pH abaixo de 4,5: coloque cal"; return true; })()');

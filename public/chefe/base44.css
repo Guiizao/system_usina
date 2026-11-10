@@ -29,7 +29,7 @@
 .interruptor.ligado i { background: var(--verde); }
 .interruptor.ligado i::after { left: 25px; }
 @media (prefers-reduced-motion: reduce) { .interruptor i, .interruptor i::after { transition: none; } }
-.pessoas { display: grid; gap: 6px; }
+.pessoas { display: grid; grid-template-columns: minmax(0, 1fr); gap: 6px; } /* 3.1.8: a linha não passa da caixa (no celular de 360 a lixeira ficava cortada) */
 .pessoas > div { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 6px 8px 6px 12px; border-radius: 8px; background: var(--papel-2); }
 .pessoas .nome { display: flex; align-items: center; gap: 8px; min-width: 0; font-size: 18px; }
 .pessoas .nome svg.ico, .pessoas .nome small { flex: none; }
@@ -39,6 +39,8 @@
 .pessoas .acoes { display: flex; gap: 6px; flex: none; }
 .pessoas .acoes .btn { min-height: 46px; padding: 0 12px; }
 .pessoas .vazio { color: var(--tinta-2); justify-content: flex-start; }
+/* celular: o selo da senha desce para a linha de baixo quando não cabe ao lado do nome (antes o nome era cortado); o desenho fica fora da conta para o selo cair embaixo do nome */
+@media (max-width: 480px) { .pessoas .nome { position: relative; flex-wrap: wrap; row-gap: 0; padding-left: 32px; } .pessoas .nome svg.ico { position: absolute; left: 0; top: 50%; transform: translateY(-50%); } .pessoas .nome small { margin-left: 0; } }
 .segmentos { display: flex; gap: 6px; padding: 4px; border-radius: 12px; background: var(--papel-2); border: 2px solid var(--linha-clara); }
 .segmentos button { flex: 1; display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 52px; border-radius: 9px; font-size: 18px; font-weight: 700; color: var(--tinta-2); }
 .segmentos button.sel { background: var(--grafite); color: var(--branco); }

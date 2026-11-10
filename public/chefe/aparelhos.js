@@ -230,7 +230,8 @@
     return `${topo('Aparelhos', `${contar(ligados, 'ligado agora', 'ligados agora')}`, true)}
       <main class="config tela-aparelhos">
         <p class="sub">Em cima, quem está usando; embaixo, o nome do aparelho no Android e a função dele. Toque no + para ver o modelo, o endereço na rede e para bloquear.</p>
-        <div class="lista-aparelhos">${lista.map(linhaDoAparelho).join('') || '<p class="sub">Nenhum aparelho falou com a central ainda.</p>'}</div>
+        <div class="lista-aparelhos">${lista.map(linhaDoAparelho).join('') || '<p class="sub">Nenhum aparelho falou com a central ainda.</p>'}
+          ${painelNovoAqui() && !cfg.soNuvem ? `<div class="linha-botoes"><button class="btn pequeno" data-a="ver-erros">${ico('alerta')} Ver erros dos aparelhos</button></div>` : ''}</div>
         ${painelNovoAqui() && !cfg.soNuvem ? blocoConectar(sync.status) : ''}
       </main>`;
   }

@@ -6,6 +6,7 @@
 @media (min-width: 760px) { main.escritorio .papeis { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 /* minmax(0, 1fr): sem ele a coluna cresce até a largura da tabela e a tabela não rola para o lado no celular */
 main.escritorio { max-width: 1100px; margin: 0 auto; width: 100%; display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px; align-content: start; }
+main.escritorio > .esc-coluna { grid-template-columns: minmax(0, 1fr); } /* tabela larga rola dentro da caixa, não alarga a tela */
 main.escritorio .esc-acoes { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 main.escritorio .esc-acoes .btn { width: 100%; }
 main.escritorio .esc-acoes .btn:first-child:nth-last-child(odd) { grid-column: 1 / -1; } /* 3 botões: 1 em cima, 2 embaixo */
@@ -23,6 +24,12 @@ main.escritorio .bloco h3 { margin: 14px 0 6px; font-size: 17px; }
 .linha-esc.resultado .num-esc { color: var(--verde); }
 .linha-config.linha-esc small { word-break: normal; }
 .linha-esc small.falta { color: var(--tinta); font-weight: 700; }
+/* 3.1.8, celular estreito: o nome numa linha e, embaixo, o número e o Mudar (lado a lado o nome ficava espremido e saía da caixa) */
+@media (max-width: 400px) {
+  main.escritorio .linha-esc { flex-wrap: wrap; row-gap: 2px; }
+  main.escritorio .linha-esc > div:first-child { flex: 1 1 100%; }
+  main.escritorio .linha-esc .num-esc { flex: 1; min-width: 0; text-align: left; }
+}
 .tabela-esc { width: 100%; border-collapse: collapse; font-size: 16px; }
 .tabela-esc th, .tabela-esc td { border: 1px solid var(--linha-clara); padding: 4px 6px; text-align: left; vertical-align: middle; }
 .tabela-esc th { background: var(--papel-2); font-size: 14px; white-space: nowrap; }
@@ -66,6 +73,6 @@ main.escritorio .bloco h3 { margin: 14px 0 6px; font-size: 17px; }
 .et-placa { width: 34mm; height: 34mm; margin: auto auto 0; display: block; }
 .folha-etiquetas { width: 190mm; margin: 0 auto; }
 /* 3.1.7: com a tela do tamanho do celular, os nomes dos operadores e o código do POP (03-FOR011) não se partem no meio */
-main.escritorio .linha-config small { word-break: normal; overflow-wrap: anywhere; }
+main.escritorio .linha-config small { word-break: normal; overflow-wrap: break-word; } /* break-word, não anywhere: anywhere deixava a coluna do nome encolher até uma letra nos Cálculos */
 .sem-quebra { white-space: nowrap; }
 @media print { body.imprimindo .folha-etiquetas { width: auto; } }

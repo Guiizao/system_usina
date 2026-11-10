@@ -117,6 +117,8 @@
       case 'graficos-setor': v.setor = b.dataset.setor || ''; return render();
       case 'graficos-modo': v.semana = b.dataset.modo === 'semana'; return render(true);
       case 'folhas': return ir({ tela: 'folhas' });
+      case 'folha-ver': if (painelNovoPc()) { v.folha = b.dataset.pid; return render(); } return ir({ tela: 'folhas', folha: b.dataset.pid }); // 3.1.8: no celular abre em outra tela
+      case 'folha-setor': v.setorFolha = b.dataset.setor; v.folha = ''; return render();
       case 'folha-campo': return editarCampoDaFolha(b.dataset.pid, b.dataset.id);
       case 'folha-unidades': return editarUnidadesDaFolha(b.dataset.pid);
       case 'folha-estrutura': return editarEstruturaDaFolha(b.dataset.pid);

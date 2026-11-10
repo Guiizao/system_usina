@@ -149,7 +149,7 @@
       ${lista.map(([id, nome]) => { const i = x.insumos[id] || {}; return `<tr><td>${esc(nome)}${i.unidade ? ` <small>${esc(i.unidade)}</small>` : ''}</td><td>${celEsc(x, `insumos.${id}.qtd`, nome, true)}</td>
         ${['lote', 'validade', 'nf', 'fornecedor'].map((k) => `<td>${celEsc(x, `insumos.${id}.${k}`, `${nome}: ${k}`)}</td>`).join('')}</tr>`; }).join('')}</tbody></table></div>`;
     return `${cabecalho('Rastreamento', `POP 03 - FOR 011 · lote ${x.lote}`, true, atalhosEsc(v))}
-      <main class="escritorio">
+      <main class="escritorio ${painelNovoPc() ? 'pn-rastreio' : ''}"><div class="esc-coluna">
         <section class="bloco"><h2>Produtos do dia</h2>
           <p class="sub">Início 07:00 de ${fmtData(v.data)} · final 07:00 de ${fmtData(x.fechamento)}. Toque num número para mudar.</p>
           <div class="tabela-wrap"><table class="tabela-esc"><thead><tr><th>Produto</th><th>Produção (L)</th><th>Nº do lote</th><th>Validade</th></tr></thead><tbody>
@@ -170,7 +170,7 @@
         <section class="bloco"><h2>Operadores e encarregado</h2>
           <div class="linha-config"><div><b>Operadores</b><small>${esc(x.operadores || '—')}</small></div><button class="btn pequeno" data-a="esc-campo" data-c="operadores" data-r="Operadores">Mudar</button></div>
           <div class="linha-config"><div><b>Encarregado</b><small>${esc(x.encarregado || '—')}</small></div><button class="btn pequeno" data-a="esc-campo" data-c="encarregado" data-r="Encarregado">Mudar</button></div>
-          <p class="sub">${esc(R.aviso).replace(/\S+-\S+/g, '<span class="sem-quebra">$&</span>')}</p></section>
+          <p class="sub">${esc(R.aviso).replace(/\S+-\S+/g, '<span class="sem-quebra">$&</span>')}</p></section></div>
         <div class="linha-botoes esc-acoes"><button class="btn" data-a="esc-recalcular">${ico('relogio')} Refazer com as anotações de agora</button>
           <button class="btn" data-a="esc-arquivo">${ico('enviar')} Enviar (PDF, Excel ou XML)</button>
           <button class="btn" data-a="esc-folha">${ico('imprimir')} Imprimir a folha</button>

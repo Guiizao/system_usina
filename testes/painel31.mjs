@@ -38,9 +38,12 @@ try {
     const a = await abrir('p3', TAMANHOS.computador, 'central', true);
     await dormir(300);
     await a.avaliar(`document.querySelector('#abertura-nova').dispatchEvent(new PointerEvent('pointerdown', { bubbles: true })); 1`);
-    certo(await a.avaliar(`document.querySelector('#abertura-nova').classList.contains('saindo')`), 'começou a sair');
+    // 3.1.8: a passagem cobre a abertura com o mesmo fundo e esconde o lugar de chegada da logo até ela pousar
+    igual(await a.avaliar(`[!!document.querySelector('.abertura-fundo'), !!document.querySelector('.abertura-voa .placa'), document.documentElement.classList.contains('abertura-voando')]`), [true, true, true]);
     await dormir(800);
     igual(await a.avaliar(`!!document.querySelector('#abertura-nova')`), false);
+    await dormir(700);
+    igual(await a.avaliar(`[!!document.querySelector('.abertura-fundo'), !!document.querySelector('.abertura-voa'), document.documentElement.classList.contains('abertura-voando'), getComputedStyle(document.querySelector('.menu-marca img')).opacity]`), [false, false, false, '1']);
     await a.fechar();
   });
   await teste(g, 'PC: painel novo sempre, sem chave; tablet não mostra chave', async () => {

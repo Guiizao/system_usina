@@ -136,7 +136,8 @@ export async function testarTextoSeguranca216(g) {
     const texto = '\"><img src=x onerror=alert(1)>';
     const totais = [{ nome: texto, unidade: texto, folha: 'insumo', total: 2, turnos: [{ t: { nome: texto }, q: 2 }] }];
     let modal;
-    const c = vm.createContext({ C: { inicioDoDia: 7 }, cfg: { soNuvem: true }, texto,
+    // document: os Relatórios (3.1.5) escutam a troca do mês e o fim da animação ao carregar; aqui não há tela
+    const c = vm.createContext({ C: { inicioDoDia: 7 }, cfg: { soNuvem: true }, texto, document: { addEventListener() {} },
       pessoaAtual: () => ({ nome: texto }), ico: () => '', pode: () => true, soVer: () => false, avisosEmAberto: () => [],
       setores: () => [{ id: 'setor', nome: texto, pranchetas: ['insumo'] }], diaFechado: () => '2026-10-20', diaDoEscritorio: () => '2026-10-20', lerFolhaLigada: () => false, view: () => ({ tela: 'central' }),
       totaisPorTurno: () => totais, folhasDe: (p) => [p], prancheta: () => ({ nome: texto, tipo: 'insumo' }),

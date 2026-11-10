@@ -22,7 +22,8 @@ export async function testarProducao(ligar, porta, grupo) {
     igual((await p(cli, '/api/chefes', { acao: 'liberar', pin: SENHA_ENCARREGADO, nivel })).status, 200);
     igual((await p(cli, '/api/pessoas', { acao: 'entrar', pin })).status, 200);
   };
-  const funcoes = async (cli) => (await p(cli, '/api/pessoas', { acao: 'quem' })).funcoes;
+  // 3.1.3: o assistente é permissão da pessoa e passa pelo nível e pelo teto do aparelho (a central Java ainda não; acompanha no próximo APK)
+  const funcoes = async (cli) => (await p(cli, '/api/pessoas', { acao: 'quem' })).funcoes.filter((f) => f !== 'assistente');
   let dono, outroDono, chefe, setor, n1, consulta;
   const cfgAtual = async () => (await p(dono, '/api/registros?desde=0')).registros.find((r) => r.id === CFG);
   const configurar = async (cli, niveisChefe, extra = {}) => {

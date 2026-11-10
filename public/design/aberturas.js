@@ -259,7 +259,7 @@ return{ligar,tocar(i){if(A.state==='suspended')A.resume();novoBus(A.currentTime)
 })();
 const MOD=[['Neon',m1,3350,2000],['Riscos',m2,F2+1500,1800],['Turbilhão',m3,3250,1900],['Laser',m4,3200,1700],['Faíscas',m5,3450,2000],['Dorna',m6,3480,2000],['Gotas',m7,3500,2000],['Vapor',m8,3550,2000],['Vidro',m9,3250,1800],['Eclipse',m10,3400,1900],['Cometas',m11,ABRE,ABRE]].map(([n,f,d0,d])=>[n,(g,T)=>f(g,T*d0/ABRE),ABRE,ABRE/d]);
 let cv = null, Q = null;
-function medir(){const r=cv.getBoundingClientRect(),pr=Math.min(2,devicePixelRatio||1),W=Math.round(r.width*pr),H=Math.round(r.height*pr);if(Q&&Q.W===W&&Q.H===H)return Q;cv.width=W;cv.height=H;Q={W,H,sc:tela(W,H),m1:tela(W>>1,H>>1),m2:tela(W>>2,H>>2),m3:tela(W>>3,H>>3),b1:tela(W>>2,H>>2),b2:tela(W>>3,H>>3),bg:fundo(W,H)};return Q;}
+let PR=2;function medir(){const r=cv.getBoundingClientRect(),pr=Math.min(PR,devicePixelRatio||1),W=Math.round(r.width*pr),H=Math.round(r.height*pr);if(Q&&Q.W===W&&Q.H===H)return Q;cv.width=W;cv.height=H;Q={W,H,sc:tela(W,H),m1:tela(W>>1,H>>1),m2:tela(W>>2,H>>2),m3:tela(W>>3,H>>3),b1:tela(W>>2,H>>2),b2:tela(W>>3,H>>3),bg:fundo(W,H)};return Q;}
 function metade(de,para){const q=para.getContext('2d');q.clearRect(0,0,para.width,para.height);q.imageSmoothingEnabled=true;q.imageSmoothingQuality='high';q.drawImage(de,0,0,para.width,para.height);}
 function borra(de,para,r){const q=para.getContext('2d');q.clearRect(0,0,para.width,para.height);q.filter=`blur(${r}px)`;q.drawImage(de,0,0);q.filter='none';}
 function pinta(f,T){const{W,H,sc,m1,m2,m3,b1,b2,bg}=medir(),s=sc.getContext('2d');s.setTransform(1,0,0,1,0,0);s.globalCompositeOperation='source-over';s.globalAlpha=1;s.clearRect(0,0,W,H);const S=Math.min(W,H)/205,vw=W/S,vh=H/S;KX=vw/273.3;KY=vh/205;KM=Math.max(1,KX,KY);V={x0:50-vw/2,x1:50+vw/2,y0:50-vh/2,y1:50+vh/2};s.setTransform(S,0,0,S,W/2-50*S,H/2-50*S);s.lineCap=s.lineJoin='round';BLOOM=1;f(s,T);
@@ -269,7 +269,7 @@ const c=cv.getContext('2d');c.globalCompositeOperation='source-over';c.globalAlp
   let vez = 0;
   /** Toca a abertura i no canvas; aoFim é chamado ao terminar. */
   function tocar(i, canvas, comSom, aoFim) {
-    cv = canvas; Q = null;
+    cv = canvas; Q = null; PR = 2;
     const [, f, D, k] = MOD[i], id = ++vez, ini = performance.now() + (comSom ? 100 : 0);
     if (matchMedia('(prefers-reduced-motion:reduce)').matches) { pinta(f, D); setTimeout(aoFim, 350); return; }
     if (comSom) {
@@ -279,7 +279,16 @@ const c=cv.getContext('2d');c.globalCompositeOperation='source-over';c.globalAlp
         novoBus(A.currentTime); SOM[i](A.currentTime + 0.1 + POUSO[i] * (k - 1));
       } catch (e) { /* sem áudio, a abertura sai muda */ }
     }
-    const lp = (a) => { if (id !== vez) return; const T = a - ini; pinta(f, Math.max(0, Math.min(D, T))); if (T < D) requestAnimationFrame(lp); else aoFim(); };
+    // 3.1.8: aparelho que não acompanha (quadros acima de 28 ms) desenha com menos pontos: 2, depois 1,5, depois 1.
+    // O tempo é o do relógio, então a animação não atrasa nem desencontra do som.
+    let n = 0, lentos = 0, antes = 0;
+    const lp = (a) => {
+      if (id !== vez) return;
+      if (antes && a - antes > 28) lentos++;
+      antes = a;
+      if (++n === 18) { if (lentos > 6 && PR > 1) PR = PR > 1.5 ? 1.5 : 1; n = lentos = 0; }
+      const T = a - ini; pinta(f, Math.max(0, Math.min(D, T))); if (T < D) requestAnimationFrame(lp); else aoFim();
+    };
     requestAnimationFrame(lp);
   }
   function somDaTela(i) {

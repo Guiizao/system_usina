@@ -16,6 +16,12 @@ try {
       const a = await nav.novoAparelho(tamanho, medidas);
       try {
         for (const [url, n] of [['&papel=central&tela=config', 8], ['&papel=hidrolise&op=Guilherme&tela=admin', 6], ['&papel=central&tela=admin', 5]]) {
+          // 3.1.8: no computador os Ajustes da central cabem numa tela só, cada parte numa caixa, sem quadro para abrir
+          if (!medidas.celular && url.includes('central&tela=admin')) {
+            await a.ir(`${c.url}/?demo${url}`, '!!document.querySelector("main.ajustes-juntos")');
+            igual(await a.avaliar(`(() => { const m = document.querySelector('main.ajustes-juntos'); return [m.querySelectorAll('.config-grade > .bloco').length, !!document.querySelector('.quadro-menu'), m.scrollWidth > m.clientWidth + 1]; })()`), [n, false, false], url);
+            continue;
+          }
           await a.ir(`${c.url}/?demo${url}`, '!!document.querySelector("main.quadros-menu")');
           const r = await a.avaliar(MEDIDAS);
           // 3.1.7: no PC largo as Configurações (8 quadros e o "Você está") ficam em 3 colunas, 3 + 3 + 3
@@ -115,6 +121,8 @@ try {
     try {
       await pc.ir(`${c.url}/?demo&papel=central&op=Guilherme`, '!!document.querySelector(".pn-visao")');
       const MENU = '.menu-pc [data-a="esc-abrir"][data-t="esc-calculos"]';
+      // 3.1.8: Pessoas e Aparelhos só dentro de Configurações (sem botão repetido no menu)
+      igual(await pc.avaliar(`[!!document.querySelector('.menu-pc [data-a="pessoas"]'), !!document.querySelector('.menu-pc [data-a="aparelhos"]'), !!document.querySelector('.menu-pc [data-a="config"]')]`), [false, false, true]);
       igual(await pc.avaliar(`document.querySelector('${MENU}').dataset.dia`), await pc.avaliar('somarDias(dataProducao(), -1)'));
       for (let i = 0; i < 2; i++) await pc.tocar('.nav-data [data-a="dia"][data-n="-1"]');
       const dia = await pc.avaliar('somarDias(dataProducao(), -2)');

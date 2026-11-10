@@ -128,6 +128,12 @@ main.pn-visao { max-width: none; }
 /* barra de cima do computador */
 #app.com-menu .topo .ia-busca { flex: 1 1 200px; min-width: 150px; min-height: 44px; display: flex; align-items: center; gap: 10px; padding: 0 16px; border-radius: 12px; background: var(--papel); color: var(--tinta-2); font-size: 16px; white-space: nowrap; overflow: hidden; }
 #app.com-menu .topo .ia-busca svg { color: var(--verde); flex: none; }
+/* 3.1.8: com a busca do assistente na barra, o título fica do tamanho do texto e a busca ocupa a sobra (dividindo a sobra, o título perdia 1 ou 2 px e era cortado) */
+#app.com-menu .topo:has(.ia-busca) .titulo { flex: 0 1 auto; }
+/* a frase inteira só quando cabe; na caixa estreita fica "Assistente" (antes a frase era cortada no meio) */
+#app.com-menu .topo .ia-busca { container-type: inline-size; }
+.ia-busca .curta { display: none; }
+@container (max-width: 288px) { #app.com-menu .topo .ia-busca .frase { display: none; } #app.com-menu .topo .ia-busca .curta { display: inline; } }
 #app.com-menu .topo .nav-data { display: flex; align-items: center; gap: 4px; }
 #app.com-menu .topo .nav-data .btn { min-height: 44px; min-width: 44px; background: var(--topo-botao); color: var(--branco); border-color: var(--topo-botao-borda); }
 #app.com-menu .topo .data-grande b { color: var(--branco); font-size: 16px; white-space: nowrap; }
@@ -138,6 +144,16 @@ main.pn-visao { max-width: none; }
 /* Produção e Relatórios no computador */
 .esc-coluna { display: grid; gap: 14px; min-width: 0; align-content: start; }
 main.escritorio.pn-producao { max-width: none; grid-template-columns: minmax(0, 1.65fr) minmax(320px, 1fr); align-items: start; }
+/* 3.1.8, Rastreamento no computador: as caixas em duas colunas na largura toda e linhas mais baixas (era uma coluna estreita, 4 telas de rolagem) */
+@media (min-width: 1241px) {
+  main.escritorio.pn-rastreio { max-width: none; }
+  main.escritorio.pn-rastreio > .esc-coluna { display: block; columns: 2; column-gap: 14px; } /* as colunas num contêiner sem altura fixa: no main elas vazariam para o lado */
+  main.escritorio.pn-rastreio > .esc-coluna > .bloco { break-inside: avoid; margin: 0 0 14px; }
+  main.escritorio.pn-rastreio > .esc-acoes { grid-template-columns: none; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); }
+  main.escritorio.pn-rastreio > .esc-acoes .btn:first-child:nth-last-child(odd) { grid-column: auto; }
+  main.escritorio.pn-rastreio .cel-esc { min-height: 34px; }
+  main.escritorio.pn-rastreio .tabela-esc th, main.escritorio.pn-rastreio .tabela-esc td { padding: 2px 6px; }
+}
 .pn-lado { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
 .pn-lado .totais-dia { margin: 0; border-radius: 18px; border: 0; box-shadow: 0 2px 10px var(--pn-sombra); }
 .pn-donut { display: flex; align-items: center; gap: 16px; }

@@ -4,6 +4,18 @@
    Depois do sinal de igual vem JSON puro, porque o servidor do tablet chefe (Java) também lê este arquivo. */
 window.NOVIDADES = [
   {
+    "versao": "3.1.8",
+    "data": "2026-11-10",
+    "itens": [
+      "Abertura: a logo que vai para o canto agora sai exatamente de cima da logo da animação (antes aparecia menor e fora do meio, em dobro). O fundo é o mesmo da animação e some enquanto a logo diminui até o lugar dela, no tamanho certo no celular, no computador e na tela de entrar.",
+      "Abertura em aparelho mais fraco: se a animação não acompanha, ela desenha com menos pontos para não travar, sem atrasar nem desencontrar do som.",
+      "Envio da produção ao Servidor da Usina: corrigido um defeito que fazia o pedido falhar antes de sair da nuvem.",
+      "Computador: Pessoas e Aparelhos saíram do menu do lado (estão em Configurações). Ajustes do aparelho ficou numa tela só. Rastreamento em duas colunas na largura toda. Folhas e avisos com os setores em abas e uma folha aberta por vez. Na barra de cima, o título da tela fica sempre inteiro e a busca do assistente ocupa o que sobra (na tela estreita ela mostra só \"Assistente\").",
+      "Níveis do tablet chefe: o assistente saiu da lista do que cada nível pode fazer, porque é permissão da pessoa e vale em qualquer nível. Com ele na lista, a central do tablet chefe recusava a configuração.",
+      "Celular com o painel novo: Folhas e avisos mostra a lista das folhas e abre uma de cada vez. Em celular estreito, os Cálculos e os Operadores não saem mais da caixa."
+    ]
+  },
+  {
     "versao": "3.1.7",
     "data": "2026-11-10",
     "itens": [

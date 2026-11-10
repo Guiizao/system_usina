@@ -39,7 +39,7 @@ export async function testarPedidos212(nav, ligar, porta, grupo, comApi) {
   };
   const abrirFolhas = async (chefe) => {
     await semNotificacao(chefe);
-    if (!(await chefe.avaliar('!!document.querySelector("main.tela-folhas")'))) { await chefe.tocar('[data-a="pessoa"]'); await chefe.tocar('[data-k="folhas"]'); }
+    if (!(await chefe.avaliar('!!document.querySelector("main.tela-folhas")'))) { await chefe.tocar('[data-a="config"]'); await chefe.tocar('[data-a="folhas"]'); }
     await chefe.esperar('!!document.querySelector("main.tela-folhas")', 8000, 'tela Folhas e avisos');
   };
   const anotarNaCaldeira = async (cal, quadro, teclas) => {

@@ -55,12 +55,11 @@
   function telaFolhas(v) {
     const mud = configSistema().folhas || {};
     const vistas = new Set();
-    return `${topo('Folhas e avisos', 'O que mudar aqui vale para todos os tablets', true)}
-      <main class="config tela-folhas">
-        <p class="sub">Mude o nome dos quadros, a unidade, a faixa esperada e os avisos (como pH abaixo de 5 ou Brix acima de 25). O desenho das folhas de papel não muda.</p>
-        <div class="config-grade">${todosSetores.map((s) => {
+    const explica = '<p class="sub">Mude o nome dos quadros, a unidade, a faixa esperada e os avisos (como pH abaixo de 5 ou Brix acima de 25). O desenho das folhas de papel não muda.</p>';
+    const tituloDaFolha = (f) => `<h3 class="folha-titulo ${f.tirada ? 'desligado' : ''}">${esc(f.nome)}${f.tirada ? ' <span class="selo-mudado">desligada</span>' : ''}</h3>`;
+    const porSetor = todosSetores.map((s) => {
           const pids = s.pranchetas.flatMap(folhasDe).filter((pid) => !vistas.has(pid) && vistas.add(pid));
-          const blocos = pids.map((pid) => {
+          const folhas = pids.map((pid) => {
             const p = prancheta(pid);
             const campos = camposDaFolha(p).filter((c) => !c.arquivado && (c.type === 'num' || c.type === 'time' || c.type === 'choice' || c.type === 'check' || c.type === 'text'));
             const linhas = campos.map((c) => `<div class="linha-config"><div><b>${esc(c.label)}${c.novo ? ' <span class="selo-mudado">novo</span>' : (mud[pid] || {})[c.id] ? ' <span class="selo-mudado">mudado</span>' : ''}</b><small>${esc([resumoDoCampo(c) || 'sem aviso', c.oculto ? 'o operador não vê' : '', c.doEscritorio ? 'do escritório, o operador também preenche' : ''].filter(Boolean).join(' · '))}</small></div>
@@ -70,11 +69,35 @@
             const estrutura = pode('sistema') && window.Folhas.aceitaNovo(p) ? `<div class="linha-botoes"><button class="btn pequeno" data-a="folha-estrutura" data-pid="${pid}">${ico('mais')} Estrutura da folha (campos novos${p.tipo === 'insumo' ? ', campos do escritório' : ''})</button></div>` : '';
             const tirada = ((configSistema().pranchetasDesligadas || {})[s.id] || []).includes(pid);
             const tirar = pode('usina') && s.pranchetas.includes(pid) ? `<div class="linha-botoes"><button class="btn pequeno" data-a="prancheta-liga" data-setor="${s.id}" data-id="${pid}">${tirada ? `${ico('mais')} Ligar de novo` : `${ico('fechar')} Desligar`}</button>${pode('sistema') ? `<button class="btn pequeno perigo" data-a="folha-remover" data-setor="${s.id}" data-id="${pid}">${ico('lixeira')} Remover de vez</button>` : ''}</div>` : '';
-            return linhas || unidades || estrutura ? `<h3 class="folha-titulo ${tirada ? 'desligado' : ''}">${esc(p.nome)}${tirada ? ' <span class="selo-mudado">desligada</span>' : ''}</h3>${linhas}${unidades}${estrutura}${tirar}` : '';
-          }).join('');
+            return linhas || unidades || estrutura ? { pid, nome: p.nome, tirada, campos: campos.length + (unidades ? 1 : 0), linhas: `${linhas}${unidades}`, botoes: `${estrutura}${tirar}` } : null;
+          }).filter(Boolean);
           const nova = pode('sistema') && !s.soChefe ? `<div class="linha-botoes"><button class="btn pequeno" data-a="folha-tabela" data-setor="${s.id}">${ico('mais')} Nova tabela</button></div>` : '';
-          return blocos || nova ? `<section class="bloco"><h2>${ico(s.icone)} ${esc(s.nome)}</h2>${blocos}${nova}</section>` : '';
-        }).join('')}</div>
+          return folhas.length || nova ? { s, folhas, nova } : null;
+        }).filter(Boolean);
+    // 3.1.8, painel novo: só a folha escolhida fica aberta (eram 5 telas de rolagem no computador e 9 no celular).
+    // Computador: os setores em abas, as folhas do setor à esquerda e os campos da folha à direita.
+    // Celular: a lista vem primeiro e a folha abre em outra tela, com voltar.
+    if (painelNovoAqui()) {
+      const pc = painelNovoPc();
+      const botoes = (folhas, sel) => `<div class="folhas-lista">${folhas.map((f) => `<button class="${sel && sel.pid === f.pid ? 'sel' : ''} ${f.tirada ? 'desligado' : ''}" data-a="folha-ver" data-pid="${esc(f.pid)}"><b>${esc(f.nome)}</b><small>${f.tirada ? 'desligada' : contar(f.campos, 'campo', 'campos')}</small></button>`).join('')}</div>`;
+      const escolhida = porSetor.flatMap((x) => x.folhas).find((f) => f.pid === v.folha);
+      const detalhe = (f) => (f ? `<section class="bloco folha-aberta">${pc ? tituloDaFolha(f) : ''}<div class="folha-campos">${f.linhas}</div>${f.botoes}</section>` : '');
+      if (pc) {
+        const setor = (escolhida && porSetor.find((x) => x.folhas.includes(escolhida))) || porSetor.find((x) => x.s.id === v.setorFolha) || porSetor[0];
+        if (!setor) return `${topo('Folhas e avisos', 'O que mudar aqui vale para todos os tablets', true)}<main class="config tela-folhas">${explica}</main>`;
+        const aberta = escolhida || setor.folhas[0];
+        return `${topo('Folhas e avisos', 'O que mudar aqui vale para todos os tablets', true)}
+        <main class="config tela-folhas folhas-pc">${explica}
+          <div class="segmentos folhas-setores" role="group" aria-label="Setor">${porSetor.map((x) => `<button class="${x === setor ? 'sel' : ''}" data-a="folha-setor" data-setor="${esc(x.s.id)}">${ico(x.s.icone)} ${esc(x.s.nome)}</button>`).join('')}</div>
+          <div class="folhas-grade"><aside class="bloco folhas-lado"><h2>${ico(setor.s.icone)} ${esc(setor.s.nome)}</h2>${botoes(setor.folhas, aberta)}${setor.nova}</aside>${detalhe(aberta)}</div></main>`;
+      }
+      return `${topo(escolhida ? escolhida.nome : 'Folhas e avisos', escolhida ? 'Folhas e avisos' : 'O que mudar aqui vale para todos os tablets', true)}
+        <main class="config tela-folhas">${escolhida ? detalhe(escolhida) : `${explica}<div class="config-grade">${porSetor.map(({ s, folhas, nova }) => `<section class="bloco"><h2>${ico(s.icone)} ${esc(s.nome)}</h2>${botoes(folhas)}${nova}</section>`).join('')}</div>`}</main>`;
+    }
+    return `${topo('Folhas e avisos', 'O que mudar aqui vale para todos os tablets', true)}
+      <main class="config tela-folhas">
+        ${explica}
+        <div class="config-grade">${porSetor.map(({ s, folhas, nova }) => `<section class="bloco"><h2>${ico(s.icone)} ${esc(s.nome)}</h2>${folhas.map((f) => `${tituloDaFolha(f)}${f.linhas}${f.botoes}`).join('')}${nova}</section>`).join('')}</div>
       </main>`;
   }
   function salvarFolhas(novo, texto) {

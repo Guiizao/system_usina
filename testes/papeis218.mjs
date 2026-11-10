@@ -248,15 +248,13 @@ export async function testarAjustesPC218(nav, g) {
       await a.ir(c.url + '/?demo&papel=central', 'typeof render === "function" && !!document.querySelector("#app main")');
       await a.avaliar('(() => { cfg.soNuvem = true; cfg.nuvemUrl = "https://nuvem.exemplo"; cfg.pessoa = { id: "lucas", nome: "Lucas", funcoes: ["relatorios"] }; pilha = [telaInicial()]; render(true); return 1; })()');
       await a.tocar('[data-a="admin"]');
+      // 3.1.8: no computador as três partes (tela, aplicativo e servidor) ficam na mesma página, sem quadros
+      await a.esperar('!!document.querySelector("main.ajustes-juntos")', 8000, 'os Ajustes numa página');
       await a.foto('testes/saida/papeis218/pc-ajustes.png');
-      certo(!(await a.avaliar('document.querySelector("main").innerText')).includes('Este aparelho'), 'mostrou a troca de função do tablet');
-      for (const [parte, textos] of [['tela', ['Tamanho das letras']], ['aplicativo', ['Versão']], ['servidor', ['nuvem.exemplo', 'Lucas']]]) {
-        await a.tocar(`[data-a="categoria"][data-cat="${parte}"]`);
-        const t = await a.avaliar('document.querySelector("main").innerText');
-        for (const x of textos) certo(t.includes(x), 'faltou ' + x);
-        if (parte === 'servidor') certo(await a.existe('[data-a="sair-nuvem"]'), 'faltou o Sair');
-        await a.tocar('[data-a="voltar"]');
-      }
+      const t = await a.avaliar('document.querySelector("main").innerText');
+      certo(!t.includes('Este aparelho'), 'mostrou a troca de função do tablet');
+      for (const x of ['Tamanho das letras', 'Versão', 'nuvem.exemplo', 'Lucas']) certo(t.includes(x), 'faltou ' + x);
+      certo(await a.existe('[data-a="sair-nuvem"]'), 'faltou o Sair');
     });
     certo(!a.erros.length, a.erros.join(' | '));
   } finally { await a.fechar(); await c.desligar(); }

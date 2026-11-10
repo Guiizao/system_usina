@@ -16,6 +16,8 @@ const SAIDA = path.join(path.dirname(new URL(import.meta.url).pathname.replace(/
 
 const B = BASE + '/?demo';
 const HID = '&papel=hidrolise&op=Guilherme&tela=prancheta&pid=hid_anexo1';
+// 3.1.8: no computador (painel novo) a tela das Folhas mostra uma folha por vez: escolhe a folha antes de tocar num campo dela
+const folha = async (a, pid) => { if (await a.existe('.folhas-pc')) { await a.avaliar(`(() => { view().folha = ${JSON.stringify(pid)}; render(); return 1; })()`); await dormir(250); } };
 const TELAS = [
   ['conectar', '&tela=conectar'],
   ['escolher-setor', ''],
@@ -152,13 +154,13 @@ const TELAS = [
   ['chefe-graficos-hidrolise', '&papel=central&tela=graficos&setor=hidrolise'],
   ['chefe-folhas', '&papel=central&tela=folhas'],
   ['chefe-nova-tabela', '&papel=central&tela=folhas', async (a) => { await a.tocar('[data-a="folha-tabela"][data-setor="caldeira"]'); await dormir(200); }],
-  ['chefe-folha-ph', '&papel=central&tela=folhas', async (a) => { await a.tocar('[data-a="folha-campo"][data-pid="hid_anexo1"][data-id="phf"]'); await dormir(200); }],
-  ['chefe-folha-unidades', '&papel=central&tela=folhas', async (a) => { await a.tocar('[data-a="folha-unidades"][data-pid="ins_lphera"]'); await dormir(200); }],
+  ['chefe-folha-ph', '&papel=central&tela=folhas', async (a) => { await folha(a, 'hid_anexo1'); await a.tocar('[data-a="folha-campo"][data-pid="hid_anexo1"][data-id="phf"]'); await dormir(200); }],
+  ['chefe-folha-unidades', '&papel=central&tela=folhas', async (a) => { await folha(a, 'ins_lphera'); await a.tocar('[data-a="folha-unidades"][data-pid="ins_lphera"]'); await dormir(200); }],
   // versão 2.12: liberar o tablet chefe, as opções do dono no quadro, a estrutura da folha e o campo novo
   ['chefe-liberar', '&papel=central&modal=liberar'],
-  ['chefe-folha-dono', '&papel=central&tela=folhas', async (a) => { await a.tocar('[data-a="folha-campo"][data-pid="caldeira"][data-id="pressao"]'); await dormir(200); }],
-  ['chefe-estrutura', '&papel=central&tela=folhas', async (a) => { await a.tocar('[data-a="folha-estrutura"][data-pid="ins_materia_prima"]'); await dormir(200); }],
-  ['chefe-campo-novo', '&papel=central&tela=folhas', async (a) => { await a.tocar('[data-a="folha-estrutura"][data-pid="caldeira"]'); await dormir(200); await a.tocar('.modal [data-k="novo"]'); await dormir(250); }],
+  ['chefe-folha-dono', '&papel=central&tela=folhas', async (a) => { await folha(a, 'caldeira'); await a.tocar('[data-a="folha-campo"][data-pid="caldeira"][data-id="pressao"]'); await dormir(200); }],
+  ['chefe-estrutura', '&papel=central&tela=folhas', async (a) => { await folha(a, 'ins_materia_prima'); await a.tocar('[data-a="folha-estrutura"][data-pid="ins_materia_prima"]'); await dormir(200); }],
+  ['chefe-campo-novo', '&papel=central&tela=folhas', async (a) => { await folha(a, 'caldeira'); await a.tocar('[data-a="folha-estrutura"][data-pid="caldeira"]'); await dormir(200); await a.tocar('.modal [data-k="novo"]'); await dormir(250); }],
   ['chefe-enviar-pdf', '&papel=central', async (a) => { await a.tocar('[data-a="compartilhar"][data-destino="whatsapp"]'); await dormir(200); }],
   // versão 2.11: aparelhos (quem usa, nome no Android, modelo, endereço) e bloqueio
   ['chefe-aparelhos', '&papel=central&tela=aparelhos'],

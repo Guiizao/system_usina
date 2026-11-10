@@ -93,7 +93,9 @@
 :root[data-tema="escuro"] { --pn-heroi: linear-gradient(135deg, #235a38, #1d3f2a); --pn-heroi-2: #b9dcc4; --pn-liquido: #4cae6e; --pn-tanque-texto: #0c1a12; --pn-barra: #35503f; --pn-sombra: rgba(0, 0, 0, .3); }
 
 /* Abertura do painel novo: sempre escura, a mesma nos dois temas (design/abertura.css, nucleo/iniciar.js) */
-:root { --abertura-fundo: #0e1110; --abertura-brilho: rgba(57, 224, 111, .75); }
+/* 3.1.8: o mesmo fundo que o canvas pinta (fundo() em design/aberturas.js): mais claro no meio, quase preto nas bordas */
+:root { --abertura-fundo: #0c0f0e; --abertura-meio: #1a1f1d; --abertura-centro: #323a36; --abertura-brilho: rgba(57, 224, 111, .75);
+  --abertura-degrade: radial-gradient(circle 62vmax at 50% 50%, var(--abertura-centro) 0, var(--abertura-meio) 55%, var(--abertura-fundo) 100%); }
 
 /* Gráficos do dia: uma cor por série */
 :root { --serie-1: #1f62c4; --serie-2: #c2410c; --serie-3: #15803d; --serie-4: #7c3aed; }

@@ -140,40 +140,65 @@
     try { if (sessionStorage.getItem('abertura')) return; sessionStorage.setItem('abertura', '1'); } catch (e) { /* mostra */ }
     const tela = document.createElement('div'); tela.id = 'abertura-nova'; tela.innerHTML = '<canvas></canvas>';
     document.body.appendChild(tela);
-    // 3.1.7, como o Guilherme descreveu: os efeitos somem e fica só o fundo escuro da abertura com a logo no meio; o fundo esmaece
-    // mostrando a tela, enquanto a logo diminui e vai, numa curva, para o lugar dela (cabeçalho do celular, menu do PC ou login)
-    const fim = () => {
+    // 3.1.8, a passagem como o Guilherme descreveu, em três tempos: 1) os efeitos somem no próprio fundo da abertura e fica a logo no
+    // meio; 2) uma pausa curta, com a tela já pronta por baixo; 3) o fundo esmaece mostrando a tela enquanto a logo diminui e vai,
+    // numa curva, para o lugar dela (cabeçalho do celular, menu do PC ou login). Só transform e opacity: o aparelho anima sem
+    // depender da tela que está entrando, e o redesenho da tela no meio do caminho não atrapalha (o alvo some por classe, não por elemento).
+    const ALVOS = '.pn-oi img, .menu-marca img, .entrar-logo';
+    let saiu = false;
+    const fim = (toque) => {
       if (window.Aberturas) window.Aberturas.parar();
-      if (tela.classList.contains('saindo')) return;
-      tela.classList.add('saindo');
-      const alvo = document.querySelector('.pn-oi img, .menu-marca img, .entrar-logo'), a = alvo && alvo.getBoundingClientRect(); // medido parado, antes da tela entrar
-      const app = document.getElementById('app'), entrar = () => { app.classList.remove('troca'); void app.offsetWidth; app.classList.add('troca'); };
-      if (!a || !a.width || matchMedia('(prefers-reduced-motion: reduce)').matches) { entrar(); setTimeout(() => tela.remove(), 700); return; }
+      if (saiu) return;
+      saiu = true;
+      const app = document.getElementById('app');
+      const entrar = () => { app.classList.remove('troca'); void app.offsetWidth; app.classList.add('troca'); };
+      const alvo = document.querySelector(ALVOS), a = alvo && alvo.getBoundingClientRect(); // medido parado, antes da tela entrar
+      if (!a || !a.width || matchMedia('(prefers-reduced-motion: reduce)').matches) { tela.classList.add('saindo'); entrar(); setTimeout(() => tela.remove(), 700); return; }
       const W = innerWidth, H = innerHeight, lado = Math.min(W, H) * 132 / 205; // a placa da logo no meio do canvas (aberturas.js)
-      const cs = getComputedStyle(alvo), k = a.width / lado, limpa = 200, voa = 760;
+      const cs = getComputedStyle(alvo), k = a.width / lado, zoom = a.width / (alvo.offsetWidth || a.width);
+      // a logo dentro da placa: 100 de 132 no canvas; no alvo, o que sobra do enchimento dele (o login nem placa tem)
+      const dentro = (a.width - (parseFloat(cs.paddingLeft) + parseFloat(cs.paddingRight)) * zoom) / a.width / (100 / 132);
+      const semPlaca = /rgba\(0, 0, 0, 0\)|transparent/.test(cs.backgroundColor);
+      const ritmo = parseFloat(getComputedStyle(raiz).getPropertyValue('--ritmo')) || 1; // design/movimento.css: a velocidade de tudo
+      const LIMPA = 160 * ritmo, PAUSA = 60 * ritmo, VOO = 740 * ritmo, POUSO = 140 * ritmo, curva = 'cubic-bezier(.6, 0, .2, 1)';
+      const em = (cx, cy, s) => `translate(${cx - lado * s / 2}px, ${cy - lado * s / 2}px) scale(${s})`;
       const fundo = document.createElement('div'); fundo.className = 'abertura-fundo';
       const logo = document.createElement('div'); logo.className = 'abertura-voa';
-      logo.style.cssText = `width:${lado}px;height:${lado}px;padding:${lado * 16 / 132}px`;
-      logo.innerHTML = `<img src="${alvo.getAttribute('src')}" alt="">`;
-      document.body.append(fundo, logo); alvo.style.visibility = 'hidden';
-      // o meio da logo anda numa curva (primeiro sobe, depois vai para o lado) e o tamanho cai junto
-      const x0 = W / 2, y0 = H / 2, x2 = a.left + a.width / 2, y2 = a.top + a.height / 2, x1 = x0 + (x2 - x0) * 0.25, y1 = y2 + (y0 - y2) * 0.2;
-      const raio0 = lado * 26 / 132, raio1 = (parseFloat(cs.borderTopLeftRadius) || 0) / k;
-      const quadros = Array.from({ length: 13 }, (_, i) => {
-        const t = i / 12, u = 1 - t, cx = u * u * x0 + 2 * u * t * x1 + t * t * x2, cy = u * u * y0 + 2 * u * t * y1 + t * t * y2, s = 1 + (k - 1) * t;
-        return { transform: `translate(${cx - lado * s / 2}px, ${cy - lado * s / 2}px) scale(${s})`, borderRadius: `${raio0 + (raio1 - raio0) * t}px` };
-      });
-      quadros[12].backgroundColor = cs.backgroundColor;
-      logo.animate(quadros, { duration: voa, delay: limpa, easing: 'cubic-bezier(.65, 0, .35, 1)', fill: 'both' }).finished.then(() => {
-        alvo.style.visibility = ''; logo.remove();
-        alvo.animate([{ transform: 'scale(1.1)', filter: `drop-shadow(0 0 10px ${getComputedStyle(document.documentElement).getPropertyValue('--abertura-brilho').trim()})` }, { transform: 'none', filter: 'drop-shadow(0 0 0 transparent)' }],
-          { duration: 480, easing: 'cubic-bezier(.22, 1, .36, 1)' });
-      });
-      // os efeitos se apagam no fundo escuro; com ele cobrindo tudo, a abertura sai e a tela entra por baixo enquanto o fundo esmaece
-      fundo.animate([{ opacity: 0 }, { opacity: 1 }], { duration: limpa, easing: 'ease-out', fill: 'forwards' }).finished.then(() => {
-        tela.remove(); entrar();
-        fundo.animate([{ opacity: 1 }, { opacity: 0 }], { duration: voa - 100, easing: 'cubic-bezier(.4, 0, .2, 1)', fill: 'forwards' }).finished.then(() => fundo.remove());
-      });
+      logo.style.cssText = `width:${lado}px;height:${lado}px`;
+      logo.innerHTML = `<i class="brilho"></i><i class="placa"></i><img src="${alvo.getAttribute('src')}" alt="">`;
+      const limpar = () => { fundo.remove(); logo.remove(); raiz.classList.remove('abertura-voando'); if (tela.isConnected) tela.remove(); };
+      setTimeout(limpar, 2600 * ritmo); // aconteça o que acontecer, a tela não fica coberta
+      // fora do body: ele tem a escala da tela (design/escala.js), que encolheria e tiraria do meio as medidas daqui, tomadas na tela de verdade
+      raiz.append(fundo, logo); raiz.classList.add('abertura-voando');
+      // 1) a logo da tela aparece em cima da do canvas, sem pulo (se um toque pulou a abertura no meio, ela pousa aqui)
+      fundo.animate([{ opacity: 0 }, { opacity: 1 }], { duration: LIMPA, easing: 'ease-out', fill: 'both' });
+      logo.animate([{ opacity: 0, transform: em(W / 2, H / 2, toque ? .86 : 1) }, { opacity: 1, transform: em(W / 2, H / 2, 1) }], { duration: LIMPA, easing: 'cubic-bezier(.22, 1, .36, 1)', fill: 'both' });
+      logo.firstChild.animate([{ opacity: 0 }, { opacity: .6, offset: .4 }, { opacity: 0 }], { duration: LIMPA + PAUSA + 330 * ritmo, easing: 'ease-out', fill: 'both' });
+      const pousar = () => {
+        const real = document.querySelector(ALVOS);
+        raiz.classList.remove('abertura-voando');
+        if (real) real.animate([{ opacity: 0 }, { opacity: 1 }], { duration: POUSO, easing: 'ease-out' });
+        logo.animate([{ opacity: 1 }, { opacity: 0 }], { duration: POUSO, easing: 'ease-in', fill: 'forwards' }).finished.then(() => {
+          limpar();
+          const fica = document.querySelector(ALVOS);
+          if (fica) fica.animate([{ transform: 'scale(1.07)' }, { transform: 'none' }], { duration: 420 * ritmo, easing: 'cubic-bezier(.22, 1, .36, 1)' });
+        }, limpar);
+      };
+      // 3) o meio da logo anda numa curva (primeiro sobe, depois vai para o lado) e o tamanho cai junto
+      const voar = () => {
+        const x0 = W / 2, y0 = H / 2, x2 = a.left + a.width / 2, y2 = a.top + a.height / 2, x1 = x0 + (x2 - x0) * 0.25, y1 = y2 + (y0 - y2) * 0.2;
+        const quadros = Array.from({ length: 17 }, (_, i) => {
+          const t = i / 16, u = 1 - t;
+          return { transform: em(u * u * x0 + 2 * u * t * x1 + t * t * x2, u * u * y0 + 2 * u * t * y1 + t * t * y2, 1 + (k - 1) * t) };
+        });
+        logo.animate(quadros, { duration: VOO, easing: curva, fill: 'forwards' });
+        logo.lastChild.animate([{ transform: 'none' }, { transform: `scale(${dentro})` }], { duration: VOO, easing: curva, fill: 'forwards' });
+        if (semPlaca) logo.children[1].animate([{ opacity: 1 }, { opacity: 0 }], { duration: VOO * .4, easing: 'ease-out', fill: 'forwards' }); // some antes de a logo crescer além dela
+        fundo.animate([{ opacity: 1 }, { opacity: 0 }], { duration: VOO - 60, easing: 'cubic-bezier(.4, 0, .2, 1)', fill: 'forwards' });
+        setTimeout(pousar, VOO - POUSO);
+      };
+      // 2) com o fundo cobrindo tudo, a abertura sai e a tela entra por baixo; a logo só sai do lugar depois desse trabalho
+      setTimeout(() => { tela.remove(); entrar(); setTimeout(voar, PAUSA); }, LIMPA);
     };
     tela.addEventListener('pointerdown', fim);
     try {

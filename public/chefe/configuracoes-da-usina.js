@@ -24,7 +24,8 @@
       pode('folhas') && { a: 'folhas', icone: 'lapis', nome: 'Folhas e avisos', resumo: 'Campos, limites, avisos, entrada e saída' },
       { cat: 'medidas', icone: 'regua', nome: 'Medidas e listas', resumo: 'Dornas, tanques e listas do ralo' },
       { cat: 'envios', icone: 'enviar', nome: 'Envios', resumo: integra ? 'WhatsApp, e-mail, Base44 e totais do turno' : 'WhatsApp e e-mail do escritório' },
-      { cat: 'aparelhos', icone: 'wifi', nome: 'Aparelhos', resumo: 'Quem está ligado e os erros' },
+      // 3.1.8, painel novo: o quadro abre direto a tela dos Aparelhos (a parte daqui era uma caixa pequena numa tela vazia)
+      painelNovoAqui() ? { a: 'aparelhos', icone: 'wifi', nome: 'Aparelhos', resumo: 'Quem está ligado, conectar e os erros' } : { cat: 'aparelhos', icone: 'wifi', nome: 'Aparelhos', resumo: 'Quem está ligado e os erros' },
       { cat: 'sistema', icone: 'servidor', nome: 'Sistema', resumo: integra ? 'Nuvem, leitor de folha, registro e apagar' : 'Leitor de folha e registro' },
     ].filter(Boolean);
     const q = quadros.find((x) => x.cat && x.cat === v.cat);

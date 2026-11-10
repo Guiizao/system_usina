@@ -195,14 +195,13 @@ export async function testarPainelPC217(nav, g) {
       await pc.esperar('!!document.querySelector(".modal")', 8000, 'enviar');
       await pc.tocar('.modal [data-k="x"]').catch(() => {});
     });
-    await teste(g, 'Ajustes do computador: em quadros, sem rolar, e cada quadro abre a sua parte', async () => {
+    await teste(g, 'Ajustes do computador (3.1.8): as três partes numa tela só, sem quadro para abrir e sem rolar', async () => {
       await pc.avaliar('ir({ tela: "admin" }); true');
-      await pc.esperar('document.querySelectorAll(".quadro-menu").length === 3', 8000, 'os quadros');
-      certo(await pc.avaliar('(() => { const m = document.querySelector("main.quadros-menu"); return m.scrollHeight <= m.clientHeight + 1; })()'), 'apareceu rolagem');
+      await pc.esperar('document.querySelectorAll("main.ajustes-juntos .config-grade > .bloco").length === 3', 8000, 'as três partes');
+      certo(!(await pc.existe('.quadro-menu')), 'ainda tem quadro para abrir');
+      certo(await pc.avaliar('(() => { const m = document.querySelector("main.ajustes-juntos"); return m.scrollHeight <= m.clientHeight + 1; })()'), 'apareceu rolagem');
+      certo(await pc.existe('[data-a="sair-nuvem"]') && await pc.existe('[data-a="escala"]') && await pc.existe('[data-a="novidades"]'), 'falta alguma parte');
       await pc.foto(path.join(FOTOS, 'ajustes-pc.png'));
-      await pc.tocar('[data-a="categoria"][data-cat="servidor"]');
-      await pc.esperar('!!document.querySelector("[data-a=sair-nuvem]")', 5000, 'a parte do servidor');
-      await pc.foto(path.join(FOTOS, 'ajustes-pc-servidor.png'));
     });
     certo(!pc.erros.length, pc.erros.join(' | '));
   } finally { await pc.fechar().catch(() => {}); await c.desligar(); await n.desligar(); }

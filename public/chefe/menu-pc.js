@@ -18,11 +18,13 @@
     const item = (a, icone, texto, ativo, extra = '') => `<button class="menu-item ${ativo ? 'ativo' : ''}" data-a="${a}" ${extra}>${ico(icone)}<span>${texto}</span></button>`;
     const abertos = veNoChefe('avisos') ? avisosEmAberto().length : 0;
     const quem = pessoaAtual();
+    // 3.1.8: Pessoas e Aparelhos ficam dentro de Configurações; no menu só para quem não abre Configurações
+    const config = FUNCOES_DA_USINA.some(veNoChefe);
     const administrar = [quem && quem.dono ? item('sala', 'servidor', 'Sala de controle', naTela('sala')) : '',
-      veNoChefe('chefes') || veNoChefe('conexao') ? item('aparelhos', 'wifi', 'Aparelhos', naTela('aparelhos')) : '',
-      veNoChefe('pessoas') ? item('pessoas', 'pessoas', 'Pessoas', naTela('pessoas')) : '',
+      !config && (veNoChefe('chefes') || veNoChefe('conexao')) ? item('aparelhos', 'wifi', 'Aparelhos', naTela('aparelhos')) : '',
+      !config && veNoChefe('pessoas') ? item('pessoas', 'pessoas', 'Pessoas', naTela('pessoas')) : '',
       veNoChefe('registro') ? item('registro', 'nota', 'Registro', naTela('registro')) : '',
-      FUNCOES_DA_USINA.some(veNoChefe) ? item('config', 'ajustes', 'Configurações', naTela('config', 'folhas')) : ''].join('');
+      config ? item('config', 'ajustes', 'Configurações', naTela('config', 'folhas', 'pessoas', 'aparelhos')) : ''].join('');
     // 3.1.7: rastreamento e etiqueta abrem de dentro da Produção (coluna da direita): um item só para o escritório
     return `<nav class="menu-pc" aria-label="Menu do painel">
       <div class="menu-marca"><img src="icons/logo-u.svg" alt=""><div><b>Pranchetas</b><small>${soVer() ? 'Painel pela nuvem' : 'Painel do escritório'}</small></div></div>

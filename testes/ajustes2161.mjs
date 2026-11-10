@@ -89,7 +89,7 @@ export async function testarAjustes2161(nav, ligar, porta, grupo) {
 
     await teste(grupo, 'aviso novo com texto curto em outra área: temperatura da destilaria acima de 90', async () => {
       await semNotificacao(chefe);
-      await chefe.tocar('[data-a="pessoa"]'); await chefe.tocar('[data-k="folhas"]');
+      await chefe.tocar('[data-a="config"]'); await chefe.tocar('[data-a="folhas"]');
       await chefe.esperar('!!document.querySelector("main.tela-folhas")', 8000, 'tela Folhas e avisos');
       await chefe.tocar('[data-a="folha-campo"][data-pid="destilaria"][data-id="temp_pe_a"]');
       await chefe.tocar('.modal [data-k="av-mais"]');
@@ -113,9 +113,8 @@ export async function testarAjustes2161(nav, ligar, porta, grupo) {
     });
 
     await teste(grupo, 'Usina: as seções que mandam totais dizem que não precisa preencher (o Evandro busca pela API)', async () => {
-      await chefe.tocar('[data-a="voltar"]');
+      await chefe.tocar('[data-a="voltar"]'); // das Folhas volta para Configurações (3.1.7: é por onde se chega nelas)
       await semNotificacao(chefe);
-      await chefe.tocar('[data-a="config"]');
       await chefe.tocar('[data-a="categoria"][data-cat="envios"]');
       await chefe.esperar('!!document.querySelector("main.config")', 8000, 'Usina aberta');
       for (const bloco of ['#bloco-turnos', '#bloco-base44']) {
