@@ -28,11 +28,11 @@
     if (!rascunhoSujo() || modalAberto()) return;
     if (salvarRascunho(true, { silencioso: true })) { rascunho = null; ed.alvoId = null; render(true); }
   }
-  function ir(v, substituir = false) {
+  function ir(v, substituir = false, como = true) {
     if (rascunhoSujo()) salvarRascunho(true);
     if (substituir) pilha[pilha.length - 1] = v; else pilha.push(v);
     rascunho = null; ed.alvoId = null;
-    render(true);
+    render(como);
   }
   async function voltar() {
     if (modalAberto()) return modalFixo ? undefined : fecharModalAtual();

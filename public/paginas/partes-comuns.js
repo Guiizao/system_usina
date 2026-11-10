@@ -9,6 +9,7 @@
   const topo = (titulo, subtitulo, podeVoltar, atalhos) => cabecalho(titulo, subtitulo, podeVoltar, atalhos) + faixa();
   /** Barra de cima. Leva título, atalhos, relógio e, no canto, os ajustes e o botão claro/escuro. */
   function cabecalho(titulo, subtitulo, podeVoltar, atalhos) {
+    if (painelNovoCel()) return cabecalhoCel(titulo, subtitulo, podeVoltar, atalhos);
     const escuro = cfg.tema === 'escuro';
     const configurado = cfg.papel && (cfg.chave || cfg.demo);
     return `<header class="topo">
@@ -53,6 +54,8 @@
   let ultimaChaveTela = '';
   /** Redesenha a tela. Mantém a posição da rolagem quando continua na mesma tela. */
   function render(trocouDeTela) {
+    const outroDia = trocouDeTela === 'dia'; // a mesma tela em outro dia: fica onde estava, sem animação de entrada
+    if (outroDia) trocouDeTela = false;
     aoAtualizarEdicao = null;
     aplicarPainelNovo();
     aplicarFolhas(); // mudança nas folhas que chegou do tablet chefe
@@ -68,24 +71,25 @@
     };
     const chaveTela = JSON.stringify([v.tela, v.pid, v.data, v.monitor]);
     const outraTela = chaveTela !== ultimaChaveTela;
-    const mesmaTela = !trocouDeTela && !outraTela;
+    const mesmaTela = !trocouDeTela && (!outraTela || outroDia);
     // a atualização que vem da central (a cada 5 s) não pode mudar onde a pessoa está: guarda e volta cada rolagem
-    const ROLAM = '.abas, .seletor, .tabela-wrap, .cabecalho-form, .chips-escolha, .lista-avisos, main';
+    const ROLAM = '.abas, .seletor, .tabela-wrap, .cabecalho-form, .chips-escolha, .lista-avisos, .reg-tipos, main';
     const rolagens = mesmaTela ? [...app.querySelectorAll(ROLAM)].map((el) => [el.scrollLeft, el.scrollTop]) : [];
     alvos = [];
     // a animação de entrada é só de quem trocou de tela: o redesenho que vem da central (a cada 5 s) não pode piscar
     app.classList.remove('troca', 'troca-linha');
     // computador (2.16): menu fixo à esquerda e a tela à direita (chefe/menu-pc.js)
     const html = (telas[v.tela] || telaInicio)(v);
-    const focoIa = !!document.activeElement && document.activeElement.id === 'ia-texto';
+    // campo de texto que redesenha a tela enquanto a pessoa digita (assistente, busca do registro): continua com o cursor no fim
+    const focado = document.activeElement && ['ia-texto', 'reg-busca'].includes(document.activeElement.id) ? document.activeElement.id : '';
     const menu = comMenuPc();
     app.classList.toggle('com-menu', menu);
     app.innerHTML = menu ? menuPc(v) + `<div class="area-pc">${html}${gavetaAssistente()}</div>` : html + barraCelular(v);
-    if (focoIa) { const c = document.getElementById('ia-texto'); if (c) { c.focus(); c.setSelectionRange(c.value.length, c.value.length); } }
+    if (focado) { const c = document.getElementById(focado); if (c) { c.focus(); c.setSelectionRange(c.value.length, c.value.length); } }
     ultimaChaveTela = chaveTela;
     if (mesmaTela) app.querySelectorAll(ROLAM).forEach((el, i) => { if (rolagens[i]) { el.scrollLeft = rolagens[i][0]; el.scrollTop = rolagens[i][1]; } });
     else rolarDepois = true; // abriu a tela ou trocou a linha: a escolhida vai para o meio
-    if (v.tela === 'central') desenharQr();
+    if (v.tela === 'central' || v.tela === 'aparelhos') desenharQr();
     if (v.tela === 'conectar' && NO_APK && pluginCentral && !procura.feita && !conexaoForm.endereco) setTimeout(procurarCentral, 300);
     if (v.tela === 'relatorios' && !v.carregado) carregarRelatorios();
     if (v.data) buscarDia(v.data);

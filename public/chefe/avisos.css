@@ -8,6 +8,7 @@
 /* Tela de avisos do tablet chefe */
 .avisos-grade { display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px; align-items: start; }
 @media (min-width: 1000px) { .avisos-grade { grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); } }
+@media (min-width: 1000px) { #app.com-menu .avisos-grade { align-items: stretch; } } /* 3.1.7, PC: as duas caixas da mesma altura */
 .avisos-grade .bloco { margin: 0; }
 .avisos-grade h2 { display: flex; align-items: center; gap: 10px; font-size: 24px; margin: 0 0 6px; }
 .novo-aviso h3 { margin: 14px 0 8px; font-size: 18px; color: var(--tinta-2); }

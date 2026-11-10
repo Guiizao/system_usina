@@ -31,7 +31,7 @@ try {
     const claro = await a.avaliar(`(() => { const c = document.querySelector('#abertura-nova canvas'); const d = c.getContext('2d').getImageData(c.width / 2 - 60, c.height / 2 - 60, 120, 120).data; let m = 0; for (let i = 0; i < d.length; i += 4) m = Math.max(m, d[i + 1]); return m; })()`);
     certo(claro > 60, 'desenhou algo: ' + claro);
     await dormir(3900);
-    igual(await a.avaliar(`!!document.querySelector('#abertura-nova') || !!document.querySelector('.abertura-voa')`), false);
+    igual(await a.avaliar(`!!document.querySelector('#abertura-nova') || !!document.querySelector('.abertura-voa') || !!document.querySelector('.abertura-fundo')`), false);
     await a.fechar();
   });
   await teste(g, 'um toque pula a abertura', async () => {
@@ -191,6 +191,26 @@ try {
     const a = await nav.novoAparelho('p13', TAMANHOS.computador);
     await a.ir(url + 'central&funcoes=corrigir', 'document.querySelector("#app main")');
     igual(await a.avaliar(`[!!document.querySelector('.pn-visao'), !!document.querySelector('.pn-heroi'), !!document.querySelector('.pn-linha')]`), [true, false, false]);
+    await a.fechar();
+  });
+  await teste(g, 'celular (3.1.7): barra nova em toda tela, bolha no Mais, Mais sem repetidos, dia sem animação de entrada, chave volta ao início', async () => {
+    const a = await nav.novoAparelho('p21', TAMANHOS.celular);
+    await a.ir(url + 'central', 'document.querySelector("#app main")');
+    await a.avaliar(`cfg.painelNovo = true; pilha = [telaInicial()]; render(true); 1`);
+    await a.tocar('.pn-barra [data-a="mais-cel"]');
+    igual(await a.avaliar(`[...document.querySelectorAll('.pn-mais [data-a="esc-abrir"]')].map((b) => b.dataset.t)`), ['escritorio'], 'cálculos e rastreio ficam dentro do Escritório');
+    for (const alvo of ['[data-a="graficos"]', '[data-t="escritorio"]', '[data-a="config"]']) {
+      await a.avaliar(`pilha = [telaInicial(), { tela: 'mais-cel' }]; render(true); 1`);
+      await a.tocar(`.pn-mais ${alvo}`); await a.esperar(`view().tela !== 'mais-cel'`, 5000, alvo);
+      igual(await a.avaliar(`[!!document.querySelector('header.topo'), !!document.querySelector('header.pn-topo [data-a="voltar"]'), document.querySelector('.pn-barra .at').dataset.a]`), [false, true, 'mais-cel'], alvo);
+    }
+    await a.avaliar(`pilha = [telaInicial()]; render(true); 1`); await dormir(500);
+    const dia = await a.avaliar(`document.querySelector('.pn-heroi-dia b').textContent`);
+    await a.tocar('.pn-heroi-dia [aria-label="Dia anterior"]');
+    igual(await a.avaliar(`[document.querySelector('.pn-heroi-dia b').textContent !== ${JSON.stringify(dia)}, document.getElementById('app').classList.contains('troca')]`), [true, false], 'outro dia, sem animação de entrada');
+    await a.avaliar(`pilha = [telaInicial(), { tela: 'graficos', data: dataProducao() }, { tela: 'mais-cel' }]; render(true); 1`);
+    await a.tocar('.pn-mais [data-a="painel-novo"]'); await dormir(900);
+    igual(await a.avaliar(`[cfg.painelNovo, pilha.length, view().tela, !!document.querySelector('.pn-barra')]`), [false, 1, 'central', false]);
     await a.fechar();
   });
   await teste(g, 'as 11 aberturas desenham sem erro', async () => {

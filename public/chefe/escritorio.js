@@ -113,7 +113,9 @@
     : `<button class="btn primario" data-a="esc-salvar">${ico('certo')} Salvar</button></div>`);
   function telaEscCalculos(v) {
     const x = valoresDaTela(v);
-    return `${cabecalho('Cálculos da produção', `Lote ${x.lote} · ${fmtData(x.fechamento)} 07:00`, true, atalhosEsc(v))}
+    // PC (3.1.7): sem a tela do Escritório no meio, o dia troca aqui mesmo
+    const diaPc = painelNovoPc() ? `<div class="nav-data"><button class="btn" data-a="esc-dia" data-n="-1" aria-label="Dia anterior">${ico('voltar')}</button><div class="data-grande"><b>Produção de ${fmtData(v.data).slice(0, 5)}</b><span>fechou em ${fmtData(x.fechamento).slice(0, 5)} às 07:00</span></div><button class="btn" data-a="esc-dia" data-n="1" aria-label="Próximo dia" ${v.data >= dataProducao() ? 'disabled' : ''}>${ico('seta')}</button></div>` : '';
+    return `${cabecalho('Cálculos da produção', `Lote ${x.lote} · ${fmtData(x.fechamento)} 07:00`, true, diaPc + atalhosEsc(v))}
       <main class="escritorio ${painelNovoPc() ? 'pn-producao' : ''}"><div class="esc-coluna">
         <section class="bloco"><h2>${ico('tanque')} Hidrolisado e vinho</h2>
           <p class="sub">Conta do Lucas: hidrolisado = matéria‑prima ÷ fator; vinho = hidrolisado × Brix inicial ÷ Brix final.</p>
@@ -125,7 +127,7 @@
           ${linhaEsc(x, 'calculo.alcoolDestilaria', 'Álcool da Destilaria', 'L')}${linhaEsc(x, 'calculo.alcoolNova', 'Álcool da Nova Destilaria', 'L')}
           ${linhaEsc(x, 'alcool.producao', 'Produção de álcool', 'L', true)}${linhaEsc(x, 'volumeDestilado', 'Volume destilado', 'L')}
           ${linhaEsc(x, 'vinhaca.producao', 'Produção de vinhaça', 'L', true)}</section>
-        <div class="linha-botoes"><button class="btn" data-a="esc-recalcular">${ico('relogio')} Refazer com as anotações de agora</button>
+        <div class="linha-botoes esc-acoes"><button class="btn" data-a="esc-recalcular">${ico('relogio')} Refazer com as anotações de agora</button>
           ${pode('relatorios') ? `<button class="btn" data-a="relatorio-enviar" data-data="${v.data}">${ico('enviar')} Enviar ou imprimir</button>` : ''}
           ${botaoSalvarEsc()}
       </div>${painelNovoPc() ? pnLadoProducao(v, x) : ''}</main>`;
@@ -168,8 +170,8 @@
         <section class="bloco"><h2>Operadores e encarregado</h2>
           <div class="linha-config"><div><b>Operadores</b><small>${esc(x.operadores || '—')}</small></div><button class="btn pequeno" data-a="esc-campo" data-c="operadores" data-r="Operadores">Mudar</button></div>
           <div class="linha-config"><div><b>Encarregado</b><small>${esc(x.encarregado || '—')}</small></div><button class="btn pequeno" data-a="esc-campo" data-c="encarregado" data-r="Encarregado">Mudar</button></div>
-          <p class="sub">${esc(R.aviso)}</p></section>
-        <div class="linha-botoes"><button class="btn" data-a="esc-recalcular">${ico('relogio')} Refazer com as anotações de agora</button>
+          <p class="sub">${esc(R.aviso).replace(/\S+-\S+/g, '<span class="sem-quebra">$&</span>')}</p></section>
+        <div class="linha-botoes esc-acoes"><button class="btn" data-a="esc-recalcular">${ico('relogio')} Refazer com as anotações de agora</button>
           <button class="btn" data-a="esc-arquivo">${ico('enviar')} Enviar (PDF, Excel ou XML)</button>
           <button class="btn" data-a="esc-folha">${ico('imprimir')} Imprimir a folha</button>
           <button class="btn" data-a="esc-etiqueta">${ico('documento')} Etiqueta das bombonas</button>

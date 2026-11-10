@@ -86,8 +86,11 @@
   }
   function pnHeroi(dia, celular) {
     const d = pnDia(dia), ontem = pnDia(somarDias(dia, -1));
+    // celular (3.1.7): troca o dia ali mesmo. As setas andam pelo dia mostrado (o fechado), não pela data da tela: com a data de hoje o cartão já mostra ontem
+    const depois = somarDias(dia, 1);
+    const troca = celular ? `<span class="pn-heroi-dia"><button data-a="dia-ir" data-data="${somarDias(dia, -1)}" aria-label="Dia anterior">${ico('voltar')}</button><b>${fmtData(dia).slice(0, 5)}</b><button data-a="dia-ir" data-data="${depois}" aria-label="Próximo dia" ${depois >= dataProducao() ? 'disabled' : ''}>${ico('seta')}</button></span>` : '';
     return `<section class="pn-heroi pn-e">
-      <div class="txt"><small>Álcool produzido</small><div class="n1">${pnNum(d.alcool)} <em>L</em></div>${pnVariacao(d.alcool, ontem.alcool, 'clara')}
+      <div class="txt">${celular ? `<div class="pn-heroi-topo"><small>Álcool produzido</small>${troca}</div>` : '<small>Álcool produzido</small>'}<div class="n1">${pnNum(d.alcool)} <em>L</em></div>${pnVariacao(d.alcool, ontem.alcool, 'clara')}
         <div class="partes"><span>Destilaria<b>${pnComUn(d.destilaria, 'L')}</b></span><span>Nova<b>${pnComUn(d.nova, 'L')}</b></span>${celular ? '' : `<span>Lote<b>${esc(d.lote)}</b></span>`}</div>
         ${d.conferido ? '' : '<small class="aviso-h">Calculado das folhas, não conferido</small>'}</div>
       ${pnTanque(dia)}</section>`;
@@ -112,7 +115,7 @@
   }
   const pnIniciais = (nome) => esc(String(nome).trim().slice(0, 2));
 
-  function telaVisaoGeral(v, { lista, todos, pend, ligados, subtitulo, hoje, lateral }) {
+  function telaVisaoGeral(v, { lista, todos, pend, ligados, subtitulo, hoje }) {
     const data = v.data, ve = pnVeProducao(), dia = diaDoEscritorio(data);
     const d = pnDia(dia), ontem = pnDia(somarDias(dia, -1));
     const feitas = lista.flatMap((s) => s.pranchetas.flatMap(folhasDe)), comNota = feitas.filter((pid) => listar(data, pid).length).length;
@@ -122,6 +125,13 @@
     const serie = ve ? pnSerie(dia, v.periodo || 7) : [];
     const validos = serie.filter((p) => p.alcool != null), media = validos.length ? validos.reduce((s, p) => s + p.alcool, 0) / validos.length : '';
     const salvo = !!rastreioGuardado(dia);
+    // 3.1.7: a visão geral só resume; cada resumo tem o botão da tela dele (os gráficos de hora em hora ficam em Gráficos)
+    const rodape = (a, texto, extra = '') => `<div class="pn-rodape"><button class="btn pequeno" data-a="${a}" ${extra}>${texto}</button></div>`;
+    const envio = veNoChefe('relatorios') ? `<div class="pn-envio">${[['whatsapp', 'whatsapp', 'WhatsApp'], ['email', 'email', 'E-mail'], ['outros', 'compartilhar', 'Outros apps'], ['baixar', 'baixar', 'Guardar']].map(([d, i, t]) => `<button class="btn pequeno" data-a="compartilhar" data-destino="${d}">${ico(i)}<span>${t}</span></button>`).join('')}<button class="btn pequeno" data-a="imprimir">${ico('imprimir')}<span>Imprimir</span></button></div>` : '';
+    const resumos = [veNoChefe('relatorios') && blocoTotais(data, veNoChefe('escritorio') ? rodape('esc-abrir', 'Abrir a produção', `data-t="esc-calculos" data-dia="${dia}"`) : rodape('relatorios', 'Relatórios')),
+      // sem o Escritório não há o Fechamento do dia: o envio da folha vira um resumo próprio
+      !veNoChefe('escritorio') && envio && `<section class="bloco"><h2>Compartilhar a folha do dia</h2><button class="btn primario largo" data-a="compartilhar" data-destino="escritorio">${ico('enviar')} Enviar para o escritório</button>${envio}</section>`,
+      blocoAparelhosAgora(6), blocoUltimasAnotacoes(todos, 6, veNoChefe('registro') ? rodape('registro', 'Ver no registro') : '')].filter(Boolean);
     const passo = (icone, nome, det, val, un, alerta) => `<li class="${alerta ? 'alerta' : ''}"><span class="ic">${ico(icone)}</span><span class="t"><b>${nome}</b><small>${det}</small></span><strong>${val}${val === '-' ? '' : ` ${un}`}</strong></li>`;
     return `${cabecalho('Visão geral', subtitulo, false, nav)}
       <main class="pn-visao">
@@ -136,7 +146,7 @@
         </div>
         ${ve ? `<div class="pn-l2">
           <section class="pn-c pn-e"><div class="cab"><h2>Produção de álcool</h2><span class="pn-leg"><i class="t"></i>Total<i class="d"></i>Destilaria${media !== '' ? `<i class="m"></i>Média ${pnNum(media)} L` : ''}</span>${pnPeriodos(v)}</div>${pnGrafico(serie)}</section>
-          <section class="pn-c pn-e"><div class="cab"><h2>Linha de produção</h2><small>do dia ${fmtData(dia).slice(0, 5)}</small></div>
+          <section class="pn-c pn-e"><div class="cab"><h2>Linha de produção</h2><small>do dia ${fmtData(dia).slice(0, 5)}</small>${veNoChefe('relatorios') ? '<button class="btn pequeno" data-a="graficos">Gráficos do dia</button>' : ''}</div>
             <ol class="pn-etapas">${passo('balanca', 'Ralo / Pesagem', 'Matéria-prima do dia', pnNum(d.mp, 1), 'kg')}${passo('tanque', 'Hidrólise', d.brix === '' ? 'Sem Brix ainda' : `Brix ${pnNum(d.brix, 1)}`, pnNum(d.hidrolisado), 'L')}${passo('regua', 'Vinho e Fermentação', d.brixFinal === '' ? 'Sem Brix final' : `Brix final ${pnNum(d.brixFinal, 1)}`, pnNum(d.vinho), 'L')}${passo('fabrica', 'Destilaria e Nova', d.alcool === '' ? 'Faltam leituras' : 'Soma das duas', pnNum(d.alcool), 'L', d.alcool === '')}${passo('baixar', 'Vinhaça', 'Destilado menos álcool', pnNum(d.vinhaca), 'L')}</ol></section>
         </div>` : ''}
         <div class="pn-l3">
@@ -147,11 +157,11 @@
             ${pnVeSetores() ? blocoForaDoLimite(data) || `<section class="pn-c pn-e"><div class="cab"><h2>Fora do limite</h2></div><p class="sub pn-vazio">Nada fora do limite neste dia.</p></section>` : ''}
             ${veNoChefe('escritorio') ? `<section class="pn-c pn-e pn-fecha"><div class="cab"><h2>Fechamento do dia</h2><small>Lote <b>${esc(d.lote)}</b></small></div>
               <div class="chips"><mark class="${d.alcool === '' ? 'a' : 'v'}">${d.alcool === '' ? 'Faltam leituras' : 'Cálculos'}</mark><mark class="${salvo ? 'v' : 'a'}">${salvo ? 'Rastreamento salvo' : 'Falta rastreamento'}</mark></div>
-              <div class="linha-botoes"><button class="btn" data-a="esc-abrir" data-t="esc-calculos" data-dia="${dia}">${ico('grafico')} Cálculos</button><button class="btn" data-a="esc-abrir" data-t="esc-rastreamento" data-dia="${dia}">${ico('documento')} Rastreamento</button>${veNoChefe('relatorios') ? `<button class="btn primario" data-a="compartilhar" data-destino="escritorio">${ico('enviar')} Enviar</button>` : ''}</div></section>` : ''}
+              <div class="linha-botoes"><button class="btn" data-a="esc-abrir" data-t="esc-calculos" data-dia="${dia}">${ico('grafico')} Cálculos</button><button class="btn" data-a="esc-abrir" data-t="esc-rastreamento" data-dia="${dia}">${ico('documento')} Rastreamento</button>${veNoChefe('relatorios') ? `<button class="btn primario" data-a="compartilhar" data-destino="escritorio">${ico('enviar')} Enviar</button>` : ''}</div>${envio}</section>` : ''}
           </div>
         </div>
         ${v.temArquivo === data && veNoChefe('relatorios') ? `<div class="linha-botoes"><button class="btn pequeno perigo" data-a="relatorio-apagar" data-data="${data}">${ico('lixeira')} Apagar o arquivo</button></div>` : ''}
-        <div class="central-grade pn-demais"><section>${htmlGraficosDoPainel(data)}</section><aside class="lateral-chefe">${lateral}</aside></div>
+        ${resumos.length ? `<div class="pn-l4">${resumos.join('')}</div>` : ''}
       </main>`;
   }
 
@@ -187,7 +197,7 @@
     const pessoas = aparelhosDoPainel().filter((a) => a.online && a.operador && !vistos.has(a.operador) && vistos.add(a.operador));
     const linhaPessoa = (a) => { const x = agora.find((y) => y.s.id === a.papel); return `<div class="pn-lin"><em>${pnIniciais(a.operador)}</em><span><b>${esc(a.operador)}</b><small>${esc(funcaoDoAparelho(a))}</small></span>${x && x.hora ? `<time>última ${x.hora}</time>` : ''}</div>`; };
     return `<header class="pn-oi pn-e"><img src="icons/logo-u.svg" alt=""><div><b>${pnSaudacao()}</b><small>${esc(turnoAtual().nome)}, ${fmtData(data).slice(0, 5)}</small></div>
-        <button class="pn-ic" data-a="avisos" aria-label="Avisos${abertos ? `, ${abertos} esperando` : ''}">${ico('sino')}${abertos ? '<span class="pt"></span>' : ''}</button></header>
+        ${pnAtualizar()}<button class="pn-ic" data-a="avisos" aria-label="Avisos${abertos ? `, ${abertos} esperando` : ''}">${ico('sino')}${abertos ? '<span class="pt"></span>' : ''}</button></header>
       <main class="pn-cel cabe"><div class="pn-miolo">
         ${ve ? pnHeroi(dia, true) : ''}
         ${ve ? `<section class="pn-c pn-e" style="--o:1"><div class="cab"><h2>Caminho da produção</h2><small>do dia ${fmtData(dia).slice(0, 5)}</small></div>${pnCaminho(dia)}</section>
@@ -205,7 +215,7 @@
     const ultimas = lista.flatMap((x) => x.s.pranchetas.flatMap(folhasDe).flatMap((pid) => listar(data, pid))).filter((r) => !r.apagado).sort((a, b) => b.atualizadoEm - a.atualizadoEm).slice(0, 8);
     const antes = pnUltimaVista; pnUltimaVista = Math.max(pnUltimaVista, ultimas.length ? ultimas[0].atualizadoEm : 0);
     const cartao = (x, i) => `<button class="pn-e ${x.situacao[0]}" style="--o:${i + 1}" data-a="abrir-setor" data-id="${x.s.id}"><i>${ico(x.s.icone)}</i><b>${esc(x.s.nome)}</b><mark>${esc(x.situacao[1])}</mark><small class="${ligado(x) ? 'on' : ''}"><q></q>${esc(x.aparelho || x.quem || 'Sem anotação')}${x.situacao[0] === 'a' && x.agora ? `: ${x.agora.split('. ')[0]}` : x.hora ? `, última às ${x.hora}` : ''}</small><em>${x.feitas} de ${contar(x.total, 'folha', 'folhas')}</em><u><s style="width:${x.total ? x.feitas / x.total * 100 : 0}%"></s></u></button>`;
-    return `<header class="pn-oi pn-e"><div><b>Setores</b><small>${esc(turnoAtual().nome)}, ${fmtData(data).slice(0, 5)}</small></div></header>
+    return `<header class="pn-oi pn-e"><div><b>Setores</b><small>${esc(turnoAtual().nome)}, ${fmtData(data).slice(0, 5)}</small></div>${pnAtualizar()}</header>
       <main class="pn-cel cabe"><div class="pn-miolo">
         <div class="pn-tres pn-e"><div><b>${lista.filter(ligado).length} de ${lista.length}</b><small>tablets ligados</small></div><div><b>${pessoas}</b><small>${pessoas === 1 ? 'pessoa' : 'pessoas'} agora</small></div><div class="${alertas.length ? 'ruim' : ''}"><b>${alertas.length}</b><small>fora do limite</small></div></div>
         <div class="pn-setores">${lista.map(cartao).join('')}</div>
@@ -241,9 +251,13 @@
     const p = pessoaAtual(), abertos = veNoChefe('avisos') ? avisosEmAberto().length : 0, dia = diaDoEscritorio(dataProducao());
     const tile = (a, icone, nome, extra = '', selo = 0) => `<button class="pn-e" data-a="${a}" ${extra}><i>${ico(icone)}</i>${nome}${selo ? `<em>${selo}</em>` : ''}</button>`;
     const acompanhar = [veNoChefe('ler_folha') && lerFolhaLigada() && tile('ler-folha', 'camera', 'Ler folha'), veNoChefe('avisos') && !soVer() && tile('avisos', 'sino', 'Avisos', '', abertos), veNoChefe('relatorios') && tile('graficos', 'grafico', 'Gráficos'),
-      veNoChefe('escritorio') && tile('esc-abrir', 'etiqueta', 'Rastreio e etiqueta', `data-t="esc-rastreamento" data-dia="${dia}"`), veNoChefe('escritorio') && tile('esc-abrir', 'documento', 'Cálculos', `data-t="esc-calculos" data-dia="${dia}"`), veNoChefe('escritorio') && tile('esc-abrir', 'escritorio', 'Escritório', `data-t="escritorio" data-dia="${dia}"`)].filter(Boolean);
-    const administrar = [veNoChefe('pessoas') && tile('pessoas', 'pessoas', 'Pessoas e níveis'), (veNoChefe('chefes') || veNoChefe('conexao')) && tile('aparelhos', 'wifi', 'Aparelhos'), p && p.dono && tile('sala', 'servidor', 'Sala de controle'), veNoChefe('registro') && tile('registro', 'nota', 'Registro'), FUNCOES_DA_USINA.some(veNoChefe) && tile('config', 'ajustes', 'Configurações'), tile('tema', cfg.tema === 'escuro' ? 'sol' : 'lua', 'Tema'), tile('admin', 'tamanho', 'Ajustes')].filter(Boolean);
-    return `<header class="pn-oi"><div><b>Mais</b></div></header>
+      veNoChefe('escritorio') && tile('esc-abrir', 'escritorio', 'Escritório', `data-t="escritorio" data-dia="${dia}"`)].filter(Boolean); // cálculos e rastreio ficam dentro do Escritório
+    // Pessoas e Aparelhos estão dentro das Configurações: só aparecem aqui para quem não abre as Configurações
+    const config = FUNCOES_DA_USINA.some(veNoChefe);
+    const administrar = [p && p.dono && tile('sala', 'servidor', 'Sala de controle'), veNoChefe('registro') && tile('registro', 'nota', 'Registro'), config && tile('config', 'ajustes', 'Configurações'),
+      !config && veNoChefe('pessoas') && tile('pessoas', 'pessoas', 'Pessoas e níveis'), !config && (veNoChefe('chefes') || veNoChefe('conexao')) && tile('aparelhos', 'wifi', 'Aparelhos'),
+      tile('tema', cfg.tema === 'escuro' ? 'sol' : 'lua', cfg.tema === 'escuro' ? 'Tema claro' : 'Tema escuro'), tile('admin', 'tamanho', 'Ajustes do aparelho')].filter(Boolean);
+    return `<header class="pn-oi"><div><b>Mais</b></div>${pnAtualizar()}</header>
       <main class="pn-cel pn-mais">
         <section class="pn-c pn-e pn-quem"><em>${p ? pnIniciais(p.nome) : ''}</em><div><b>${esc(p ? p.nome : 'Ninguém entrou')}</b><small>${esc(p ? p.nivel || '' : '')}</small></div><button class="btn pequeno" data-a="pessoa">${p ? 'Trocar' : 'Entrar'}</button></section>
         <section class="pn-c pn-e pn-quem"><div><b>Painel novo</b><small>Se desligar, volta para o painel de antes</small></div><button class="pn-chave ${cfg.painelNovo ? 'on' : ''}" role="switch" aria-checked="${!!cfg.painelNovo}" aria-label="Painel novo" data-a="painel-novo" data-valor="${cfg.painelNovo ? '0' : '1'}"></button></section>
@@ -267,13 +281,27 @@
     const p = pessoaAtual();
     return `<section class="pn-c pn-quem pn-voce"><div><b>${p ? `Você está como ${esc(p.nome)}` : 'Ninguém entrou neste computador'}</b><small>${esc(p ? p.nivel || '' : '')}</small></div><button class="btn" data-a="pessoa">${p ? 'Entrar com outra pessoa' : 'Entrar'}</button></section>`;
   }
+  /** 3.1.7: no celular com o painel novo, toda tela tem a barra de cima do painel novo (nada do relógio, luzes e lua do painel de antes:
+      tema e ajustes ficam no Mais). As abas da barra de baixo não têm voltar. */
+  const ABA_DA_TELA = { central: 'abrir-painel', 'setores-cel': 'setores-cel', assistente: 'assistente', relatorios: 'relatorios', 'mais-cel': 'mais-cel' };
+  function cabecalhoCel(titulo, subtitulo, podeVoltar, atalhos) {
+    // Escritório e folha do setor não pedem voltar no painel de antes (são a tela de início lá); aqui vêm do Mais e dos Setores.
+    // A leitura da folha esconde o voltar enquanto lê a foto: continua escondido.
+    const t = (view() || {}).tela, volta = !ABA_DA_TELA[t] && (podeVoltar || (pilha.length > 1 && t !== 'leitura'));
+    return `<header class="pn-oi pn-topo">${volta ? `<button class="pn-ic" data-a="voltar" aria-label="Voltar">${ico('voltar')}</button>` : ''}
+      <div><b>${esc(titulo)}</b>${subtitulo ? `<small id="subtitulo-topo">${esc(subtitulo)}</small>` : ''}</div>${pnAtualizar()}${atalhos ? `<div class="pn-atalhos">${atalhos}</div>` : ''}</header>`;
+  }
+  /** Versão nova esperando: o botão de atualizar que ficava na barra de antes. */
+  function pnAtualizar() {
+    return atualizacao.nova ? `<button class="pn-ic pn-atualizar" data-a="atualizacao" aria-label="Atualizar o aplicativo para a versão ${esc(atualizacao.nova.versao)}">${ico('instalar')}</button>` : '';
+  }
   const TELAS_SEM_BARRA = [...TELAS_SEM_MENU, 'prancheta', 'leitura', 'operador', 'trocar-funcao'];
   let pnTroca = null;
   function barraCelular(v) {
     if (!painelNovoCel() || TELAS_SEM_BARRA.includes(v.tela)) return '';
-    const ativo = { central: 'abrir-painel', 'setores-cel': 'setores-cel', relatorios: 'relatorios', 'mais-cel': 'mais-cel' }[v.tela];
+    const ativo = ABA_DA_TELA[v.tela] || 'mais-cel'; // o que não é aba se abre pelo Mais: a bolha fica no Mais
     const itens = [['abrir-painel', 'casa', 'Início'], pnVeSetores() && ['setores-cel', 'grade', 'Setores'], iaDisponivel() && ['assistente', 'brilho', 'Assistente'], veNoChefe('relatorios') && ['relatorios', 'pasta', 'Relatórios'], ['mais-cel', 'menu', 'Mais']].filter((x, n) => x || n !== 2); // sem o assistente a vaga do meio some
-    const lugar = (a) => itens.findIndex((x) => x && x[0] === a), i = lugar(ativo) < 0 ? lugar('assistente') : lugar(ativo); // tela fora das abas: a bolha fica no assistente; sem ele, não há bolha
+    const lugar = (a) => itens.findIndex((x) => x && x[0] === a), i = lugar(ativo);
     // a barra velha ainda está na tela quando a nova é montada: é de lá que a bolha sai
     const velha = document.querySelector('.pn-barra'), antes = velha ? Number(velha.style.getPropertyValue('--i')) : i, agora = Date.now();
     if (antes !== i) pnTroca = antes < 0 || i < 0 ? null : { de: antes, para: i, em: agora };

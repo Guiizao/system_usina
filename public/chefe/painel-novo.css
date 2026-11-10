@@ -104,8 +104,15 @@ main.pn-visao { max-width: none; }
 .pn-tabela .p u { flex: 1; height: 8px; border-radius: 9px; background: var(--papel-2); overflow: hidden; text-decoration: none; }
 .pn-tabela .p u i { display: block; height: 100%; background: var(--verde); }
 .pn-fecha .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
-.pn-fecha .linha-botoes { flex-wrap: wrap; }
-.pn-demais { margin-top: 2px; }
+.pn-fecha .linha-botoes { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 8px; }
+.pn-fecha .linha-botoes .btn, .pn-c .cab .btn { min-height: 44px; padding: 0 14px; font-size: 16px; } /* 3.1.7: botões da caixa no tamanho da caixa */
+/* 3.1.7: a fileira de resumos (no lugar dos gráficos de hora em hora e da lateral comprida): caixas da mesma altura, o botão embaixo */
+.pn-l4 { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 12px; align-items: stretch; }
+.pn-l4 > .bloco { margin: 0; border: 0; border-radius: 18px; padding: 14px 16px; box-shadow: 0 2px 10px var(--pn-sombra); display: flex; flex-direction: column; min-width: 0; }
+.pn-l4 > .bloco h2 { margin: 0 0 6px; font-size: 18px; }
+.pn-rodape { margin-top: auto; padding-top: 10px; display: flex; justify-content: flex-end; }
+.pn-envio { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; margin-top: 10px; }
+.pn-envio .btn { flex-direction: column; gap: 4px; min-height: 64px; padding: 6px 2px; font-size: 13px; }
 .pn-col .fora-limite { margin: 0; border-radius: 18px; padding: 14px 16px; border: 0; box-shadow: 0 2px 10px var(--pn-sombra); }
 .pn-col .fora-limite h2 { margin: 0 0 6px; font-size: 18px; }
 .pn-col .fora-limite li { padding: 5px 0; font-size: 15px; }
@@ -185,6 +192,28 @@ main.escritorio.pn-producao { max-width: none; grid-template-columns: minmax(0, 
 .ia-campo { flex: none; display: flex; gap: 8px; padding: 10px 12px; background: var(--papel); }
 #app:has(> .pn-barra) .ia-campo { padding-bottom: 30px; } /* a bolha da barra sobe até aqui */
 .ia-campo input { flex: 1; min-width: 0; min-height: 48px; padding: 0 14px; border-radius: 12px; border: 1px solid var(--linha); background: var(--papel); color: var(--tinta); font: inherit; }
+/* 3.1.7: sem a faixa branca embaixo; só o campo (redondo) e o botão de enviar (círculo), mais baixos */
+.ia-campo { align-items: center; padding: 6px 12px 10px; background: none; }
+#app:has(> .pn-barra) .ia-campo { padding-bottom: 26px; }
+.ia-campo input { height: 46px; min-height: 0; padding: 0 18px; border-radius: 99px; box-shadow: 0 2px 10px var(--pn-sombra); }
+.ia-campo .btn { flex: none; width: 46px; height: 46px; min-width: 0; min-height: 0; padding: 0; border-radius: 50%; }
+
+/* 3.1.7: janela da pessoa (toque no nome): quem é e, no painel de antes, o acesso rápido */
+.quem-modal { display: flex; align-items: center; gap: 14px; margin-bottom: 6px; }
+.quem-modal em { width: 56px; height: 56px; flex: none; display: grid; place-items: center; border-radius: 50%; background: var(--grafite); color: var(--branco); font-style: normal; font-weight: 700; font-size: 20px; }
+.quem-modal h3 { margin: 0; }
+.quem-modal .dica { margin: 2px 0 0; }
+
+/* 3.1.7: a barra de cima do painel novo em todas as telas do celular (cabecalhoCel) */
+.pn-topo { padding: 10px 12px 6px; }
+.pn-topo b { font-size: 20px; line-height: 1.15; }
+.pn-topo small { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pn-topo > .pn-atalhos { flex: none; display: flex; gap: 6px; } /* > div do .pn-oi estica: o título fica com a sobra */
+.pn-atalhos .atalho { width: 44px; height: 44px; display: grid; place-items: center; border-radius: 12px; background: var(--papel); color: var(--tinta); }
+.pn-atalhos .atalho span { display: none; } /* como no painel de antes no celular: só o desenho */
+.pn-atalhos .atalho.sel, .pn-atalhos .atalho.destaque { background: var(--verde); color: var(--branco); }
+.pn-atalhos .atalho.alerta { background: var(--ambar); color: var(--ambar-tinta); }
+.pn-atualizar { background: var(--verde); color: var(--branco); }
 
 /* celular */
 .pn-oi { flex: none; display: flex; align-items: center; gap: 10px; padding: 10px 12px 2px; }
@@ -198,7 +227,13 @@ main.escritorio.pn-producao { max-width: none; grid-template-columns: minmax(0, 
 .pn-miolo { flex: none; display: flex; flex-direction: column; gap: 9px; padding: 6px 12px 28px; overflow: clip; } /* clip: a animação de entrada não conta como altura ao medir */
 .pn-cel .pn-heroi { min-height: 0; flex: none; padding: 11px 16px; }
 .pn-cel .pn-heroi .txt { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; justify-items: start; column-gap: 9px; }
-.pn-cel .pn-heroi .txt > small, .pn-cel .pn-heroi .partes { grid-column: 1 / -1; }
+.pn-cel .pn-heroi .txt > small, .pn-cel .pn-heroi .partes, .pn-heroi-topo { grid-column: 1 / -1; }
+.pn-heroi-topo { display: flex; align-items: center; gap: 8px; }
+.pn-heroi-dia { display: inline-flex; align-items: center; border-radius: 99px; background: var(--topo-botao-toque); }
+.pn-heroi-dia b { min-width: 46px; text-align: center; font-size: 15px; }
+.pn-heroi-dia button { width: calc(40px / var(--pn-k, 1)); height: calc(38px / var(--pn-k, 1)); display: grid; place-items: center; color: var(--branco); } /* o dedo não encolhe junto com a tela */
+.pn-heroi-dia button:disabled { opacity: .35; }
+.pn-heroi-dia svg.ico { width: 18px; height: 18px; }
 .pn-cel .pn-heroi .partes { margin-top: 3px; }
 .pn-cel .pn-heroi .aviso-h { display: none; } /* o Caminho da produção já diz */
 .pn-cel .pn-tanque { width: 96px; }
@@ -303,6 +338,16 @@ main.escritorio.pn-producao { max-width: none; grid-template-columns: minmax(0, 
 .pn-alerta > span { color: var(--vermelho); }
 .pn-mais h3 { margin: 2px 0 -3px 3px; font-size: 15px; color: var(--tinta-2); }
 .pn-tiles { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; flex: none; }
+/* 3.1.7: sem quadrado sozinho na última linha, já no primeiro desenho (pelo data-n; arrumar depois fazia os quadrados pularem) */
+.pn-tiles[data-n="1"] { grid-template-columns: minmax(0, 1fr); }
+.pn-tiles[data-n="2"] { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.pn-tiles[data-n="4"], .pn-tiles[data-n="8"] { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.pn-tiles[data-n="5"] { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+.pn-tiles[data-n="5"] > * { grid-column: span 2; }
+.pn-tiles[data-n="5"] > :nth-child(n+4) { grid-column: span 3; }
+.pn-tiles[data-n="7"] { grid-template-columns: repeat(12, minmax(0, 1fr)); }
+.pn-tiles[data-n="7"] > * { grid-column: span 3; }
+.pn-tiles[data-n="7"] > :nth-child(n+5) { grid-column: span 4; }
 .pn-tiles button { position: relative; min-height: 88px; padding: 6px 4px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 5px; border-radius: 16px; background: var(--papel); color: var(--tinta); font-size: 14px; line-height: 1.1; text-align: center; }
 .pn-tiles i { width: 38px; height: 38px; display: grid; place-items: center; border-radius: 50%; background: var(--verde-fundo); color: var(--verde-escuro); }
 .pn-tiles em { position: absolute; top: 6px; right: 7px; padding: 0 7px; border-radius: 99px; background: var(--ambar); color: var(--ambar-tinta); font-style: normal; font-weight: 700; font-size: 14px; }
@@ -390,21 +435,12 @@ main.escritorio.pn-producao { max-width: none; grid-template-columns: minmax(0, 
 .rel-acoes { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .rel-acoes .btn { width: 100%; min-height: 52px; font-size: 17px; }
 .rel-acoes .btn:first-child, .rel-acoes .perigo { grid-column: 1 / -1; }
-/* 3.1.5: persiana (referência do Guilherme). 9 faixas fecham uma depois da outra (18 ms) em .22 s; com tudo coberto (.37 s) o que sai some
-   e o que entra aparece; .03 s depois as faixas abrem em .34 s. Na volta, de baixo para cima. */
-.rel-pilha > .sai { pointer-events: none; animation: rel-some 1ms steps(1, end) calc(.37s * var(--ritmo, 1)) forwards; }
-.rel-pilha > .entra { animation: rel-surge calc(.5s * var(--ritmo, 1)) cubic-bezier(.22, 1, .36, 1) calc(.37s * var(--ritmo, 1)) both; }
-.rel-persiana { z-index: 2; display: flex; flex-direction: column; border-radius: 22px; overflow: hidden; pointer-events: none; }
-.rel-persiana i { flex: 1; margin-bottom: -1px; background: var(--verde-fundo); clip-path: inset(0 0 100% 0); --d: calc(var(--i) * 18ms * var(--ritmo, 1));
-  animation: rel-fecha calc(.22s * var(--ritmo, 1)) cubic-bezier(.65, 0, .35, 1) var(--d) forwards, rel-abre calc(.34s * var(--ritmo, 1)) cubic-bezier(.65, 0, .35, 1) calc(var(--d) + .394s * var(--ritmo, 1)) forwards; }
-.rel-persiana.volta i { clip-path: inset(100% 0 0 0); animation-name: rel-fecha-volta, rel-abre-volta; }
-@keyframes rel-fecha { to { clip-path: inset(0); } }
-@keyframes rel-abre { from { clip-path: inset(0); } to { clip-path: inset(100% 0 0 0); } }
-@keyframes rel-fecha-volta { to { clip-path: inset(0); } }
-@keyframes rel-abre-volta { from { clip-path: inset(0); } to { clip-path: inset(0 0 100% 0); } }
+/* 3.1.7 (pedido do Guilherme): no lugar da persiana, o que sai esmaece e o que entra aparece por cima, no mesmo lugar */
+.rel-pilha > .sai { pointer-events: none; animation: rel-some calc(.2s * var(--ritmo, 1)) ease-in forwards; }
+.rel-pilha > .entra { animation: rel-surge calc(.32s * var(--ritmo, 1)) ease-out calc(.12s * var(--ritmo, 1)) both; }
 @keyframes rel-some { to { opacity: 0; } }
-@keyframes rel-surge { from { opacity: 0; transform: translateY(14px); } 1% { opacity: 1; } to { opacity: 1; transform: none; } }
-.rel-painel.entra .rel-setores s { animation: pn-corre calc(.6s * var(--ritmo, 1)) cubic-bezier(.22, 1, .36, 1) calc(.55s * var(--ritmo, 1)) both; }
+@keyframes rel-surge { from { opacity: 0; } }
+.rel-painel.entra .rel-setores s { animation: pn-corre calc(.6s * var(--ritmo, 1)) cubic-bezier(.22, 1, .36, 1) calc(.3s * var(--ritmo, 1)) both; }
 @media (max-height: 720px) { .rel-atalhos, .rel-fora div:nth-child(3) { display: none; } .rel-painel h2 { margin-top: 8px; font-size: 20px; } } /* tela baixa: o calendário já faz o mesmo que os atalhos */
 .rel-grade.troca-mes { animation: pn-entra calc(.3s * var(--ritmo, 1)) cubic-bezier(.22, 1, .36, 1) both; }
 /* entrada: só ao trocar de tela (o redesenho de 5 em 5 segundos não pisca) */
@@ -424,5 +460,6 @@ main.escritorio.pn-producao { max-width: none; grid-template-columns: minmax(0, 
 @keyframes pn-pisca { to { opacity: .35; } }
 @media (prefers-reduced-motion: reduce) {
   #app.troca .pn-e, #app.troca .pn-barras i, #app.troca .pn-linha .total, #app.troca .pn-linha .dest, #app.troca .pn-tanque .liquido,
-  #app.troca .pn-tabela .p i, #app.troca .pn-setores s, .pn-tanque .onda, .ia-gaveta.entrando, .ia-esperando i, .pn-barra.vem .pn-barra-fundo, .pn-barra.vem svg.ico, .pn-barra.vem span, #app.troca .pn-graf i, .rel-pilha > .sai, .rel-pilha > .entra, .rel-persiana i, .rel-painel.entra .rel-setores s, .rel-grade.troca-mes, .pn-cam .falta > span::after, .pn-cam li.cheio::after, .pn-setores .on q, .pn-lin.nova { animation: none; }
+  #app.troca .pn-tabela .p i, #app.troca .pn-setores s, .pn-tanque .onda, .ia-gaveta.entrando, .ia-esperando i, .pn-barra.vem .pn-barra-fundo, .pn-barra.vem svg.ico, .pn-barra.vem span, #app.troca .pn-graf i, .rel-pilha > .sai, .rel-pilha > .entra, .rel-painel.entra .rel-setores s, .rel-grade.troca-mes, .pn-cam .falta > span::after, .pn-cam li.cheio::after, .pn-setores .on q, .pn-lin.nova { animation: none; }
+  .rel-pilha > .sai { display: none; } /* sem a animação não há animationend: o que sai some na hora */
 }

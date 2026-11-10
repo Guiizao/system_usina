@@ -6,6 +6,9 @@
 .numeros .numero-botao:active { border-color: var(--verde); }
 :root[data-dispositivo="celular"] .numeros .numero-botao { min-width: 0; flex: 1; padding: 6px 10px; }
 .lista-aparelhos { display: grid; gap: 6px; }
+/* 3.1.7, PC: a lista de um lado e o Conectar um tablet do outro (antes ficava na Visão geral) */
+@media (min-width: 1100px) { #app.com-menu main.tela-aparelhos { max-width: none; display: grid; grid-template-columns: minmax(0, 1.7fr) minmax(320px, 1fr); gap: 14px; align-content: start; align-items: start; }
+  #app.com-menu main.tela-aparelhos > .sub { grid-column: 1 / -1; margin: 0; } #app.com-menu main.tela-aparelhos > .conectar { margin: 0; } }
 .aparelho-linha { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 12px; padding: 10px 12px; border-radius: 10px; background: var(--papel); border: 2px solid var(--linha-clara); }
 .aparelho-linha.bloqueado { border-color: var(--vermelho); }
 .aparelho-linha .conexao { min-width: 128px; }
@@ -29,3 +32,5 @@
 .numeros-sala span { font-size: 15px; color: var(--tinta-2); }
 .tela-sala .titulo-secao { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; }
 .tela-sala .filtros-registro { margin: 8px 0; }
+/* 3.1.7, PC: as duas caixas da Sala usam a largura toda (antes: três colunas estreitas e a terceira vazia) */
+@media (min-width: 1100px) { #app.com-menu main.tela-sala { max-width: none; } #app.com-menu .tela-sala .config-grade { columns: auto; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.3fr); gap: 12px; align-items: start; } #app.com-menu .tela-sala .config-grade .bloco { margin: 0; } }

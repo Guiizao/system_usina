@@ -231,6 +231,7 @@
       <main class="config tela-aparelhos">
         <p class="sub">Em cima, quem está usando; embaixo, o nome do aparelho no Android e a função dele. Toque no + para ver o modelo, o endereço na rede e para bloquear.</p>
         <div class="lista-aparelhos">${lista.map(linhaDoAparelho).join('') || '<p class="sub">Nenhum aparelho falou com a central ainda.</p>'}</div>
+        ${painelNovoAqui() && !cfg.soNuvem ? blocoConectar(sync.status) : ''}
       </main>`;
   }
   async function verAparelho(id) {

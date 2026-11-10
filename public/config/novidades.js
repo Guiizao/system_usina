@@ -4,6 +4,19 @@
    Depois do sinal de igual vem JSON puro, porque o servidor do tablet chefe (Java) também lê este arquivo. */
 window.NOVIDADES = [
   {
+    "versao": "3.1.7",
+    "data": "2026-11-10",
+    "itens": [
+      "Celular com o painel novo: todas as telas usam a barra de cima nova e, abertas pelo Mais, deixam a bolha no Mais. O Mais ficou sem botões repetidos: cálculos e rastreio estão dentro do Escritório; pessoas e aparelhos, dentro das Configurações.",
+      "Assistente: o campo da pergunta e o botão de enviar ficaram redondos e mais baixos, sem a faixa branca embaixo.",
+      "Início do celular: setas no álcool produzido para trocar o dia. Trocar o dia não recomeça as animações da tela.",
+      "Abertura: no fim fica só o fundo escuro com a logo; o fundo some e a logo vai, numa curva, para o canto.",
+      "Relatórios: o calendário e o dia trocam só esmaecendo. Desligar o painel novo volta direto para o início, esmaecendo.",
+      "Rastreamento no celular: as tabelas rolam para o lado. Cálculos com os botões alinhados e o lote do dia no meio.",
+      "Computador: a Visão geral virou um resumo, com o botão de cada tela (os gráficos de hora em hora estão em Gráficos). Sala de controle, Registro e Configurações usam a largura toda; o Registro tem busca e a contagem de cada tipo; Conectar um tablet foi para Aparelhos."
+    ]
+  },
+  {
     "versao": "3.1.6",
     "data": "2026-11-09",
     "itens": [

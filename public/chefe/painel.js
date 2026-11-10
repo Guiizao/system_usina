@@ -31,7 +31,7 @@
       : cfg.soNuvem ? (sync.nuvemEm ? `Pela nuvem · atualizado às ${new Date(sync.nuvemEm).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}` : 'Pela nuvem')
       : sync.modo === 'online' ? (centralNoTablet() ? 'Servidor ligado neste aparelho' : 'Acompanhando a central em tempo real') : 'Procurando o servidor';
 
-    if (painelNovoPc()) return telaVisaoGeral(v, { lista, todos, pend, ligados, subtitulo, hoje, lateral: lateralDoChefe(data, todos, st, true) });
+    if (painelNovoPc()) return telaVisaoGeral(v, { lista, todos, pend, ligados, subtitulo, hoje });
     if (painelNovoCel()) return telaInicioCel(v);
     return `${cabecalho(nomeDoChefe(), subtitulo, false, atalhosChefe())}
       <main class="painel-chefe">
@@ -81,8 +81,8 @@
         </div>
       </main>`;
   }
-  function lateralDoChefe(data, todos, st, novo) {
-    return `            ${novo || !veNoChefe('escritorio') ? '' : blocoEscritorio(data)}
+  function lateralDoChefe(data, todos, st) {
+    return `            ${!veNoChefe('escritorio') ? '' : blocoEscritorio(data)}
             ${veNoChefe('relatorios') ? blocoTotais(data) : ''}
             ${veNoChefe('relatorios') ? `<section class="bloco">
               <h2>Compartilhar a folha do dia</h2>
@@ -99,7 +99,12 @@
             ${blocoAparelhosAgora()}
             ${comMenuPc() ? blocoUltimasAnotacoes(todos) : ''}
             ${blocoIrPara()}
-            ${cfg.demo || pode('conexao') ? `<section class="bloco conectar">
+            ${blocoConectar(st)}`;
+  }
+  /** QR code e código para ligar um tablet: no painel de antes fica na lateral; no painel novo, na tela Aparelhos (3.1.7). */
+  function blocoConectar(st) {
+    if (!(cfg.demo || pode('conexao'))) return '';
+    return `<section class="bloco conectar">
               <h2>Conectar um tablet</h2>
               ${cfg.demo
                 ? '<p class="sub" style="margin:0">Na usina, aqui aparecem o QR code para baixar o aplicativo e o código de conexão.</p>'
@@ -108,7 +113,7 @@
                   <div class="conectar-info"><small>Código de conexão</small>
                   <p class="codigo-grande">${st ? esc(String(st.codigo).replace(/(\d{3})(\d{3})/, '$1 $2')) : '--- ---'}</p>
                   <div class="linha-botoes"><button class="btn pequeno" data-a="qr-grande">Ampliar QR code</button><button class="btn pequeno" data-a="novo-codigo">Trocar código</button></div></div></div>`}
-            </section>` : ''}`;
+            </section>`;
   }
   /** Escritório dentro do painel (versão 2.15): o lote do dia escolhido e as duas partes, sem trocar de aparelho. */
   function blocoEscritorio(data) {
@@ -126,14 +131,14 @@
   }
   /** 2.16: o que foi gasto no dia, somado por turno: os insumos e os quilos do ralo (o mesmo dos totais da API).
       Hora, pressão e temperatura não se somam: não entram. */
-  function blocoTotais(data) {
+  function blocoTotais(data, rodape = '') {
     const linhas = totaisPorTurno(data);
     const num = (n) => fmtNum(String(Math.round(n * 100) / 100));
     return `<section class="bloco totais-dia"><h2>Totais do dia</h2>
       ${linhas.length ? linhas.map((l) => `<div class="total-linha"><span><b>${esc(l.nome)}</b>
         <small>${l.turnos.filter((y) => y.q).map((y) => `${esc(y.t.nome.replace(' Turno', ''))} ${num(y.q)}`).join(' · ')}</small></span>
         <strong>${num(l.total)} <small>${esc(l.unidade)}</small></strong></div>`).join('') : '<p class="sub">Nada somado ainda neste dia.</p>'}
-    </section>`;
+    ${rodape}</section>`;
   }
   /** Os aparelhos da usina: da central (na rede) ou, pelo PC, da lista que a central manda para a nuvem (2.17).
       Pela nuvem, ligado = falou com a central até 2 min antes do último envio; sem envio há 5 min, ninguém aparece ligado. */
@@ -147,16 +152,16 @@
     }));
   }
   /** Quem está trabalhando agora: cada aparelho, quem usa e se está ligado (a visão geral do escritório). */
-  function blocoAparelhosAgora() {
+  function blocoAparelhosAgora(max = 8) {
     const lista = aparelhosDoPainel().slice().sort((a, b) => Number(!!b.online) - Number(!!a.online));
     if (!lista.length) return '';
     const em = cfg.soNuvem && !soVer() ? (sync.status || {}).aparelhosEm || 0 : sync.aparelhosNuvemEm || 0;
     const aviso = cfg.soNuvem && (em || soVer()) && Date.now() - em > SEM_SINAL_DA_CENTRAL_MS
       ? `<p class="sub aviso-sinal">${ico('alerta')} A usina está sem sinal da central desde ${new Date(em).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}.</p>` : '';
     return `<section class="bloco aparelhos-agora"><div class="titulo-secao"><h2>Aparelhos agora</h2>${soVer() ? '' : '<button class="btn pequeno" data-a="aparelhos">Ver todos</button>'}</div>${aviso}
-      ${lista.slice(0, 8).map((a) => `<div class="agora-linha"><span class="conexao ${a.bloqueio ? 'off' : a.online ? 'ok' : 'off'}"><i></i></span>
+      ${lista.slice(0, max).map((a) => `<div class="agora-linha"><span class="conexao ${a.bloqueio ? 'off' : a.online ? 'ok' : 'off'}"><i></i></span>
         <span><b>${esc(funcaoDoAparelho(a))}</b><small>${esc(quemUsa(a))} · ${esc(situacaoDoAparelho(a))}</small></span></div>`).join('')}
-      ${lista.length > 8 ? `<p class="sub">E mais ${lista.length - 8}.</p>` : ''}
+      ${lista.length > max ? `<p class="sub">E mais ${lista.length - max}.</p>` : ''}
     </section>`;
   }
   /** 2.17 (PC): as anotações mais recentes do dia, a mais nova primeiro: hora, quem e a folha. */
@@ -181,12 +186,12 @@
       <span class="hora">${new Date(x.em).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</span>
       <span><b class="fora">${esc(x.txt)}</b><small>${esc(x.onde)}${x.quem ? ` · ${esc(x.quem)}` : ''}</small></span></li>`).join('')}</ul></section>`;
   }
-  function blocoUltimasAnotacoes(todos) {
-    const ultimas = todos.filter((r) => !r.apagado).sort((a, b) => b.atualizadoEm - a.atualizadoEm).slice(0, 8);
+  function blocoUltimasAnotacoes(todos, max = 8, rodape = '') {
+    const ultimas = todos.filter((r) => !r.apagado).sort((a, b) => b.atualizadoEm - a.atualizadoEm).slice(0, max);
     if (!ultimas.length) return '';
     return `<section class="bloco ultimas-anotacoes"><h2>Últimas anotações</h2><ul>${ultimas.map((r) => `<li>
       <span class="hora">${new Date(r.atualizadoEm).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</span>
-      <span><b>${esc(r.operador || 'Sem nome')}</b><small>${esc((prancheta(r.prancheta) || {}).nome || r.prancheta)}</small></span></li>`).join('')}</ul></section>`;
+      <span><b>${esc(r.operador || 'Sem nome')}</b><small>${esc((prancheta(r.prancheta) || {}).nome || r.prancheta)}</small></span></li>`).join('')}</ul>${rodape}</section>`;
   }
   /** Atalhos para as outras telas, só os que a pessoa pode usar. */
   function blocoIrPara() {

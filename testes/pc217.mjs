@@ -45,7 +45,7 @@ export async function testarNivelNaTela217(nav, g) {
     });
     await teste(g, 'pessoa nova: "Vale em" qualquer aparelho ou só nos fixos; marcar este tablet grava a lista', async () => {
       await semNotificacao(chefe);
-      await chefe.tocar('[data-a="pessoa"]'); await chefe.tocar('[data-k="pessoas"]');
+      await chefe.tocar('[data-a="config"]'); await chefe.tocar('[data-a="pessoas"]'); // 3.1.7: Pessoas fica em Usina
       await chefe.esperar('!!document.querySelector("[data-a=\\"pessoa-nova\\"]")', 10000, 'tela de pessoas');
       // um tablet de setor que a central conhece também pode ser fixo (revisão do Codex)
       await chefe.avaliar(`(() => { sync.status.aparelhos.push({ id: 'tab-setor', nome: 'Tablet da Hidrólise', papel: 'hidrolise' }); return 1; })()`);

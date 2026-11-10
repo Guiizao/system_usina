@@ -133,15 +133,15 @@
   }
   const TOQUE_DE_VOLTAR = '[data-a="voltar"], [data-a="voltar-conectar"], [data-a$="-cancelar"], [data-a="ia-fechar"], [data-k="x"], [data-k="nao"], [data-k="voltar"]';
   document.addEventListener('pointerdown', (e) => { const b = e.target.closest && e.target.closest('.btn, .atalho, [data-a]'); if (b) somDoPainel(b.matches(TOQUE_DE_VOLTAR) ? 4 : 0); }, true);
-  /** Sorteia uma das 10 aberturas (4 segundos com a passagem para a tela); um toque pula. */
+  /** Sorteia uma das 11 aberturas (cerca de 4 segundos com a passagem para a tela); um toque pula. */
   async function aberturaNova() {
     const raiz = document.documentElement;
     if (!(raiz.dataset.pc === '1' || raiz.dataset.dispositivo === 'celular')) return;
     try { if (sessionStorage.getItem('abertura')) return; sessionStorage.setItem('abertura', '1'); } catch (e) { /* mostra */ }
     const tela = document.createElement('div'); tela.id = 'abertura-nova'; tela.innerHTML = '<canvas></canvas>';
     document.body.appendChild(tela);
-    // 3.1.5, na linha da referência que o Guilherme mandou: a placa da logo se abre até a tela ficar toda verde, com a logo branca no meio,
-    // e o verde se fecha até virar a logo do cabeçalho (ou a do login), mostrando a tela por trás
+    // 3.1.7, como o Guilherme descreveu: os efeitos somem e fica só o fundo escuro da abertura com a logo no meio; o fundo esmaece
+    // mostrando a tela, enquanto a logo diminui e vai, numa curva, para o lugar dela (cabeçalho do celular, menu do PC ou login)
     const fim = () => {
       if (window.Aberturas) window.Aberturas.parar();
       if (tela.classList.contains('saindo')) return;
@@ -149,32 +149,31 @@
       const alvo = document.querySelector('.pn-oi img, .menu-marca img, .entrar-logo'), a = alvo && alvo.getBoundingClientRect(); // medido parado, antes da tela entrar
       const app = document.getElementById('app'), entrar = () => { app.classList.remove('troca'); void app.offsetWidth; app.classList.add('troca'); };
       if (!a || !a.width || matchMedia('(prefers-reduced-motion: reduce)').matches) { entrar(); setTimeout(() => tela.remove(), 700); return; }
-      const W = innerWidth, H = innerHeight, lado = Math.min(W, H) * 132 / 205, x = (W - lado) / 2, y = (H - lado) / 2; // a placa da logo no canvas (aberturas.js)
-      const cs = getComputedStyle(alvo), raiz = getComputedStyle(document.documentElement), pad = parseFloat(cs.paddingLeft) || 0;
-      const u0 = lado * 100 / 132, um = Math.min(W, H) * 0.2, u1 = a.width - 2 * pad, branco = raiz.getPropertyValue('--branco').trim(), verde = raiz.getPropertyValue('--abertura-verde').trim();
-      const caixa = (t, r, b, l, raio) => `inset(${t}px ${r}px ${b}px ${l}px round ${raio}px)`, logo = (px, py, u, cor) => ({ transform: `translate(${px}px, ${py}px) scale(${u / u0})`, filter: cor ? 'brightness(0) invert(1)' : 'brightness(1) invert(0)' });
-      const abre = 260, fecha = 560, k = abre / (abre + fecha), ABRE = 'cubic-bezier(.22, 1, .36, 1)', FECHA = 'cubic-bezier(.76, 0, .24, 1)';
-      const placa = document.createElement('div'); placa.className = 'abertura-voa';
-      placa.innerHTML = `<img src="${alvo.getAttribute('src')}" alt="" style="width:${u0}px;height:${u0}px">`;
-      document.body.appendChild(placa); alvo.style.visibility = 'hidden';
-      placa.animate([
-        { offset: 0, clipPath: caixa(y, x, y, x, lado * 26 / 132), backgroundColor: branco, easing: ABRE },
-        { offset: k, clipPath: caixa(0, 0, 0, 0, 44), backgroundColor: verde, easing: FECHA },
-        { offset: 0.86, backgroundColor: verde },
-        { offset: 1, clipPath: caixa(a.top, W - a.right, H - a.bottom, a.left, parseFloat(cs.borderTopLeftRadius) || 0), backgroundColor: cs.backgroundColor },
-      ], { duration: abre + fecha, fill: 'forwards' });
-      placa.firstChild.animate([
-        { offset: 0, ...logo(x + lado * 16 / 132, y + lado * 16 / 132, u0, false), easing: ABRE },
-        { offset: k, ...logo((W - um) / 2, (H - um) / 2, um, true), easing: FECHA },
-        { offset: 0.86, filter: 'brightness(0) invert(1)' },
-        { offset: 1, ...logo(a.left + pad, a.top + pad, u1, false) },
-      ], { duration: abre + fecha, fill: 'forwards' }).finished.then(() => {
-        alvo.style.visibility = ''; placa.remove();
-        alvo.animate([{ transform: 'scale(1.12)', filter: `drop-shadow(0 0 10px ${raiz.getPropertyValue('--abertura-brilho').trim()})` }, { transform: 'none', filter: 'drop-shadow(0 0 0 transparent)' }],
-          { duration: 520, easing: 'cubic-bezier(.22, 1, .36, 1)' });
+      const W = innerWidth, H = innerHeight, lado = Math.min(W, H) * 132 / 205; // a placa da logo no meio do canvas (aberturas.js)
+      const cs = getComputedStyle(alvo), k = a.width / lado, limpa = 200, voa = 760;
+      const fundo = document.createElement('div'); fundo.className = 'abertura-fundo';
+      const logo = document.createElement('div'); logo.className = 'abertura-voa';
+      logo.style.cssText = `width:${lado}px;height:${lado}px;padding:${lado * 16 / 132}px`;
+      logo.innerHTML = `<img src="${alvo.getAttribute('src')}" alt="">`;
+      document.body.append(fundo, logo); alvo.style.visibility = 'hidden';
+      // o meio da logo anda numa curva (primeiro sobe, depois vai para o lado) e o tamanho cai junto
+      const x0 = W / 2, y0 = H / 2, x2 = a.left + a.width / 2, y2 = a.top + a.height / 2, x1 = x0 + (x2 - x0) * 0.25, y1 = y2 + (y0 - y2) * 0.2;
+      const raio0 = lado * 26 / 132, raio1 = (parseFloat(cs.borderTopLeftRadius) || 0) / k;
+      const quadros = Array.from({ length: 13 }, (_, i) => {
+        const t = i / 12, u = 1 - t, cx = u * u * x0 + 2 * u * t * x1 + t * t * x2, cy = u * u * y0 + 2 * u * t * y1 + t * t * y2, s = 1 + (k - 1) * t;
+        return { transform: `translate(${cx - lado * s / 2}px, ${cy - lado * s / 2}px) scale(${s})`, borderRadius: `${raio0 + (raio1 - raio0) * t}px` };
       });
-      // com a tela toda verde, a abertura já pode sair: a tela de verdade entra enquanto o verde se fecha
-      setTimeout(() => { tela.remove(); entrar(); }, abre);
+      quadros[12].backgroundColor = cs.backgroundColor;
+      logo.animate(quadros, { duration: voa, delay: limpa, easing: 'cubic-bezier(.65, 0, .35, 1)', fill: 'both' }).finished.then(() => {
+        alvo.style.visibility = ''; logo.remove();
+        alvo.animate([{ transform: 'scale(1.1)', filter: `drop-shadow(0 0 10px ${getComputedStyle(document.documentElement).getPropertyValue('--abertura-brilho').trim()})` }, { transform: 'none', filter: 'drop-shadow(0 0 0 transparent)' }],
+          { duration: 480, easing: 'cubic-bezier(.22, 1, .36, 1)' });
+      });
+      // os efeitos se apagam no fundo escuro; com ele cobrindo tudo, a abertura sai e a tela entra por baixo enquanto o fundo esmaece
+      fundo.animate([{ opacity: 0 }, { opacity: 1 }], { duration: limpa, easing: 'ease-out', fill: 'forwards' }).finished.then(() => {
+        tela.remove(); entrar();
+        fundo.animate([{ opacity: 1 }, { opacity: 0 }], { duration: voa - 100, easing: 'cubic-bezier(.4, 0, .2, 1)', fill: 'forwards' }).finished.then(() => fundo.remove());
+      });
     };
     tela.addEventListener('pointerdown', fim);
     try {

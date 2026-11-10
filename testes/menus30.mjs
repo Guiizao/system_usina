@@ -18,7 +18,8 @@ try {
         for (const [url, n] of [['&papel=central&tela=config', 8], ['&papel=hidrolise&op=Guilherme&tela=admin', 6], ['&papel=central&tela=admin', 5]]) {
           await a.ir(`${c.url}/?demo${url}`, '!!document.querySelector("main.quadros-menu")');
           const r = await a.avaliar(MEDIDAS);
-          igual(r.n, n, url); igual(r.colunas, 2, url);
+          // 3.1.7: no PC largo as Configurações (8 quadros e o "Você está") ficam em 3 colunas, 3 + 3 + 3
+          igual(r.n, n, url); igual(r.colunas, !medidas.celular && medidas.largura >= 1300 && url.includes('central&tela=config') ? 3 : 2, url);
           certo(!r.rola, 'apareceu rolagem em ' + url);
           igual(r.cortado, [], url); igual(r.baixo, 0, url);
         }
@@ -109,17 +110,17 @@ try {
     await a.esperar('view().tela === "esc-rastreamento"', 5000, 'a folha');
     certo(await a.avaliar('window.__chegou'), 'abriu antes de chegar: a conta ficaria incompleta');
   });
-  await teste(g, '3.0.1: no computador, o menu Escritório também abre no dia do painel', async () => {
+  await teste(g, '3.0.1: no computador, o menu Produção e rastreio (3.1.7: no lugar do Escritório) também abre no dia do painel', async () => {
     const pc = await nav.novoAparelho('computador', TAMANHOS.computador);
     try {
       await pc.ir(`${c.url}/?demo&papel=central&op=Guilherme`, '!!document.querySelector(".pn-visao")');
-      const MENU = '[data-a="esc-abrir"][data-t="escritorio"]';
+      const MENU = '.menu-pc [data-a="esc-abrir"][data-t="esc-calculos"]';
       igual(await pc.avaliar(`document.querySelector('${MENU}').dataset.dia`), await pc.avaliar('somarDias(dataProducao(), -1)'));
       for (let i = 0; i < 2; i++) await pc.tocar('.nav-data [data-a="dia"][data-n="-1"]');
       const dia = await pc.avaliar('somarDias(dataProducao(), -2)');
       igual(await pc.avaliar(`document.querySelector('${MENU}').dataset.dia`), dia);
       await pc.tocar(MENU);
-      await pc.esperar('view().tela === "escritorio"', 5000, 'o Escritório');
+      await pc.esperar('view().tela === "esc-calculos"', 5000, 'a Produção');
       igual(await pc.avaliar('view().data'), dia);
     } finally { await pc.fechar(); }
   });

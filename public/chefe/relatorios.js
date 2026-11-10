@@ -101,10 +101,9 @@
           ${arqs.length && pode('pessoas') ? `<button class="btn perigo" data-a="relatorio-apagar" data-data="${d}">${ico('lixeira')} Apagar o arquivo</button>` : ''}
         </div></section>`;
     };
-    // 3.1.5: persiana, como na referência do Guilherme: as faixas fecham de cima para baixo sobre o que sai e abrem mostrando o que entra (na volta, de baixo para cima)
-    const persiana = (volta) => `<div class="rel-persiana${volta ? ' volta' : ''}" aria-hidden="true">${Array.from({ length: 9 }, (_, i) => `<i style="--i:${volta ? 8 - i : i}"></i>`).join('')}</div>`;
-    const miolo = anim === 'abre' ? calendario('sai') + painel('entra', v.diaSel) + persiana(false)
-      : anim === 'fecha' && v.diaAntes ? painel('sai', v.diaAntes) + calendario('entra') + persiana(true)
+    // 3.1.7 (pedido do Guilherme): só esmaece, o que sai some e o que entra aparece
+    const miolo = anim === 'abre' ? calendario('sai') + painel('entra', v.diaSel)
+      : anim === 'fecha' && v.diaAntes ? painel('sai', v.diaAntes) + calendario('entra')
       : v.diaSel ? painel('', v.diaSel) : calendario('');
     return `${cabecalho('Relatórios', 'Um por dia, com todos os setores', true)}<main class="pn-cel cabe"><div class="pn-miolo"><div class="rel-pilha">${miolo}</div></div></main>`;
   }
@@ -114,10 +113,9 @@
     v.mes = `${document.getElementById('rel-ano').value}-${String(document.getElementById('rel-mes').value).padStart(2, '0')}`; v.anim = 'mes';
     render();
   });
-  // o que saiu some com a persiana fechada e não fica ocupando lugar: a tela volta a caber do tamanho certo; a persiana sai quando a última faixa abre
+  // o que saiu não fica ocupando lugar: a tela volta a caber do tamanho certo
   document.addEventListener('animationend', (e) => {
     if (e.target.matches('.rel-pilha > .sai')) { e.target.remove(); pnCaberNaTela(); }
-    else if (e.animationName.startsWith('rel-abre') && e.target.matches('.rel-persiana i[style="--i:8"]')) e.target.parentNode.remove();
   });
   /** 2.16: o resumo do dia (setores, totais por turno) para ver e enviar sem abrir o Excel. */
   async function verResumo(data) {

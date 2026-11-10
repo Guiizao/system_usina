@@ -63,21 +63,23 @@
         }
         if (!pessoaAtual()) return entrarNoChefe();
         const p = pessoaAtual();
-        const opcoes = [p.dono ? '<button class="btn" data-k="sala">Sala de controle</button>' : '', pode('pessoas') ? '<button class="btn" data-k="pessoas">Pessoas e permissões</button>' : '', pode('registro') ? '<button class="btn" data-k="registro">Registro do sistema</button>' : '', pode('folhas') ? '<button class="btn" data-k="folhas">Folhas e avisos</button>' : ''].join('');
-        const resp = await abrirModal(`<h3>${esc(p.nome)}</h3><p class="dica">${esc((C.niveis[p.nivel] || {}).nome || p.nivel)} neste tablet chefe.</p>
-          ${opcoes ? `<div class="linha-botoes">${opcoes}</div>` : ''}
+        // 3.1.7: acesso rápido só ao que fica fundo no painel de antes (Pessoas e Folhas estão a um toque, em Usina);
+        // no painel novo a Sala e o Registro já estão no Mais e no menu do PC
+        const novo = painelNovoAqui();
+        const rapidos = novo ? [] : [p.dono && ['sala', 'servidor', 'Sala de controle'], pode('registro') && ['registro', 'nota', 'Registro do sistema']].filter(Boolean);
+        const resp = await abrirModal(`<div class="quem-modal"><em>${pnIniciais(p.nome)}</em><div><h3>${esc(p.nome)}</h3><p class="dica">${esc((C.niveis[p.nivel] || {}).nome || p.nivel)}${novo ? '' : ' neste tablet chefe'}</p></div></div>
+          ${rapidos.length ? `<div class="grade-acoes" style="grid-template-columns: repeat(${rapidos.length}, minmax(0, 1fr))">${rapidos.map(([k, i, t]) => `<button data-k="${k}">${ico(i)}<span>${t}</span></button>`).join('')}</div>` : ''}
           <div class="acoes-modal"><button class="btn" data-k="x">Fechar</button><button class="btn primario" data-k="sair">${ico('voltar')} Sair</button></div>`, (k, b2, fechar) => fechar(k), {});
         if (resp === 'sair') { sairDoChefe(); toast('Saiu. O painel continua à vista.'); }
         if (resp === 'sala') return ir({ tela: 'sala', data: dataProducao() });
-        if (resp === 'pessoas') return ir({ tela: 'pessoas' });
         if (resp === 'registro') return ir({ tela: 'registro', data: dataProducao() });
-        if (resp === 'folhas') return ir({ tela: 'folhas' });
         return;
       }
       case 'pessoas': if (!(await exigir('pessoas'))) return; return ir({ tela: 'pessoas' });
       case 'registro': if (!(await exigir('registro'))) return; return ir({ tela: 'registro', data: dataProducao() });
       case 'registro-dia': { const d = somarDias(v.data, Number(b.dataset.n)); if (d > dataProducao()) return; pilha[pilha.length - 1] = { tela: 'registro', data: d, tipo: v.tipo }; return render(); }
       case 'registro-tipo': v.tipo = b.dataset.tipo || ''; return render();
+      case 'ver-chefes': v.verChefes = true; return render();
       case 'sala': if (!(pessoaAtual() || {}).dono) return toast('Só o dono vê esta tela', 'erro'); return ir({ tela: 'sala', data: dataProducao() });
       case 'sala-dia': { const d = somarDias(v.data, Number(b.dataset.n)); if (d > dataProducao()) return; pilha[pilha.length - 1] = { tela: 'sala', data: d, tipo: v.tipo }; return render(); }
       case 'baixar-copia': return baixarCopia();
@@ -111,7 +113,7 @@
         return liberarAparelho('Aparelho liberado. Pode usar.', blq.rev || 0);
       }
       case 'graficos': return ir({ tela: 'graficos', data: v.data || dataProducao(), setor: b.dataset.setor || '' });
-      case 'graficos-dia': { const d = somarDias(v.data, Number(b.dataset.n)); if (d > dataProducao()) return; pilha[pilha.length - 1] = Object.assign({}, v, { data: d }); return render(true); }
+      case 'graficos-dia': { const d = somarDias(v.data, Number(b.dataset.n)); if (d > dataProducao()) return; pilha[pilha.length - 1] = Object.assign({}, v, { data: d }); return render('dia'); }
       case 'graficos-setor': v.setor = b.dataset.setor || ''; return render();
       case 'graficos-modo': v.semana = b.dataset.modo === 'semana'; return render(true);
       case 'folhas': return ir({ tela: 'folhas' });
@@ -128,8 +130,8 @@
         return render();
       case 'tema-fixo': cfg.tema = b.dataset.valor; salvarCfg(); aplicarTema(); return render();
       case 'painel-novo': {
-        // a tela inteira muda: o painel de antes encolhe e some enquanto o outro cresce no lugar (movimento.css)
-        const trocar = () => { cfg.painelNovo = b.dataset.valor === '1'; salvarCfg(); aplicarPainelNovo(); render(); document.getElementById('app').classList.add('troca'); };
+        // 3.1.7: vai direto para o início do outro painel (sem as telas do caminho para voltar uma a uma); esmaece (movimento.css)
+        const trocar = () => { cfg.painelNovo = b.dataset.valor === '1'; salvarCfg(); aplicarPainelNovo(); pilha = [telaInicial()]; render(true); };
         return document.startViewTransition && !matchMedia('(prefers-reduced-motion: reduce)').matches ? void document.startViewTransition(trocar) : trocar();
       }
       case 'som-painel': cfg.somDesligado = b.dataset.valor === '0'; salvarCfg(); return render();
@@ -161,7 +163,7 @@
         const d = somarDias(v.data, Number(b.dataset.n));
         if (d > dataProducao()) return;
         buscarDia(d); renovarEscritorio();
-        pilha[pilha.length - 1] = Object.assign({}, v, { data: d, valores: null, sujo: false }); return render();
+        pilha[pilha.length - 1] = Object.assign({}, v, { data: d, valores: null, sujo: false }); return render('dia');
       }
       case 'esc-abrir': {
         if (ehCentral() && !(await exigir('escritorio'))) return;
@@ -333,8 +335,10 @@
         }
         return;
       }
-      case 'dia': return ir(Object.assign({}, v, { data: somarDias(v.data, Number(b.dataset.n)) }), true);
-      case 'dia-hoje': return ir(Object.assign({}, v, { data: dataProducao() }), true);
+      // 3.1.7: trocar o dia é a mesma tela com outros números: nada de animação de entrada nem de voltar ao topo
+      case 'dia': return ir(Object.assign({}, v, { data: somarDias(v.data, Number(b.dataset.n)) }), true, 'dia');
+      case 'dia-hoje': return ir(Object.assign({}, v, { data: dataProducao() }), true, 'dia');
+      case 'dia-ir': return ir(Object.assign({}, v, { data: b.dataset.data }), true, 'dia');
       case 'abrir-setor': if (!pnVeSetores()) return; return ir({ tela: 'prancheta', pid: pranchetasDasAbas(b.dataset.id)[0], data: v.data, monitor: soConsulta() || undefined });
       case 'compartilhar': return compartilhar(b.dataset.destino, v.data || dataProducao());
       case 'relatorios': return ir({ tela: 'relatorios' });

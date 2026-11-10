@@ -23,17 +23,16 @@
       veNoChefe('pessoas') ? item('pessoas', 'pessoas', 'Pessoas', naTela('pessoas')) : '',
       veNoChefe('registro') ? item('registro', 'nota', 'Registro', naTela('registro')) : '',
       FUNCOES_DA_USINA.some(veNoChefe) ? item('config', 'ajustes', 'Configurações', naTela('config', 'folhas')) : ''].join('');
+    // 3.1.7: rastreamento e etiqueta abrem de dentro da Produção (coluna da direita): um item só para o escritório
     return `<nav class="menu-pc" aria-label="Menu do painel">
       <div class="menu-marca"><img src="icons/logo-u.svg" alt=""><div><b>Pranchetas</b><small>${soVer() ? 'Painel pela nuvem' : 'Painel do escritório'}</small></div></div>
       ${item('abrir-painel', 'casa', 'Visão geral', naTela('central'))}
       ${veNoChefe('corrigir') || veNoChefe('relatorios') ? `<p class="menu-titulo">Setores</p>
         ${setores().map((s) => item('abrir-setor', s.icone, esc(s.nome), setorAberto === s.id, `data-id="${s.id}"`)).join('')}` : ''}
       <p class="menu-titulo">Acompanhar</p>
-      ${veNoChefe('escritorio') ? item('esc-abrir', 'grafico', 'Produção', naTela('esc-calculos'), `data-t="esc-calculos" data-dia="${diaDoEscritorio(view().data)}"`) : ''}
-      ${veNoChefe('escritorio') ? item('esc-abrir', 'etiqueta', 'Rastreamento e etiqueta', naTela('esc-rastreamento'), `data-t="esc-rastreamento" data-dia="${diaDoEscritorio(view().data)}"`) : ''}
+      ${veNoChefe('escritorio') ? item('esc-abrir', 'grafico', 'Produção e rastreio', naTela('esc-calculos', 'esc-rastreamento', 'escritorio'), `data-t="esc-calculos" data-dia="${diaDoEscritorio(view().data)}"`) : ''}
       ${veNoChefe('relatorios') ? item('graficos', 'grafico', 'Gráficos', naTela('graficos')) : ''}
       ${veNoChefe('relatorios') ? item('relatorios', 'pasta', 'Relatórios', naTela('relatorios')) : ''}
-      ${veNoChefe('escritorio') ? item('esc-abrir', 'escritorio', 'Escritório', naTela('escritorio'), `data-t="escritorio" data-dia="${diaDoEscritorio(view().data)}"`) : ''}
       ${veNoChefe('avisos') && !soVer() ? item('avisos', 'sino', `Avisos${abertos ? ` <em class="contador">${abertos}</em>` : ''}`, naTela('avisos')) : ''}
       ${veNoChefe('ler_folha') && lerFolhaLigada() ? item('ler-folha', 'camera', 'Ler folha', naTela('leitura')) : ''}
       ${soVer() || !administrar ? '' : `<p class="menu-titulo">Administrar</p>${administrar}`}

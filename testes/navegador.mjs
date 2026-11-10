@@ -224,7 +224,9 @@ export const auditarLayout = (minLetra = 11.5) => `(() => {
       const clip = recorte(n.parentElement);
       // texto numa lista que rola (para cima e para baixo) dentro da caixa: dá para rolar até ele, não está cortado
       const rolaDentro = clip && clip !== cx && cx.contains(clip) && /(auto|scroll)/.test(getComputedStyle(clip).overflowY);
-      const fora = rects.some((x) => x.right > bc.right + 1.5 || x.left < bc.left - 1.5 || (!rolaDentro && (x.bottom > bc.bottom + folgaV || x.top < bc.top - folgaV)));
+      // 3.1.7: o mesmo de lado (tabela do rastreio, filtros do registro): faixa que rola para o lado dentro da caixa
+      const rolaDeLado = clip && clip !== cx && cx.contains(clip) && /(auto|scroll)/.test(getComputedStyle(clip).overflowX);
+      const fora = rects.some((x) => (!rolaDeLado && (x.right > bc.right + 1.5 || x.left < bc.left - 1.5)) || (!rolaDentro && (x.bottom > bc.bottom + folgaV || x.top < bc.top - folgaV)));
       // texto maior que o próprio elemento (ex.: nome espremido por um selo do lado, que fica por cima)
       const pai = n.parentElement;
       if (getComputedStyle(pai).display !== 'inline') {

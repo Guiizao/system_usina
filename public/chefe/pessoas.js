@@ -277,6 +277,9 @@
     const chefes = new Map();
     ((st && st.aparelhos) || []).filter((a) => a.papel === 'central').forEach((a) => chefes.set(a.id, a));
     Object.keys(l.aparelhos || {}).forEach((id) => { if (!chefes.has(id)) chefes.set(id, { id, papel: 'central', nome: l.aparelhos[id].nome, online: false, minutos: 0 }); });
+    // 3.1.7: os PCs e celulares antigos sem sinal que ninguém ajustou (sem nível, nome ou limite) ficam atrás de um botão (a lista ficava enorme)
+    const parado = (a) => !a.online && !l.aparelhos[a.id] && a.id !== cfg.deviceId;
+    const chefesVisiveis = [...chefes.values()].filter((a) => v.verChefes || !parado(a)), guardados = chefes.size - chefesVisiveis.length;
     return `${topo('Pessoas e permissões', 'Só o administrador mexe aqui', true)}
       <main class="config tela-pessoas">
         <div class="config-grade">
@@ -291,12 +294,13 @@
           <section class="bloco">
             <h2>${ico('escritorio')} Tablets chefe</h2>
             <p class="sub" style="margin:0 0 8px">O nível de cada tablet chefe (o 3 é só do dono) e o que ele deixa fazer, seja quem for.</p>
-            ${[...chefes.values()].map((a) => {
+            ${chefesVisiveis.map((a) => {
               const teto = (l.aparelhos[a.id] || {}).teto;
               return `<div class="linha-config"><span class="escolha-ico">${ico('escritorio')}</span>
                 <div><b>${esc(a.nome || 'Tablet chefe')}${a.id === cfg.deviceId ? ' (este aparelho)' : ''}</b><small>${(l.aparelhos[a.id] || {}).nivel ? `${esc(nomeDoNivelChefe(l.aparelhos[a.id].nivel))} · ` : 'Não liberado · '}${a.online ? `Ligado${a.pessoa ? `, ${esc(a.pessoa)}` : ', ninguém entrou'}` : 'Sem sinal'} · ${Array.isArray(teto) ? `${teto.length} de ${C.funcoes.length} funções` : 'tudo liberado'}${a.id === cfg.deviceId ? ' · este aparelho' : ''}</small></div>
                 <button class="btn pequeno" data-a="aparelho-chefe" data-id="${esc(a.id)}">Mudar</button></div>`;
-            }).join('') || '<p class="sub">Nenhum tablet chefe falou com a central ainda.</p>'}
+            }).join('')}${chefes.size ? '' : '<p class="sub">Nenhum tablet chefe falou com a central ainda.</p>'}
+            ${guardados ? `<div class="linha-botoes"><button class="btn pequeno" data-a="ver-chefes">Ver mais ${contar(guardados, 'aparelho sem sinal e nunca ajustado', 'aparelhos sem sinal e nunca ajustados')}</button></div>` : ''}
             ${pode('sistema') ? secaoNiveisChefe() : ''}
           </section>
           ${secaoPreviaDaPessoa(v, l)}
@@ -506,8 +510,9 @@
     if (!v.data) v.data = dataProducao();
     if (!v.linhas && !v.carregando) carregarRegistro(v);
     const hoje = dataProducao();
+    // 3.1.7: no PC o dia e o filtro ficam numa coluna à esquerda e a lista usa o resto da largura
     return `${topo('Registro do sistema', `${fmtData(v.data)} · o que aconteceu, de hora em hora`, true)}
-      <main class="registro">
+      <main class="registro"><div class="reg-grade"><aside class="reg-lado">
         <div class="barra-dia">
           <div class="nav-data">
             <button class="btn" data-a="registro-dia" data-n="-1" aria-label="Dia anterior">${ico('voltar')}</button>
@@ -515,20 +520,32 @@
             <button class="btn" data-a="registro-dia" data-n="1" aria-label="Próximo dia" ${v.data >= hoje ? 'disabled' : ''}>${ico('seta')}</button>
           </div>
         </div>
-        ${listaDoRegistro(v)}
-      </main>`;
+        ${filtrosDoRegistro(v)}</aside>
+        ${listaDoRegistro(v, false)}
+      </div></main>`;
   }
-  function listaDoRegistro(v) {
-    const linhas = (v.linhas || []).filter((r) => !v.tipo || r.valores.tipo === v.tipo).slice().reverse();
+  const buscaSemAcento = (t) => String(t || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+  const textoDoRegistro = (x) => buscaSemAcento([x.texto, x.quem, x.aparelho, ...(x.mudancas || []).map((m) => m.campo)].join(' '));
+  /** 3.1.7 (pedido do Guilherme): busca por pessoa, folha ou aparelho e o tipo com a cor da linha e quantos há de cada. */
+  function filtrosDoRegistro(v) {
+    const todas = v.linhas || [], quantos = (t) => todas.filter((r) => !t || r.valores.tipo === t).length;
+    return `<div class="reg-filtros"><label class="reg-busca">${ico('lupa')}<input id="reg-busca" type="search" placeholder="Buscar pessoa, folha ou aparelho" aria-label="Buscar no registro" autocomplete="off" value="${esc(v.busca || '')}"></label>
+      <div class="reg-tipos" role="group" aria-label="Tipo">${TIPOS_REGISTRO.map(([t, n]) => `<button class="reg-${t || 'tudo'} ${(v.tipo || '') === t ? 'sel' : ''}" data-a="registro-tipo" data-tipo="${t}" aria-pressed="${(v.tipo || '') === t}"><i></i>${n}<em>${quantos(t)}</em></button>`).join('')}</div></div>`;
+  }
+  document.addEventListener('input', (e) => { if (e.target.id === 'reg-busca') { view().busca = e.target.value; render(); } });
+  function listaDoRegistro(v, comFiltros = true) {
+    const busca = buscaSemAcento(v.busca).trim();
+    const linhas = (v.linhas || []).filter((r) => (!v.tipo || r.valores.tipo === v.tipo) && (!busca || textoDoRegistro(r.valores).includes(busca))).slice().reverse();
     const hora = (ms) => new Date(ms).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
-    return `<div class="segmentos filtros-registro">${TIPOS_REGISTRO.map(([t, n]) => `<button class="${(v.tipo || '') === t ? 'sel' : ''}" data-a="registro-tipo" data-tipo="${t}">${n}</button>`).join('')}</div>
+    const vazio = (v.linhas || []).length ? 'Nada com esse filtro.' : 'Nada registrado neste dia.';
+    return `${comFiltros ? filtrosDoRegistro(v) : ''}
         <div class="lista-registro">${v.carregando && !v.linhas ? '<p class="sub">Buscando na central...</p>' : linhas.map((r) => {
           const x = r.valores;
           return `<div class="reg-linha reg-${esc(x.tipo)}"><b class="reg-hora">${hora(x.em)}</b><div class="reg-texto"><p>${esc(x.texto)}</p>
             <small>${esc([x.quem, x.aparelho].filter(Boolean).join(' · '))}</small>
             ${(x.mudancas || []).length ? `<ul>${x.mudancas.map((m) => `<li>${esc(m.campo)}: <s>${esc(m.antes)}</s> → <b>${esc(m.depois)}</b></li>`).join('')}</ul>` : ''}
             ${x.antes && x.depois ? `<ul><li><s>${esc(x.antes)}</s> → <b>${esc(x.depois)}</b></li></ul>` : ''}</div></div>`;
-        }).join('') || '<p class="sub">Nada registrado neste dia.</p>'}</div>`;
+        }).join('') || `<p class="sub">${vazio}</p>`}</div>`;
   }
   async function carregarRegistro(v) {
     v.carregando = true;

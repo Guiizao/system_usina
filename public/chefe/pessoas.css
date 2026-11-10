@@ -39,6 +39,31 @@ main.registro { max-width: 1100px; }
 .reg-texto small { color: var(--tinta-2); font-size: 14px; }
 .reg-texto ul { margin: 4px 0 0; padding-left: 18px; font-size: 15px; }
 .reg-texto s { color: var(--tinta-2); }
+/* 3.1.7: filtro do registro (busca e tipos com a cor da linha e a contagem); no PC, coluna à esquerda e a lista em duas colunas */
+.reg-grade { display: grid; gap: 12px; }
+.reg-filtros { display: grid; gap: 8px; margin-bottom: 10px; }
+.reg-busca { display: flex; align-items: center; gap: 8px; min-height: 48px; padding: 0 16px; border-radius: 99px; background: var(--papel); border: 1px solid var(--linha); color: var(--tinta-2); }
+.reg-busca:focus-within { border-color: var(--verde); }
+.reg-busca input { flex: 1; min-width: 0; border: 0; outline: 0; background: none; color: var(--tinta); font: inherit; font-size: 16px; }
+.reg-tipos { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; }
+.reg-tipos button { flex: none; display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 14px; border-radius: 99px; background: var(--papel); border: 1px solid var(--linha-clara); color: var(--tinta); font-size: 15px; font-weight: 700; white-space: nowrap; }
+.reg-tipos i { width: 10px; height: 10px; border-radius: 50%; background: var(--tinta-2); }
+.reg-tipos .reg-anotacao i { background: var(--verde-escuro); }
+.reg-tipos .reg-entrada i { background: var(--azul-registro); }
+.reg-tipos .reg-aparelho i { background: var(--ambar); }
+.reg-tipos .reg-configuracao i { background: var(--vermelho); }
+.reg-tipos em { min-width: 24px; padding: 0 7px; border-radius: 99px; background: var(--papel-2); color: var(--tinta-2); font-style: normal; font-size: 13px; text-align: center; }
+.reg-tipos button.sel { background: var(--grafite); border-color: var(--grafite); color: var(--branco); }
+.reg-tipos button.sel em { background: var(--topo-botao-toque); color: var(--branco); }
+@media (min-width: 1000px) {
+  #app.com-menu main.registro { max-width: none; }
+  #app.com-menu .reg-grade { grid-template-columns: 340px minmax(0, 1fr); align-items: start; }
+  #app.com-menu .reg-lado { position: sticky; top: 0; }
+  #app.com-menu .reg-lado .barra-dia { margin-bottom: 10px; }
+  #app.com-menu .reg-lado .reg-tipos { flex-direction: column; }
+  #app.com-menu .reg-lado .reg-tipos button { justify-content: flex-start; }
+  #app.com-menu .reg-lado .reg-tipos em { margin-left: auto; }
+  #app.com-menu .reg-grade .lista-registro { grid-template-columns: repeat(auto-fill, minmax(420px, 1fr)); align-items: start; }
 /* 3.0: funções em categorias e a prévia da pessoa em cada nível do tablet chefe */
 .categoria-funcao { margin: 10px 0 4px; font-size: 15px; font-weight: 700; color: var(--tinta-2); text-align: left; }
 .previa-pessoa { grid-column: 1 / -1; }
