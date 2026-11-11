@@ -57,7 +57,8 @@ registro(ate, 'avisos', 'a2', { texto: 'Aviso de outro dia', paraSetor: 'destila
 registro(de, 'registro', 'r1', { texto: 'Segredo interno 888' }, 'Não listar');
 const escolher = (name, args) => { executarAI = () => ({ choices: [{ message: { content: 'Produção inventada: 987654321',
   tool_calls: [{ type: 'function', function: { name, arguments: JSON.stringify(args) } }] } }] }); };
-const pedir = async ({ corpo = { pergunta: 'Quanto álcool produzimos de 01/11/2026 a 02/11/2026?' }, chave = token,
+// 3.1.10: a pergunta padrão é das que só o modelo resolve; o que o servidor entende sozinho está em entender31.mjs e no fim deste arquivo
+const pedir = async ({ corpo = { pergunta: 'Pergunta que só o modelo decide' }, chave = token,
   aparelho = 'pc-assistente', method = 'POST', bruto, rota = '/banco/assistente' } = {}) => {
   const r = await worker.fetch(new Request('https://nuvem.exemplo' + rota, {
     method, headers: { Authorization: 'Bearer ' + chave, 'X-Aparelho': aparelho },
@@ -137,9 +138,10 @@ try {
     for (const trecho of ['ferramenta: producao', `de: ${de}`, `ate: ${ate}`, 'dias com valor: 2', 'Álcool (L): 35.5', `${de}=15.5`, `${ate}=20`]) certo(r.memoria.includes(trecho));
     certo(r.memoria.length <= 1900);
     escolher('responder', { texto: 'Sim, de 01/11 a 02/11: 35,5 litros.' });
-    const antes = leituras;
+    const antes = leituras, n = chamadas;
+    // 3.1.10: a confirmação do período sai do servidor, sem o modelo (antes ele recusava "Isso é no mês de novembro?")
     const resposta = await pedir({ corpo: { pergunta: 'Isso é novembro?', historico: [{ de: 'ia', texto: r.memoria }] } });
-    igual(resposta.json.texto, 'Sim, de 01/11 a 02/11: 35,5 litros.');
+    igual(resposta.json.texto, 'Sim. O período mostrado vai de 01/11 a 02/11, em novembro.'); igual(chamadas, n);
     igual(resposta.json.memoria, undefined); igual(leituras, antes); // senão o "e em outubro?" repetiria o responder
   });
   await caso('nao_faco anota sem ler o banco; toda pergunta exige ferramenta; valor arredondado passa', async () => {
@@ -503,6 +505,33 @@ try {
     limparCota(); executarAI = () => { throw new Error('offline'); };
     for (let i = 0; i < 20; i++) igual((await pedir()).json.cota, true);
     igual((await pedir()).status, 429);
+  });
+  // 3.1.10: o que o servidor entende sozinho (entender.js) passa pelas mesmas permissões e contas, sem chamar o modelo
+  await caso('3.1.10: "de cada dia" lista os dias com o total, sem o modelo, com gráfico e arquivo', async () => {
+    const n = chamadas;
+    const r = (await pedir({ corpo: { pergunta: 'Liste a produção de álcool de cada dia de 01/11/2026 a 02/11/2026' } })).json;
+    igual(chamadas, n);
+    igual(r.linhas, [['01/11 dom', 15.5], ['02/11 seg', 20], ['Total (L)', 35.5]]);
+    igual(r.consulta, { folha: 'producao', campo: 'alcool', de, ate, por: 'dia', operacao: 'soma' });
+    certo(r.arquivo && r.memoria.includes('"por":"dia"'));
+    const m = (await pedir({ corpo: { pergunta: 'média de álcool de 01/11/2026 a 02/11/2026' } })).json;
+    igual(m.linhas, [['Álcool (L)', 35.5], ['Média por dia (L)', 17.75]]);
+  });
+  await caso('3.1.10: o modelo esquece o "cada dia" e o servidor lista assim mesmo; continuação usa a memória', async () => {
+    escolher('producao', { de, ate });
+    igual((await pedir({ corpo: { pergunta: 'Quero cada dia daquilo' } })).json.linhas.length, 3);
+    escolher('consulta', { folha: 'destilaria', campo: 'producao', de, ate });
+    const c = (await pedir({ corpo: { pergunta: 'Me mostra aquilo separado' } })).json;
+    igual(c.linhas, [['01/11 dom', 10.5], ['02/11 seg', 20], ['Produção Álcool', 30.5]]);
+    const n = chamadas;
+    const e = (await pedir({ corpo: { pergunta: 'e só em 01/11/2026?', historico: [{ de: 'ia', texto: c.memoria }] } })).json;
+    igual(chamadas, n); igual(e.consulta.de, de); igual(e.consulta.ate, de);
+  });
+  await caso('3.1.10: sem relatórios, a pergunta entendida no servidor recusa antes de ler o banco', async () => {
+    salvarPessoa({ ...p, extras: { assistente: true, relatorios: false } });
+    const antes = leituras;
+    igual((await pedir({ corpo: { pergunta: 'álcool de cada dia de 01/11/2026 a 02/11/2026' } })).json.texto, 'Você não tem permissão para consultar ou preparar isso.');
+    igual(leituras, antes);
   });
 } finally {
   db.close();

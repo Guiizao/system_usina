@@ -4,6 +4,15 @@
    Depois do sinal de igual vem JSON puro, porque o servidor do tablet chefe (Java) também lê este arquivo. */
 window.NOVIDADES = [
   {
+    "versao": "3.1.9",
+    "data": "2026-11-11",
+    "itens": [
+      "Tablet chefe como central: o assistente agora vale em qualquer nível do tablet, como já valia no computador e na nuvem. É uma permissão da pessoa: quem tem, usa; quem não tem, não vê.",
+      "Assistente: \"liste a produção de álcool de cada dia\" mostra cada dia com o total e o gráfico com as datas. \"Isso é de novembro?\", \"e em outubro?\" e \"agora por dia\" são respondidas na hora, e ele entende muito mais jeitos de dizer o período (do dia 1 ao 8, a partir do dia 1, últimos 7 dias, semana passada).",
+      "Esta versão mexe na parte de dentro do aplicativo do tablet. Por isso, desta vez, os tablets pedem para instalar o aplicativo novo em vez de só atualizar as telas."
+    ]
+  },
+  {
     "versao": "3.1.8",
     "data": "2026-11-10",
     "itens": [

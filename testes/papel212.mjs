@@ -258,8 +258,7 @@ export async function testarPapel212(grupo) {
     const forms = formsDoApp();
     const java = fs.readFileSync(new URL('../apk/nativo/java/br/com/ubiralcool/pranchetas/ServidorCentral.java', import.meta.url), 'utf8');
     const lista = (re) => { const m = java.match(re); certo(m, 'não achei ' + re); return JSON.parse('[' + m[1] + ']'); };
-    // o assistente (3.1.3) ainda não está na central do tablet: entra no próximo APK, junto com a regra de passar pelo nível
-    igual(JSON.stringify(lista(/FUNCOES_PADRAO = Arrays\.asList\(([^)]*)\)/)), JSON.stringify(forms.funcoes.map((f) => f.id).filter((f) => f !== 'assistente')), 'funções (fora o assistente, que entra no próximo APK)');
+    igual(JSON.stringify(lista(/FUNCOES_PADRAO = Arrays\.asList\(([^)]*)\)/)), JSON.stringify(forms.funcoes.map((f) => f.id)), 'funções');
     igual(JSON.stringify(lista(/"encarregado"\.equals\(nivel\)\) return Arrays\.asList\(([^)]*)\)/)), JSON.stringify(forms.niveis.encarregado.funcoes), 'encarregado');
     igual(JSON.stringify(lista(/"consulta"\.equals\(nivel\)\) return Arrays\.asList\(([^)]*)\)/)), JSON.stringify(forms.niveis.consulta.funcoes), 'consulta');
     igual(JSON.stringify(lista(/FUNCOES_DO_NIVEL_1 = Arrays\.asList\(([^)]*)\)/)), JSON.stringify(forms.niveisDoAparelho[1].funcoes), 'nível 1');

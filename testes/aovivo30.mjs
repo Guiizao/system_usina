@@ -283,8 +283,8 @@ try {
       }
       await teste(g, `${nome}: lista do nível não passa por cima da recusa de conexão; dono no nível 3 continua pleno`, async () => {
         const contexto = { window: {} }; usinaNoContexto(contexto);
-        // 3.1.8: como a tela de níveis, sem o assistente (é da pessoa e passa pelo nível; a central do tablet recusa a lista com ele até o próximo APK)
-        const todas = [...new Set([...contexto.window.USINA.funcoes.map((f) => f.id), 'pessoas', 'chefes'])].filter((f) => f !== 'assistente');
+        // com o assistente na lista: a tela não manda mais (3.1.8), mas configuração salva antes disso tem, e as duas centrais aceitam (3.1.9)
+        const todas = [...new Set([...contexto.window.USINA.funcoes.map((f) => f.id), 'pessoas', 'chefes'])];
         await mudarConfig(c, dono, (v) => ({ ...v, niveisChefe: { 1: ['conexao', 'relatorios'], 2: todas } }));
         for (const { pessoa, pin } of pessoasConexao.filter((x) => x.pessoa.nivel !== 'administrador')) {
           await c.api('/api/pessoas', { acao: 'salvar', pessoa: { ...pessoa, extras: { conexao: false } } });

@@ -22,7 +22,7 @@ export async function testarProducao(ligar, porta, grupo) {
     igual((await p(cli, '/api/chefes', { acao: 'liberar', pin: SENHA_ENCARREGADO, nivel })).status, 200);
     igual((await p(cli, '/api/pessoas', { acao: 'entrar', pin })).status, 200);
   };
-  // 3.1.3: o assistente é permissão da pessoa e passa pelo nível e pelo teto do aparelho (a central Java ainda não; acompanha no próximo APK)
+  // 3.1.3: o assistente é permissão da pessoa e passa pelo nível e pelo teto do aparelho; fica fora destas contas e tem o teste dele abaixo
   const funcoes = async (cli) => (await p(cli, '/api/pessoas', { acao: 'quem' })).funcoes.filter((f) => f !== 'assistente');
   let dono, outroDono, chefe, setor, n1, consulta;
   const cfgAtual = async () => (await p(dono, '/api/registros?desde=0')).registros.find((r) => r.id === CFG);
@@ -77,6 +77,15 @@ export async function testarProducao(ligar, porta, grupo) {
       certo((await funcoes(dono)).includes('sistema'), 'dono mantém acesso no 3');
       for (const cli of [chefe, n1, dono]) await p(dono, '/api/pessoas', { acao: 'aparelho', id: cli.aparelho, teto: null });
     });
+    await teste(grupo, 'assistente é da pessoa: passa pelo nível vazio e pelo teto do aparelho; quem não tem continua sem', async () => {
+      const cru = async (cli) => (await p(cli, '/api/pessoas', { acao: 'quem' })).funcoes;
+      igual((await configurar(dono, { 1: [], 2: ['relatorios'] })).recusados.length, 0);
+      await p(dono, '/api/pessoas', { acao: 'aparelho', id: n1.aparelho, teto: ['relatorios'] });
+      igual(await cru(n1), ['assistente']);
+      certo(!(await cru(consulta)).includes('assistente'), 'quem só consulta ganhou o assistente');
+      await p(dono, '/api/pessoas', { acao: 'aparelho', id: n1.aparelho, teto: null });
+      igual((await configurar(dono, padrao)).recusados.length, 0);
+    });
     await teste(grupo, 'aplicativo antigo não apaga níveis; revisão velha é recusada', async () => {
       const atual = await cfgAtual();
       igual((await sync(chefe, [reg(CFG, { operadores: {} })])).recusados.length, 0);
@@ -109,9 +118,9 @@ export async function testarProducao(ligar, porta, grupo) {
         igual((await sync(n1, [reg(ids[0], { valor: '11' })])).recusados.length, 0);
       }
     });
-    await teste(grupo, 'memória do leitor: quem lê folha grava sem usina (na central do tablet só no próximo APK); tablet de setor é recusado', async () => {
+    await teste(grupo, 'memória do leitor: quem lê folha grava sem usina, nas duas centrais; tablet de setor é recusado', async () => {
       const mem = (chave) => reg(`config|memoria_leitor|${chave}`, { pid: 'caldeira', nome: 'temp', valor: '10', vet: [1, 2] }, { base: 0 });
-      igual((await sync(consulta, [mem('a')])).recusados.length, /java/i.test(c.tipo) ? 1 : 0);
+      igual((await sync(consulta, [mem('a')])).recusados.length, 0);
       igual((await sync(setor, [mem('b')])).recusados[0].motivo, 'sem_permissao');
     });
     await teste(grupo, 'escritório central respeita teto e a rota antiga do escritório continua aceita', async () => {

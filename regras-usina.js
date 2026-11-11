@@ -50,7 +50,6 @@ function funcoesDaPessoaNoAparelho(p, aparelho) {
   if (proprias.has('assistente')) consulta.add('assistente');
   return consulta;
 }
-// shortcut: a central Java (apk/nativo) acompanha a permissão pessoal do assistente no próximo APK.
 /** O que quem está no aparelho pode fazer nele: a pessoa, o nível do aparelho e o limite dele. */
 function funcoesNoAparelho(aparelho) {
   const p = pessoaDoAparelho(aparelho);

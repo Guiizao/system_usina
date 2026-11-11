@@ -3064,7 +3064,7 @@ public class ServidorCentral {
   /* da conexão cifrada, nunca o que vem no pedido.                     */
   /* ------------------------------------------------------------------ */
 
-  private static final List<String> FUNCOES_PADRAO = Arrays.asList("anotar", "corrigir", "avisos", "relatorios", "ler_folha", "usina", "folhas", "conexao", "integracoes", "ajustes", "registro", "chefes", "escritorio", "trocar_funcao");
+  private static final List<String> FUNCOES_PADRAO = Arrays.asList("anotar", "corrigir", "avisos", "relatorios", "ler_folha", "usina", "folhas", "conexao", "integracoes", "ajustes", "registro", "chefes", "escritorio", "trocar_funcao", "assistente");
   private static final List<String> FUNCOES_DO_NIVEL_1 = Arrays.asList("corrigir", "relatorios", "escritorio");
   private static final List<String> FUNCOES_NO_SETOR = Arrays.asList("ajustes", "usina", "escritorio", "trocar_funcao");
   /** Folhas que só o tablet chefe anota (Vinho e Fermentação, iguais ao forms.js; os testes conferem). */
@@ -3158,7 +3158,7 @@ public class ServidorCentral {
     if (p == null) return s;
     List<String> todas = funcoesDoForms();
     if (ehDono(p)) { s.addAll(todas); s.add("pessoas"); s.add("chefes"); s.add("sistema"); return s; }
-    if ("administrador".equals(p.optString("nivel"))) { s.addAll(todas); s.add("pessoas"); return s; }
+    if ("administrador".equals(p.optString("nivel"))) { s.addAll(todas); s.add("pessoas"); JSONObject ex = p.optJSONObject("extras"); if (ex != null && Boolean.FALSE.equals(ex.opt("assistente"))) s.remove("assistente"); return s; }
     s.addAll(funcoesDoNivelDePessoa(p.optString("nivel")));
     JSONObject extras = p.optJSONObject("extras");
     if (extras != null) for (Iterator<String> it = extras.keys(); it.hasNext(); ) {
@@ -3175,14 +3175,14 @@ public class ServidorCentral {
     JSONArray fixos = p == null ? null : p.optJSONArray("aparelhos");
     if (fixos == null || fixos.length() == 0) return funcoesDaPessoa(p);
     for (int i = 0; i < fixos.length(); i++) if (aparelho.equals(fixos.optString(i))) return funcoesDaPessoa(p);
-    return new HashSet<>(funcoesDoNivelDePessoa("consulta"));
+    Set<String> consulta = new HashSet<>(funcoesDoNivelDePessoa("consulta")); if (funcoesDaPessoa(p).contains("assistente")) consulta.add("assistente"); return consulta; // 3.1.9: o assistente é da pessoa
   }
 
   private synchronized Set<String> funcoesNoAparelho(String aparelho) throws Exception {
     JSONObject p = pessoaDoAparelho(aparelho);
     int nivel = nivelDoAparelho(aparelho);
     if (p == null || nivel == 0 || (nivel == 3 && !ehDono(p))) return new HashSet<>();
-    Set<String> s = funcoesDaPessoaNoAparelho(p, aparelho);
+    Set<String> s = funcoesDaPessoaNoAparelho(p, aparelho); boolean assistente = s.contains("assistente"); // 3.1.9: é permissão da pessoa, passa pelo nível e pelo limite do aparelho
     // o código de conexão: só no nível 3 ou com a opção ligada na pessoa por quem administra
     JSONObject extrasDela = p.optJSONObject("extras");
     boolean conexaoNaPessoa = s.contains("conexao") && extrasDela != null && extrasDela.optBoolean("conexao");
@@ -3207,7 +3207,7 @@ public class ServidorCentral {
       for (int i = 0; i < t.length(); i++) deixa.add(t.optString(i));
       s.retainAll(deixa);
     }
-    return s;
+    if (assistente) s.add("assistente"); return s;
   }
 
   private boolean podeNoAparelho(String aparelho, String funcao) throws Exception { return funcoesNoAparelho(aparelho).contains(funcao); }
@@ -3224,7 +3224,7 @@ public class ServidorCentral {
     JSONArray permitidas = niveis == null ? null : niveis.optJSONArray(String.valueOf(nivel));
     boolean deixa = false;
     if (permitidas != null) { for (int i = 0; i < permitidas.length(); i++) if (f.equals(permitidas.optString(i))) deixa = true; }
-    else deixa = nivel == 1 ? FUNCOES_DO_NIVEL_1.contains(f) : FUNCOES_PADRAO.contains(f) && !"conexao".equals(f);
+    else deixa = nivel == 1 ? FUNCOES_DO_NIVEL_1.contains(f) : FUNCOES_PADRAO.contains(f) && !"conexao".equals(f) && !"assistente".equals(f);
     if (!deixa) return false;
     Object teto = tetoDoAparelho(aparelho);
     if (!(teto instanceof JSONArray)) return true;
@@ -3421,7 +3421,7 @@ public class ServidorCentral {
       if ("folhas".equals(k)) continue;
       if (mesmoJson(va == null ? null : va.opt(k), vn.opt(k))) continue;
       // no tablet de setor só os operadores (ajustes); no tablet chefe, o resto da usina
-      boolean pode = "niveisChefe".equals(k) ? funcoes.contains("sistema") : chefe ? funcoes.contains("usina") : "operadores".equals(k) && (funcoes.contains("ajustes") || funcoes.contains("usina"));
+      boolean pode = "niveisChefe".equals(k) ? funcoes.contains("sistema") : "memoria_leitor".equals(r.optString("prancheta")) ? chefe && funcoes.contains("ler_folha") : chefe ? funcoes.contains("usina") : "operadores".equals(k) && (funcoes.contains("ajustes") || funcoes.contains("usina"));
       if (pode) continue;
       if (!antigo) return new Object[] { false, null, "sem_permissao" };
       comoEstava(vn, va, k);

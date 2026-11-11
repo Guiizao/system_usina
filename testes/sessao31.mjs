@@ -157,10 +157,11 @@ if (!process.argv.includes('--node') && !process.argv.includes('--sem-wrangler')
   try {
     await preparar(w);
     const r = await entrar(w, 'parada31'); igual(r.status, 200);
-    w.consultar("UPDATE prazos_nuvem SET expira = " + (Date.now() + 2000) + " WHERE aparelho = 'parada31'");
+    // 3.1.9: 8 s de folga; com 2 s, gravar pelo wrangler (1 a 3 s) e conectar passavam do prazo e a conexão era recusada, como deve
+    w.consultar("UPDATE prazos_nuvem SET expira = " + (Date.now() + 8000) + " WHERE aparelho = 'parada31'");
     ws = new WebSocket(w.url.replace('http', 'ws') + '/banco/aovivo?a=parada31', ['pranchetas', r.json.token]);
     const codigo = await new Promise((resolve, reject) => {
-      const tempo = setTimeout(() => reject(new Error('conexão parada não venceu em 15 s')), 15000);
+      const tempo = setTimeout(() => reject(new Error('conexão parada não venceu em 25 s')), 25000);
       ws.onclose = (e) => { clearTimeout(tempo); resolve(e.code); };
       ws.onerror = () => { clearTimeout(tempo); reject(new Error('WebSocket recusado')); };
     });

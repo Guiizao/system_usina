@@ -1,6 +1,7 @@
 /* Assistente 3.1: o modelo escolhe; permissões, consultas e respostas são do servidor. */
 import leitura from '../../api-leitura.js';
 import Consolidar from '../../public/bibliotecas/consolidar.js';
+import { entender, pedeLista } from './entender.js';
 
 // Contrato: https://developers.cloudflare.com/workers-ai/models/glm-4.7-flash/
 export const MODELO = '@cf/zai-org/glm-4.7-flash';
@@ -21,7 +22,8 @@ const definicoes = [
   ['consulta', 'Consulta um campo numérico para gráfico, soma ou média no período',
     { folha: str, campo: str, de: data, ate: data, por: { type: 'string', enum: ['hora', 'dia', 'total'] },
       operacao: { type: 'string', enum: ['soma', 'media'] } }, ['folha', 'campo', 'de', 'ate']],
-  ['producao', 'Total de álcool anotado nas duas destilarias por período, em litros', { de: data, ate: data }, ['de', 'ate']],
+  ['producao', 'Álcool anotado nas duas destilarias por período, em litros. por=dia lista cada dia; operacao=media dá a média por dia',
+    { de: data, ate: data, por: { type: 'string', enum: ['dia', 'total'] }, operacao: { type: 'string', enum: ['soma', 'media'] } }, ['de', 'ate']],
   ['folhas', 'Resumo numérico das folhas em um dia; informe setor só se a pergunta citar um', { data, setor: str }, ['data']],
   ['quem_trabalha', 'Operadores que fizeram anotações no dia; não comprova presença agora', { data }, ['data']],
   ['avisos', 'Avisos enviados no dia', { data }, ['data']],
@@ -70,7 +72,7 @@ Setores, folhas e o que anotam: ${JSON.stringify(setores)}.
 Sinônimos fixos: álcool/produção total → producao (as duas destilarias); produção de uma destilaria ou gráfico → consulta destilaria.producao ou nova_destilaria.producao_lth. MP/matéria-prima/pesagem → ins_materia_prima.qtd. Cal consumida → ins_cal.qtd; cal por dorna → hid_anexo1.cal. Brix → hid_anexo1.brix (inicial), hid_anexo1.bhx (final), hid_anexo2.bhx (sacarificação), fermentacao.brix_inicial ou med_dornas.brix_ralo/brix_hid/brix_ferm conforme local. pH → hid_anexo1.phf (antes da cal), hid_anexo1.phf2 (depois), hid_anexo2.phf (sacarificação). INPM → destilaria.inpm ou nova_destilaria.inpm. Pressão da caldeira → caldeira.pressao ou caldeira_2.pressao; vapor na destilaria é o campo vapor. Vinho → med_dornas (medição de volume); no rastreamento: vinho = pi.vinho, hidrolisado = pi.hidrolise, vinhaça = vinhaca.producao. Os volumes do rastreamento e das dornas não são campos disponíveis em consulta: use nao_faco para seus totais, nunca substitua por álcool ou Brix. Se houver mais de uma folha/campo possível, use o contexto; sem contexto, use responder para pedir o setor, folha ou etapa. Unidade vazia significa não informada; não invente unidade nem conversão de insumos.
 Catálogo de folhas e campos numéricos: ${JSON.stringify(campos)}. Datas são dias de produção.
 Exemplos (hoje = ${hoje}):
-1. "Total de álcool do mês" → producao {"de":"${mes}","ate":"${hoje}"}.
+1. "Total de álcool do mês" → producao {"de":"${mes}","ate":"${hoje}"}; "liste o álcool de cada dia do mês" → producao {"de":"${mes}","ate":"${hoje}","por":"dia"}.
 2. "Álcool ontem" → producao {"de":"${ontem}","ate":"${ontem}"}.
 3. "Álcool semana passada" → producao {"de":"${segunda}","ate":"${domingo}"}.
 4. Após total de álcool: "e em ${mesAntes}?" → producao {"de":"${iniAntes}","ate":"${fimAntes}"}.
@@ -131,6 +133,7 @@ function validarChamada(nome, a, forms) {
     if (!campo || !['hora', 'dia', 'total'].includes(a.por === undefined ? 'dia' : a.por) ||
       !['soma', 'media'].includes(a.operacao === undefined ? Consolidar.agregaDoCampo(campo) : a.operacao)) return null;
   }
+  if (nome === 'producao' && ((a.por !== undefined && !['dia', 'total'].includes(a.por)) || (a.operacao !== undefined && !['soma', 'media'].includes(a.operacao)))) return null;
   let periodo;
   if (nome === 'preparar_acao') {
     if (!['imprimir', 'enviar', 'aviso'].includes(a.tipo)) return null;
@@ -219,13 +222,22 @@ async function executar(env, ctx, aparelho, nome, a, periodo) {
       return { x: d, y: totais.length ? Math.round(totais.reduce((s, n) => s + n, 0) * 100) / 100 : null };
     });
     const presentes = serie.filter((p) => p.y !== null);
-    return { texto: 'Álcool anotado na Destilaria e na Nova Destilaria. Dias sem leitura não são zero.', titulo: 'Produção de álcool',
-      linhas: [['Álcool (L)', presentes.length ? Math.round(presentes.reduce((s, p) => s + p.y, 0) * 100) / 100 : 'Sem anotações']], serie };
+    const total = presentes.length ? Math.round(presentes.reduce((s, p) => s + p.y, 0) * 100) / 100 : 'Sem anotações';
+    // 3.1.10: "de cada dia" lista os dias; a média é por dia com leitura
+    const linhas = a.por === 'dia' && serie.length > 1 ? [...linhasDosDias(serie), ['Total (L)', total]] : [['Álcool (L)', total]];
+    if (a.operacao === 'media' && presentes.length) linhas.push(['Média por dia (L)', Math.round((total / presentes.length) * 100) / 100]);
+    return { texto: 'Álcool anotado na Destilaria e na Nova Destilaria. Dias sem leitura não são zero.', titulo: 'Produção de álcool', unidade: 'L',
+      linhas, serie, arquivo: { nome: `producao-alcool-${periodo.de}-${periodo.ate}` },
+      consulta: { folha: 'producao', campo: 'alcool', de: periodo.de, ate: periodo.ate, por: 'dia', operacao: a.operacao || 'soma' } };
   }
   return ouVazio({ texto: 'Totais calculados das anotações do período.', titulo: nome === 'folhas' ? 'Folhas' : 'Relatórios',
     diasComValor: periodo.dias.filter((d) => resumos(ctx.forms, regs.filter((r) => r.data === d), [d], a.setor).length > 0).length,
     linhas: resumos(ctx.forms, regs, periodo.dias, a.setor) }, 'Nada anotado nesse período.');
 }
+
+const SEMANA = ['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sáb'];
+/** uma linha por dia: "01/11 sáb" e o valor, ou "Sem leitura" (dia sem anotação não é zero) */
+const linhasDosDias = (serie) => serie.map((p) => [`${p.x.slice(8, 10)}/${p.x.slice(5, 7)} ${SEMANA[new Date(p.x + 'T12:00:00Z').getUTCDay()]}`, p.y ?? 'Sem leitura']);
 
 function consultar(forms, regs, a, periodo) {
   const p = forms.pranchetas[a.folha];
@@ -264,7 +276,8 @@ function consultar(forms, regs, a, periodo) {
     .normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-zA-Z0-9_-]/g, '-');
   return { titulo, texto: 'Valores calculados das anotações do período. Dias sem leitura não são zero.', unidade,
     diasComValor: periodo.dias.filter((d) => calcular(validos.filter((r) => r.data === d)) !== null).length,
-    linhas: [[`${rotulo}${unidade ? ` (${unidade})` : ''}`, valor]], serie, arquivo: { nome },
+    // pedido "por dia" (não o gráfico que já abre por dia) lista os dias antes do total
+    linhas: [...(a.por === 'dia' && por === 'dia' && serie.length > 1 ? linhasDosDias(serie) : []), [`${rotulo}${unidade ? ` (${unidade})` : ''}`, valor]], serie, arquivo: { nome },
     consulta: { folha: a.folha, campo: a.campo, de: periodo.de, ate: periodo.ate, por, operacao } };
 }
 
@@ -294,8 +307,12 @@ export async function assistente(req, env, quem, h) {
   if (!pessoa) return responder(401, { erro: 'Sessão inválida' });
   if (!ctx.regras.funcoesNoAparelho(quem.aparelho).has('assistente')) return responder(403, { erro: 'Você não tem permissão para usar o assistente', semPermissao: 'assistente' });
   if (!await reservar(env, pessoa.id)) return responder(429, { texto: 'Você atingiu o limite de 20 perguntas por hora. Tente mais tarde.' });
+  // 3.1.10: as perguntas comuns e as continuações ("e em outubro?", "isso é de novembro?") se resolvem aqui, sem o modelo
+  const entendido = entender(corpo.pergunta, corpo.historico || [], hojeNaUsina());
+  if (entendido && entendido.texto) return responder(200, { texto: entendido.texto });
   let resultado;
-  try {
+  if (entendido) resultado = { tool_calls: [{ name: entendido.nome, arguments: entendido.args }] };
+  else try {
     const pedido = { stream: false, temperature: 0, max_completion_tokens: 1024, parallel_tool_calls: false,
       tools: tools.filter(({ function: f }) => ['responder', 'nao_faco'].includes(f.name) ? true : f.name === 'pedidos_sem_resposta' ? ctx.regras.ehDono(pessoa)
         : f.name === 'preparar_acao' ? ['avisos', 'relatorios'].some((p) => ctx.regras.podeNoAparelho(quem.aparelho, p))
@@ -327,6 +344,8 @@ export async function assistente(req, env, quem, h) {
   let args = chamada?.arguments;
   try { if (typeof args === 'string') args = JSON.parse(args || '{}'); } catch { return naoFaz(); }
   args = args ?? {};
+  // "de cada dia", "liste": lista os dias mesmo quando o modelo esquece de pedir
+  if (['producao', 'consulta'].includes(chamada?.name) && objeto(args) && args.por !== 'hora' && pedeLista(corpo.pergunta)) args = { ...args, por: 'dia' };
   if (chamada?.name === 'nao_faco') return naoFaz();
   if (chamada?.name === 'responder') {
     if (!chaves(args, ['texto']) || !curto(args.texto, 400)) return naoFaz();

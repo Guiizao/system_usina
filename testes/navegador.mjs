@@ -63,8 +63,13 @@ export async function abrirNavegador({ porta = 9340 + Math.floor(Math.random() *
       m.error ? rej(new Error(m.error.message + ' ' + (m.error.data || ''))) : res(m.result);
     } else if (m.method && m.sessionId && ouvintes.has(m.sessionId)) ouvintes.get(m.sessionId).forEach((f) => f(m));
   });
+  // 3.1.9: chamada sem resposta vira falha com o nome dela, em vez de prender a bateria (11/11 ficou 80 min parada nos Relatórios)
+  const LIMITE_CDP = 120000;
+  ws.addEventListener('close', () => { for (const { rej } of pend.values()) rej(new Error('o Chrome fechou a conexão')); pend.clear(); });
   const cdp = (method, params = {}, sessionId) => new Promise((res, rej) => {
-    const id = ++seq; pend.set(id, { res, rej });
+    const id = ++seq;
+    const t = setTimeout(() => { pend.delete(id); rej(new Error(`o Chrome não respondeu ${method} em ${LIMITE_CDP / 1000} s`)); }, LIMITE_CDP);
+    pend.set(id, { res: (v) => { clearTimeout(t); res(v); }, rej: (e) => { clearTimeout(t); rej(e); } });
     ws.send(JSON.stringify({ id, method, params, sessionId }));
   });
 

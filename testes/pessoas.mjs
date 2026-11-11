@@ -109,8 +109,8 @@ export async function testarPessoas(nav, ligar, porta, grupo) {
       await chefe.tocar('[data-a="pessoa"]'); await chefe.tocar('[data-k="sair"]');
       await entrarComoChefe(chefe);
       // o que a central devolveu na entrada (sem outra conexão com a identidade do tablet chefe)
-      // 3.1.3: o assistente é permissão da pessoa e passa pelo teto do aparelho (a central Java ainda não; acompanha no próximo APK)
-      igual(await chefe.avaliar('JSON.parse(localStorage.getItem("usina.cfg")).pessoa.funcoes.filter((f) => f !== "assistente")'), ['relatorios'], 'a central aplica o teto ao administrador');
+      // 3.1.3: o assistente é permissão da pessoa e passa pelo teto do aparelho (3.1.9: nas duas centrais)
+      igual(await chefe.avaliar('JSON.parse(localStorage.getItem("usina.cfg")).pessoa.funcoes.slice().sort()'), ['assistente', 'relatorios'], 'a central aplica o teto ao administrador');
       await p(adm, { acao: 'aparelho', id, teto: null });
       // sem o teto: o administrador entra de novo para os próximos testes terem tudo
       await semNotificacao(chefe);

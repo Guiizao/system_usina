@@ -25,4 +25,4 @@
     document.documentElement.dataset.escala = cfg.escala || 'normal';
     document.body.style.zoom = z;
   }
-  window.addEventListener('resize', () => { ajustarEscala(); aplicarPainelNovo(); rolarDepois = true; arrumarQuadros(); agendarCaber(); });
+  window.addEventListener('resize', () => { ajustarEscala(); aplicarPainelNovo(); rolarDepois = true; arrumarQuadros(); if (typeof agendarCaber === 'function') agendarCaber(); }); // 3.1.9: tela girada antes do texto-que-cabe.js carregar
