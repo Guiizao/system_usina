@@ -145,6 +145,7 @@ async function ligar() {
           await comPrazo((async () => {
             // ?nuvem=1: começa em Entrar pela nuvem.
             await janela.loadURL(endereco + '/?nuvem=1');
+            abrir(); // 3.1.10: aparece logo depois de carregar (a abertura espera por isso); antes, com telas novas, esperava mais 5 s
             if (nova) {
               await new Promise((r) => setTimeout(r, 5000));
               const ok = await janela.webContents.executeJavaScript('!!document.querySelector("#app main")?.textContent.trim()');

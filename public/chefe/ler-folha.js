@@ -198,10 +198,10 @@
     });
   }
 
-  function escolherFolhaParaLer(data) {
+  function escolherFolhaParaLer() {
     const lista = folhasQueLeio();
     if (!lista.length) return toast('Nenhuma folha com leitura disponível', 'erro');
-    return abrirModal(`<h3>Qual folha vai ler?</h3><p class="dica">Tire a foto com a folha inteira, reta e bem iluminada. Folha do dia ${fmtData(data)}.</p>
+    return abrirModal(`<h3>Qual folha vai ler?</h3><p class="dica">Tire a foto com a folha inteira, reta e bem iluminada. O dia da folha você escolhe em seguida.</p>
       <div class="escolhas lista-folhas">${lista.map((x) => { const p = prancheta(x.pid); return `<button data-k="${x.pid}"><span class="escolha-ico">${ico(x.setor.icone)}</span><b>${esc(p.nome)}</b><small>${esc(x.setor.nome)} · ${esc(p.codigo)}</small></button>`; }).join('')}</div>
       <div class="acoes-modal um"><button class="btn" data-k="x">Cancelar</button></div>`,
     (k, b, fechar) => fechar(k === 'x' ? undefined : k), { classe: 'largo' });
@@ -229,26 +229,36 @@
       if (k === 'sim') { posicionarLinhas(g.leitura); return ir({ tela: 'leitura', pid: g.pid, data: g.data, fase: 'revisar', leitura: g.leitura, arquivo: g.arquivo, foto: g.arquivo ? URL.createObjectURL(g.arquivo) : '' }); }
       await leituraApagar();
     }
-    const pid = await escolherFolhaParaLer(data);
+    const pid = await escolherFolhaParaLer();
     if (!pid) return;
-    const como = await abrirModal(`<h3>Foto da folha</h3><p class="dica">${esc(prancheta(pid).nome)} de ${fmtData(data)}</p>
-      <div class="escolhas"><button data-k="camera"><span class="escolha-ico">${ico('camera')}</span><b>Tirar foto agora</b><small>Abre a câmera do tablet</small></button>
+    // 3.1.10: o dia da folha se escolhe aqui; vem o dia aberto no painel (no painel novo, hoje) e as setas trocam
+    const hoje = dataProducao();
+    let dia = data > hoje ? hoje : data;
+    const navDia = () => `<div class="nav-data"><button class="btn" data-k="d:-1" aria-label="Dia anterior">${ico('voltar')}</button><div class="data-grande"><b>${fmtData(dia)}</b><span>${dia === hoje ? 'hoje' : diaSemana(dia)}</span></div><button class="btn" data-k="d:1" aria-label="Próximo dia" ${dia >= hoje ? 'disabled' : ''}>${ico('seta')}</button></div>`;
+    const como = await abrirModal(`<h3>Foto da folha</h3><p class="dica">${esc(prancheta(pid).nome)}. De que dia é a folha?</p>
+      <div class="dia-da-foto">${navDia()}</div>
+      <div class="escolhas"><button data-k="camera"><span class="escolha-ico">${ico('camera')}</span><b>Tirar foto agora</b><small>Em pé ou deitado, com a folha inteira</small></button>
       <button data-k="galeria"><span class="escolha-ico">${ico('pasta')}</span><b>Escolher uma foto</b><small>Foto que já está no aparelho</small></button></div>
-      <div class="acoes-modal um"><button class="btn" data-k="x">Cancelar</button></div>`, (k, b, fechar) => fechar(k === 'x' ? undefined : k), { classe: 'largo' });
+      <div class="acoes-modal um"><button class="btn" data-k="x">Cancelar</button></div>`, (k, b, fechar, fundo) => {
+      if (k.startsWith('d:')) { dia = somarDias(dia, Number(k.slice(2))); if (dia > hoje) dia = hoje; fundo.querySelector('.dia-da-foto').innerHTML = navDia(); return; }
+      fechar(k === 'x' ? undefined : k);
+    }, { classe: 'largo' });
     if (!como) return;
     const arquivo = await pedirFoto(como === 'camera');
     if (!arquivo) return;
-    return lerFolhaDeArquivo(pid, data, arquivo);
+    return lerFolhaDeArquivo(pid, dia, arquivo);
   }
-  async function lerFolhaDeArquivo(pid, data, arquivo) {
-    const v = { tela: 'leitura', pid, data, fase: 'lendo', texto: 'Preparando o leitor', foto: URL.createObjectURL(arquivo), arquivo };
-    ir(v);
+  /** giro: só quando a pessoa toca em Girar (0, 90, 180 ou 270); a leitura nova toma o lugar da anterior */
+  async function lerFolhaDeArquivo(pid, data, arquivo, giro) {
+    const v = { tela: 'leitura', pid, data, fase: 'lendo', texto: 'Preparando o leitor', foto: URL.createObjectURL(arquivo), arquivo, giro };
+    ir(v, giro !== undefined);
     try {
       const molde = moldeDaFolha(pid);
       const bruto = await window.LeitorFolhas.lerFoto(arquivo, molde, colunasDaLeitura(pid), (t) => {
         v.texto = t;
         const el = document.getElementById('texto-leitura'); if (el) el.textContent = t;
-      });
+      }, giro);
+      v.giro = bruto.giro;
       v.texto = 'Conferindo as horas e os valores';
       const el = document.getElementById('texto-leitura'); if (el) el.textContent = v.texto;
       await new Promise((ok) => setTimeout(ok, 20));
@@ -276,7 +286,7 @@
           <div class="preparo-cab">
             <span class="preparo-ico ${erro ? 'erro' : 'girando'}">${ico(erro ? 'alerta' : 'camera')}</span>
             <div><h1>${erro ? 'Não deu para ler' : 'Lendo a folha'}</h1><p id="texto-leitura">${esc(v.texto || '')}</p></div>
-            ${erro ? `<div class="preparo-botoes"><button class="btn primario" data-a="ler-folha">${ico('camera')} Tirar outra foto</button></div>` : ''}
+            ${erro ? `<div class="preparo-botoes">${v.arquivo && v.giro !== undefined ? `<button class="btn" data-a="leitura-girar">${ico('girar')} Girar de novo</button>` : ''}<button class="btn primario" data-a="ler-folha">${ico('camera')} Tirar outra foto</button></div>` : ''}
           </div>
           ${v.foto ? `<img class="foto-leitura" src="${v.foto}" alt="Foto da folha">` : ''}
           <p class="sub">${erro ? 'Dicas: folha inteira na foto, sem dobra, sem sombra forte e com o celular reto em cima da folha.' : 'Tudo acontece neste aparelho, sem internet. Leva alguns segundos.'}</p>
@@ -288,7 +298,9 @@
     const duvidas = L.linhas.reduce((s, l) => s + (l.temValor ? Object.entries(l.celulas).filter(([nome, c]) => emDuvida(nome, c)).length : 0), 0);
     const incluidas = L.linhas.filter((l) => l.incluir).length;
     const visiveis = L.linhas.map((l, i) => [l, i]).filter(([l]) => l.temValor || l.existe);
-    return `${cabecalho('Conferir a leitura', `${p.nome} · ${fmtData(v.data)}`, true, `<button class="atalho" data-a="ler-folha">${ico('camera')}<span>Outra foto</span></button>`)}
+    // 3.1.10: célula de lado ou de cabeça para baixo na conferência: Girar lê a mesma foto 90° adiante
+    const girar = v.arquivo ? `<button class="atalho" data-a="leitura-girar">${ico('girar')}<span>Girar</span></button>` : '';
+    return `${cabecalho('Conferir a leitura', `${p.nome} · ${fmtData(v.data)}`, true, `${girar}<button class="atalho" data-a="ler-folha">${ico('camera')}<span>Outra foto</span></button>`)}
       <main class="leitura">
         <div class="aviso-leitura ${duvidas ? 'duvida' : 'ok'}">${ico(duvidas ? 'alerta' : 'certo')}
           <span>${duvidas ? `<b>${contar(duvidas, 'valor', 'valores')} em amarelo para conferir.</b> Toque no valor para corrigir.` : '<b>Leitura sem dúvidas.</b> Mesmo assim, confira antes de salvar.'} A foto de cada célula aparece em cima do valor lido.</span></div>

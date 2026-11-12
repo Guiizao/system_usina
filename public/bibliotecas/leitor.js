@@ -570,7 +570,7 @@
    * colunas: { nomeDaColunaNoMolde: spec } — só as colunas pedidas são lidas
    * devolve { linhas: [ { m, celulas: { nome: { vazia, imagem, r } } } ] }
    */
-  async function lerFoto(arquivo, nomeMolde, colunasPedidas, aoProgresso) {
+  async function lerFoto(arquivo, nomeMolde, colunasPedidas, aoProgresso, giroPedido) {
     await carregar(aoProgresso);
     const molde = MOLDES[nomeMolde];
     aoProgresso && aoProgresso('Achando a tabela na foto');
@@ -578,7 +578,10 @@
     const cinza = await imagemParaCinza(arquivo);
     // foto tirada de lado ou de cabeça para baixo: testa os giros e fica com o que encaixa melhor no molde
     const deitada = (cinza.cols > cinza.rows) !== !!molde.deitada;
-    const giros = deitada ? [cv.ROTATE_90_CLOCKWISE, cv.ROTATE_90_COUNTERCLOCKWISE, null, cv.ROTATE_180] : [null, cv.ROTATE_180, cv.ROTATE_90_CLOCKWISE, cv.ROTATE_90_COUNTERCLOCKWISE];
+    const PELO_GRAU = { 0: null, 90: cv.ROTATE_90_CLOCKWISE, 180: cv.ROTATE_180, 270: cv.ROTATE_90_COUNTERCLOCKWISE };
+    // 3.1.10: "Girar" na conferência pede um giro só (a pessoa viu as células de lado)
+    const giros = giroPedido in PELO_GRAU ? [PELO_GRAU[giroPedido]]
+      : deitada ? [cv.ROTATE_90_CLOCKWISE, cv.ROTATE_90_COUNTERCLOCKWISE, null, cv.ROTATE_180] : [null, cv.ROTATE_180, cv.ROTATE_90_CLOCKWISE, cv.ROTATE_90_COUNTERCLOCKWISE];
     let g = null; const tentativas = [];
     for (const giro of giros) {
       let img = cinza;

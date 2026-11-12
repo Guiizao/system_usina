@@ -8,6 +8,7 @@
    * ========================================================= */
   const ICONES = {
     voltar: '<path d="M15 5l-7 7 7 7"/>', seta: '<path d="M9 5l7 7-7 7"/>',
+    girar: '<path d="M20 12a8 8 0 1 1-2.3-5.7L20 8.5"/><path d="M20 3.5v5h-5"/>',
     grafico: '<path d="M4 4v16h16"/><path d="M7 15l4-5 3 3 5-6"/>',
     cadeado: '<rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/>',
     documento: '<path d="M7 3h7l5 5v13H7z"/><path d="M14 3v5h5"/><path d="M10 13h6M10 17h6"/>',

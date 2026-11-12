@@ -46,6 +46,22 @@ try {
     igual(await a.avaliar(`[!!document.querySelector('.abertura-fundo'), !!document.querySelector('.abertura-voa'), document.documentElement.classList.contains('abertura-voando'), getComputedStyle(document.querySelector('.menu-marca img')).opacity]`), [false, false, false, '1']);
     await a.fechar();
   });
+  // 3.1.10: o programa do Windows mostra a janela depois de carregar; a abertura tocava escondida e a pessoa via só o fim
+  await teste(g, 'programa do Windows: a abertura espera a janela vir para a frente e toca inteira', async () => {
+    const a = await abrir('p3w', TAMANHOS.computador, 'central', false);
+    await a.avaliar(`(async () => { ${ERROS} Object.defineProperty(navigator, 'userAgent', { get: () => 'Mozilla/5.0 Chrome/140 Electron/38.0.0' });
+      window.__foco = false; document.hasFocus = () => window.__foco; cfg.painelNovo = true; aplicarPainelNovo(); sessionStorage.removeItem('abertura');
+      window.__tocou = 0; await carregarAberturas(); const o = window.Aberturas.tocar; window.Aberturas.tocar = (...x) => { window.__tocou = 1; return o(...x); };
+      mostrarAbertura(); return 1; })()`);
+    await dormir(2500);
+    igual(await a.avaliar('[window.__tocou, !!document.querySelector("#abertura-nova")]'), [0, true]); // escondida: só o fundo cobre
+    await a.avaliar('window.__foco = true; window.dispatchEvent(new Event("focus")); 1');
+    await dormir(400);
+    igual(await a.avaliar('window.__tocou'), 1);
+    await dormir(6000);
+    igual(await a.avaliar('[!!document.querySelector("#abertura-nova"), !!document.querySelector(".abertura-voa"), window.__erros.length]'), [false, false, 0]);
+    await a.fechar();
+  });
   await teste(g, 'PC: painel novo sempre, sem chave; tablet não mostra chave', async () => {
     const pc = await abrir('p9', TAMANHOS.computador, 'central', false);
     igual(await pc.avaliar(`[document.documentElement.hasAttribute('data-painel-novo'), /Painel novo/.test(blocoPainelNovo()), /Sons do painel/.test(blocoPainelNovo())]`), [true, false, true]);

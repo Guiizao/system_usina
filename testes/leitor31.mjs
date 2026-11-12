@@ -120,6 +120,25 @@ try {
       igual(r.linhas.slice(1, 4).map((l) => l.coluna_hidro), ['92.1', '91.7', '92.3']);
       certo(r.linhas.filter((l) => l.vapor === '1.7').length >= 12, 'vapor 1,7 na maior parte do dia');
     });
+    // 3.1.10: o botão Girar lê a mesma foto 90° adiante, no lugar da leitura anterior; 4 toques voltam ao giro certo
+    await teste(g, 'Girar na conferência: lê no giro pedido, sem empilhar telas, e volta ao certo', async () => {
+      igual(await a.avaliar(`(async () => { const b = await (await fetch('http://127.0.0.1:8539/20261106_071636.jpg.jpeg')).blob();
+        return (await LeitorFolhas.lerFoto(new File([b], 'f.jpg'), 'destilaria', {}, null, 90)).giro; })()`), 90);
+      await a.avaliar(`(async () => { const b = await (await fetch('http://127.0.0.1:8539/20261106_071636.jpg.jpeg')).blob();
+        lerFolhaDeArquivo('destilaria', '2026-11-05', new File([b], 'f.jpg', { type: 'image/jpeg' })); return 1; })()`);
+      await a.esperar('view().tela === "leitura" && view().fase === "revisar"', 90000, 'primeira leitura');
+      const altura = await a.avaliar('pilha.length');
+      igual(await a.avaliar('view().giro'), 270);
+      const giros = [];
+      for (let i = 0; i < 4; i++) {
+        await a.tocar('[data-a="leitura-girar"]');
+        await a.esperar('view().fase === "revisar" || view().fase === "erro"', 90000, 'leitura girada');
+        giros.push(await a.avaliar('view().giro'));
+      }
+      igual(giros, [0, 90, 180, 270]);
+      igual(await a.avaliar('pilha.length'), altura);
+      igual(await a.avaliar('view().leitura.linhas.slice(0, 3).map((l) => l.celulas.producao.valor)'), ['160', '180', '180']);
+    });
   } else console.log('  (sem as fotos da usina neste computador: testes com foto real não rodaram)');
 } finally { await nav.fechar(); await c.desligar(); srv.close(); }
 

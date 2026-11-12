@@ -18,7 +18,11 @@ O Painel novo é o único no computador. No celular é uma chave por aparelho, e
 
 O assistente roda na nuvem (`nuvem/src/assistente.js`, Workers AI). O modelo só escolhe uma ferramenta fechada; quem confere a permissão e escreve os números é o servidor. Imprimir, enviar e avisar só abrem a tela depois de a pessoa confirmar. Limite de 20 perguntas por hora por pessoa. Funciona para quem entrou pela nuvem.
 
-A regra nova de `memoria_leitor` (quem tem `ler_folha` grava sem precisar de `usina`) vale na nuvem e no `server.js`. Na central do tablet (Java) fica para o próximo APK, porque qualquer mudança no Java faz os tablets antigos pararem de receber as telas pela atualização rápida.
+A regra nova de `memoria_leitor` (quem tem `ler_folha` grava sem precisar de `usina`) e o assistente como permissão da pessoa valem nas três centrais desde a 3.1.9 (a do tablet ganhou o APK 3.1.9; tablets abaixo dela pedem o aplicativo novo).
+
+Desde a 3.1.9 o servidor entende sozinho as perguntas comuns do assistente (`nuvem/src/entender.js`): período ("do dia 1 ao 8", "a partir do dia 1", "últimos 7 dias", "semana passada", "em outubro"), campo (álcool, cal, matéria-prima, pressão da caldeira 2, INPM da nova...), "de cada dia", média e total, e as continuações ("e em outubro?", "agora por dia", "isso é de novembro?"). Só o que ele não entende vai para o modelo. "De cada dia" lista os dias com o total. Teste: `node testes/entender31.mjs` (8.433 frases).
+
+Desde a 3.1.10 a foto da folha pergunta o dia: vem o dia aberto no painel (no painel novo, hoje) e as setas trocam. Na conferência, Girar lê a mesma foto 90° adiante. No programa do Windows a abertura espera a janela aparecer (antes tocava escondida); programa anterior à 2.18 não recebe telas novas e fica na abertura e na tela de entrar antigas, então precisa do instalador novo.
 
 ## Escritório segue a data do painel (versão 3.0.1)
 

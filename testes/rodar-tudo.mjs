@@ -329,10 +329,14 @@ try {
 // 6. telas (roda separado, com a própria central)
 const g6 = novoGrupo('Todas as telas em 15 tamanhos (computador e Full HD, celulares, celular deitado, tablets, Tab S9+ e tela dividida)');
 const c6 = await centralNode(8296);
+// 3.1.10: telas interrompidas (12/11 o computador parou no meio) não podem passar lendo o resultado da rodada anterior
+const jsonTelas = path.join(SAIDA, 'telas.json');
+fs.rmSync(jsonTelas, { force: true });
 try {
   spawnSync(process.execPath, [path.join(APP, 'testes', 'telas.mjs'), c6.url], { stdio: 'inherit' });
 } finally { await c6.desligar(); }
-const telas = JSON.parse(fs.readFileSync(path.join(SAIDA, 'telas.json'), 'utf8')).telas;
+const telas = fs.existsSync(jsonTelas) ? JSON.parse(fs.readFileSync(jsonTelas, 'utf8')).telas : [];
+if (!telas.length) await teste(g6, 'o teste de telas chegou ao fim', async () => certo(false, 'telas.mjs parou antes de gravar o resultado'));
 const porTamanho = {};
 telas.forEach((t) => { (porTamanho[t.tamanho] = porTamanho[t.tamanho] || []).push(t); });
 for (const [tam, lista] of Object.entries(porTamanho)) {

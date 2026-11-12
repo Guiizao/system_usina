@@ -44,7 +44,8 @@
         const cel = (valor, confianca = 1) => ({ valor, confianca, alternativas: [], tinta: valor !== '' });
         const linhas = [7, 8, 9, 10, 11, 12].map((chave, i) => ({ chave, temValor: true, existe: i === 5, incluir: i !== 5, riscos: {}, celulas: Object.fromEntries(Object.keys(colunas).map((n) => [n, cel('')])) }));
         linhas.forEach((l, i) => Object.assign(l.celulas, { pressao: cel('6', i === 2 ? 0.6 : 1), temp_agua: cel(i < 2 ? ['42', '33'][i] : ''), descarga_fundo: cel(['02', '03', '01'][i % 3]), descarga_garrafa: cel(i ? '' : 'OK') }));
-        pilha.push({ tela, pid: 'caldeira', data: dataProducao(), fase: 'revisar', leitura: { pid: 'caldeira', data: dataProducao(), colunas, linhas } });
+        // arquivo vazio só para o botão Girar aparecer na foto do teste de telas
+        pilha.push({ tela, pid: 'caldeira', data: dataProducao(), fase: 'revisar', arquivo: new Blob([], { type: 'image/jpeg' }), giro: 0, leitura: { pid: 'caldeira', data: dataProducao(), colunas, linhas } });
       }
       else if (tela === 'graficos') pilha.push({ tela, data: dataProducao(), setor: params.get('setor') || '' });
       else if (tela === 'aparelhos') pilha.push({ tela });
@@ -203,8 +204,20 @@
     tela.addEventListener('pointerdown', fim);
     try {
       await carregarAberturas();
+      await janelaNaFrente();
       if (tela.isConnected) window.Aberturas.tocar(Math.floor(Math.random() * window.Aberturas.total), tela.firstChild, !cfg.somDesligado, fim);
     } catch (e) { fim(); }
+  }
+  /** 3.1.10: o programa do Windows só mostra a janela depois de carregar a página (e confere as telas novas por 5 s);
+      a abertura tocava escondida e a pessoa via só o fim. Lá ela espera a janela vir para a frente; o fundo já cobre a tela. */
+  function janelaNaFrente() {
+    if (!/Electron\//.test(navigator.userAgent) || (document.hasFocus() && !document.hidden)) return Promise.resolve();
+    return new Promise((ok) => {
+      const seguir = () => { removeEventListener('focus', pronto); document.removeEventListener('visibilitychange', pronto); clearTimeout(t); ok(); };
+      const pronto = () => { if (!document.hidden) seguir(); };
+      const t = setTimeout(seguir, 60000); // nunca veio para a frente: toca assim mesmo
+      addEventListener('focus', pronto); document.addEventListener('visibilitychange', pronto);
+    });
   }
   function mostrarAbertura() {
     // o programa do Windows abre com ela antes mesmo de entrar na nuvem

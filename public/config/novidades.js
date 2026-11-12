@@ -4,6 +4,15 @@
    Depois do sinal de igual vem JSON puro, porque o servidor do tablet chefe (Java) também lê este arquivo. */
 window.NOVIDADES = [
   {
+    "versao": "3.1.10",
+    "data": "2026-11-12",
+    "itens": [
+      "Foto da folha: antes de tirar a foto, você escolhe de que dia é a folha. Vem o dia aberto no painel (no painel novo, hoje) e as setas trocam.",
+      "Conferir a leitura: se as células aparecerem de lado ou de cabeça para baixo, toque em Girar. A mesma foto é lida de novo, 90 graus adiante.",
+      "Programa do Windows: a abertura espera a janela aparecer e toca inteira, e a janela aparece logo depois de carregar. Para valer, instale o programa novo (3.1.10) por cima do antigo."
+    ]
+  },
+  {
     "versao": "3.1.9",
     "data": "2026-11-11",
     "itens": [

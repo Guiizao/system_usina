@@ -25,7 +25,7 @@
     salvar: 'folha', 'enviar-dorna': 'folha', 'terminar-dorna': 'folha', 'copiar-vemde': 'folha', 'apagar-linha': 'folha',
     'ferm-encher': 'anotar', 'ferm-terminou': 'anotar', 'ferm-volante': 'anotar', 'ferm-parar': 'anotar', 'ferm-esvaziou': 'anotar', 'ferm-apagar': 'anotar',
     compartilhar: 'relatorios', relatorios: 'relatorios', 'relatorio-enviar': 'relatorios', 'relatorio-apagar': 'relatorios', 'gerar-hoje': 'relatorios', imprimir: 'relatorios',
-    'ia-arquivo': 'relatorios', 'aviso-enviar': 'avisos', 'aviso-cancelar': 'avisos', 'ler-folha': 'ler_folha', 'leitura-salvar': 'ler_folha',
+    'ia-arquivo': 'relatorios', 'aviso-enviar': 'avisos', 'aviso-cancelar': 'avisos', 'ler-folha': 'ler_folha', 'leitura-girar': 'ler_folha', 'leitura-salvar': 'ler_folha',
     config: 'usina', 'medida-grupo': 'usina', 'medidas-planilha': 'usina', contato: 'usina', 'lista-add': 'usina', 'lista-remove': 'usina',
     'setor-liga': 'usina', 'prancheta-liga': 'usina', 'lembrete-liga': 'usina', 'lembrete-horario': 'usina', 'turnos-setor': 'usina', 'op-add': 'usina', 'op-senha': 'usina', 'op-remove': 'usina',
     'nuvem-url': 'sistema', 'nuvem-segredo': 'sistema', 'nuvem-enviar': 'integracoes', 'base44-url': 'sistema', 'base44-segredo': 'sistema', 'base44-enviar': 'integracoes',
@@ -407,6 +407,7 @@
       case 'ler-folha': return comecarLeitura(v.data || dataProducao());
       case 'leitura-linha': { const l = v.leitura.linhas[Number(b.dataset.i)]; if (l.temValor && !l.semLugar) l.incluir = !l.incluir; posicionarLinhas(v.leitura); leituraGuardar(v); return render(); }
       case 'leitura-cancelar': leituraApagar(); return voltar();
+      case 'leitura-girar': return v.arquivo ? lerFolhaDeArquivo(v.pid, v.data, v.arquivo, ((v.giro || 0) + 90) % 360) : undefined;
       case 'leitura-cel': return corrigirCelula(v, Number(b.dataset.i), b.dataset.c);
       case 'leitura-salvar': return salvarLeitura(v);
       case 'relatorio-enviar': return enviarDia(b.dataset.data);
